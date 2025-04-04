@@ -1,0 +1,40 @@
+.user-profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.5rem;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 2rem;
+}
+
+.user-info {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.user-info h2 {
+  color: #3498db;
+  margin-bottom: 0.5rem;
+}
+
+.user-info p {
+  color: #666;
+  margin-bottom: 0.25rem;
+}
+
+.sign-out-button {
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+  max-width: 120px;
+}
+
+.sign-out-button:hover {
+  background-color: #c0392b;
+} 

@@ -70,7 +70,7 @@
    ```
 
 6. **Authentication Module**
-   - Implement Cognito authentication
+   - Implement Cognito authentication, without using aws amplify
    - Create login/logout components
    - Add protected route wrapper
    - Test: Verify auth flow
