@@ -1,68 +1,68 @@
 #!/bin/bash
 
-# Check if required arguments are provided
-if [ "$#" -ne 2 ]; then
-    echo "Usage: $0 <email> <password>"
-    echo "Example: $0 test@example.com 'YourPassword123!'"
-    exit 1
-fi
+# Default values
+DEFAULT_USERNAME="testuser@example.com"
+DEFAULT_PASSWORD="Test123!@"
 
-EMAIL=$1
-PASSWORD=$2
-
-# Get Cognito configuration from terraform output
-cd infrastructure/terraform
-USER_POOL_ID=$(terraform output -raw cognito_user_pool_id)
+# Get the values from terraform output
+cd infrastructure/terraform || exit 1
+API_ENDPOINT=$(terraform output -raw api_endpoint)
 CLIENT_ID=$(terraform output -raw cognito_user_pool_client_id)
-REGION="eu-west-2"
-cd ../..
+USER_POOL_ID=$(terraform output -raw cognito_user_pool_id)
 
-echo "Using Cognito configuration:"
-echo "User Pool ID: $USER_POOL_ID"
+echo "Using default test user: $DEFAULT_USERNAME"
+echo "API Endpoint: $API_ENDPOINT"
 echo "Client ID: $CLIENT_ID"
-echo "Region: $REGION"
-echo "-------------------"
+echo "User Pool ID: $USER_POOL_ID"
 
-# Create the user
-echo "Creating user $EMAIL..."
-aws cognito-idp sign-up \
-    --client-id $CLIENT_ID \
-    --username $EMAIL \
-    --password $PASSWORD \
-    --region $REGION
+# Function to check if user exists
+check_user_exists() {
+    aws cognito-idp admin-get-user \
+        --user-pool-id "$USER_POOL_ID" \
+        --username "$DEFAULT_USERNAME" > /dev/null 2>&1
+    return $?
+}
 
-if [ $? -ne 0 ]; then
-    echo "Failed to create user"
-    exit 1
+# Function to create a test user
+create_test_user() {
+    echo "Creating test user..."
+    aws cognito-idp admin-create-user \
+        --user-pool-id "$USER_POOL_ID" \
+        --username "$DEFAULT_USERNAME" \
+        --temporary-password "Test123!" \
+        --user-attributes Name=email,Value="$DEFAULT_USERNAME" Name=email_verified,Value=true \
+        --message-action SUPPRESS
+    
+    # Set permanent password
+    aws cognito-idp admin-set-user-password \
+        --user-pool-id "$USER_POOL_ID" \
+        --username "$DEFAULT_USERNAME" \
+        --password "$DEFAULT_PASSWORD" \
+        --permanent
+}
+
+# Function to get authentication token
+get_auth_token() {
+    echo "Getting authentication token..."
+    TOKEN=$(aws cognito-idp initiate-auth \
+        --client-id "$CLIENT_ID" \
+        --auth-flow USER_PASSWORD_AUTH \
+        --auth-parameters USERNAME="$DEFAULT_USERNAME",PASSWORD="$DEFAULT_PASSWORD" \
+        --query 'AuthenticationResult.IdToken' \
+        --output text)
+    echo "Token obtained"
+}
+
+# Check if user exists, create if not
+if ! check_user_exists; then
+    create_test_user
+else
+    echo "User already exists, skipping creation"
 fi
 
-# Confirm the user (admin confirmation)
-echo "Confirming user..."
-aws cognito-idp admin-confirm-sign-up \
-    --user-pool-id $USER_POOL_ID \
-    --username $EMAIL \
-    --region $REGION
+# Get the authentication token
+get_auth_token
 
-if [ $? -ne 0 ]; then
-    echo "Failed to confirm user"
-    exit 1
-fi
-
-# Test authentication
-echo "Testing authentication..."
-AUTH_RESULT=$(aws cognito-idp initiate-auth \
-    --client-id $CLIENT_ID \
-    --auth-flow USER_PASSWORD_AUTH \
-    --auth-parameters USERNAME=$EMAIL,PASSWORD=$PASSWORD \
-    --region $REGION)
-
-if [ $? -ne 0 ]; then
-    echo "Authentication failed"
-    exit 1
-fi
-
-# Extract and display the access token
-echo "Authentication successful!"
-echo "-------------------"
-echo "Access Token:"
-echo $AUTH_RESULT | jq -r '.AuthenticationResult.AccessToken' 
+# Test the API endpoint
+echo "Testing API endpoint..."
+curl -v -H "Authorization: $TOKEN" "$API_ENDPOINT" 
