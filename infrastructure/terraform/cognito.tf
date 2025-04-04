@@ -53,11 +53,14 @@ resource "aws_cognito_user_pool_client" "main" {
   # Auth flows for token generation
   explicit_auth_flows = [
     "ALLOW_USER_PASSWORD_AUTH",
-    "ALLOW_REFRESH_TOKEN_AUTH"
+    "ALLOW_REFRESH_TOKEN_AUTH",
+    "ALLOW_USER_SRP_AUTH"
   ]
 
   # Token configuration
   refresh_token_validity = 30
+  access_token_validity = 60
+  id_token_validity = 60
 
   prevent_user_existence_errors = "ENABLED"
   
@@ -65,9 +68,14 @@ resource "aws_cognito_user_pool_client" "main" {
   enable_token_revocation = true
 
   # Allow all scopes needed for API access
-  allowed_oauth_flows                  = ["implicit"]
+  allowed_oauth_flows                  = ["implicit", "client_credentials"]
   allowed_oauth_flows_user_pool_client = true
-  allowed_oauth_scopes                 = ["openid", "email", "profile"]
+  allowed_oauth_scopes                 = [
+    "openid",
+    "email",
+    "profile",
+    "${aws_cognito_resource_server.api.identifier}/colors.read"
+  ]
 
   # Required for OAuth flows
   callback_urls = ["http://localhost:3000"]
