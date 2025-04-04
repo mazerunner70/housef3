@@ -1,5 +1,6 @@
 locals {
   s3_origin_id = "${var.project_name}-${var.environment}-frontend-origin"
+  api_origin_id = "${var.project_name}-${var.environment}-api-origin"
 }
 
 resource "aws_cloudfront_origin_access_control" "frontend" {
@@ -10,6 +11,32 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol                  = "sigv4"
 }
 
+# Cache policy for API Gateway
+resource "aws_cloudfront_cache_policy" "api_gateway" {
+  name        = "${var.project_name}-${var.environment}-api-gateway-cache"
+  comment     = "Cache policy for API Gateway"
+  default_ttl = 60
+  min_ttl     = 0
+  max_ttl     = 300
+
+  parameters_in_cache_key_and_forwarded_to_origin {
+    enable_accept_encoding_brotli = true
+    enable_accept_encoding_gzip   = true
+
+    cookies_config {
+      cookie_behavior = "none"
+    }
+
+    headers_config {
+      header_behavior = "none"
+    }
+
+    query_strings_config {
+      query_string_behavior = "all"
+    }
+  }
+}
+
 resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
   is_ipv6_enabled    = true
@@ -17,9 +44,38 @@ resource "aws_cloudfront_distribution" "frontend" {
   price_class         = "PriceClass_100"
 
   origin {
-    domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
-    origin_access_control_id = aws_cloudfront_origin_access_control.frontend.id
-    origin_id                = local.s3_origin_id
+    domain_name = aws_s3_bucket_website_configuration.frontend.website_endpoint
+    origin_id   = local.s3_origin_id
+    
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "http-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
+  # API Gateway Origin
+  origin {
+    domain_name = replace(aws_apigatewayv2_api.main.api_endpoint, "https://", "")
+    origin_id   = local.api_origin_id
+    origin_path = "/dev"  # This appends the stage name
+
+    custom_origin_config {
+      http_port              = 80
+      https_port            = 443
+      origin_protocol_policy = "https-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+      origin_read_timeout    = 30
+      origin_keepalive_timeout = 5
+    }
+  }
+
+  # Enable detailed logging to S3
+  logging_config {
+    include_cookies = false
+    bucket          = "${aws_s3_bucket.frontend.bucket}.s3.amazonaws.com"
+    prefix          = "cloudfront-logs/"
   }
 
   default_cache_behavior {
@@ -39,6 +95,35 @@ resource "aws_cloudfront_distribution" "frontend" {
     min_ttl     = 0
     default_ttl = 3600
     max_ttl     = 86400
+  }
+
+  # API Gateway behavior - direct pass-through
+  ordered_cache_behavior {
+    path_pattern     = "/colors"  # Simple path pattern matching the example
+    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = local.api_origin_id
+
+    compress               = true
+    viewer_protocol_policy = "https-only"
+
+    forwarded_values {
+      query_string = true
+      headers = [
+        "Authorization",
+        "Origin",
+        "Access-Control-Request-Headers",
+        "Access-Control-Request-Method",
+        "Content-Type"
+      ]
+      cookies {
+        forward = "none"
+      }
+    }
+
+    min_ttl     = 0
+    default_ttl = 0
+    max_ttl     = 0
   }
 
   # This special behavior handles routing SPA routes back to index.html

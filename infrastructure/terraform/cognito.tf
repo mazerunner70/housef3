@@ -59,8 +59,8 @@ resource "aws_cognito_user_pool_client" "main" {
 
   # Token configuration
   refresh_token_validity = 30
-  access_token_validity = 60
-  id_token_validity = 60
+  access_token_validity  = 5  # 5 minutes
+  id_token_validity     = 5   # 5 minutes
 
   prevent_user_existence_errors = "ENABLED"
   
@@ -68,7 +68,7 @@ resource "aws_cognito_user_pool_client" "main" {
   enable_token_revocation = true
 
   # Allow all scopes needed for API access
-  allowed_oauth_flows                  = ["implicit", "client_credentials"]
+  allowed_oauth_flows                  = ["implicit"]
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_scopes                 = [
     "openid",

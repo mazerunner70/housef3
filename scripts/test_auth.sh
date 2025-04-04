@@ -138,7 +138,8 @@ check_response "$API_RESPONSE" "API Gateway" || exit 1
 
 # Test CloudFront endpoint
 echo -e "\n****************************Testing CloudFront endpoint..."
-CF_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" "https://$CLOUDFRONT_DOMAIN/api/colors")
+echo "Making request to: https://$CLOUDFRONT_DOMAIN/colors"
+CF_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" "https://$CLOUDFRONT_DOMAIN/colors")
 echo "CloudFront Raw Response:"
 echo "$CF_RESPONSE"
 echo -e "\nCloudFront Response (parsed):"
