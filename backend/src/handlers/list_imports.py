@@ -6,13 +6,29 @@ from typing import Dict, Any, List
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-def get_colors() -> List[str]:
-    """Return a list of color names."""
+def get_colors() -> List[Dict[str, Any]]:
+    """Return a list of color objects with metadata."""
     return [
-        "Cerulean",
-        "Crimson",
-        "Sage",
-        "Amber"
+        {
+            "name": "Cerulean",
+            "hex": "#007BA7",
+            "category": "blue"
+        },
+        {
+            "name": "Crimson",
+            "hex": "#DC143C",
+            "category": "red"
+        },
+        {
+            "name": "Sage",
+            "hex": "#BCB88A",
+            "category": "green"
+        },
+        {
+            "name": "Amber",
+            "hex": "#FFBF00",
+            "category": "yellow"
+        }
     ]
 
 def create_response(status_code: int, body: Any) -> Dict[str, Any]:
@@ -48,7 +64,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         logger.info("Authorizer context: %s", json.dumps(authorizer))
 
         # Get user claims
-        user_sub = authorizer.get("claims", {}).get("sub")
+        claims = authorizer.get("claims", {})
+        user_sub = claims.get("sub")
         if not user_sub:
             logger.error("No user sub found in token")
             return create_response(401, {"message": "Unauthorized"})
@@ -56,9 +73,22 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Get and return colors
         colors = get_colors()
         
+        # Create enriched user object
+        user_info = {
+            "id": user_sub,
+            "email": claims.get("email", "unknown"),
+            "auth_time": claims.get("auth_time"),
+            "scope": "read"  # Default scope for all authenticated users
+        }
+        
         return create_response(200, {
             "colors": colors,
-            "user": user_sub  # Include user ID in response
+            "user": user_info,
+            "metadata": {
+                "totalColors": len(colors),
+                "timestamp": context.aws_request_id,
+                "version": "1.0.0"
+            }
         })
 
     except Exception as e:

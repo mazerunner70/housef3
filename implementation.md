@@ -60,7 +60,7 @@
 
 ### 2. Frontend Development (TypeScript/React)
 
-1. **Project Setup**
+5. **Project Setup**
    - Initialize React project with TypeScript
    - Configure build process
    - Test: Verify build and local development
@@ -69,7 +69,7 @@
    npm start
    ```
 
-2. **Authentication Module**
+6. **Authentication Module**
    - Implement Cognito authentication
    - Create login/logout components
    - Add protected route wrapper
@@ -82,7 +82,7 @@
    - Token refresh works
    ```
 
-3. **API Integration**
+7. **API Integration**
    - Create API client
    - Add authentication interceptor
    - Implement color fetching service
@@ -94,7 +94,7 @@
    - Loading states work
    ```
 
-4. **UI Components**
+8. **UI Components**
    - Create color list component
    - Add loading states
    - Implement error handling
@@ -108,7 +108,7 @@
 
 ### 3. Deployment Pipeline
 
-1. **Backend Deployment**
+9. **Backend Deployment**
    - Create deployment script
    - Configure environment variables
    - Test: Verify Lambda updates
@@ -117,8 +117,7 @@
    terraform apply
    aws lambda invoke --function-name your-function output.json
    ```
-
-2. **Frontend Deployment**
+10. **Frontend Deployment**
    - Create build pipeline
    - Configure S3 sync
    - Set up CloudFront invalidation
@@ -132,7 +131,7 @@
 
 ### 4. Testing Strategy
 
-1. **End-to-End Tests**
+11. **End-to-End Tests**
    ```typescript
    // Test full flow
    - User signup
@@ -141,7 +140,7 @@
    - Display in UI
    ```
 
-2. **Integration Tests**
+12. **Integration Tests**
    ```typescript
    // Test integrations
    - Frontend to API Gateway
@@ -149,7 +148,7 @@
    - Cognito authentication
    ```
 
-3. **Load Tests**
+13. **Load Tests**
    ```bash
    # Test performance
    - API response times
@@ -159,7 +158,7 @@
 
 ### 5. Monitoring and Logging
 
-1. **CloudWatch Setup**
+14. **CloudWatch Setup**
    - Configure Lambda logs
    - Set up API Gateway logging
    - Create CloudWatch dashboards
@@ -169,7 +168,7 @@
    aws logs tail /aws/lambda/your-function
    ```
 
-2. **Alerts**
+15. **Alerts**
    - Configure error rate alarms
    - Set up latency alarms
    - Test: Verify alerting

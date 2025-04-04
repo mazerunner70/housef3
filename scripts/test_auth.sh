@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # Check if jq is installed
 if ! command -v jq &> /dev/null; then
@@ -38,113 +39,81 @@ CLOUDFRONT_DOMAIN=$(terraform output -raw cloudfront_distribution_domain)
 CLIENT_ID=$(terraform output -raw cognito_user_pool_client_id)
 USER_POOL_ID=$(terraform output -raw cognito_user_pool_id)
 
-echo "Using user: $USERNAME"
+echo "User: $USERNAME"
 echo "API Endpoint: $API_ENDPOINT"
 echo "CloudFront Domain: $CLOUDFRONT_DOMAIN"
 echo "Client ID: $CLIENT_ID"
 echo "User Pool ID: $USER_POOL_ID"
 
-# Function to check if user exists
-check_user_exists() {
-    aws cognito-idp admin-get-user \
-        --user-pool-id "$USER_POOL_ID" \
-        --username "$USERNAME" > /dev/null 2>&1
-    return $?
-}
-
-# Function to create a test user
-create_test_user() {
-    echo "Creating test user..."
-    aws cognito-idp admin-create-user \
-        --user-pool-id "$USER_POOL_ID" \
-        --username "$USERNAME" \
-        --temporary-password "Test123!" \
-        --user-attributes Name=email,Value="$USERNAME" Name=email_verified,Value=true \
-        --message-action SUPPRESS
-
-    if [ $? -ne 0 ]; then
-        echo "Error: Failed to create user"
-        exit 1
-    fi
-    
-    # Set permanent password
-    aws cognito-idp admin-set-user-password \
-        --user-pool-id "$USER_POOL_ID" \
-        --username "$USERNAME" \
-        --password "$PASSWORD" \
-        --permanent
-
-    if [ $? -ne 0 ]; then
-        echo "Error: Failed to set user password"
-        exit 1
-    fi
-}
-
-# Function to get authentication token
-get_auth_token() {
-    echo "Getting authentication token..."
-    TOKEN=$(aws cognito-idp initiate-auth \
-        --client-id "$CLIENT_ID" \
-        --auth-flow USER_PASSWORD_AUTH \
-        --auth-parameters USERNAME="$USERNAME",PASSWORD="$PASSWORD" \
-        --query 'AuthenticationResult.IdToken' \
-        --output text)
-
-    if [ $? -ne 0 ] || [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-        echo "Error: Failed to obtain authentication token"
-        exit 1
-    fi
-
-    echo "Token obtained successfully"
-}
-
-# Function to check response
-check_response() {
-    local response=$1
-    local endpoint_name=$2
-    
-    # Check if response is valid JSON
-    if ! echo "$response" | jq . >/dev/null 2>&1; then
-        echo "Error: Invalid JSON response from $endpoint_name"
-        return 1
-    fi
-    
-    # Check if response contains colors array and user ID
-    if ! echo "$response" | jq -e '.colors and (.colors | type=="array") and (.colors | length>0) and .user' >/dev/null 2>&1; then
-        echo "Error: Response from $endpoint_name does not contain expected colors array and user ID"
-        return 1
-    fi
-    
-    echo "Success: Received valid response from $endpoint_name"
-    return 0
-}
-
 # Check if user exists, create if not
-if ! check_user_exists; then
-    create_test_user
+USER_EXISTS=$(aws cognito-idp admin-get-user --user-pool-id $USER_POOL_ID --username $USERNAME 2>/dev/null || echo "NOT_EXISTS")
+
+if [[ $USER_EXISTS == "NOT_EXISTS" ]]; then
+  echo "Creating user..."
+  aws cognito-idp admin-create-user \
+    --user-pool-id $USER_POOL_ID \
+    --username $USERNAME \
+    --temporary-password "Temp123!" \
+    --message-action SUPPRESS
+
+  # Set permanent password
+  aws cognito-idp admin-set-user-password \
+    --user-pool-id $USER_POOL_ID \
+    --username $USERNAME \
+    --password $PASSWORD \
+    --permanent
 else
-    echo "User already exists, skipping creation"
+  echo "User already exists, skipping creation"
 fi
 
-# Get the authentication token
-get_auth_token
+# Authenticate user and get token
+echo "Authenticating user..."
+AUTH_RESULT=$(aws cognito-idp initiate-auth \
+  --auth-flow USER_PASSWORD_AUTH \
+  --client-id $CLIENT_ID \
+  --auth-parameters USERNAME=$USERNAME,PASSWORD=$PASSWORD)
 
-# Test direct API Gateway endpoint
-echo -e "\n****************************Testing direct API Gateway endpoint..."
-API_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" "$API_ENDPOINT")
-echo "API Gateway Response:"
-echo "$API_RESPONSE" | jq .
-check_response "$API_RESPONSE" "API Gateway" || exit 1
+ID_TOKEN=$(echo $AUTH_RESULT | jq -r '.AuthenticationResult.IdToken')
 
-# Test CloudFront endpoint
-echo -e "\n****************************Testing CloudFront endpoint..."
-echo "Making request to: https://$CLOUDFRONT_DOMAIN/colors"
-CF_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" "https://$CLOUDFRONT_DOMAIN/colors")
-echo "CloudFront Raw Response:"
-echo "$CF_RESPONSE"
-echo -e "\nCloudFront Response (parsed):"
-echo "$CF_RESPONSE" | jq . || echo "Failed to parse response as JSON"
-check_response "$CF_RESPONSE" "CloudFront" || exit 1
+echo "Testing direct API Gateway endpoint..."
+DIRECT_RESPONSE=$(curl -s -H "Authorization: $ID_TOKEN" $API_ENDPOINT)
+echo "API Gateway response:"
+echo $DIRECT_RESPONSE | jq .
+
+echo "Testing CloudFront endpoint..."
+CF_RESPONSE=$(curl -v -s -H "Authorization: $ID_TOKEN" https://$CLOUDFRONT_DOMAIN/colors)
+echo "CloudFront response:"
+echo $CF_RESPONSE | jq .
+
+# Validate responses
+echo "Validating responses..."
+
+# Extract key fields from responses to compare
+API_COLORS=$(echo $DIRECT_RESPONSE | jq -c '.colors | map(.name)')
+CF_COLORS=$(echo $CF_RESPONSE | jq -c '.colors | map(.name)')
+
+API_TOTAL=$(echo $DIRECT_RESPONSE | jq '.metadata.totalColors')
+CF_TOTAL=$(echo $CF_RESPONSE | jq '.metadata.totalColors')
+
+API_USER_ID=$(echo $DIRECT_RESPONSE | jq -r '.user.id')
+CF_USER_ID=$(echo $CF_RESPONSE | jq -r '.user.id')
+
+# Compare key fields
+if [[ "$API_COLORS" == "$CF_COLORS" && "$API_TOTAL" == "$CF_TOTAL" && "$API_USER_ID" == "$CF_USER_ID" ]]; then
+  echo "✅ Validation successful! CloudFront is correctly forwarding to API Gateway."
+  echo "✅ User ID: $CF_USER_ID"
+  echo "✅ Total colors: $CF_TOTAL"
+  echo "✅ Colors: $CF_COLORS"
+else
+  echo "❌ Validation failed! Responses don't match."
+  echo "API Colors: $API_COLORS"
+  echo "CloudFront Colors: $CF_COLORS"
+  echo "API Total: $API_TOTAL"
+  echo "CloudFront Total: $CF_TOTAL"
+  echo "API User ID: $API_USER_ID"
+  echo "CloudFront User ID: $CF_USER_ID"
+  exit 1
+fi
 
 echo -e "\nAll tests passed successfully!"
 exit 0 
