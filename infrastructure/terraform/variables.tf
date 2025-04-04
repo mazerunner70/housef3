@@ -1,19 +1,25 @@
-variable "aws_region" {
-  description = "AWS region to deploy resources"
+variable "project_name" {
+  description = "Name of the project"
   type        = string
-  default     = "eu-west-2"
+  default     = "housef3"
 }
 
 variable "environment" {
-  description = "Environment name (e.g., dev, prod)"
+  description = "Environment (dev, staging, prod)"
   type        = string
   default     = "dev"
 }
 
-variable "project_name" {
-  description = "Project name used for resource naming"
+variable "domain_name" {
+  description = "Domain name for the application"
   type        = string
-  default     = "housef3"
+  default     = "localhost:3000"  # Default for local development
+}
+
+variable "aws_region" {
+  description = "AWS region to deploy to"
+  type        = string
+  default     = "eu-west-2"  # London
 }
 
 variable "frontend_domain" {
