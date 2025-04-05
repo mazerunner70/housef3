@@ -3,12 +3,14 @@ import './App.css'
 import Login from './components/Login';
 import UserProfile from './components/UserProfile';
 import ColorDisplay from './components/ColorDisplay';
+import FileManager from './components/FileManager';
 import { AuthUser, getCurrentUser, isAuthenticated, refreshToken } from './services/AuthService';
 
 function App() {
   const [authenticated, setAuthenticated] = useState<boolean>(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [activeSection, setActiveSection] = useState<'colors' | 'files'>('colors');
 
   // Check authentication status on component mount
   useEffect(() => {
@@ -69,20 +71,49 @@ function App() {
     setUser(null);
   };
 
+  const handleSectionChange = (section: 'colors' | 'files') => {
+    setActiveSection(section);
+  };
+
   if (loading) {
     return <div className="loading-auth">Checking authentication...</div>;
   }
 
   return (
     <div className="app-container">
-      <h1>Color Import Application</h1>
+      <h1>House F3 Application</h1>
       
       {authenticated && user ? (
         <>
           <UserProfile user={user} onSignOut={handleSignOut} />
+          
+          <div className="section-tabs">
+            <button 
+              className={`section-button ${activeSection === 'colors' ? 'active' : ''}`}
+              onClick={() => handleSectionChange('colors')}
+            >
+              Colors
+            </button>
+            <button 
+              className={`section-button ${activeSection === 'files' ? 'active' : ''}`}
+              onClick={() => handleSectionChange('files')}
+            >
+              File Manager
+            </button>
+          </div>
+          
           <div className="content">
-            <p>Welcome to the Color Import Application, {user.username}!</p>
-            <ColorDisplay />
+            {activeSection === 'colors' ? (
+              <>
+                <h2>Color Import</h2>
+                <ColorDisplay />
+              </>
+            ) : (
+              <>
+                <h2>File Management</h2>
+                <FileManager />
+              </>
+            )}
           </div>
         </>
       ) : (

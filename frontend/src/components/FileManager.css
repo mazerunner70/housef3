@@ -1,0 +1,48 @@
+.file-manager-container {
+  width: 100%;
+  max-width: 1000px;
+  margin: 20px auto;
+}
+
+.file-manager-tabs {
+  display: flex;
+  border-bottom: 1px solid #ddd;
+  margin-bottom: 20px;
+}
+
+.tab-button {
+  padding: 12px 20px;
+  background-color: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 16px;
+  color: #666;
+  transition: all 0.3s ease;
+}
+
+.tab-button:hover {
+  color: #0066cc;
+  background-color: #f8f8f8;
+}
+
+.tab-button.active {
+  color: #0066cc;
+  border-bottom-color: #0066cc;
+}
+
+.tab-content {
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .file-manager-container {
+    margin: 10px auto;
+  }
+  
+  .tab-button {
+    padding: 10px 15px;
+    font-size: 14px;
+  }
+} 
