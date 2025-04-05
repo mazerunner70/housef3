@@ -58,10 +58,14 @@ echo "$LIST_RESPONSE" | jq .
 FILE_COUNT=$(echo "$LIST_RESPONSE" | jq -r '.metadata.totalFiles // "0"')
 echo "Found $FILE_COUNT files"
 
+# Create a random account ID for testing
+TEST_ACCOUNT_ID="acc-$(date +%s)"
+echo "Created test account ID: $TEST_ACCOUNT_ID"
+
 # Step 2: Get upload URL
 echo -e "\n2. Testing POST /files/upload"
 UPLOAD_ENDPOINT="${API_ENDPOINT%/files}/files/upload"
-UPLOAD_PAYLOAD="{\"fileName\":\"test_file.txt\", \"contentType\":\"text/plain\", \"fileSize\": $FILE_SIZE}"
+UPLOAD_PAYLOAD="{\"fileName\":\"test_file.txt\", \"contentType\":\"text/plain\", \"fileSize\": $FILE_SIZE, \"accountId\": \"$TEST_ACCOUNT_ID\"}"
 
 echo "Upload endpoint: $UPLOAD_ENDPOINT"
 echo "Upload payload: $UPLOAD_PAYLOAD"
@@ -77,12 +81,16 @@ echo "$UPLOAD_RESPONSE" | jq .
 
 FILE_ID=$(echo "$UPLOAD_RESPONSE" | jq -r '.fileId')
 UPLOAD_URL=$(echo "$UPLOAD_RESPONSE" | jq -r '.uploadUrl')
+PROCESSING_STATUS=$(echo "$UPLOAD_RESPONSE" | jq -r '.processingStatus')
+FILE_FORMAT=$(echo "$UPLOAD_RESPONSE" | jq -r '.fileFormat')
 
 if [ "$FILE_ID" == "null" ] || [ -z "$FILE_ID" ]; then
   handle_error "Failed to get file ID"
 fi
 
 echo "Received file ID: $FILE_ID"
+echo "Processing status: $PROCESSING_STATUS"
+echo "File format: $FILE_FORMAT"
 
 # Step 3: Upload file
 echo -e "\n3. Testing file upload using pre-signed URL"
@@ -100,8 +108,16 @@ echo "$LIST_RESPONSE" | jq .
 FILE_COUNT=$(echo "$LIST_RESPONSE" | jq -r '.metadata.totalFiles // "0"')
 echo "Found $FILE_COUNT files"
 
-# Step 5: Get download URL
-echo -e "\n5. Testing GET /files/$FILE_ID/download"
+# Step 5: Query files by account ID 
+echo -e "\n5. Testing GET /files?accountId=$TEST_ACCOUNT_ID"
+ACCOUNT_LIST_RESPONSE=$(curl -s "$API_ENDPOINT?accountId=$TEST_ACCOUNT_ID" -H "Authorization: $TOKEN")
+echo "$ACCOUNT_LIST_RESPONSE" | jq .
+
+ACCOUNT_FILE_COUNT=$(echo "$ACCOUNT_LIST_RESPONSE" | jq -r '.metadata.totalFiles // "0"')
+echo "Found $ACCOUNT_FILE_COUNT files for account $TEST_ACCOUNT_ID"
+
+# Step 6: Get download URL
+echo -e "\n6. Testing GET /files/$FILE_ID/download"
 DOWNLOAD_RESPONSE=$(curl -s "${API_ENDPOINT%/files}/files/$FILE_ID/download" \
   -H "Authorization: $TOKEN")
 
@@ -113,8 +129,8 @@ if [ "$DOWNLOAD_URL" == "null" ] || [ -z "$DOWNLOAD_URL" ]; then
   handle_error "Failed to get download URL"
 fi
 
-# Step 6: Download file
-echo -e "\n6. Testing file download using pre-signed URL"
+# Step 7: Download file
+echo -e "\n7. Testing file download using pre-signed URL"
 DOWNLOADED_FILE="/tmp/downloaded_test_file.txt"
 curl -s "$DOWNLOAD_URL" -o "$DOWNLOADED_FILE"
 
@@ -127,24 +143,31 @@ else
   handle_error "Downloaded file does not match original"
 fi
 
-# Step 7: Delete file
-echo -e "\n7. Testing DELETE /files/$FILE_ID"
+# Step 8: Delete file
+echo -e "\n8. Testing DELETE /files/$FILE_ID"
 DELETE_RESPONSE=$(curl -s -X DELETE "${API_ENDPOINT%/files}/files/$FILE_ID" \
   -H "Authorization: $TOKEN")
 
 echo "$DELETE_RESPONSE" | jq .
 
-# Step 8: List files again (after deletion)
-echo -e "\n8. Testing GET /files (after deletion)"
+# Step 9: List files again (after deletion)
+echo -e "\n9. Testing GET /files (after deletion)"
 LIST_RESPONSE=$(curl -s "$API_ENDPOINT" -H "Authorization: $TOKEN")
 echo "$LIST_RESPONSE" | jq .
 
 FILE_COUNT=$(echo "$LIST_RESPONSE" | jq -r '.metadata.totalFiles // "0"')
-echo "Found $FILE_COUNT files (should be 0 after deletion)"
+echo "Found $FILE_COUNT files after deletion"
 
-# Check if file count is 0 after deletion
-if [ "$FILE_COUNT" != "0" ]; then
-  handle_error "Expected 0 files after deletion, found $FILE_COUNT"
+# Check if the file is no longer associated with the account
+echo -e "\n10. Testing GET /files?accountId=$TEST_ACCOUNT_ID (after deletion)"
+ACCOUNT_LIST_RESPONSE=$(curl -s "$API_ENDPOINT?accountId=$TEST_ACCOUNT_ID" -H "Authorization: $TOKEN")
+echo "$ACCOUNT_LIST_RESPONSE" | jq .
+
+ACCOUNT_FILE_COUNT=$(echo "$ACCOUNT_LIST_RESPONSE" | jq -r '.metadata.totalFiles // "0"')
+if [ "$ACCOUNT_FILE_COUNT" != "0" ]; then
+  handle_error "Expected 0 files for account after deletion, found $ACCOUNT_FILE_COUNT"
+else
+  echo "Successfully verified 0 files for account $TEST_ACCOUNT_ID after deletion"
 fi
 
 # Clean up

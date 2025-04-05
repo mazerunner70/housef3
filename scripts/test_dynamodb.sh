@@ -9,7 +9,7 @@ handle_error() {
 
 # Get DynamoDB table name from Terraform output
 cd $(dirname "$0")/../infrastructure/terraform
-DYNAMODB_TABLE=$(terraform output -raw dynamodb_table_name)
+DYNAMODB_TABLE=$(terraform output -raw transaction_files_table_name)
 cd ../..
 
 echo "Testing DynamoDB table configuration for: $DYNAMODB_TABLE"

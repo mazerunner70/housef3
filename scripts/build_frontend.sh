@@ -40,7 +40,7 @@ aws s3 sync . "s3://$S3_BUCKET" --delete
 
 # Invalidate CloudFront cache
 echo "Invalidating CloudFront cache..."
-aws cloudfront create-invalidation --distribution-id $CLOUDFRONT_ID --paths "/*"
+aws cloudfront create-invalidation --distribution-id $CLOUDFRONT_ID --paths "/*" --no-cli-pager
 
 echo "Frontend build and deployment complete!"
 echo "Your application is available at: https://$CLOUDFRONT_DOMAIN" 

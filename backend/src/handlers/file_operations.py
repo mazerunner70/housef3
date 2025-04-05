@@ -7,6 +7,17 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from decimal import Decimal
 
+# Import our models for transaction files
+try:
+    from models import TransactionFile, FileFormat, ProcessingStatus, DateRange
+except ImportError:
+    try:
+        # Fallback if running in Lambda context
+        from src.models import TransactionFile, FileFormat, ProcessingStatus, DateRange
+    except ImportError:
+        # Second fallback with another path
+        from backend.src.models import TransactionFile, FileFormat, ProcessingStatus, DateRange
+
 # Custom JSON encoder to handle Decimal values
 class DecimalEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -94,53 +105,91 @@ def list_files_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str,
         # Log user details for debugging
         logger.info(f"Listing files for user: {user['id']}")
         
+        # Check if there's an accountId filter
+        query_params = event.get('queryStringParameters', {}) or {}
+        account_id = query_params.get('accountId')
+        
         files = []
         
-        # First try using GSI
-        try:
-            logger.info(f"Attempting to query UserIndex GSI for user: {user['id']}")
-            
-            # Query DynamoDB for user's files
-            response = file_table.query(
-                IndexName='UserIndex',
-                KeyConditionExpression=boto3.dynamodb.conditions.Key('userId').eq(user['id'])
-            )
-            
-            files = response.get('Items', [])
-            logger.info(f"Query successful: Found {len(files)} files for user {user['id']} using GSI")
-            
-        except Exception as query_error:
-            logger.error(f"Error querying UserIndex: {str(query_error)}. Exception type: {type(query_error).__name__}")
-        
-        # If GSI query returned no results or failed, fallback to scan
-        if not files:
-            logger.info(f"No files found with GSI or GSI query failed. Trying scan as fallback for user: {user['id']}")
-            
+        # If accountId provided, query by accountId
+        if account_id:
+            logger.info(f"Filtering files for account: {account_id}")
             try:
-                # Fallback to scan with filter
-                scan_response = file_table.scan(
-                    FilterExpression=boto3.dynamodb.conditions.Attr('userId').eq(user['id'])
+                response = file_table.query(
+                    IndexName='AccountIdIndex',
+                    KeyConditionExpression=boto3.dynamodb.conditions.Key('accountId').eq(account_id)
+                )
+                files = response.get('Items', [])
+                logger.info(f"Found {len(files)} files for account {account_id}")
+            except Exception as query_error:
+                logger.error(f"Error querying AccountIdIndex: {str(query_error)}. Exception type: {type(query_error).__name__}")
+        else:
+            # First try using UserIndex GSI
+            try:
+                logger.info(f"Attempting to query UserIndex GSI for user: {user['id']}")
+                
+                # Query DynamoDB for user's files
+                response = file_table.query(
+                    IndexName='UserIndex',
+                    KeyConditionExpression=boto3.dynamodb.conditions.Key('userId').eq(user['id'])
                 )
                 
-                files = scan_response.get('Items', [])
-                logger.info(f"Fallback scan found {len(files)} files for user {user['id']}")
+                files = response.get('Items', [])
+                logger.info(f"Query successful: Found {len(files)} files for user {user['id']} using GSI")
                 
-                if files:
-                    logger.info(f"First file from scan: {json.dumps(files[0])}")
-            except Exception as scan_error:
-                logger.error(f"Error in fallback scan: {str(scan_error)}. Exception type: {type(scan_error).__name__}")
+            except Exception as query_error:
+                logger.error(f"Error querying UserIndex: {str(query_error)}. Exception type: {type(query_error).__name__}")
+            
+            # If GSI query returned no results or failed, fallback to scan
+            if not files:
+                logger.info(f"No files found with GSI or GSI query failed. Trying scan as fallback for user: {user['id']}")
+                
+                try:
+                    # Fallback to scan with filter
+                    scan_response = file_table.scan(
+                        FilterExpression=boto3.dynamodb.conditions.Attr('userId').eq(user['id'])
+                    )
+                    
+                    files = scan_response.get('Items', [])
+                    logger.info(f"Fallback scan found {len(files)} files for user {user['id']}")
+                    
+                    if files:
+                        logger.info(f"First file from scan: {json.dumps(files[0])}")
+                except Exception as scan_error:
+                    logger.error(f"Error in fallback scan: {str(scan_error)}. Exception type: {type(scan_error).__name__}")
         
         # Convert DynamoDB response to more user-friendly format
         formatted_files = []
         for file in files:
-            formatted_files.append({
+            formatted_file = {
                 'fileId': file.get('fileId'),
                 'fileName': file.get('fileName'),
                 'contentType': file.get('contentType'),
                 'fileSize': file.get('fileSize'),
                 'uploadDate': file.get('uploadDate'),
                 'lastModified': file.get('lastModified', file.get('uploadDate'))
-            })
+            }
+            
+            # Include TransactionFile model specific fields if they exist
+            if 'accountId' in file:
+                formatted_file['accountId'] = file.get('accountId')
+            
+            if 'fileFormat' in file:
+                formatted_file['fileFormat'] = file.get('fileFormat')
+                
+            if 'processingStatus' in file:
+                formatted_file['processingStatus'] = file.get('processingStatus')
+                
+            if 'recordCount' in file:
+                formatted_file['recordCount'] = file.get('recordCount')
+                
+            if 'dateRange' in file:
+                formatted_file['dateRange'] = file.get('dateRange')
+                
+            if 'errorMessage' in file:
+                formatted_file['errorMessage'] = file.get('errorMessage')
+            
+            formatted_files.append(formatted_file)
             
         return create_response(200, {
             'files': formatted_files,
@@ -154,6 +203,76 @@ def list_files_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str,
         logger.error(f"Error listing files: {str(e)}, Exception type: {type(e).__name__}")
         return create_response(500, {"message": "Error listing files"})
 
+def get_files_by_account_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    """List files for a specific account."""
+    try:
+        # Get account ID from path parameters
+        account_id = event.get('pathParameters', {}).get('accountId')
+        
+        if not account_id:
+            return create_response(400, {"message": "Account ID is required"})
+            
+        logger.info(f"Listing files for account: {account_id}")
+        
+        # Query DynamoDB for account's files
+        try:
+            response = file_table.query(
+                IndexName='AccountIdIndex',
+                KeyConditionExpression=boto3.dynamodb.conditions.Key('accountId').eq(account_id)
+            )
+            
+            files = response.get('Items', [])
+            logger.info(f"Found {len(files)} files for account {account_id}")
+            
+            # Convert DynamoDB response to more user-friendly format
+            formatted_files = []
+            for file in files:
+                formatted_file = {
+                    'fileId': file.get('fileId'),
+                    'fileName': file.get('fileName'),
+                    'contentType': file.get('contentType'),
+                    'fileSize': file.get('fileSize'),
+                    'uploadDate': file.get('uploadDate'),
+                    'lastModified': file.get('lastModified', file.get('uploadDate')),
+                    'accountId': file.get('accountId')
+                }
+                
+                # Include TransactionFile model specific fields if they exist
+                if 'fileFormat' in file:
+                    formatted_file['fileFormat'] = file.get('fileFormat')
+                    
+                if 'processingStatus' in file:
+                    formatted_file['processingStatus'] = file.get('processingStatus')
+                    
+                if 'recordCount' in file:
+                    formatted_file['recordCount'] = file.get('recordCount')
+                    
+                if 'dateRange' in file:
+                    formatted_file['dateRange'] = file.get('dateRange')
+                    
+                if 'errorMessage' in file:
+                    formatted_file['errorMessage'] = file.get('errorMessage')
+                
+                formatted_files.append(formatted_file)
+                
+            return create_response(200, {
+                'files': formatted_files,
+                'user': user,
+                'metadata': {
+                    'totalFiles': len(formatted_files),
+                    'timestamp': datetime.utcnow().isoformat(),
+                    'accountId': account_id
+                }
+            })
+                
+        except Exception as query_error:
+            logger.error(f"Error querying AccountIdIndex: {str(query_error)}. Exception type: {type(query_error).__name__}")
+            return create_response(500, {"message": "Error listing files for account"})
+            
+    except Exception as e:
+        logger.error(f"Error listing files for account: {str(e)}, Exception type: {type(e).__name__}")
+        return create_response(500, {"message": "Error listing files for account"})
+
 def get_upload_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     """Generate a presigned URL for file upload."""
     try:
@@ -162,9 +281,18 @@ def get_upload_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
         file_name = body.get('fileName')
         content_type = body.get('contentType', 'text/plain')
         file_size = body.get('fileSize', 0)
+        account_id = body.get('accountId')
         
         if not file_name:
             return create_response(400, {"message": "fileName is required"})
+        
+        # Validate account_id if it's a transaction file
+        if account_id:
+            if not account_id.strip():
+                return create_response(400, {"message": "accountId cannot be empty if provided"})
+        else:
+            # If not associated with an account, it's a regular file
+            pass
             
         # Generate a unique file ID
         file_id = generate_file_id()
@@ -175,8 +303,13 @@ def get_upload_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
         # Generate presigned URL for upload
         upload_url = get_presigned_url(FILE_STORAGE_BUCKET, file_key, 'put')
         
+        # Determine file format based on content type or file extension
+        file_format = determine_file_format(file_name, content_type)
+        
         # Store file metadata in DynamoDB
         current_time = datetime.utcnow().isoformat()
+        
+        # Create basic item with required fields
         item = {
             'fileId': file_id,
             'userId': user['id'],
@@ -186,24 +319,70 @@ def get_upload_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
             'uploadDate': current_time,
             'lastModified': current_time,
             's3Key': file_key,
-            'status': 'pending'  # Will be updated to 'uploaded' when the file is uploaded
+            'processingStatus': ProcessingStatus.PENDING.value,
+            'fileFormat': file_format.value
         }
+        
+        # Add accountId if provided (for transaction files)
+        if account_id:
+            item['accountId'] = account_id
         
         logger.info(f"Saving file metadata to DynamoDB: {json.dumps(item)}")
         logger.info(f"User ID for index: {user['id']}")
         
         file_table.put_item(Item=item)
         
-        return create_response(200, {
+        # Create response with basic fields
+        response = {
             'fileId': file_id,
             'uploadUrl': upload_url,
             'fileName': file_name,
             'contentType': content_type,
-            'expires': 3600  # URL expires in 1 hour
-        })
+            'expires': 3600,  # URL expires in 1 hour
+            'processingStatus': ProcessingStatus.PENDING.value,
+            'fileFormat': file_format.value
+        }
+        
+        # Include accountId in response if it was provided
+        if account_id:
+            response['accountId'] = account_id
+            
+        return create_response(200, response)
     except Exception as e:
         logger.error(f"Error generating upload URL: {str(e)}, Exception type: {type(e).__name__}")
         return create_response(500, {"message": "Error generating upload URL"})
+
+def determine_file_format(file_name: str, content_type: str) -> FileFormat:
+    """Determine the file format based on file name and content type."""
+    # Extract extension from file name
+    extension = file_name.split('.')[-1].lower() if '.' in file_name else ''
+    
+    # Map extensions to FileFormat enum
+    extension_map = {
+        'csv': FileFormat.CSV,
+        'ofx': FileFormat.OFX,
+        'qfx': FileFormat.QFX,
+        'pdf': FileFormat.PDF,
+        'xlsx': FileFormat.XLSX
+    }
+    
+    # Content type mapping
+    content_type_map = {
+        'text/csv': FileFormat.CSV,
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': FileFormat.XLSX,
+        'application/pdf': FileFormat.PDF
+    }
+    
+    # Try to determine by extension first
+    if extension in extension_map:
+        return extension_map[extension]
+    
+    # If not successful, try by content type
+    if content_type in content_type_map:
+        return content_type_map[content_type]
+    
+    # Default to OTHER if we can't determine
+    return FileFormat.OTHER
 
 def get_download_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     """Generate a presigned URL for file download."""
@@ -300,6 +479,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     # Handle based on route
     if route == "GET /files":
         return list_files_handler(event, user)
+    elif route == "GET /files/account/{accountId}":
+        return get_files_by_account_handler(event, user)
     elif route == "POST /files/upload":
         return get_upload_url_handler(event, user)
     elif route == "GET /files/{id}/download":

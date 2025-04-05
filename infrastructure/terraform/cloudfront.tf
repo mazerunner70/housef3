@@ -177,6 +177,37 @@ resource "aws_cloudfront_distribution" "frontend" {
     default_ttl = 0
     max_ttl     = 0
   }
+  
+  # API Gateway behavior for account operations
+  ordered_cache_behavior {
+    path_pattern     = "/accounts*"
+    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = local.api_origin_id
+    
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.cors_policy.id
+    
+    compress               = true
+    viewer_protocol_policy = "https-only"
+    
+    forwarded_values {
+      query_string = true
+      headers = [
+        "Authorization",
+        "Origin",
+        "Access-Control-Request-Headers",
+        "Access-Control-Request-Method",
+        "Content-Type"
+      ]
+      cookies {
+        forward = "none"
+      }
+    }
+    
+    min_ttl     = 0
+    default_ttl = 0
+    max_ttl     = 0
+  }
 
   # For SPA routing, we need to serve index.html for all routes that don't match files
   custom_error_response {

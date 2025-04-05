@@ -49,7 +49,7 @@ This plan outlines the implementation of a financial account management system t
    - Sort key: none
    - Global Secondary Index: userId-createdAt for efficient retrieval
    
-2. Update existing file metadata table or create a new TransactionFiles table:
+2. Update existing file metadata table to be TransactionFiles table:
    - Partition key: fileId
    - Sort key: none
    - Global Secondary Indexes:

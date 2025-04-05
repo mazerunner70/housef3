@@ -89,6 +89,78 @@ resource "aws_apigatewayv2_route" "delete_file" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# Account Operations Integration
+resource "aws_apigatewayv2_integration" "account_operations" {
+  api_id                 = aws_apigatewayv2_api.main.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.account_operations.invoke_arn
+  payload_format_version = "2.0"
+  description           = "Lambda integration for account operations endpoints"
+}
+
+# Account creation route
+resource "aws_apigatewayv2_route" "create_account" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /accounts"
+  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Account listing route
+resource "aws_apigatewayv2_route" "list_accounts" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /accounts"
+  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Account details route
+resource "aws_apigatewayv2_route" "get_account" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /accounts/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Account update route
+resource "aws_apigatewayv2_route" "update_account" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "PUT /accounts/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Account deletion route
+resource "aws_apigatewayv2_route" "delete_account" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "DELETE /accounts/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Account files route
+resource "aws_apigatewayv2_route" "account_files" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /accounts/{id}/files"
+  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# File upload for account route
+resource "aws_apigatewayv2_route" "account_file_upload" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /accounts/{id}/files"
+  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 resource "aws_apigatewayv2_stage" "main" {
   api_id      = aws_apigatewayv2_api.main.id
   name        = var.environment
@@ -139,6 +211,15 @@ resource "aws_lambda_permission" "file_operations" {
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/files*"
 }
 
+# Lambda permission for account operations
+resource "aws_lambda_permission" "account_operations" {
+  statement_id  = "AllowAPIGatewayInvokeAccounts"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.account_operations.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/accounts*"
+}
+
 # Outputs
 output "api_endpoint" {
   value = "${aws_apigatewayv2_stage.main.invoke_url}/colors"
@@ -146,6 +227,10 @@ output "api_endpoint" {
 
 output "api_files_endpoint" {
   value = "${aws_apigatewayv2_stage.main.invoke_url}/files"
+}
+
+output "api_accounts_endpoint" {
+  value = "${aws_apigatewayv2_stage.main.invoke_url}/accounts"
 }
 
 output "api_stage" {
