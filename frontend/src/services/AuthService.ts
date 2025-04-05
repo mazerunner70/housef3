@@ -28,7 +28,7 @@ export interface AuthUser {
   tokenExpiry: number;
 }
 
-// Store the current user information
+// Current authenticated user state
 let currentUser: AuthUser | null = null;
 
 // Check local storage for existing token on initialization
@@ -45,10 +45,24 @@ initAuth();
 // Store the auth user in local storage
 export const storeUser = (user: AuthUser) => {
   localStorage.setItem('authUser', JSON.stringify(user));
+  // Update the current user in memory
+  currentUser = user;
 };
 
 // Get the current user from local storage
 export const getCurrentUser = (): AuthUser | null => {
+  if (!currentUser) {
+    // Try to get from localStorage if not in memory
+    const userStr = localStorage.getItem('authUser');
+    if (userStr) {
+      try {
+        currentUser = JSON.parse(userStr);
+      } catch (error) {
+        console.error('Error parsing auth user:', error);
+        return null;
+      }
+    }
+  }
   return currentUser;
 };
 
@@ -64,6 +78,7 @@ export const isAuthenticated = (): boolean => {
     refreshToken(user.refreshToken).catch(() => {
       // If refresh fails, clear local storage
       localStorage.removeItem('authUser');
+      currentUser = null;
     });
     return false;
   }
@@ -91,18 +106,20 @@ export const signOut = async (): Promise<void> => {
 
 // Sign in with username and password
 export const signIn = async (username: string, password: string): Promise<AuthUser> => {
+  const client = new CognitoIdentityProviderClient({ region: REGION });
+  
+  const input: InitiateAuthCommandInput = {
+    AuthFlow: 'USER_PASSWORD_AUTH',
+    ClientId: CLIENT_ID,
+    AuthParameters: {
+      USERNAME: username,
+      PASSWORD: password,
+    },
+  };
+  
   try {
-    const params: InitiateAuthCommandInput = {
-      AuthFlow: 'USER_PASSWORD_AUTH',
-      ClientId: CLIENT_ID,
-      AuthParameters: {
-        USERNAME: username,
-        PASSWORD: password
-      }
-    };
-
-    const command = new InitiateAuthCommand(params);
-    const response: InitiateAuthCommandOutput = await cognitoClient.send(command);
+    const command = new InitiateAuthCommand(input);
+    const response = await client.send(command);
     
     if (!response.AuthenticationResult) {
       throw new Error('Authentication failed');
@@ -126,10 +143,8 @@ export const signIn = async (username: string, password: string): Promise<AuthUs
       tokenExpiry: Date.now() + (ExpiresIn || 3600) * 1000 // Convert to milliseconds
     };
     
-    // Store user in local storage
+    // Store user in local storage and update current user
     storeUser(user);
-    
-    currentUser = user;
     
     return user;
   } catch (error) {
@@ -140,17 +155,19 @@ export const signIn = async (username: string, password: string): Promise<AuthUs
 
 // Refresh the token
 export const refreshToken = async (refreshToken: string): Promise<AuthUser> => {
+  const client = new CognitoIdentityProviderClient({ region: REGION });
+  
+  const input: InitiateAuthCommandInput = {
+    AuthFlow: 'REFRESH_TOKEN_AUTH',
+    ClientId: CLIENT_ID,
+    AuthParameters: {
+      REFRESH_TOKEN: refreshToken,
+    },
+  };
+  
   try {
-    const params: InitiateAuthCommandInput = {
-      AuthFlow: 'REFRESH_TOKEN_AUTH',
-      ClientId: CLIENT_ID,
-      AuthParameters: {
-        REFRESH_TOKEN: refreshToken,
-      }
-    };
-
-    const command = new InitiateAuthCommand(params);
-    const response: InitiateAuthCommandOutput = await cognitoClient.send(command);
+    const command = new InitiateAuthCommand(input);
+    const response = await client.send(command);
     
     if (!response.AuthenticationResult) {
       throw new Error('Token refresh failed');
@@ -180,10 +197,8 @@ export const refreshToken = async (refreshToken: string): Promise<AuthUser> => {
       tokenExpiry: Date.now() + (ExpiresIn || 3600) * 1000 // Convert to milliseconds
     };
     
-    // Store updated user in local storage
+    // Store updated user in local storage and update current user
     storeUser(user);
-    
-    currentUser = user;
     
     return user;
   } catch (error) {

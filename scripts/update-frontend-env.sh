@@ -8,13 +8,24 @@ cd "$(dirname "$0")/../infrastructure/terraform"
 COGNITO_USER_POOL_ID=$(terraform output -raw cognito_user_pool_id)
 COGNITO_CLIENT_ID=$(terraform output -raw cognito_user_pool_client_id)
 AWS_REGION=$(terraform output -raw aws_region 2>/dev/null || echo "eu-west-2")
-CLOUDFRONT_DOMAIN=$(terraform output -raw cloudfront_domain 2>/dev/null || echo "d2q06gtsnbb6iy.cloudfront.net")
+CLOUDFRONT_DOMAIN=$(terraform output -raw cloudfront_distribution_domain 2>/dev/null || echo "d2q06gtsnbb6iy.cloudfront.net")
 
-# Create or update the .env.local file
-ENV_FILE="../../frontend/.env.local"
+# Create or update the development .env.local file
+DEV_ENV_FILE="../../frontend/.env.local"
 
-echo "Updating frontend environment variables..."
-cat > "$ENV_FILE" << EOF
+echo "Updating frontend development environment variables..."
+cat > "$DEV_ENV_FILE" << EOF
+VITE_COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
+VITE_COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}
+VITE_AWS_REGION=${AWS_REGION}
+VITE_CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN}
+EOF
+
+# Create or update the production .env.production file
+PROD_ENV_FILE="../../frontend/.env.production"
+
+echo "Updating frontend production environment variables..."
+cat > "$PROD_ENV_FILE" << EOF
 VITE_COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
 VITE_COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}
 VITE_AWS_REGION=${AWS_REGION}
