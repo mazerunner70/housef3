@@ -15,6 +15,8 @@ resource "aws_lambda_function" "colors" {
   environment {
     variables = {
       ENVIRONMENT = var.environment
+      DYNAMODB_TABLE = aws_dynamodb_table.file_metadata.name
+      FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.bucket
     }
   }
 
@@ -49,6 +51,34 @@ resource "aws_iam_role" "lambda_exec" {
 resource "aws_iam_role_policy_attachment" "lambda_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
   role       = aws_iam_role.lambda_exec.name
+}
+
+# IAM policy for Lambda to access DynamoDB
+resource "aws_iam_role_policy" "lambda_dynamodb_access" {
+  name   = "dynamodb-access"
+  role   = aws_iam_role.lambda_exec.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan",
+          "dynamodb:BatchGetItem",
+          "dynamodb:BatchWriteItem"
+        ]
+        Effect   = "Allow"
+        Resource = [
+          aws_dynamodb_table.file_metadata.arn,
+          "${aws_dynamodb_table.file_metadata.arn}/index/*"
+        ]
+      }
+    ]
+  })
 }
 
 # CloudWatch log group for Lambda
