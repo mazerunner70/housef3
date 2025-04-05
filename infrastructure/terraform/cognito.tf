@@ -43,43 +43,37 @@ resource "aws_cognito_user_pool" "main" {
 }
 
 resource "aws_cognito_user_pool_client" "main" {
-  name = "${var.project_name}-${var.environment}-client"
-
-  user_pool_id = aws_cognito_user_pool.main.id
-  
-  # No client secret for public clients
-  generate_secret = false
-  
-  # Auth flows for token generation
-  explicit_auth_flows = [
-    "ALLOW_USER_PASSWORD_AUTH",
-    "ALLOW_REFRESH_TOKEN_AUTH",
-    "ALLOW_USER_SRP_AUTH"
-  ]
-
-  # Token configuration
-  refresh_token_validity = 30
-  access_token_validity  = 5  # 5 minutes
-  id_token_validity     = 5   # 5 minutes
-
+  name                         = "${var.project_name}-${var.environment}-client"
+  user_pool_id                 = aws_cognito_user_pool.main.id
+  generate_secret              = false
+  refresh_token_validity       = 30
   prevent_user_existence_errors = "ENABLED"
   
-  # Enable token revocation
-  enable_token_revocation = true
-
-  # Allow all scopes needed for API access
-  allowed_oauth_flows                  = ["implicit"]
-  allowed_oauth_flows_user_pool_client = true
-  allowed_oauth_scopes                 = [
-    "openid",
-    "email",
-    "profile",
-    "${aws_cognito_resource_server.api.identifier}/colors.read"
+  # Add explicit auth flows
+  explicit_auth_flows = [
+    "ALLOW_ADMIN_USER_PASSWORD_AUTH",
+    "ALLOW_USER_PASSWORD_AUTH",
+    "ALLOW_REFRESH_TOKEN_AUTH"
   ]
+  
+  allowed_oauth_flows          = ["code", "implicit"]
+  allowed_oauth_scopes         = ["openid", "email", "profile", "aws.cognito.signin.user.admin"]
+  allowed_oauth_flows_user_pool_client = true
+  callback_urls                = ["http://localhost:3000/callback", "https://${var.domain_name}/callback"]
+  logout_urls                  = ["http://localhost:3000/logout", "https://${var.domain_name}/logout"]
+  supported_identity_providers = ["COGNITO"]
 
-  # Required for OAuth flows
-  callback_urls = ["http://localhost:3000"]
-  logout_urls   = ["http://localhost:3000"]
+  # Access token is valid for 1 hour
+  access_token_validity = 1
+
+  # ID token is valid for 1 hour
+  id_token_validity = 1
+
+  token_validity_units {
+    access_token  = "hours"
+    id_token      = "hours"
+    refresh_token = "days"
+  }
 }
 
 # Resource server for API access

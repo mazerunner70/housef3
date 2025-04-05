@@ -27,6 +27,31 @@ resource "aws_lambda_function" "colors" {
   }
 }
 
+resource "aws_lambda_function" "file_operations" {
+  filename         = "../../backend/lambda.zip"
+  function_name    = "${var.project_name}-${var.environment}-file-operations"
+  role            = aws_iam_role.lambda_exec.arn
+  handler         = "file_operations.handler"
+  runtime         = "python3.9"
+  source_code_hash = data.archive_file.lambda_colors.output_base64sha256
+  timeout         = 30
+  memory_size     = 256
+  
+  environment {
+    variables = {
+      ENVIRONMENT = var.environment
+      DYNAMODB_TABLE = aws_dynamodb_table.file_metadata.name
+      FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.bucket
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
 resource "aws_iam_role" "lambda_exec" {
   name = "${var.project_name}-${var.environment}-lambda-role"
 
@@ -81,6 +106,18 @@ resource "aws_iam_role_policy" "lambda_dynamodb_access" {
   })
 }
 
+# CloudWatch log group for file operations Lambda
+resource "aws_cloudwatch_log_group" "file_operations" {
+  name              = "/aws/lambda/${aws_lambda_function.file_operations.function_name}"
+  retention_in_days = 7
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
 # CloudWatch log group for Lambda
 resource "aws_cloudwatch_log_group" "lambda" {
   name              = "/aws/lambda/${aws_lambda_function.colors.function_name}"
@@ -100,4 +137,12 @@ output "lambda_function_name" {
 
 output "lambda_function_arn" {
   value = aws_lambda_function.colors.arn
+}
+
+output "file_operations_function_name" {
+  value = aws_lambda_function.file_operations.function_name
+}
+
+output "file_operations_function_arn" {
+  value = aws_lambda_function.file_operations.arn
 } 

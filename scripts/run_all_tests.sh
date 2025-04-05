@@ -47,6 +47,9 @@ run_test "DynamoDB Table Configuration" "test_dynamodb.sh"
 # Run Authentication test
 run_test "Authentication Service" "test_auth.sh"
 
+# Run File Operations test
+run_test "File Operations" "test_file_operations.sh"
+
 # Run Frontend test
 run_test "Frontend Deployment" "test_frontend.sh"
 

@@ -63,11 +63,6 @@ resource "aws_cloudfront_response_headers_policy" "cors_policy" {
 }
 
 resource "aws_cloudfront_distribution" "frontend" {
-  enabled             = true
-  is_ipv6_enabled    = true
-  default_root_object = "index.html"
-  price_class         = "PriceClass_100"
-
   origin {
     domain_name = aws_s3_bucket_website_configuration.frontend.website_endpoint
     origin_id   = local.s3_origin_id
@@ -79,16 +74,16 @@ resource "aws_cloudfront_distribution" "frontend" {
       origin_ssl_protocols   = ["TLSv1.2"]
     }
   }
-
+  
   # API Gateway Origin
   origin {
     domain_name = replace(aws_apigatewayv2_api.main.api_endpoint, "https://", "")
     origin_id   = local.api_origin_id
     origin_path = "/dev"  # This appends the stage name
-
+    
     custom_origin_config {
       http_port              = 80
-      https_port            = 443
+      https_port             = 443
       origin_protocol_policy = "https-only"
       origin_ssl_protocols   = ["TLSv1.2"]
       origin_read_timeout    = 30
@@ -96,32 +91,31 @@ resource "aws_cloudfront_distribution" "frontend" {
     }
   }
 
-  # Enable detailed logging to S3
-  logging_config {
-    include_cookies = false
-    bucket          = "${aws_s3_bucket.frontend.bucket}.s3.amazonaws.com"
-    prefix          = "cloudfront-logs/"
-  }
-
+  enabled             = true
+  is_ipv6_enabled     = true
+  comment             = "CloudFront distribution for ${var.project_name} ${var.environment}"
+  default_root_object = "index.html"
+  
+  # Default cache behavior - S3 website
   default_cache_behavior {
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = local.s3_origin_id
-    viewer_protocol_policy = "redirect-to-https"
-    compress              = true
-
+    allowed_methods  = ["GET", "HEAD", "OPTIONS"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = local.s3_origin_id
+    
     forwarded_values {
       query_string = false
       cookies {
         forward = "none"
       }
     }
-
-    min_ttl     = 0
-    default_ttl = 3600
-    max_ttl     = 86400
+    
+    viewer_protocol_policy = "redirect-to-https"
+    min_ttl                = 0
+    default_ttl            = 3600
+    max_ttl                = 86400
+    compress               = true
   }
-
+  
   # API Gateway behavior - direct pass-through
   ordered_cache_behavior {
     path_pattern     = "/colors"  # Simple path pattern matching the example
@@ -130,10 +124,10 @@ resource "aws_cloudfront_distribution" "frontend" {
     target_origin_id = local.api_origin_id
     
     response_headers_policy_id = aws_cloudfront_response_headers_policy.cors_policy.id
-
+    
     compress               = true
     viewer_protocol_policy = "https-only"
-
+    
     forwarded_values {
       query_string = true
       headers = [
@@ -147,24 +141,57 @@ resource "aws_cloudfront_distribution" "frontend" {
         forward = "none"
       }
     }
-
+    
+    min_ttl     = 0
+    default_ttl = 0
+    max_ttl     = 0
+  }
+  
+  # API Gateway behavior for file operations
+  ordered_cache_behavior {
+    path_pattern     = "/files*"
+    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = local.api_origin_id
+    
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.cors_policy.id
+    
+    compress               = true
+    viewer_protocol_policy = "https-only"
+    
+    forwarded_values {
+      query_string = true
+      headers = [
+        "Authorization",
+        "Origin",
+        "Access-Control-Request-Headers",
+        "Access-Control-Request-Method",
+        "Content-Type"
+      ]
+      cookies {
+        forward = "none"
+      }
+    }
+    
     min_ttl     = 0
     default_ttl = 0
     max_ttl     = 0
   }
 
-  # This special behavior handles routing SPA routes back to index.html
+  # For SPA routing, we need to serve index.html for all routes that don't match files
   custom_error_response {
     error_code         = 403
     response_code      = 200
     response_page_path = "/index.html"
   }
-
+  
   custom_error_response {
     error_code         = 404
     response_code      = 200
     response_page_path = "/index.html"
   }
+
+  price_class = "PriceClass_100"
 
   restrictions {
     geo_restriction {
@@ -172,11 +199,16 @@ resource "aws_cloudfront_distribution" "frontend" {
     }
   }
 
+  # Using the CloudFront managed SSL certificate
   viewer_certificate {
     cloudfront_default_certificate = true
   }
-
-  tags = var.tags
+  
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
 }
 
 output "cloudfront_distribution_domain" {

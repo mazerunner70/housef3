@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Script to build and deploy the frontend to S3
+# Script to build the frontend and deploy to S3
 
 # Get directory of this script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,7 +34,7 @@ CLOUDFRONT_DOMAIN=$(terraform output -raw cloudfront_distribution_domain)
 CLOUDFRONT_ID=$(terraform output -raw cloudfront_distribution_id)
 
 # Deploy to S3
-echo "Deploying to S3 bucket: $S3_BUCKET"
+echo "Deploying frontend to S3 bucket: $S3_BUCKET"
 cd "$PROJECT_ROOT/frontend/dist"
 aws s3 sync . "s3://$S3_BUCKET" --delete
 
@@ -42,5 +42,5 @@ aws s3 sync . "s3://$S3_BUCKET" --delete
 echo "Invalidating CloudFront cache..."
 aws cloudfront create-invalidation --distribution-id $CLOUDFRONT_ID --paths "/*"
 
-echo "Deployment complete!"
+echo "Frontend build and deployment complete!"
 echo "Your application is available at: https://$CLOUDFRONT_DOMAIN" 
