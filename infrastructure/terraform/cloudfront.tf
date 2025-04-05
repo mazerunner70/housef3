@@ -37,6 +37,31 @@ resource "aws_cloudfront_cache_policy" "api_gateway" {
   }
 }
 
+# Response headers policy for CORS
+resource "aws_cloudfront_response_headers_policy" "cors_policy" {
+  name    = "${var.project_name}-${var.environment}-cors-policy"
+  comment = "CORS policy for API Gateway and frontend integration"
+
+  cors_config {
+    access_control_allow_credentials = true
+    
+    access_control_allow_headers {
+      items = ["Authorization", "Content-Type", "Origin", "Accept"]
+    }
+    
+    access_control_allow_methods {
+      items = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "DELETE", "PATCH"]
+    }
+    
+    access_control_allow_origins {
+      items = ["http://localhost:5173"]
+    }
+    
+    access_control_max_age_sec = 600
+    origin_override            = true
+  }
+}
+
 resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
   is_ipv6_enabled    = true
@@ -103,6 +128,8 @@ resource "aws_cloudfront_distribution" "frontend" {
     allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods   = ["GET", "HEAD"]
     target_origin_id = local.api_origin_id
+    
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.cors_policy.id
 
     compress               = true
     viewer_protocol_policy = "https-only"

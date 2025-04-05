@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, FormEvent } from 'react';
 import { signIn } from '../services/AuthService';
 import './Login.css';
 
@@ -9,57 +9,61 @@ interface LoginProps {
 const Login = ({ onLoginSuccess }: LoginProps) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setError('');
-    setIsLoading(true);
-
+    
+    if (!username || !password) {
+      setError('Please enter both username and password');
+      return;
+    }
+    
+    setLoading(true);
+    setError(null);
+    
     try {
       await signIn(username, password);
       onLoginSuccess();
-    } catch (err: any) {
-      console.error('Login failed:', err);
-      setError(err.message || 'Login failed. Please check your credentials.');
+    } catch (err) {
+      console.error('Login error:', err);
+      setError('Invalid username or password. Please try again.');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   return (
     <div className="login-container">
-      <h2>Sign In</h2>
-      {error && <div className="error-message">{error}</div>}
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} className="login-form">
         <div className="form-group">
-          <label htmlFor="username">Email:</label>
+          <label htmlFor="username">Username</label>
           <input
-            type="email"
+            type="text"
             id="username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            disabled={isLoading}
-            required
+            disabled={loading}
           />
         </div>
+        
         <div className="form-group">
-          <label htmlFor="password">Password:</label>
+          <label htmlFor="password">Password</label>
           <input
             type="password"
             id="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            disabled={isLoading}
-            required
+            disabled={loading}
           />
         </div>
-        <div className="form-actions">
-          <button type="submit" disabled={isLoading || !username || !password}>
-            {isLoading ? 'Signing in...' : 'Sign In'}
-          </button>
-        </div>
+        
+        {error && <div className="error-message">{error}</div>}
+        
+        <button type="submit" className="login-button" disabled={loading}>
+          {loading ? 'Signing in...' : 'Sign In'}
+        </button>
       </form>
     </div>
   );

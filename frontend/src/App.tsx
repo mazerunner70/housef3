@@ -2,21 +2,57 @@ import { useState, useEffect } from 'react';
 import './App.css'
 import Login from './components/Login';
 import UserProfile from './components/UserProfile';
-import { AuthUser, getCurrentUser, isAuthenticated } from './services/AuthService';
+import ColorDisplay from './components/ColorDisplay';
+import { AuthUser, getCurrentUser, isAuthenticated, refreshToken } from './services/AuthService';
 
 function App() {
   const [authenticated, setAuthenticated] = useState<boolean>(false);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
 
   // Check authentication status on component mount
   useEffect(() => {
-    const checkAuth = () => {
-      const isAuth = isAuthenticated();
-      setAuthenticated(isAuth);
+    const checkAuth = async () => {
+      setLoading(true);
       
-      if (isAuth) {
+      try {
+        // Get current user
         const currentUser = getCurrentUser();
-        setUser(currentUser);
+        
+        // Check if user is authenticated
+        if (currentUser) {
+          // If token expired, try to refresh
+          if (!isAuthenticated() && currentUser.refreshToken) {
+            try {
+              const refreshedUser = await refreshToken(currentUser.refreshToken);
+              setUser(refreshedUser);
+              setAuthenticated(true);
+              return;
+            } catch (error) {
+              console.error('Failed to refresh token:', error);
+              setUser(null);
+              setAuthenticated(false);
+              return;
+            }
+          }
+          
+          // Token still valid
+          if (isAuthenticated()) {
+            setUser(currentUser);
+            setAuthenticated(true);
+            return;
+          }
+        }
+        
+        // No user or invalid token
+        setUser(null);
+        setAuthenticated(false);
+      } catch (error) {
+        console.error('Authentication check error:', error);
+        setUser(null);
+        setAuthenticated(false);
+      } finally {
+        setLoading(false);
       }
     };
     
@@ -24,14 +60,18 @@ function App() {
   }, []);
 
   const handleLoginSuccess = () => {
-    setAuthenticated(true);
     setUser(getCurrentUser());
+    setAuthenticated(true);
   };
 
   const handleSignOut = () => {
     setAuthenticated(false);
     setUser(null);
   };
+
+  if (loading) {
+    return <div className="loading-auth">Checking authentication...</div>;
+  }
 
   return (
     <div className="app-container">
@@ -41,8 +81,8 @@ function App() {
         <>
           <UserProfile user={user} onSignOut={handleSignOut} />
           <div className="content">
-            <p>Welcome to the Color Import Application. You are now authenticated and can view your colors.</p>
-            {/* Color list would go here in a future step */}
+            <p>Welcome to the Color Import Application, {user.username}!</p>
+            <ColorDisplay />
           </div>
         </>
       ) : (

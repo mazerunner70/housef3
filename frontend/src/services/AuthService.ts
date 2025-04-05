@@ -22,9 +22,10 @@ const cognitoClient = new CognitoIdentityProviderClient({
 
 export interface AuthUser {
   username: string;
-  email: string;
+  email?: string;
   token: string;
-  isAuthenticated: boolean;
+  refreshToken: string;
+  tokenExpiry: number;
 }
 
 // Store the current user information
@@ -32,24 +33,63 @@ let currentUser: AuthUser | null = null;
 
 // Check local storage for existing token on initialization
 const initAuth = (): void => {
-  const storedToken = localStorage.getItem('userToken');
-  const storedUsername = localStorage.getItem('username');
-  const storedEmail = localStorage.getItem('userEmail');
-  
-  if (storedToken && storedUsername) {
-    currentUser = {
-      username: storedUsername,
-      email: storedEmail || '',
-      token: storedToken,
-      isAuthenticated: true
-    };
+  const storedUser = localStorage.getItem('authUser');
+  if (storedUser) {
+    currentUser = JSON.parse(storedUser);
   }
 };
 
 // Initialize on module load
 initAuth();
 
-// Sign in function
+// Store the auth user in local storage
+export const storeUser = (user: AuthUser) => {
+  localStorage.setItem('authUser', JSON.stringify(user));
+};
+
+// Get the current user from local storage
+export const getCurrentUser = (): AuthUser | null => {
+  return currentUser;
+};
+
+// Check if the user is authenticated
+export const isAuthenticated = (): boolean => {
+  const user = getCurrentUser();
+  if (!user) return false;
+  
+  // Check if token has expired
+  const now = Date.now();
+  if (now > user.tokenExpiry) {
+    // Try to refresh the token
+    refreshToken(user.refreshToken).catch(() => {
+      // If refresh fails, clear local storage
+      localStorage.removeItem('authUser');
+    });
+    return false;
+  }
+  
+  return !!user.token;
+};
+
+// Sign out the user
+export const signOut = async (): Promise<void> => {
+  try {
+    if (currentUser?.token) {
+      const command = new GlobalSignOutCommand({
+        AccessToken: currentUser.token
+      });
+      await cognitoClient.send(command);
+    }
+  } catch (error) {
+    console.error('Error during sign out:', error);
+  } finally {
+    // Clear local storage and user state
+    localStorage.removeItem('authUser');
+    currentUser = null;
+  }
+};
+
+// Sign in with username and password
 export const signIn = async (username: string, password: string): Promise<AuthUser> => {
   try {
     const params: InitiateAuthCommandInput = {
@@ -64,60 +104,110 @@ export const signIn = async (username: string, password: string): Promise<AuthUs
     const command = new InitiateAuthCommand(params);
     const response: InitiateAuthCommandOutput = await cognitoClient.send(command);
     
-    if (!response.AuthenticationResult?.IdToken) {
-      throw new Error('No token received');
+    if (!response.AuthenticationResult) {
+      throw new Error('Authentication failed');
     }
-
-    const token = response.AuthenticationResult.IdToken;
     
-    // Store token and user info
-    localStorage.setItem('userToken', token);
-    localStorage.setItem('username', username);
-    localStorage.setItem('userEmail', username); // In Cognito, often username is email
+    const { IdToken, RefreshToken, ExpiresIn, AccessToken } = response.AuthenticationResult;
     
-    currentUser = {
-      username,
-      email: username,
-      token,
-      isAuthenticated: true
+    if (!IdToken || !RefreshToken || !AccessToken) {
+      throw new Error('Missing token information');
+    }
+    
+    // Parse the token to get user information
+    const payload = parseJwt(IdToken);
+    
+    // Create auth user object
+    const user: AuthUser = {
+      username: payload['cognito:username'] || username,
+      email: payload.email,
+      token: IdToken,
+      refreshToken: RefreshToken,
+      tokenExpiry: Date.now() + (ExpiresIn || 3600) * 1000 // Convert to milliseconds
     };
     
-    return currentUser;
+    // Store user in local storage
+    storeUser(user);
+    
+    currentUser = user;
+    
+    return user;
   } catch (error) {
     console.error('Error signing in:', error);
     throw error;
   }
 };
 
-// Sign out function
-export const signOut = async (): Promise<void> => {
+// Refresh the token
+export const refreshToken = async (refreshToken: string): Promise<AuthUser> => {
   try {
-    if (currentUser?.token) {
-      const command = new GlobalSignOutCommand({
-        AccessToken: currentUser.token
-      });
-      await cognitoClient.send(command);
+    const params: InitiateAuthCommandInput = {
+      AuthFlow: 'REFRESH_TOKEN_AUTH',
+      ClientId: CLIENT_ID,
+      AuthParameters: {
+        REFRESH_TOKEN: refreshToken,
+      }
+    };
+
+    const command = new InitiateAuthCommand(params);
+    const response: InitiateAuthCommandOutput = await cognitoClient.send(command);
+    
+    if (!response.AuthenticationResult) {
+      throw new Error('Token refresh failed');
     }
+    
+    const { IdToken, ExpiresIn, AccessToken } = response.AuthenticationResult;
+    
+    if (!IdToken || !AccessToken) {
+      throw new Error('Missing token information');
+    }
+    
+    // Get the current user
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+      throw new Error('No user to refresh');
+    }
+    
+    // Parse the token to get user information
+    const payload = parseJwt(IdToken);
+    
+    // Update auth user object
+    const user: AuthUser = {
+      ...currentUser,
+      username: payload['cognito:username'] || currentUser.username,
+      email: payload.email || currentUser.email,
+      token: IdToken,
+      tokenExpiry: Date.now() + (ExpiresIn || 3600) * 1000 // Convert to milliseconds
+    };
+    
+    // Store updated user in local storage
+    storeUser(user);
+    
+    currentUser = user;
+    
+    return user;
   } catch (error) {
-    console.error('Error during sign out:', error);
-  } finally {
-    // Clear local storage and user state
-    localStorage.removeItem('userToken');
-    localStorage.removeItem('username');
-    localStorage.removeItem('userEmail');
-    currentUser = null;
+    console.error('Error refreshing token:', error);
+    throw error;
   }
 };
 
-// Get current user
-export const getCurrentUser = (): AuthUser | null => {
-  return currentUser;
-};
+// Helper function to parse JWT
+function parseJwt(token: string) {
+  try {
+    // Split the token and get the payload part
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
 
-// Check if user is authenticated
-export const isAuthenticated = (): boolean => {
-  return currentUser !== null && currentUser.isAuthenticated;
-};
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    console.error('Error parsing JWT token:', e);
+    return {};
+  }
+}
 
 export default {
   signIn,

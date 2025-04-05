@@ -1,4 +1,4 @@
-import { AuthUser, signOut } from '../services/AuthService';
+import { signOut, AuthUser } from '../services/AuthService';
 import './UserProfile.css';
 
 interface UserProfileProps {
@@ -8,15 +8,27 @@ interface UserProfileProps {
 
 const UserProfile = ({ user, onSignOut }: UserProfileProps) => {
   const handleSignOut = async () => {
-    await signOut();
-    onSignOut();
+    try {
+      await signOut();
+      onSignOut();
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+
+  const formatExpiryTime = (timestamp: number) => {
+    const date = new Date(timestamp);
+    return date.toLocaleString();
   };
 
   return (
     <div className="user-profile">
       <div className="user-info">
-        <h2>Hello, {user.username}!</h2>
-        <p>Email: {user.email}</p>
+        <span className="username">{user.username}</span>
+        {user.email && <span className="email">({user.email})</span>}
+        <div className="token-expiry">
+          Token expires: {formatExpiryTime(user.tokenExpiry)}
+        </div>
       </div>
       <button className="sign-out-button" onClick={handleSignOut}>
         Sign Out
