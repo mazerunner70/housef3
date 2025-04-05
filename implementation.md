@@ -1,258 +1,318 @@
-# Implementation Plan: File Management System
+# Implementation Plan: Financial Account Management System
 
 ## Overview
-This plan outlines the steps to extend the current application with a file management system that allows users to upload text files to an S3 bucket, store metadata in DynamoDB, and provide a UI for listing, editing, and deleting files.
+This plan outlines the implementation of a financial account management system that allows users to create and manage multiple financial accounts. Each account can have associated transaction files that are uploaded from financial institutions (banks, credit cards, etc.). The system will provide a comprehensive UI and backend services for managing accounts and their associated transaction files.
 
-## Phase 1: Infrastructure Setup
+## Phase 1: Data Model and Infrastructure
 
-### Step 1: Create S3 Storage Bucket
-**Objective**: Set up an S3 bucket for file storage with appropriate configurations.
+### Step 1: Define Data Model
+**Objective**: Design the data structure for financial accounts and transaction files.
 
 **Implementation**:
-1. Create a new S3 bucket for file storage through Terraform
-2. Configure CORS settings to allow browser uploads
-3. Set up lifecycle policies for cost management
-4. Update IAM permissions for file operations
-5. Enable server-side encryption for security
+1. Define Account model with fields:
+   - accountId (unique identifier)
+   - userId (owner of the account)
+   - accountName (display name)
+   - accountType (checking, savings, credit card, investment, etc.)
+   - institution (bank or financial institution name)
+   - balance (current balance)
+   - currency (USD, EUR, etc.)
+   - lastUpdated (timestamp)
+   - createdAt (timestamp)
+   - notes (additional information)
+   - isActive (boolean)
+
+2. Define TransactionFile model with fields:
+   - fileId (unique identifier)
+   - accountId (associated account)
+   - userId (owner of the file)
+   - fileName (original filename)
+   - uploadDate (timestamp)
+   - fileSize (in bytes)
+   - fileFormat (CSV, OFX, QFX, etc.)
+   - s3Key (location in S3 bucket)
+   - processingStatus (pending, processed, error)
+   - recordCount (number of transactions)
+   - dateRange (start and end dates for transactions)
 
 **Testing**:
-- Verify bucket creation and configuration using AWS CLI
-- Test CORS settings with preflight requests
-- Validate IAM permissions by attempting basic operations
-- Confirm encryption is working by examining object metadata
+- Validate data model with sample data
+- Verify relationships between accounts and files
+- Test integrity constraints and validation rules
 
-### Step 2: Set Up DynamoDB Table
-**Objective**: Create a DynamoDB table to store file metadata.
+### Step 2: Set Up Database Tables
+**Objective**: Create DynamoDB tables to store account and transaction file metadata.
 
 **Implementation**:
-1. Define table schema with fields: 
-   - fileId (partition key)
-   - fileName
-   - uploadDate
-   - userId
-   - fileSize
-   - contentType
-   - lastModified
-2. Set up global secondary indexes for querying by userId and uploadDate
-3. Configure auto-scaling for read/write capacity
-4. Implement TTL for temporary files if needed
+1. Create Accounts table:
+   - Partition key: accountId
+   - Sort key: none
+   - Global Secondary Index: userId-createdAt for efficient retrieval
+   
+2. Update existing file metadata table or create a new TransactionFiles table:
+   - Partition key: fileId
+   - Sort key: none
+   - Global Secondary Indexes:
+     - userId-uploadDate for listing all user files
+     - accountId-uploadDate for listing files by account
+
+3. Configure auto-scaling, TTL settings, and backup policies
 
 **Testing**:
-- Verify table creation using AWS CLI or console
-- Test basic CRUD operations on the table
-- Validate GSI functionality with query operations
-- Perform load testing to ensure capacity settings are appropriate
+- Verify table creation and index configuration
+- Test basic CRUD operations
+- Validate GSI query performance
+- Test with expected data volumes
 
-### Step 3: Update Lambda Functions
-**Objective**: Create Lambda functions to handle file operations.
+### Step 3: Update S3 Storage Structure
+**Objective**: Configure S3 storage for transaction files with appropriate organization.
 
 **Implementation**:
-1. Create new Lambda functions for:
-   - File upload (with presigned URL generation)
-   - File download (with presigned URL generation)
-   - File listing (query DynamoDB by user)
-   - File deletion (remove from S3 and DynamoDB)
-   - File update (update content and metadata)
-2. Configure appropriate permissions via IAM roles
-3. Implement error handling and logging
-4. Add authentication checks using Cognito
+1. Create or update S3 bucket for transaction file storage
+2. Define folder structure: `{userId}/{accountId}/{fileId}/{fileName}`
+3. Configure appropriate lifecycle policies
+4. Update IAM permissions for secure access
+5. Ensure server-side encryption is enabled
 
 **Testing**:
-- Unit test each Lambda function independently
-- Test with various file sizes and types
-- Verify error handling for edge cases
-- Validate authentication and authorization
-- Perform integration tests with S3 and DynamoDB
+- Test file upload and retrieval
+- Verify folder structure is maintained
+- Validate access control and permissions
+- Test encryption and data protection
 
-### Step 4: Configure API Gateway Endpoints
-**Objective**: Create API endpoints for file operations and integrate with CloudFront.
+### Step 4: Create Lambda Functions for Account Management
+**Objective**: Implement backend services for account operations.
 
 **Implementation**:
-1. Add new routes to API Gateway:
-   - POST /files (upload)
-   - GET /files (list)
-   - GET /files/{id} (download)
-   - PUT /files/{id} (update)
-   - DELETE /files/{id} (delete)
-2. Configure Cognito authorizers for all endpoints
-3. Set up request/response mappings
-4. Update CloudFront distribution to forward these new paths
-5. Configure proper CORS headers for browser requests
+1. Create Lambda functions for account operations:
+   - CreateAccount
+   - GetAccount
+   - UpdateAccount
+   - DeleteAccount
+   - ListAccounts
+   
+2. Implement validation, error handling, and logging
+3. Ensure proper authentication and authorization checks
+4. Add support for concurrency and conflict resolution
 
 **Testing**:
-- Test each endpoint with valid requests
-- Verify authorization is working correctly
-- Test with invalid requests to ensure proper error responses
-- Validate CORS headers in responses
-- Confirm CloudFront is correctly forwarding requests
+- Unit test each Lambda function
+- Test with valid and invalid input
+- Verify error handling
+- Test authentication and authorization
+- Perform integration tests with DynamoDB
 
-## Phase 2: Frontend Implementation
+## Phase 2: API Integration
 
-### Step 5: Create File Upload Component
-**Objective**: Build a UI component for file uploading with progress tracking.
+### Step 5: Create API Gateway Endpoints for Accounts
+**Objective**: Expose account management services through RESTful API.
 
 **Implementation**:
-1. Create a file upload component with drag-and-drop support
-2. Implement file type validation for text files
-3. Add file size limits and validation
-4. Create progress indicator for uploads
-5. Handle success and error states
-6. Connect to the upload API endpoint
+1. Create API routes for account management:
+   - POST /accounts (create)
+   - GET /accounts (list all)
+   - GET /accounts/{id} (get one)
+   - PUT /accounts/{id} (update)
+   - DELETE /accounts/{id} (delete)
+
+2. Configure authentication with Cognito
+3. Set up appropriate request/response mappings
+4. Implement CORS headers for browser access
+5. Create API documentation
 
 **Testing**:
-- Test upload with various file types (valid and invalid)
-- Verify drag-and-drop functionality works in different browsers
-- Test upload progress indicator
-- Validate error handling for oversized files
-- Test upload cancellation
-- Verify integration with backend API
+- Test each endpoint with valid/invalid requests
+- Verify authentication works correctly
+- Test CORS for browser compatibility
+- Validate API response formats
+- Test error handling and status codes
 
-### Step 6: Implement File List Component
-**Objective**: Create a UI for listing and searching uploaded files.
+### Step 6: Update File Management API
+**Objective**: Extend existing file API to support transaction files associated with accounts.
 
 **Implementation**:
-1. Build a file listing component with sorting options
-2. Implement search functionality by filename
-3. Add filtering by upload date
-4. Create pagination for large lists
-5. Show relevant metadata (name, size, date)
-6. Add refresh functionality
-7. Connect to list API endpoint
+1. Update or create file management endpoints:
+   - POST /accounts/{id}/files (upload)
+   - GET /accounts/{id}/files (list by account)
+   - GET /accounts/{id}/files/{fileId} (download)
+   - DELETE /accounts/{id}/files/{fileId} (delete)
+   
+2. Add file metadata support for transaction files
+3. Implement pre-signed URL generation for secure uploads/downloads
+4. Update authorization logic to check account ownership
 
 **Testing**:
-- Test rendering with various list sizes
-- Verify sorting functionality (by name, date, size)
-- Validate search and filter capabilities
-- Test pagination with large datasets
-- Confirm metadata is displayed correctly
-- Verify integration with backend API
+- Test file upload/download with various formats
+- Verify account association is maintained
+- Test authorization for account-specific operations
+- Validate metadata handling
 
-### Step 7: Develop File Actions
-**Objective**: Implement file operations (download, delete, preview).
+## Phase 3: Frontend Implementation
+
+### Step 7: Create Account Management UI
+**Objective**: Build user interface components for account management.
 
 **Implementation**:
-1. Add download functionality
-2. Implement file deletion with confirmation
-3. Create text file preview component
-4. Add loading states for all operations
-5. Implement error handling
-6. Connect to respective API endpoints
+1. Create account dashboard component:
+   - Summary of all accounts
+   - Total balance across accounts
+   - Quick actions for common operations
+   
+2. Implement account list component:
+   - Sortable/filterable list of accounts
+   - Account type icons and visual indicators
+   - Basic account details preview
+   - Action buttons (edit, delete, view files)
+   
+3. Build account detail component:
+   - Display account information
+   - Edit capability
+   - Transaction file management
+   - Balance history (if implemented)
+
+4. Create account creation/edit form:
+   - Input validation
+   - Institution selection (dropdown or search)
+   - Account type selection
+   - Currency option
+   - Notes field
 
 **Testing**:
-- Test file download functionality
-- Verify deletion works and updates the file list
-- Test file preview with different text file formats
-- Validate error handling for each operation
-- Test with slow network conditions
-- Verify integration with backend API
+- Test UI rendering and responsiveness
+- Verify form validation
+- Test CRUD operations through UI
+- Validate error handling and user feedback
+- Test accessibility compliance
 
-### Step 8: Create File Edit Component
-**Objective**: Build an in-browser text editor for file editing.
+### Step 8: Implement Transaction File UI
+**Objective**: Create interface for managing transaction files associated with accounts.
 
 **Implementation**:
-1. Create a text editor component
-2. Implement save and cancel functionality
-3. Add syntax highlighting for common formats
-4. Create auto-save feature
-5. Add unsaved changes warning
-6. Connect to update API endpoint
+1. Build file upload component:
+   - Drag-and-drop support
+   - File type validation
+   - Progress indicator
+   - Success/error feedback
+   
+2. Create file listing component:
+   - Display files grouped by account
+   - Show file metadata (upload date, format, size)
+   - Sort/filter options
+   - Actions (download, delete, view)
+   
+3. Implement file preview:
+   - Basic transaction display
+   - Format detection
+   - Column mapping for different formats
+   - Simple statistics (transaction count, date range, etc.)
 
 **Testing**:
-- Test editor with various file formats and sizes
-- Verify save functionality updates the file in S3
-- Test syntax highlighting for different file types
-- Validate auto-save functionality
-- Confirm unsaved changes warnings work
-- Test with slow network conditions
-- Verify integration with backend API
+- Test file upload with various formats
+- Verify listing displays correct metadata
+- Test file previews with different formats
+- Validate error handling
+- Test integration with account components
 
-## Phase 3: Integration and Enhancements
-
-### Step 9: User Permissions and Sharing
-**Objective**: Implement file ownership and sharing capabilities.
+### Step 9: Account Dashboard and Navigation
+**Objective**: Create a comprehensive user dashboard for financial account management.
 
 **Implementation**:
-1. Update data model to include ownership and permissions
-2. Create UI for managing file permissions
-3. Implement file sharing by user ID or email
-4. Add public/private file toggle
-5. Update API endpoints to enforce permissions
-6. Add notifications for shared files
+1. Design main dashboard layout:
+   - Navigation sidebar/header
+   - Account summary cards
+   - Recent activity
+   - Quick actions
+
+2. Implement application routing:
+   - Home/dashboard
+   - Accounts list
+   - Individual account view
+   - Settings
+
+3. Create responsive design for mobile/tablet/desktop
 
 **Testing**:
-- Test file sharing between users
-- Verify permission changes are enforced
-- Test public/private toggle functionality
-- Validate permission checks in API endpoints
-- Test notification system
-- Verify integration across the application
+- Test navigation flow
+- Verify routing works correctly
+- Test responsive design on various devices
+- Validate dashboard data is accurate
+- Test performance with many accounts
 
-### Step 10: Testing and Deployment
-**Objective**: Comprehensive testing and deployment to production.
+## Phase 4: Integration and Enhancement
+
+### Step 10: Integration Testing and Deployment
+**Objective**: Ensure all components work together seamlessly.
 
 **Implementation**:
-1. Create automated tests for all components
-2. Perform end-to-end testing of complete workflows
-3. Test error scenarios and recovery
-4. Update CI/CD pipeline to include new components
+1. Conduct end-to-end testing of complete workflows
+2. Update CI/CD pipeline for deployment
+3. Implement feature flags for gradual rollout
+4. Create user documentation
 5. Deploy to production environment
-6. Monitor for errors and performance issues
 
 **Testing**:
-- Run automated test suite
-- Perform manual testing of critical paths
-- Test error handling and recovery
-- Verify deployment artifacts
-- Post-deployment verification
-- Load testing in production environment
+- Complete end-to-end testing
+- Verify all user workflows function correctly
+- Test with realistic data volumes
+- Perform security testing
+- Validate against business requirements
 
-### Step 11: Performance Optimizations
-**Objective**: Optimize application performance for file operations.
+### Step 11: Extended Features (Optional)
+**Objective**: Add additional features to enhance the account management system.
 
 **Implementation**:
-1. Implement client-side caching for file list
-2. Add server-side caching for frequently accessed files
-3. Optimize large file handling with chunked uploads
-4. Add background processing for intensive operations
-5. Implement lazy loading for file lists
-6. Optimize DynamoDB access patterns
+1. Transaction import and parsing:
+   - CSV format parser
+   - OFX/QFX format support
+   - Transaction categorization
+   - Duplicate detection
+
+2. Data visualization:
+   - Account balance trends
+   - Spending by category
+   - Income vs. expenses
+   - Monthly comparisons
+
+3. Account notifications:
+   - Balance alerts
+   - Unusual activity detection
+   - Reminder for regular updates
 
 **Testing**:
-- Measure performance before and after optimizations
-- Test with large files to verify improvements
-- Validate caching effectiveness
-- Test under high load conditions
-- Verify lazy loading works correctly
-- Measure and compare API response times
-
-### Step 12: Advanced Features (Optional)
-**Objective**: Add advanced file management capabilities.
-
-**Implementation**:
-1. Create file tagging system
-2. Implement full-text search for text files
-3. Add file versioning capability
-4. Create file thumbnail generation
-5. Implement file locking for collaborative editing
-6. Add file analytics and usage statistics
-
-**Testing**:
-- Test tagging system functionality
-- Verify full-text search accuracy
-- Test version history and restoration
-- Validate thumbnail generation for different file types
-- Test collaborative editing scenarios
-- Verify analytics data collection and reporting
+- Test import functionality with various file formats
+- Verify visualization accuracy
+- Test notification system
+- Validate user experience with extended features
 
 ## Technical Considerations
-1. File size limits should be enforced (both frontend and backend)
-2. Consider using presigned URLs for direct S3 access
-3. Implement appropriate error handling for all operations
-4. Ensure proper authentication/authorization throughout
-5. Consider cost optimization for S3 and DynamoDB usage
-6. Maintain HIPAA compliance for sensitive data
-7. Implement proper logging and monitoring
-8. Consider multi-region deployment for global access
 
-This implementation plan provides a systematic approach to extending the application with a complete file management system while leveraging the existing authentication and infrastructure.
+1. **Security**: Financial data requires strong security measures:
+   - Encryption at rest and in transit
+   - Strict access controls
+   - Regular security audits
+   - Compliance with financial regulations
+
+2. **Performance**:
+   - Optimize for quick loading of account summaries
+   - Efficient handling of large transaction files
+   - Appropriate caching strategies
+   - Background processing for heavy operations
+
+3. **Data Integrity**:
+   - Validation of all financial data
+   - Transaction consistency
+   - Audit logging for important operations
+   - Backup and recovery procedures
+
+4. **User Experience**:
+   - Clear financial information presentation
+   - Intuitive navigation between accounts and files
+   - Responsive design for all devices
+   - Accessibility compliance
+
+5. **Scalability**:
+   - Support for users with many accounts
+   - Handling large transaction files
+   - Efficient database queries
+   - Resource optimization
 
