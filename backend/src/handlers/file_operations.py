@@ -3,20 +3,27 @@ import logging
 import os
 import uuid
 import boto3
-from datetime import datetime
-from typing import Dict, Any, List, Optional
+from datetime import datetime, timedelta
+from typing import Dict, Any, List, Optional, Union
 from decimal import Decimal
 
-# Import our models for transaction files
+# Fix imports for Lambda environment
 try:
-    from models import TransactionFile, FileFormat, ProcessingStatus, DateRange
+    # Try absolute imports first (Lambda execution context)
+    from models.transaction_file import TransactionFile, FileFormat, ProcessingStatus, DateRange, validate_transaction_file_data
+    from utils.db_utils import get_file, list_files_for_account, create_file, update_file, delete_file
 except ImportError:
+    # Then try relative imports (local development context)
     try:
-        # Fallback if running in Lambda context
-        from src.models import TransactionFile, FileFormat, ProcessingStatus, DateRange
+        # Check for parent directory import
+        import sys
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from models.transaction_file import TransactionFile, FileFormat, ProcessingStatus, DateRange, validate_transaction_file_data
+        from utils.db_utils import get_file, list_files_for_account, create_file, update_file, delete_file
     except ImportError:
-        # Second fallback with another path
-        from backend.src.models import TransactionFile, FileFormat, ProcessingStatus, DateRange
+        # Last resort, try direct import
+        from ..models.transaction_file import TransactionFile, FileFormat, ProcessingStatus, DateRange, validate_transaction_file_data
+        from ..utils.db_utils import get_file, list_files_for_account, create_file, update_file, delete_file
 
 # Custom JSON encoder to handle Decimal values
 class DecimalEncoder(json.JSONEncoder):

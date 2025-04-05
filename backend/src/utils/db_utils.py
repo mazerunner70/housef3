@@ -7,11 +7,13 @@ import boto3
 from typing import Dict, List, Any, Optional, Union
 from botocore.exceptions import ClientError
 
-from ..models import (
+from models import (
     Account, 
     TransactionFile,
     validate_account_data,
-    validate_transaction_file_data
+    validate_transaction_file_data,
+    AccountType,
+    Currency
 )
 
 # Configure logging
@@ -93,14 +95,23 @@ def create_account(account_data: Dict[str, Any]) -> Account:
         # Validate the input data
         validate_account_data(account_data)
         
+        # Ensure account_type and currency are proper enum types
+        account_type = account_data['accountType']
+        if isinstance(account_type, str):
+            account_type = AccountType(account_type)
+            
+        currency = account_data.get('currency', 'USD')
+        if isinstance(currency, str):
+            currency = Currency(currency)
+        
         # Create account object
         account = Account.create(
             user_id=account_data['userId'],
             account_name=account_data['accountName'],
-            account_type=account_data['accountType'],
+            account_type=account_type,
             institution=account_data['institution'],
             balance=float(account_data.get('balance', 0)),
-            currency=account_data.get('currency', 'USD'),
+            currency=currency,
             notes=account_data.get('notes'),
             is_active=account_data.get('isActive', True)
         )
@@ -133,6 +144,13 @@ def update_account(account_id: str, update_data: Dict[str, Any]) -> Account:
         account = get_account(account_id)
         if not account:
             raise ValueError(f"Account {account_id} not found")
+        
+        # Convert enum string values to actual enum types
+        if 'accountType' in update_data and isinstance(update_data['accountType'], str):
+            update_data['accountType'] = AccountType(update_data['accountType'])
+            
+        if 'currency' in update_data and isinstance(update_data['currency'], str):
+            update_data['currency'] = Currency(update_data['currency'])
         
         # Update fields
         update_data_snake_case = {}

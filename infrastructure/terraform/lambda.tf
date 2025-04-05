@@ -1,6 +1,6 @@
-data "archive_file" "lambda_colors" {
+data "archive_file" "lambda_code" {
   type        = "zip"
-  source_dir  = "../../backend/src/handlers"
+  source_dir  = "../../backend/src"
   output_path = "../../backend/lambda.zip"
 }
 
@@ -8,9 +8,9 @@ resource "aws_lambda_function" "colors" {
   filename         = "../../backend/lambda.zip"
   function_name    = "${var.project_name}-${var.environment}-colors"
   role            = aws_iam_role.lambda_exec.arn
-  handler         = "list_imports.handler"
+  handler         = "handlers/list_imports.handler"
   runtime         = "python3.9"
-  source_code_hash = data.archive_file.lambda_colors.output_base64sha256
+  source_code_hash = data.archive_file.lambda_code.output_base64sha256
   
   environment {
     variables = {
@@ -31,9 +31,9 @@ resource "aws_lambda_function" "file_operations" {
   filename         = "../../backend/lambda.zip"
   function_name    = "${var.project_name}-${var.environment}-file-operations"
   role            = aws_iam_role.lambda_exec.arn
-  handler         = "file_operations.handler"
+  handler         = "handlers/file_operations.handler"
   runtime         = "python3.9"
-  source_code_hash = data.archive_file.lambda_colors.output_base64sha256
+  source_code_hash = data.archive_file.lambda_code.output_base64sha256
   timeout         = 30
   memory_size     = 256
   
@@ -56,9 +56,9 @@ resource "aws_lambda_function" "account_operations" {
   filename         = "../../backend/lambda.zip"
   function_name    = "${var.project_name}-${var.environment}-account-operations"
   role            = aws_iam_role.lambda_exec.arn
-  handler         = "account_operations.handler"
+  handler         = "handlers/account_operations.handler"
   runtime         = "python3.9"
-  source_code_hash = data.archive_file.lambda_colors.output_base64sha256
+  source_code_hash = data.archive_file.lambda_code.output_base64sha256
   timeout         = 30
   memory_size     = 256
   
