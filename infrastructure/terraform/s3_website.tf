@@ -1,5 +1,16 @@
+# =========================================
+# S3 BUCKET FOR FRONTEND WEBSITE HOSTING
+# =========================================
+# This file contains configurations for the S3 bucket 
+# used to host the frontend static website files.
+
 resource "aws_s3_bucket" "frontend" {
   bucket = "${var.project_name}-${var.environment}-frontend"
+
+  tags = merge(var.tags, {
+    Name = "${var.project_name}-${var.environment}-frontend"
+    Description = "S3 bucket for frontend website hosting"
+  })
 
   # Prevent accidental deletion of this S3 bucket
   lifecycle {
@@ -7,6 +18,7 @@ resource "aws_s3_bucket" "frontend" {
   }
 }
 
+# Configure public access settings for website hosting
 resource "aws_s3_bucket_public_access_block" "frontend" {
   bucket = aws_s3_bucket.frontend.id
 
@@ -16,6 +28,7 @@ resource "aws_s3_bucket_public_access_block" "frontend" {
   restrict_public_buckets = false
 }
 
+# Enable versioning for the frontend bucket
 resource "aws_s3_bucket_versioning" "frontend" {
   bucket = aws_s3_bucket.frontend.id
   versioning_configuration {
@@ -23,6 +36,7 @@ resource "aws_s3_bucket_versioning" "frontend" {
   }
 }
 
+# Enable server-side encryption for the frontend bucket
 resource "aws_s3_bucket_server_side_encryption_configuration" "frontend" {
   bucket = aws_s3_bucket.frontend.id
 
@@ -46,6 +60,7 @@ data "aws_iam_policy_document" "frontend_policy" {
   }
 }
 
+# Apply the website bucket policy
 resource "aws_s3_bucket_policy" "frontend" {
   bucket = aws_s3_bucket.frontend.id
   policy = data.aws_iam_policy_document.frontend_policy.json
@@ -54,7 +69,7 @@ resource "aws_s3_bucket_policy" "frontend" {
   depends_on = [aws_cloudfront_distribution.frontend]
 }
 
-# Enable static website hosting
+# Enable static website hosting configuration
 resource "aws_s3_bucket_website_configuration" "frontend" {
   bucket = aws_s3_bucket.frontend.id
 
@@ -67,7 +82,7 @@ resource "aws_s3_bucket_website_configuration" "frontend" {
   }
 }
 
-# Output the bucket name
+# Output the website bucket details
 output "frontend_bucket_name" {
   description = "Name of the S3 bucket hosting the frontend"
   value       = aws_s3_bucket.frontend.id
