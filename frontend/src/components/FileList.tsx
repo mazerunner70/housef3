@@ -269,6 +269,12 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
     setBalanceInput('');
   };
 
+  // Handle editing an existing balance
+  const handleEditBalance = (fileId: string, currentBalance: number | undefined) => {
+    setEditingBalanceFileId(fileId);
+    setBalanceInput(currentBalance !== undefined ? currentBalance.toString() : '');
+  };
+
   // Handle saving the balance
   const handleSaveBalance = async (fileId: string) => {
     // Validate the input is a valid number
@@ -469,7 +475,45 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
                       </td>
                       <td className="file-balance-cell">
                         {file.openingBalance !== undefined ? (
-                          `$${file.openingBalance.toFixed(2)}`
+                          editingBalanceFileId === file.fileId ? (
+                            <div className="balance-input-container">
+                              <input
+                                type="text"
+                                value={balanceInput}
+                                onChange={handleBalanceInputChange}
+                                className="balance-input"
+                                placeholder="0.00"
+                                autoFocus
+                              />
+                              <div className="balance-input-actions">
+                                <button
+                                  className="save-balance-button"
+                                  onClick={() => handleSaveBalance(file.fileId)}
+                                  disabled={savingBalanceFileId === file.fileId}
+                                >
+                                  {savingBalanceFileId === file.fileId ? '...' : '✓'}
+                                </button>
+                                <button
+                                  className="cancel-balance-button"
+                                  onClick={handleCancelBalanceEdit}
+                                  disabled={savingBalanceFileId === file.fileId}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="balance-with-edit">
+                              <span className="balance-display">${file.openingBalance.toFixed(2)}</span>
+                              <button
+                                className="edit-balance-button"
+                                onClick={() => handleEditBalance(file.fileId, file.openingBalance)}
+                                title="Edit opening balance"
+                              >
+                                ✎
+                              </button>
+                            </div>
+                          )
                         ) : editingBalanceFileId === file.fileId ? (
                           <div className="balance-input-container">
                             <input

@@ -201,6 +201,39 @@
   min-width: 100px;
 }
 
+.balance-with-edit {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  justify-content: flex-end;
+}
+
+.balance-display {
+  font-family: 'Courier New', monospace;
+  font-weight: 500;
+}
+
+.edit-balance-button {
+  background-color: transparent;
+  border: none;
+  color: #0066cc;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0;
+  opacity: 0.6;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.edit-balance-button:hover {
+  opacity: 1;
+  background-color: #f0f8ff;
+  border-radius: 50%;
+}
+
 .balance-input {
   padding: 4px;
   border-radius: 4px;
