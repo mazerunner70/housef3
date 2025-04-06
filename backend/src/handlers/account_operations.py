@@ -27,6 +27,8 @@ try:
     # Now try the imports
     from models.account import Account, AccountType, Currency, validate_account_data
     from utils.db_utils import get_account, list_user_accounts, create_account, update_account, delete_account
+    from utils.db_utils import list_account_files, create_transaction_file
+    from models.transaction_file import TransactionFile, FileFormat, ProcessingStatus
     
     logger.info("Successfully imported modules using adjusted path")
 except ImportError as e:
@@ -37,6 +39,8 @@ except ImportError as e:
     try:
         from ..models.account import Account, AccountType, Currency, validate_account_data
         from ..utils.db_utils import get_account, list_user_accounts, create_account, update_account, delete_account
+        from ..utils.db_utils import list_account_files, create_transaction_file
+        from ..models.transaction_file import TransactionFile, FileFormat, ProcessingStatus
         logger.info("Successfully imported modules using relative imports")
     except ImportError as e2:
         logger.error(f"Final import attempt failed: {str(e2)}")
@@ -241,6 +245,153 @@ def delete_account_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
         logger.error(f"Error deleting account: {str(e)}")
         return create_response(500, {"message": "Error deleting account"})
 
+def account_files_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    """List all files associated with an account."""
+    try:
+        # Get account ID from path parameters
+        account_id = event.get('pathParameters', {}).get('id')
+        
+        if not account_id:
+            return create_response(400, {"message": "Account ID is required"})
+        
+        # Verify the account exists and belongs to the user
+        existing_account = get_account(account_id)
+        
+        if not existing_account:
+            return create_response(404, {"message": f"Account not found: {account_id}"})
+        
+        if existing_account.user_id != user['id']:
+            return create_response(403, {"message": "Access denied"})
+        
+        # Get files for the account
+        files = list_account_files(account_id)
+        
+        # Convert files to dictionary format
+        file_dicts = [file.to_dict() for file in files]
+        
+        return create_response(200, {
+            'files': file_dicts,
+            'user': user,
+            'metadata': {
+                'totalFiles': len(file_dicts),
+                'accountId': account_id,
+                'accountName': existing_account.account_name
+            }
+        })
+    except Exception as e:
+        logger.error(f"Error listing account files: {str(e)}")
+        return create_response(500, {"message": "Error listing account files"})
+
+def account_file_upload_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    """Create a pre-signed URL for uploading a file to S3 and associate it with an account."""
+    try:
+        # Get account ID from path parameters
+        account_id = event.get('pathParameters', {}).get('id')
+        
+        if not account_id:
+            return create_response(400, {"message": "Account ID is required"})
+        
+        # Verify the account exists and belongs to the user
+        existing_account = get_account(account_id)
+        
+        if not existing_account:
+            return create_response(404, {"message": f"Account not found: {account_id}"})
+        
+        if existing_account.user_id != user['id']:
+            return create_response(403, {"message": "Access denied"})
+        
+        # Parse the request body
+        body = json.loads(event.get('body', '{}'))
+        
+        # Validate required fields
+        required_fields = ['fileName', 'contentType', 'fileSize']
+        for field in required_fields:
+            if field not in body:
+                return create_response(400, {"message": f"Missing required field: {field}"})
+        
+        # Generate a unique file ID
+        file_id = str(uuid.uuid4())
+        
+        # Get bucket name from environment variables
+        bucket_name = os.environ.get('FILE_STORAGE_BUCKET')
+        if not bucket_name:
+            logger.error("FILE_STORAGE_BUCKET environment variable not set")
+            return create_response(500, {"message": "Server configuration error"})
+        
+        # Create S3 client
+        s3_client = boto3.client('s3')
+        
+        # Generate a key path based on user ID, account ID and file ID
+        s3_key = f"{user['id']}/{file_id}/{body['fileName']}"
+        
+        # Generate a pre-signed URL for uploading the file
+        expires_in = 3600  # URL expires in 1 hour
+        try:
+            upload_url = s3_client.generate_presigned_url(
+                'put_object',
+                Params={
+                    'Bucket': bucket_name,
+                    'Key': s3_key,
+                    'ContentType': body['contentType']
+                },
+                ExpiresIn=expires_in
+            )
+        except Exception as e:
+            logger.error(f"Error generating pre-signed URL: {str(e)}")
+            return create_response(500, {"message": "Error generating upload URL"})
+        
+        # Determine file format based on filename or content type
+        file_format = FileFormat.OTHER
+        if 'fileFormat' in body:
+            file_format = FileFormat(body['fileFormat'])
+        elif body['fileName'].lower().endswith(('.csv')):
+            file_format = FileFormat.CSV
+        elif body['fileName'].lower().endswith(('.ofx', '.qfx')):
+            file_format = FileFormat.OFX
+        elif body['fileName'].lower().endswith('.pdf'):
+            file_format = FileFormat.PDF
+        elif body['fileName'].lower().endswith('.xlsx'):
+            file_format = FileFormat.XLSX
+        
+        # Create transaction file record in DynamoDB
+        try:
+            file_data = {
+                'fileId': file_id,
+                'userId': user['id'],
+                'accountId': account_id,
+                'fileName': body['fileName'],
+                'contentType': body['contentType'],
+                'fileSize': body['fileSize'],
+                'fileFormat': file_format.value,
+                's3Key': s3_key,
+                'processingStatus': ProcessingStatus.PENDING.value
+            }
+            
+            transaction_file = create_transaction_file(file_data)
+            
+            # Return the response with file information and upload URL
+            response = {
+                'fileId': file_id,
+                'uploadUrl': upload_url,
+                'fileName': body['fileName'],
+                'contentType': body['contentType'],
+                'expires': expires_in,
+                'processingStatus': 'pending',
+                'fileFormat': file_format.value,
+                'accountId': account_id
+            }
+            
+            return create_response(201, response)
+        except ValueError as e:
+            logger.error(f"Validation error: {str(e)}")
+            return create_response(400, {"message": str(e)})
+        except Exception as e:
+            logger.error(f"Error creating file record: {str(e)}")
+            return create_response(500, {"message": "Error creating file record"})
+    except Exception as e:
+        logger.error(f"Error processing file upload: {str(e)}")
+        return create_response(500, {"message": "Error processing file upload request"})
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main Lambda handler for account operations."""
     logger.info(f"Processing request with event: {json.dumps(event)}")
@@ -273,5 +424,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return update_account_handler(event, user)
     elif route == "DELETE /accounts/{id}":
         return delete_account_handler(event, user)
+    elif route == "GET /accounts/{id}/files":
+        return account_files_handler(event, user)
+    elif route == "POST /accounts/{id}/files":
+        return account_file_upload_handler(event, user)
     else:
         return create_response(400, {"message": f"Unsupported route: {route}"}) 

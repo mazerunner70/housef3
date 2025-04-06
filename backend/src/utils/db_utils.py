@@ -4,6 +4,8 @@ Utility functions for database operations.
 import os
 import logging
 import boto3
+import uuid
+from datetime import datetime
 from typing import Dict, List, Any, Optional, Union
 from botocore.exceptions import ClientError
 
@@ -13,7 +15,9 @@ from models import (
     validate_account_data,
     validate_transaction_file_data,
     AccountType,
-    Currency
+    Currency,
+    FileFormat,
+    ProcessingStatus
 )
 
 # Configure logging
@@ -296,15 +300,27 @@ def create_transaction_file(file_data: Dict[str, Any]) -> TransactionFile:
         # Validate the input data
         validate_transaction_file_data(file_data)
         
+        # Convert string values to enum types if provided as strings
+        if 'fileFormat' in file_data and isinstance(file_data['fileFormat'], str):
+            file_data['fileFormat'] = FileFormat(file_data['fileFormat'])
+            
+        if 'processingStatus' in file_data and isinstance(file_data['processingStatus'], str):
+            file_data['processingStatus'] = ProcessingStatus(file_data['processingStatus'])
+        
+        # Check if file_id is provided or should be generated
+        file_id = file_data.get('fileId', str(uuid.uuid4()))
+        
         # Create transaction file object
-        file = TransactionFile.create(
+        file = TransactionFile(
+            file_id=file_id,
             account_id=file_data['accountId'],
             user_id=file_data['userId'],
             file_name=file_data['fileName'],
+            upload_date=datetime.utcnow().isoformat(),
             file_size=int(file_data['fileSize']),
             file_format=file_data['fileFormat'],
             s3_key=file_data['s3Key'],
-            processing_status=file_data.get('processingStatus', 'pending')
+            processing_status=file_data.get('processingStatus', ProcessingStatus.PENDING)
         )
         
         # Save to DynamoDB
