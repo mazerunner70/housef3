@@ -9,8 +9,9 @@ export interface FileMetadata {
   lastModified: string;
   accountId?: string;
   accountName?: string;
-  fileFormat?: string;
-  processingStatus?: string;
+  fileFormat?: 'csv' | 'ofx' | 'qfx' | 'pdf' | 'xlsx' | 'other';
+  processingStatus?: 'pending' | 'processing' | 'processed' | 'error';
+  errorMessage?: string;
 }
 
 export interface FileListResponse {

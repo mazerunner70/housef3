@@ -79,6 +79,52 @@ resource "aws_lambda_function" "account_operations" {
   }
 }
 
+resource "aws_lambda_function" "file_processor" {
+  filename         = "../../backend/lambda.zip"
+  function_name    = "${var.project_name}-${var.environment}-file-processor"
+  role            = aws_iam_role.lambda_exec.arn
+  handler         = "handlers/file_processor.handler"
+  runtime         = "python3.9"
+  source_code_hash = data.archive_file.lambda_code.output_base64sha256
+  timeout         = 60
+  memory_size     = 256
+  
+  environment {
+    variables = {
+      ENVIRONMENT = var.environment
+      FILES_TABLE = aws_dynamodb_table.transaction_files.name
+      FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.bucket
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
+# Configure S3 to trigger Lambda on file uploads
+resource "aws_lambda_permission" "allow_s3" {
+  statement_id  = "AllowExecutionFromS3"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.file_processor.function_name
+  principal     = "s3.amazonaws.com"
+  source_arn    = aws_s3_bucket.file_storage.arn
+}
+
+# CloudWatch Log Group for file processor Lambda
+resource "aws_cloudwatch_log_group" "file_processor" {
+  name              = "/aws/lambda/${aws_lambda_function.file_processor.function_name}"
+  retention_in_days = 7
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
 resource "aws_iam_role" "lambda_exec" {
   name = "${var.project_name}-${var.environment}-lambda-role"
 

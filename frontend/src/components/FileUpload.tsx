@@ -6,17 +6,11 @@ import './FileUpload.css';
 // Maximum file size (5MB)
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
-// Allowed file types (text files)
-const ALLOWED_FILE_TYPES = [
-  'text/plain',
-  'text/csv',
-  'text/html',
-  'text/css',
-  'text/javascript',
-  'application/json',
-  'application/xml',
-  'text/markdown'
-];
+// Allowed file extensions matching FileFormat enum in backend
+const ALLOWED_FILE_EXTENSIONS = ['csv', 'ofx', 'qfx', 'pdf', 'json', 'xml'];
+
+// Get allowed file types string for file input accept attribute
+const ALLOWED_FILE_TYPES = ALLOWED_FILE_EXTENSIONS.map(ext => `.${ext}`).join(',');
 
 interface FileUploadProps {
   onUploadComplete: () => void;
@@ -56,8 +50,8 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
     setError(null);
     
     // Check file type
-    if (!ALLOWED_FILE_TYPES.includes(file.type)) {
-      setError('Only text files are allowed');
+    if (!ALLOWED_FILE_EXTENSIONS.includes(file.name.split('.').pop() || '')) {
+      setError(`Unsupported file type. Allowed types: ${ALLOWED_FILE_EXTENSIONS.join(', ')}`);
       return false;
     }
     
@@ -122,7 +116,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
         selectedFile.name,
         selectedFile.type,
         selectedFile.size,
-        selectedAccountId // Pass the selected account ID if one is selected
+        selectedAccountId ?? undefined // Convert null to undefined
       );
       
       // Step 2: Upload file to S3
@@ -190,7 +184,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
           type="file"
           ref={fileInputRef}
           onChange={handleFileInputChange}
-          accept={ALLOWED_FILE_TYPES.join(',')}
+          accept={ALLOWED_FILE_TYPES}
           className="file-input"
         />
         
@@ -205,7 +199,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
             <div className="upload-icon">📁</div>
             <p>Drag and drop a file here, or click to select</p>
             <p className="file-types-hint">
-              Supported file types: TXT, CSV, HTML, CSS, JS, JSON, XML, MD
+              Supported file types: CSV, Excel (XLSX), PDF, OFX/QFX (financial), and text formats (TXT, JSON, XML, MD)
             </p>
             <p className="file-size-hint">
               Maximum file size: {MAX_FILE_SIZE / 1024 / 1024}MB

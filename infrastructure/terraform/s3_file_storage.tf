@@ -152,6 +152,19 @@ resource "aws_s3_bucket_public_access_block" "file_storage" {
   restrict_public_buckets = true
 }
 
+# Configure S3 event notifications to trigger file processor Lambda
+resource "aws_s3_bucket_notification" "file_upload_notification" {
+  bucket = aws_s3_bucket.file_storage.id
+
+  lambda_function {
+    lambda_function_arn = aws_lambda_function.file_processor.arn
+    events              = ["s3:ObjectCreated:*"]
+    filter_suffix       = ""  # Process all file types
+  }
+
+  depends_on = [aws_lambda_permission.allow_s3]
+}
+
 # Outputs for the file storage resources
 output "file_storage_bucket_name" {
   description = "The name of the file storage bucket"

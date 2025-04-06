@@ -178,7 +178,7 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
   };
 
   // Handle account selection in dropdown
-  const handleAccountSelect = (e: React.ChangeEvent<HTMLSelectElement>, fileId: string) => {
+  const handleAccountSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedAccountId(e.target.value);
   };
 
@@ -328,6 +328,8 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
                       Size {getSortIndicator('fileSize')}
                     </th>
                     <th>Type</th>
+                    <th>Format</th>
+                    <th>Status</th>
                     <th>Account</th>
                     <th>Actions</th>
                   </tr>
@@ -339,6 +341,14 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
                       <td>{formatDate(file.uploadDate)}</td>
                       <td>{formatFileSize(file.fileSize)}</td>
                       <td>{file.contentType}</td>
+                      <td>{file.fileFormat ? file.fileFormat.toUpperCase() : 'OTHER'}</td>
+                      <td>
+                        {file.processingStatus && (
+                          <span className={`processing-status status-${file.processingStatus}`}>
+                            {file.processingStatus.charAt(0).toUpperCase() + file.processingStatus.slice(1)}
+                          </span>
+                        )}
+                      </td>
                       <td className="file-account-cell">
                         {file.accountId ? (
                           <div className="account-with-action">
@@ -358,7 +368,7 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
                               <div className="associate-control">
                                 <select 
                                   value={selectedAccountId} 
-                                  onChange={(e) => handleAccountSelect(e, file.fileId)}
+                                  onChange={handleAccountSelect}
                                   className="account-select"
                                 >
                                   <option value="">Select account...</option>
