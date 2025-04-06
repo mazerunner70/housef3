@@ -4,6 +4,10 @@ set -e
 # Store the original directory
 ORIGINAL_DIR=$(pwd)
 
+# Navigate to the scripts directory first
+cd "$ORIGINAL_DIR/scripts" || exit 1
+SCRIPTS_DIR=$(pwd)
+
 # Function to handle errors and exit with code 1
 handle_error() {
   echo -e "\n❌ ERROR in $1: $2"
@@ -21,11 +25,8 @@ run_test() {
   echo -e "\033[1;34m Running Test: $TEST_NAME \033[0m"
   echo -e "\033[1;34m===================================\033[0m\n"
   
-  # Return to original directory before running each test
-  cd "$ORIGINAL_DIR"
-  
   # Run the test script
-  if bash "$ORIGINAL_DIR/scripts/$TEST_SCRIPT"; then
+  if bash "$TEST_SCRIPT"; then
     echo -e "\n\033[1;32m✅ $TEST_NAME PASSED\033[0m\n"
   else
     echo -e "\n\033[1;31m❌ $TEST_NAME FAILED\033[0m\n"

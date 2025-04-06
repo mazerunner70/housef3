@@ -40,7 +40,8 @@ resource "aws_lambda_function" "file_operations" {
   environment {
     variables = {
       ENVIRONMENT = var.environment
-      DYNAMODB_TABLE = aws_dynamodb_table.transaction_files.name
+      ACCOUNTS_TABLE = aws_dynamodb_table.accounts.name
+      FILES_TABLE = aws_dynamodb_table.transaction_files.name
       FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.bucket
     }
   }

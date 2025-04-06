@@ -1,26 +1,46 @@
 import json
 import logging
 import os
+import uuid
+import boto3
+from datetime import datetime
 from typing import Dict, Any, List, Optional
 from decimal import Decimal
 
+# Configure logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
 # Fix imports for Lambda environment
 try:
-    # Try absolute imports first (Lambda execution context)
+    # Try direct imports for Lambda environment
+    import sys
+    # Add the /var/task (Lambda root) to the path if not already there
+    if '/var/task' not in sys.path:
+        sys.path.insert(0, '/var/task')
+    
+    # Add the parent directory to allow direct imports
+    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+    
+    # Now try the imports
     from models.account import Account, AccountType, Currency, validate_account_data
-    from utils.db_utils import get_account, list_user_accounts, create_account, update_account, delete_account, list_account_files
-except ImportError:
-    # Then try relative imports (local development context)
+    from utils.db_utils import get_account, list_user_accounts, create_account, update_account, delete_account
+    
+    logger.info("Successfully imported modules using adjusted path")
+except ImportError as e:
+    logger.error(f"Import error: {str(e)}")
+    # Log the current sys.path to debug import issues
+    logger.error(f"Current sys.path: {sys.path}")
+    # Last resort, try relative import
     try:
-        # Check for parent directory import
-        import sys
-        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        from models.account import Account, AccountType, Currency, validate_account_data
-        from utils.db_utils import get_account, list_user_accounts, create_account, update_account, delete_account, list_account_files
-    except ImportError:
-        # Last resort, try direct import
         from ..models.account import Account, AccountType, Currency, validate_account_data
-        from ..utils.db_utils import get_account, list_user_accounts, create_account, update_account, delete_account, list_account_files
+        from ..utils.db_utils import get_account, list_user_accounts, create_account, update_account, delete_account
+        logger.info("Successfully imported modules using relative imports")
+    except ImportError as e2:
+        logger.error(f"Final import attempt failed: {str(e2)}")
+        raise
 
 # Custom JSON encoder to handle Decimal values
 class DecimalEncoder(json.JSONEncoder):
@@ -28,10 +48,6 @@ class DecimalEncoder(json.JSONEncoder):
         if isinstance(obj, Decimal):
             return float(obj) if obj % 1 else int(obj)
         return super(DecimalEncoder, self).default(obj)
-
-# Configure logging
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
 
 def create_response(status_code: int, body: Any) -> Dict[str, Any]:
     """Create an API Gateway response object."""

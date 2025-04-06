@@ -33,7 +33,7 @@ if [ -z "$PASSWORD" ] || [ "$PASSWORD" = "null" ]; then
 fi
 
 # Get the values from terraform output
-cd infrastructure/terraform || exit 1
+cd ../infrastructure/terraform || exit 1
 API_ENDPOINT=$(terraform output -raw api_endpoint)
 CLOUDFRONT_DOMAIN=$(terraform output -raw cloudfront_distribution_domain)
 CLIENT_ID=$(terraform output -raw cognito_user_pool_client_id)
