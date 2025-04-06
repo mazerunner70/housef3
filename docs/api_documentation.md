@@ -313,6 +313,43 @@ Generates a pre-signed URL for file upload and associates the file with the spec
 }
 ```
 
+#### DELETE /accounts/{id}/files/{fileId}
+
+Deletes a file from a specific account.
+
+**Response:**
+```json
+{
+  "message": "File successfully unassociated from account",
+  "fileId": "d31b6f5a-6ab1-4d89-89c0-c405cfe1124c",
+  "previousAccountId": "6286d8bc-1cb7-4715-95c2-8c5a57d40cfd"
+}
+```
+
+#### POST /files/{id}/associate
+
+Associates a file with an account. This endpoint allows you to link an existing file to an account.
+
+**Request Parameters:**
+- `id` (path parameter): ID of the file to associate with an account
+
+**Request Body:**
+```json
+{
+  "accountId": "6286d8bc-1cb7-4715-95c2-8c5a57d40cfd"
+}
+```
+
+**Response:**
+```json
+{
+  "message": "File successfully associated with account",
+  "fileId": "d31b6f5a-6ab1-4d89-89c0-c405cfe1124c",
+  "accountId": "6286d8bc-1cb7-4715-95c2-8c5a57d40cfd",
+  "accountName": "Test Account"
+}
+```
+
 ## Account-File Association Usage Recommendations
 
 ### When to Associate Files with Accounts
@@ -346,4 +383,5 @@ Generates a pre-signed URL for file upload and associates the file with the spec
 
 * Deleting an account does not automatically delete associated files. Files must be deleted separately.
 * Files can be associated with only one account at a time.
-* Existing standalone files cannot currently be associated with accounts after creation. You must create a new file with an account association. 
+* Existing standalone files can be associated with accounts using the `/files/{id}/associate` endpoint.
+* Files can be unassociated from accounts using the `/files/{id}/unassociate` endpoint without deleting the file. 

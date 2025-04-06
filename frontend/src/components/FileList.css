@@ -175,55 +175,113 @@
 
 .account-badge {
   display: inline-block;
-  padding: 4px 8px;
-  border-radius: 12px;
-  background-color: #e6f7ff;
-  color: #1890ff;
-  font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 120px;
-}
-
-.no-account {
-  color: #999;
-  font-style: italic;
+  background-color: #e6f2ff;
+  border: 1px solid #99ccff;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.85rem;
+  color: #0066cc;
 }
 
 .account-with-action {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 5px;
 }
 
 .unassociate-button {
-  display: inline-flex;
+  background-color: transparent;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+  border-radius: 50%;
+  height: 20px;
+  width: 20px;
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background-color: #f0f0f0;
-  color: #999;
-  font-size: 12px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.2s;
 }
 
 .unassociate-button:hover {
-  background-color: #ff4d4f;
-  color: white;
+  background-color: #f0f0f0;
+  color: #d9534f;
 }
 
 .unassociate-button:disabled {
-  background-color: #f0f0f0;
-  color: #ccc;
   cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Association UI */
+.associate-button {
+  background-color: transparent;
+  border: 1px solid #99ccff;
+  color: #0066cc;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.associate-button:hover {
+  background-color: #e6f2ff;
+}
+
+.associate-control {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 180px;
+}
+
+.account-select {
+  padding: 4px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  font-size: 0.85rem;
+}
+
+.associate-buttons {
+  display: flex;
+  gap: 5px;
+}
+
+.confirm-associate-button,
+.cancel-associate-button {
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  flex: 1;
+}
+
+.confirm-associate-button {
+  background-color: #5cb85c;
+  border: 1px solid #4cae4c;
+  color: white;
+}
+
+.confirm-associate-button:hover:not(:disabled) {
+  background-color: #4cae4c;
+}
+
+.confirm-associate-button:disabled {
+  background-color: #dddddd;
+  border-color: #cccccc;
+  color: #999999;
+  cursor: not-allowed;
+}
+
+.cancel-associate-button {
+  background-color: #f0f0f0;
+  border: 1px solid #ddd;
+  color: #666;
+}
+
+.cancel-associate-button:hover {
+  background-color: #e6e6e6;
 }
 
 /* Responsive adjustments */

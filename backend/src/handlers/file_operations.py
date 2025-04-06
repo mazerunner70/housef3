@@ -584,6 +584,85 @@ def unassociate_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dic
         logger.error(f"Error unassociating file: {str(e)}")
         return create_response(500, {"message": "Error handling unassociate request"})
 
+def associate_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    """Associate a file with an account."""
+    try:
+        # Get file ID from path parameters
+        file_id = event.get('pathParameters', {}).get('id')
+        
+        if not file_id:
+            return create_response(400, {"message": "File ID is required"})
+            
+        # Get file metadata from DynamoDB
+        response = file_table.get_item(Key={'fileId': file_id})
+        file = response.get('Item')
+        
+        if not file:
+            return create_response(404, {"message": "File not found"})
+            
+        # Check if the file belongs to the user
+        if file.get('userId') != user['id']:
+            return create_response(403, {"message": "Access denied"})
+        
+        # Check if file is already associated with an account
+        if 'accountId' in file:
+            return create_response(400, {"message": "File is already associated with an account"})
+        
+        # Parse the request body to get the account ID
+        try:
+            request_body = json.loads(event.get('body', '{}'))
+            account_id = request_body.get('accountId')
+            
+            if not account_id:
+                return create_response(400, {"message": "Account ID is required"})
+        except Exception as parse_error:
+            logger.error(f"Error parsing request body: {str(parse_error)}")
+            return create_response(400, {"message": "Invalid request body"})
+        
+        # Verify that the account exists and belongs to the user
+        try:
+            account_response = get_account(account_id)
+            
+            if not account_response:
+                return create_response(404, {"message": "Account not found"})
+                
+            # Check if the account belongs to the user
+            if account_response.user_id != user['id']:
+                return create_response(403, {"message": "Access denied to the specified account"})
+        except Exception as account_error:
+            logger.error(f"Error verifying account: {str(account_error)}")
+            return create_response(500, {"message": "Error verifying account"})
+        
+        # Update the file to add account association
+        try:
+            logger.info(f"Associating file {file_id} with account {account_id}")
+            
+            # Create update expression to add accountId
+            update_expression = "SET accountId = :accountId"
+            expression_attribute_values = {
+                ":accountId": account_id
+            }
+            
+            # Update the file
+            file_table.update_item(
+                Key={'fileId': file_id},
+                UpdateExpression=update_expression,
+                ExpressionAttributeValues=expression_attribute_values
+            )
+            
+            return create_response(200, {
+                "message": "File successfully associated with account",
+                "fileId": file_id,
+                "accountId": account_id,
+                "accountName": account_response.account_name
+            })
+        except Exception as update_error:
+            logger.error(f"Error updating file: {str(update_error)}")
+            return create_response(500, {"message": "Error associating file with account"})
+    except Exception as e:
+        logger.error(f"Error associating file: {str(e)}")
+        return create_response(500, {"message": "Error handling associate request"})
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main Lambda handler for file operations."""
     logger.info(f"Processing request with event: {json.dumps(event)}")
@@ -618,5 +697,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return delete_file_handler(event, user)
     elif route == "POST /files/{id}/unassociate":
         return unassociate_file_handler(event, user)
+    elif route == "POST /files/{id}/associate":
+        return associate_file_handler(event, user)
     else:
         return create_response(400, {"message": f"Unsupported route: {route}"}) 

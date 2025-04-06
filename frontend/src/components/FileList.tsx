@@ -1,5 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { listFiles, deleteFile, getDownloadUrl, unassociateFileFromAccount, FileMetadata } from '../services/FileService';
+import { 
+  listFiles, 
+  deleteFile, 
+  getDownloadUrl, 
+  unassociateFileFromAccount,
+  associateFileWithAccount,
+  FileMetadata 
+} from '../services/FileService';
+import {
+  listAccounts,
+  Account
+} from '../services/AccountService';
 import './FileList.css';
 
 interface FileListProps {
@@ -17,6 +28,9 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
   const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
   const [unassociatingFileId, setUnassociatingFileId] = useState<string | null>(null);
+  const [associatingFileId, setAssociatingFileId] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
 
   // Load files from API
   const loadFiles = async () => {
@@ -43,9 +57,22 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
     }
   };
 
+  // Load accounts for association dropdown
+  const loadAccounts = async () => {
+    try {
+      const response = await listAccounts();
+      setAccounts(response.accounts || []);
+    } catch (error) {
+      console.error('Error loading accounts:', error);
+      // Don't set error state here to avoid disrupting the main file list UI
+      setAccounts([]);
+    }
+  };
+
   // Load files on component mount and when refresh is needed
   useEffect(() => {
     loadFiles();
+    loadAccounts();
   }, [onRefreshNeeded]);
 
   // Handle file deletion
@@ -111,6 +138,48 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
     } finally {
       setUnassociatingFileId(null);
     }
+  };
+
+  // Handle file-account association
+  const handleAssociateFile = async (fileId: string, accountId: string) => {
+    if (!accountId) {
+      alert('Please select an account');
+      return;
+    }
+    
+    setAssociatingFileId(fileId);
+    setError(null);
+    
+    try {
+      await associateFileWithAccount(fileId, accountId);
+      // Clear the selected account ID
+      setSelectedAccountId('');
+      // Stop showing the association UI
+      setAssociatingFileId(null);
+      // Refresh file list
+      await loadFiles();
+    } catch (error) {
+      console.error('Error associating file:', error);
+      setError(error instanceof Error ? error.message : 'Failed to associate file with account');
+      setAssociatingFileId(null);
+    }
+  };
+
+  // Start the association process for a file
+  const startAssociateFile = (fileId: string) => {
+    // Toggle association UI if clicking the same file
+    if (associatingFileId === fileId) {
+      setAssociatingFileId(null);
+      setSelectedAccountId('');
+    } else {
+      setAssociatingFileId(fileId);
+      setSelectedAccountId('');
+    }
+  };
+
+  // Handle account selection in dropdown
+  const handleAccountSelect = (e: React.ChangeEvent<HTMLSelectElement>, fileId: string) => {
+    setSelectedAccountId(e.target.value);
   };
 
   // Handle sort change
@@ -284,7 +353,47 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
                             </button>
                           </div>
                         ) : (
-                          <span className="no-account">—</span>
+                          <div className="account-with-action">
+                            {associatingFileId === file.fileId ? (
+                              <div className="associate-control">
+                                <select 
+                                  value={selectedAccountId} 
+                                  onChange={(e) => handleAccountSelect(e, file.fileId)}
+                                  className="account-select"
+                                >
+                                  <option value="">Select account...</option>
+                                  {accounts.map(account => (
+                                    <option key={account.accountId} value={account.accountId}>
+                                      {account.accountName}
+                                    </option>
+                                  ))}
+                                </select>
+                                <div className="associate-buttons">
+                                  <button 
+                                    className="confirm-associate-button" 
+                                    onClick={() => handleAssociateFile(file.fileId, selectedAccountId)}
+                                    disabled={!selectedAccountId}
+                                  >
+                                    ✓
+                                  </button>
+                                  <button 
+                                    className="cancel-associate-button"
+                                    onClick={() => setAssociatingFileId(null)}
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button 
+                                className="associate-button"
+                                onClick={() => startAssociateFile(file.fileId)}
+                                title="Associate with account"
+                              >
+                                Link
+                              </button>
+                            )}
+                          </div>
                         )}
                       </td>
                       <td className="file-actions">

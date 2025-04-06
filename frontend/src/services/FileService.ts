@@ -221,11 +221,25 @@ export const unassociateFileFromAccount = async (fileId: string): Promise<void> 
   }
 };
 
+// Associate a file with an account
+export const associateFileWithAccount = async (fileId: string, accountId: string): Promise<void> => {
+  try {
+    await authenticatedRequest(`${API_ENDPOINT}/${fileId}/associate`, {
+      method: 'POST',
+      body: JSON.stringify({ accountId })
+    });
+  } catch (error) {
+    console.error('Error associating file with account:', error);
+    throw error;
+  }
+};
+
 export default {
   listFiles,
   getUploadUrl,
   uploadFileToS3,
   getDownloadUrl,
   deleteFile,
-  unassociateFileFromAccount
+  unassociateFileFromAccount,
+  associateFileWithAccount
 }; 
