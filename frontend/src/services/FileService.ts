@@ -12,6 +12,7 @@ export interface FileMetadata {
   fileFormat?: 'csv' | 'ofx' | 'qfx' | 'pdf' | 'xlsx' | 'other';
   processingStatus?: 'pending' | 'processing' | 'processed' | 'error';
   errorMessage?: string;
+  openingBalance?: number;
 }
 
 export interface FileListResponse {
@@ -235,6 +236,19 @@ export const associateFileWithAccount = async (fileId: string, accountId: string
   }
 };
 
+// Update file opening balance
+export const updateFileBalance = async (fileId: string, openingBalance: number): Promise<void> => {
+  try {
+    await authenticatedRequest(`${API_ENDPOINT}/${fileId}/balance`, {
+      method: 'POST',
+      body: JSON.stringify({ openingBalance })
+    });
+  } catch (error) {
+    console.error('Error updating file balance:', error);
+    throw error;
+  }
+};
+
 export default {
   listFiles,
   getUploadUrl,
@@ -242,5 +256,6 @@ export default {
   getDownloadUrl,
   deleteFile,
   unassociateFileFromAccount,
-  associateFileWithAccount
+  associateFileWithAccount,
+  updateFileBalance
 }; 

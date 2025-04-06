@@ -5,6 +5,7 @@ import {
   getDownloadUrl, 
   unassociateFileFromAccount,
   associateFileWithAccount,
+  updateFileBalance,
   FileMetadata 
 } from '../services/FileService';
 import {
@@ -29,6 +30,9 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
   const [unassociatingFileId, setUnassociatingFileId] = useState<string | null>(null);
   const [associatingFileId, setAssociatingFileId] = useState<string | null>(null);
+  const [editingBalanceFileId, setEditingBalanceFileId] = useState<string | null>(null);
+  const [balanceInput, setBalanceInput] = useState<string>('');
+  const [savingBalanceFileId, setSavingBalanceFileId] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
 
@@ -259,6 +263,62 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
     loadFiles();
   };
 
+  // Handle adding a balance to a file
+  const handleAddBalance = (fileId: string) => {
+    setEditingBalanceFileId(fileId);
+    setBalanceInput('');
+  };
+
+  // Handle saving the balance
+  const handleSaveBalance = async (fileId: string) => {
+    // Validate the input is a valid number
+    const balanceValue = parseFloat(balanceInput);
+    if (isNaN(balanceValue)) {
+      setError('Please enter a valid number for the opening balance');
+      return;
+    }
+    
+    setSavingBalanceFileId(fileId);
+    setError(null);
+    
+    try {
+      // Call the API to update the file's opening balance
+      await updateFileBalance(fileId, balanceValue);
+      
+      // Update the file in our local state as well
+      const updatedFiles = files.map(file => {
+        if (file.fileId === fileId) {
+          return {
+            ...file,
+            openingBalance: balanceValue
+          };
+        }
+        return file;
+      });
+      
+      setFiles(updatedFiles);
+      setEditingBalanceFileId(null);
+      setBalanceInput('');
+      
+    } catch (error) {
+      console.error('Error saving balance:', error);
+      setError(error instanceof Error ? error.message : 'Failed to save opening balance');
+    } finally {
+      setSavingBalanceFileId(null);
+    }
+  };
+
+  // Handle cancel balance edit
+  const handleCancelBalanceEdit = () => {
+    setEditingBalanceFileId(null);
+    setBalanceInput('');
+  };
+
+  // Handle balance input change
+  const handleBalanceInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setBalanceInput(e.target.value);
+  };
+
   // Render filtered and sorted files
   const filteredAndSortedFiles = getFilteredAndSortedFiles();
 
@@ -331,6 +391,7 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
                     <th>Format</th>
                     <th>Status</th>
                     <th>Account</th>
+                    <th>Opening Balance</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -404,6 +465,46 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
                               </button>
                             )}
                           </div>
+                        )}
+                      </td>
+                      <td className="file-balance-cell">
+                        {file.openingBalance !== undefined ? (
+                          `$${file.openingBalance.toFixed(2)}`
+                        ) : editingBalanceFileId === file.fileId ? (
+                          <div className="balance-input-container">
+                            <input
+                              type="text"
+                              value={balanceInput}
+                              onChange={handleBalanceInputChange}
+                              className="balance-input"
+                              placeholder="0.00"
+                              autoFocus
+                            />
+                            <div className="balance-input-actions">
+                              <button
+                                className="save-balance-button"
+                                onClick={() => handleSaveBalance(file.fileId)}
+                                disabled={savingBalanceFileId === file.fileId}
+                              >
+                                {savingBalanceFileId === file.fileId ? '...' : '✓'}
+                              </button>
+                              <button
+                                className="cancel-balance-button"
+                                onClick={handleCancelBalanceEdit}
+                                disabled={savingBalanceFileId === file.fileId}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button 
+                            className="add-balance-button"
+                            onClick={() => handleAddBalance(file.fileId)}
+                            title="Add opening balance"
+                          >
+                            Add Balance
+                          </button>
                         )}
                       </td>
                       <td className="file-actions">

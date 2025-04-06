@@ -64,7 +64,8 @@ class TransactionFile:
         account_id: Optional[str] = None,
         record_count: Optional[int] = None,
         date_range: Optional[DateRange] = None,
-        error_message: Optional[str] = None
+        error_message: Optional[str] = None,
+        opening_balance: Optional[float] = None
     ):
         self.file_id = file_id
         self.user_id = user_id
@@ -78,6 +79,7 @@ class TransactionFile:
         self.record_count = record_count
         self.date_range = date_range
         self.error_message = error_message
+        self.opening_balance = opening_balance
 
     @classmethod
     def create(
@@ -88,7 +90,8 @@ class TransactionFile:
         file_format: FileFormat,
         s3_key: str,
         account_id: Optional[str] = None,
-        processing_status: ProcessingStatus = ProcessingStatus.PENDING
+        processing_status: ProcessingStatus = ProcessingStatus.PENDING,
+        opening_balance: Optional[float] = None
     ) -> 'TransactionFile':
         """
         Factory method to create a new transaction file with generated ID and timestamp.
@@ -102,7 +105,8 @@ class TransactionFile:
             file_format=file_format,
             s3_key=s3_key,
             processing_status=processing_status,
-            account_id=account_id
+            account_id=account_id,
+            opening_balance=opening_balance
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -133,6 +137,10 @@ class TransactionFile:
         
         if self.error_message:
             result["errorMessage"] = self.error_message
+            
+        # Add opening balance if it exists
+        if self.opening_balance is not None:
+            result["openingBalance"] = str(self.opening_balance)  # Convert to string for DynamoDB
             
         return result
 
@@ -165,6 +173,10 @@ class TransactionFile:
         if "errorMessage" in data:
             file.error_message = data["errorMessage"]
             
+        # Add opening balance if present
+        if "openingBalance" in data:
+            file.opening_balance = float(data["openingBalance"])
+            
         return file
 
     def update_processing_status(
@@ -172,7 +184,8 @@ class TransactionFile:
         status: ProcessingStatus,
         record_count: Optional[int] = None,
         date_range: Optional[Tuple[str, str]] = None,
-        error_message: Optional[str] = None
+        error_message: Optional[str] = None,
+        opening_balance: Optional[float] = None
     ) -> None:
         """
         Update processing status and related fields.
@@ -187,6 +200,9 @@ class TransactionFile:
             
         if error_message:
             self.error_message = error_message
+            
+        if opening_balance is not None:
+            self.opening_balance = opening_balance
 
 
 def validate_transaction_file_data(data: Dict[str, Any]) -> bool:
@@ -230,6 +246,13 @@ def validate_transaction_file_data(data: Dict[str, Any]) -> bool:
                 raise ValueError("Record count must be non-negative")
         except (ValueError, TypeError):
             raise ValueError("Record count must be a valid integer")
+
+    # Validate opening balance if provided
+    if "openingBalance" in data:
+        try:
+            float(data["openingBalance"])
+        except (ValueError, TypeError):
+            raise ValueError("Opening balance must be a valid number")
     
     # Validate date range if provided
     if "dateRange" in data:

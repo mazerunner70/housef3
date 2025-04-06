@@ -173,6 +173,85 @@
   text-align: center;
 }
 
+.file-balance-cell {
+  text-align: right;
+  font-family: 'Courier New', monospace;
+  font-weight: 500;
+  padding-right: 15px;
+}
+
+.add-balance-button {
+  background-color: transparent;
+  border: 1px solid #99ccff;
+  color: #0066cc;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.add-balance-button:hover {
+  background-color: #e6f2ff;
+}
+
+.balance-input-container {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 100px;
+}
+
+.balance-input {
+  padding: 4px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  font-size: 0.85rem;
+  text-align: right;
+  font-family: 'Courier New', monospace;
+}
+
+.balance-input-actions {
+  display: flex;
+  gap: 5px;
+  justify-content: flex-end;
+}
+
+.save-balance-button,
+.cancel-balance-button {
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  flex: 0;
+}
+
+.save-balance-button {
+  background-color: #5cb85c;
+  border: 1px solid #4cae4c;
+  color: white;
+}
+
+.save-balance-button:hover:not(:disabled) {
+  background-color: #4cae4c;
+}
+
+.save-balance-button:disabled {
+  background-color: #dddddd;
+  border-color: #cccccc;
+  color: #999999;
+  cursor: not-allowed;
+}
+
+.cancel-balance-button {
+  background-color: #f0f0f0;
+  border: 1px solid #ddd;
+  color: #666;
+}
+
+.cancel-balance-button:hover {
+  background-color: #e6e6e6;
+}
+
 .account-badge {
   display: inline-block;
   background-color: #e6f2ff;

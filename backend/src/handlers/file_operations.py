@@ -211,6 +211,9 @@ def list_files_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str,
             if 'errorMessage' in file:
                 formatted_file['errorMessage'] = file.get('errorMessage')
             
+            if 'openingBalance' in file:
+                formatted_file['openingBalance'] = float(file.get('openingBalance'))
+            
             formatted_files.append(formatted_file)
             
         return create_response(200, {
@@ -282,6 +285,9 @@ def get_files_by_account_handler(event: Dict[str, Any], user: Dict[str, Any]) ->
                     
                 if 'errorMessage' in file:
                     formatted_file['errorMessage'] = file.get('errorMessage')
+                
+                if 'openingBalance' in file:
+                    formatted_file['openingBalance'] = float(file.get('openingBalance'))
                 
                 formatted_files.append(formatted_file)
                 
@@ -663,6 +669,72 @@ def associate_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
         logger.error(f"Error associating file: {str(e)}")
         return create_response(500, {"message": "Error handling associate request"})
 
+def update_file_balance_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    """Update a file's opening balance."""
+    try:
+        # Get file ID from path parameters
+        file_id = event.get('pathParameters', {}).get('id')
+        
+        if not file_id:
+            return create_response(400, {"message": "File ID is required"})
+            
+        # Get file metadata from DynamoDB
+        response = file_table.get_item(Key={'fileId': file_id})
+        file = response.get('Item')
+        
+        if not file:
+            return create_response(404, {"message": "File not found"})
+            
+        # Check if the file belongs to the user
+        if file.get('userId') != user['id']:
+            return create_response(403, {"message": "Access denied"})
+        
+        # Parse the request body to get the opening balance
+        try:
+            request_body = json.loads(event.get('body', '{}'))
+            opening_balance = request_body.get('openingBalance')
+            
+            if opening_balance is None:
+                return create_response(400, {"message": "Opening balance is required"})
+                
+            # Convert to proper type and validate
+            try:
+                opening_balance = float(opening_balance)
+            except (ValueError, TypeError):
+                return create_response(400, {"message": "Opening balance must be a valid number"})
+        except Exception as parse_error:
+            logger.error(f"Error parsing request body: {str(parse_error)}")
+            return create_response(400, {"message": "Invalid request body"})
+        
+        # Update the file with the new opening balance
+        try:
+            logger.info(f"Updating opening balance for file {file_id} to {opening_balance}")
+            
+            # Create update expression to set opening balance
+            update_expression = "SET openingBalance = :balance"
+            expression_attribute_values = {
+                ":balance": str(opening_balance)  # Convert to string for DynamoDB
+            }
+            
+            # Update the file
+            file_table.update_item(
+                Key={'fileId': file_id},
+                UpdateExpression=update_expression,
+                ExpressionAttributeValues=expression_attribute_values
+            )
+            
+            return create_response(200, {
+                "message": "File opening balance updated successfully",
+                "fileId": file_id,
+                "openingBalance": opening_balance
+            })
+        except Exception as update_error:
+            logger.error(f"Error updating file: {str(update_error)}")
+            return create_response(500, {"message": "Error updating file opening balance"})
+    except Exception as e:
+        logger.error(f"Error updating file balance: {str(e)}")
+        return create_response(500, {"message": "Error handling update balance request"})
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main Lambda handler for file operations."""
     logger.info(f"Processing request with event: {json.dumps(event)}")
@@ -699,5 +771,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return unassociate_file_handler(event, user)
     elif route == "POST /files/{id}/associate":
         return associate_file_handler(event, user)
+    elif route == "POST /files/{id}/balance":
+        return update_file_balance_handler(event, user)
     else:
         return create_response(400, {"message": f"Unsupported route: {route}"}) 
