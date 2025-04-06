@@ -169,6 +169,63 @@
   margin-top: 10px;
 }
 
+.file-account-cell {
+  text-align: center;
+}
+
+.account-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 12px;
+  background-color: #e6f7ff;
+  color: #1890ff;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+.no-account {
+  color: #999;
+  font-style: italic;
+}
+
+.account-with-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.unassociate-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background-color: #f0f0f0;
+  color: #999;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.unassociate-button:hover {
+  background-color: #ff4d4f;
+  color: white;
+}
+
+.unassociate-button:disabled {
+  background-color: #f0f0f0;
+  color: #ccc;
+  cursor: not-allowed;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .file-list-container {

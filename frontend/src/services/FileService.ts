@@ -7,6 +7,10 @@ export interface FileMetadata {
   fileSize: number;
   uploadDate: string;
   lastModified: string;
+  accountId?: string;
+  accountName?: string;
+  fileFormat?: string;
+  processingStatus?: string;
 }
 
 export interface FileListResponse {
@@ -205,10 +209,23 @@ export const deleteFile = async (fileId: string): Promise<void> => {
   }
 };
 
+// Unassociate a file from an account
+export const unassociateFileFromAccount = async (fileId: string): Promise<void> => {
+  try {
+    await authenticatedRequest(`${API_ENDPOINT}/${fileId}/unassociate`, {
+      method: 'POST'
+    });
+  } catch (error) {
+    console.error('Error unassociating file from account:', error);
+    throw error;
+  }
+};
+
 export default {
   listFiles,
   getUploadUrl,
   uploadFileToS3,
   getDownloadUrl,
-  deleteFile
+  deleteFile,
+  unassociateFileFromAccount
 }; 

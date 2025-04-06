@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { listFiles, deleteFile, getDownloadUrl, FileMetadata } from '../services/FileService';
+import { listFiles, deleteFile, getDownloadUrl, unassociateFileFromAccount, FileMetadata } from '../services/FileService';
 import './FileList.css';
 
 interface FileListProps {
@@ -16,6 +16,7 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
+  const [unassociatingFileId, setUnassociatingFileId] = useState<string | null>(null);
 
   // Load files from API
   const loadFiles = async () => {
@@ -24,7 +25,12 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
     
     try {
       const response = await listFiles();
-      setFiles(response.files || []);
+      const filesWithAccounts = response.files || [];
+      
+      // For files with accountId but no accountName, we could fetch accounts in bulk
+      // For now, we'll leave them with just the ID display
+      
+      setFiles(filesWithAccounts);
     } catch (error) {
       console.error('Error loading files:', error);
       setError(error instanceof Error ? error.message : 'Failed to load files');
@@ -83,6 +89,27 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
       setError(error instanceof Error ? error.message : 'Failed to download file');
     } finally {
       setDownloadingFileId(null);
+    }
+  };
+
+  // Handle unassociating a file from an account
+  const handleUnassociateFile = async (fileId: string) => {
+    if (!confirm('Are you sure you want to remove this file from its associated account?')) {
+      return;
+    }
+    
+    setUnassociatingFileId(fileId);
+    setError(null);
+    
+    try {
+      await unassociateFileFromAccount(fileId);
+      // Refresh file list
+      await loadFiles();
+    } catch (error) {
+      console.error('Error unassociating file:', error);
+      setError(error instanceof Error ? error.message : 'Failed to unassociate file from account');
+    } finally {
+      setUnassociatingFileId(null);
     }
   };
 
@@ -232,6 +259,7 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
                       Size {getSortIndicator('fileSize')}
                     </th>
                     <th>Type</th>
+                    <th>Account</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -242,6 +270,23 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
                       <td>{formatDate(file.uploadDate)}</td>
                       <td>{formatFileSize(file.fileSize)}</td>
                       <td>{file.contentType}</td>
+                      <td className="file-account-cell">
+                        {file.accountId ? (
+                          <div className="account-with-action">
+                            <span className="account-badge">{file.accountName || `${file.accountId.substring(0, 8)}...`}</span>
+                            <button 
+                              className="unassociate-button"
+                              onClick={() => handleUnassociateFile(file.fileId)}
+                              disabled={unassociatingFileId === file.fileId}
+                              title="Remove account association"
+                            >
+                              {unassociatingFileId === file.fileId ? '...' : '×'}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="no-account">—</span>
+                        )}
+                      </td>
                       <td className="file-actions">
                         <button 
                           className="download-button"

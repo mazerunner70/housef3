@@ -533,6 +533,57 @@ def delete_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str
         logger.error(f"Error deleting file: {str(e)}")
         return create_response(500, {"message": "Error deleting file"})
 
+def unassociate_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    """Remove account association from a file."""
+    try:
+        # Get file ID from path parameters
+        file_id = event.get('pathParameters', {}).get('id')
+        
+        if not file_id:
+            return create_response(400, {"message": "File ID is required"})
+            
+        # Get file metadata from DynamoDB
+        response = file_table.get_item(Key={'fileId': file_id})
+        file = response.get('Item')
+        
+        if not file:
+            return create_response(404, {"message": "File not found"})
+            
+        # Check if the file belongs to the user
+        if file.get('userId') != user['id']:
+            return create_response(403, {"message": "Access denied"})
+        
+        # Check if file is associated with an account
+        if 'accountId' not in file:
+            return create_response(400, {"message": "File is not associated with any account"})
+        
+        account_id = file.get('accountId')
+        
+        # Update the file to remove account association
+        try:
+            logger.info(f"Removing association between file {file_id} and account {account_id}")
+            
+            # Create update expression to remove accountId
+            update_expression = "REMOVE accountId"
+            
+            # Update the file
+            file_table.update_item(
+                Key={'fileId': file_id},
+                UpdateExpression=update_expression
+            )
+            
+            return create_response(200, {
+                "message": "File successfully unassociated from account",
+                "fileId": file_id,
+                "previousAccountId": account_id
+            })
+        except Exception as update_error:
+            logger.error(f"Error updating file: {str(update_error)}")
+            return create_response(500, {"message": "Error unassociating file from account"})
+    except Exception as e:
+        logger.error(f"Error unassociating file: {str(e)}")
+        return create_response(500, {"message": "Error handling unassociate request"})
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main Lambda handler for file operations."""
     logger.info(f"Processing request with event: {json.dumps(event)}")
@@ -565,5 +616,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return get_download_url_handler(event, user)
     elif route == "DELETE /files/{id}":
         return delete_file_handler(event, user)
+    elif route == "POST /files/{id}/unassociate":
+        return unassociate_file_handler(event, user)
     else:
         return create_response(400, {"message": f"Unsupported route: {route}"}) 
