@@ -212,11 +212,111 @@ echo "$FINAL_FILES_RESPONSE" | jq .
 FINAL_FILE_COUNT=$(echo "$FINAL_FILES_RESPONSE" | jq -r '.metadata.totalFiles')
 echo "Account has $FINAL_FILE_COUNT files after deletion"
 
-if [ "$FINAL_FILE_COUNT" = "0" ] || [ "$INITIAL_FILE_COUNT" = "$FINAL_FILE_COUNT" ]; then
-    echo "✅ File successfully deleted from account"
+# Check if the file count decreased by 1 after deletion
+EXPECTED_COUNT=$((FILE_COUNT - 1))
+if [ "$FINAL_FILE_COUNT" -eq "$EXPECTED_COUNT" ]; then
+    echo "✅ File successfully deleted from account (count decreased from $FILE_COUNT to $FINAL_FILE_COUNT)"
 else
-    echo "❌ File was not successfully deleted from account"
+    echo "❌ File was not successfully deleted from account (expected $EXPECTED_COUNT files, found $FINAL_FILE_COUNT)"
     exit 1
+fi
+
+# 9. Test account deletion with associated files
+echo -e "\n9. Testing account deletion with associated files"
+
+# Create a new account for deletion testing
+echo "Creating a test account for deletion test..."
+ACCOUNT_CREATE_RESPONSE=$(curl -s -X POST \
+  -H "Authorization: $ID_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"accountName\":\"Test Account For Deletion $(date +%s)\", \"accountType\":\"savings\", \"institution\":\"Test Deletion Bank\", \"balance\":500, \"currency\":\"USD\", \"notes\":\"Test account for deletion test\"}" \
+  "${API_ENDPOINT%/*}")
+
+echo "Account creation response:"
+echo "$ACCOUNT_CREATE_RESPONSE" | jq .
+
+DELETION_ACCOUNT_ID=$(echo "$ACCOUNT_CREATE_RESPONSE" | jq -r '.account.accountId')
+if [ -z "$DELETION_ACCOUNT_ID" ] || [ "$DELETION_ACCOUNT_ID" == "null" ]; then
+  echo "❌ Failed to create test account for deletion"
+  exit 1
+fi
+
+echo "Created test account with ID: $DELETION_ACCOUNT_ID"
+
+# Associate a file with the account
+echo "Associating test file with account for deletion test..."
+ASSOC_UPLOAD_RESPONSE=$(curl -s -X POST \
+  -H "Authorization: $ID_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"fileName\":\"deletion_test.txt\", \"contentType\":\"text/plain\", \"fileSize\": 52}" \
+  "${API_ENDPOINT%/*}/$DELETION_ACCOUNT_ID/files")
+
+echo "Association upload response:"
+echo "$ASSOC_UPLOAD_RESPONSE" | jq .
+
+ASSOC_FILE_ID=$(echo "$ASSOC_UPLOAD_RESPONSE" | jq -r '.fileId')
+ASSOC_UPLOAD_URL=$(echo "$ASSOC_UPLOAD_RESPONSE" | jq -r '.uploadUrl')
+
+if [ -z "$ASSOC_FILE_ID" ] || [ "$ASSOC_FILE_ID" == "null" ]; then
+  echo "❌ Failed to get file upload URL for deletion test"
+  exit 1
+fi
+
+# Upload file content
+echo "Uploading file content..."
+curl -s -X PUT -T "/tmp/account_test_file.txt" \
+  -H "Content-Type: text/plain" \
+  "$ASSOC_UPLOAD_URL" > /dev/null
+
+echo "File successfully associated with account for deletion test"
+
+# Verify the file is associated with the account
+ACCOUNT_FILES_BEFORE=$(curl -s -H "Authorization: $ID_TOKEN" "${API_ENDPOINT%/*}/$DELETION_ACCOUNT_ID/files")
+FILE_COUNT_BEFORE=$(echo "$ACCOUNT_FILES_BEFORE" | jq -r '.metadata.totalFiles // 0')
+echo "Account has $FILE_COUNT_BEFORE associated files before deletion"
+
+if [ "$FILE_COUNT_BEFORE" -lt 1 ]; then
+  echo "❌ File was not properly associated with account for deletion test"
+  exit 1
+fi
+
+# Delete the account
+echo "Deleting account $DELETION_ACCOUNT_ID with associated files..."
+ACCOUNT_DELETE_RESPONSE=$(curl -s -X DELETE -H "Authorization: $ID_TOKEN" "${API_ENDPOINT%/*}/$DELETION_ACCOUNT_ID")
+echo "$ACCOUNT_DELETE_RESPONSE" | jq .
+
+# Verify the account is deleted
+ACCOUNT_CHECK=$(curl -s -H "Authorization: $ID_TOKEN" "${API_ENDPOINT%/*}/$DELETION_ACCOUNT_ID")
+ACCOUNT_STATUS=$(echo "$ACCOUNT_CHECK" | jq -r '.message')
+
+if [[ "$ACCOUNT_STATUS" != *"not found"* ]]; then
+  echo "❌ Account was not properly deleted"
+  exit 1
+fi
+
+echo "✅ Account was successfully deleted"
+
+# Check if the file still exists but is not associated with the account
+FILE_CHECK=$(curl -s -H "Authorization: $ID_TOKEN" "${API_ENDPOINT%accounts}files/$ASSOC_FILE_ID")
+echo "File check after account deletion:"
+echo "$FILE_CHECK" | jq .
+
+# Determine if file exists
+FILE_EXISTS=$(echo "$FILE_CHECK" | jq -r 'if has("message") and .message | contains("not found") then "no" else "yes" end')
+if [ "$FILE_EXISTS" == "no" ]; then
+  echo "❌ File should still exist after account deletion"
+  exit 1
+fi
+
+# Check if account association was removed
+FILE_ACCOUNT_ID=$(echo "$FILE_CHECK" | jq -r '.accountId // "null"')
+echo "File's account ID after account deletion: $FILE_ACCOUNT_ID"
+
+if [ "$FILE_ACCOUNT_ID" == "$DELETION_ACCOUNT_ID" ]; then
+  echo "❌ File is still associated with the deleted account"
+  exit 1
+else
+  echo "✅ File association was properly removed when account was deleted"
 fi
 
 echo -e "\nAll account-file association tests completed successfully! ✅" 

@@ -188,7 +188,7 @@ def update_account(account_id: str, update_data: Dict[str, Any]) -> Account:
 
 def delete_account(account_id: str) -> bool:
     """
-    Delete an account.
+    Delete an account and handle any associated files.
     
     Args:
         account_id: The unique identifier of the account to delete
@@ -202,8 +202,27 @@ def delete_account(account_id: str) -> bool:
         if not account:
             raise ValueError(f"Account {account_id} not found")
         
+        # Get all files associated with this account
+        associated_files = list_account_files(account_id)
+        logger.info(f"Found {len(associated_files)} files associated with account {account_id}")
+        
+        # Update associated files to remove the account association
+        for file in associated_files:
+            try:
+                # Create updated file data without the account association
+                updated_data = file.to_dict()
+                updated_data.pop('accountId', None)  # Remove the account ID association
+                
+                # Update the file
+                update_transaction_file(file.file_id, updated_data)
+                logger.info(f"Removed account association from file {file.file_id}")
+            except Exception as file_error:
+                logger.error(f"Error updating file {file.file_id}: {str(file_error)}")
+                # Continue with other files
+        
         # Delete the account
         accounts_table.delete_item(Key={'accountId': account_id})
+        logger.info(f"Account {account_id} deleted successfully")
         
         return True
     except ClientError as e:

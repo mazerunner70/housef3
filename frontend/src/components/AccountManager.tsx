@@ -1,14 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import AccountList from './AccountList';
 import AccountDetail from './AccountDetail';
 import './AccountManager.css';
 
 const AccountManager: React.FC = () => {
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
   const handleAccountSelect = (accountId: string) => {
-    setSelectedAccountId(accountId);
+    setSelectedAccountId(accountId === '' ? null : accountId);
   };
+
+  const handleAccountDeleted = useCallback(() => {
+    // Increment refresh trigger to force account list refresh
+    setRefreshTrigger(prev => prev + 1);
+    // Clear the selected account
+    setSelectedAccountId(null);
+  }, []);
 
   return (
     <div className="account-manager">
@@ -22,11 +30,15 @@ const AccountManager: React.FC = () => {
           <AccountList 
             onSelectAccount={handleAccountSelect} 
             selectedAccountId={selectedAccountId}
+            refreshTrigger={refreshTrigger}
           />
         </div>
         
         <div className="account-detail-section">
-          <AccountDetail accountId={selectedAccountId} />
+          <AccountDetail 
+            accountId={selectedAccountId} 
+            onAccountDeleted={handleAccountDeleted}
+          />
         </div>
       </div>
     </div>

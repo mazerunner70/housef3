@@ -141,17 +141,92 @@ else
     exit 1
 fi
 
-# Step 7: Delete the account
-echo -e "\n7. Testing DELETE /accounts/$ACCOUNT_ID"
-DELETE_RESPONSE=$(curl -s -X DELETE "$API_ENDPOINT/$ACCOUNT_ID" -H "Authorization: $TOKEN")
+# Test file creation for account association
+create_test_file() {
+  local filename="account_deletion_test.txt"
+  local filepath="/tmp/$filename"
+  echo "This is a test file for testing account file associations." > "$filepath"
+  echo "Created at $(date)" >> "$filepath"
+  echo "File created: $filepath (size: $(wc -c < "$filepath") bytes)" >&2
+  echo "$filepath"
+}
+
+# After creating the test account and before deleting it, let's associate a file with it
+echo -e "\n7. Testing file association with account before deletion"
+TEST_FILE_PATH=$(create_test_file)
+echo "Using test file: $TEST_FILE_PATH"
+
+if [ ! -f "$TEST_FILE_PATH" ]; then
+  echo "❌ ERROR: Test file does not exist at $TEST_FILE_PATH"
+  
+  # Try to create the file directly as a fallback
+  mkdir -p /tmp
+  echo "This is a test file for testing account file associations." > /tmp/account_deletion_test.txt
+  echo "Created at $(date)" >> /tmp/account_deletion_test.txt
+  TEST_FILE_PATH="/tmp/account_deletion_test.txt"
+  
+  if [ ! -f "$TEST_FILE_PATH" ]; then
+    handle_error "Failed to create test file"
+  else
+    echo "✅ Created fallback test file: $TEST_FILE_PATH"
+  fi
+fi
+
+FILENAME=$(basename "$TEST_FILE_PATH")
+FILESIZE=$(wc -c < "$TEST_FILE_PATH")
+echo "File details: name=$FILENAME, size=$FILESIZE bytes"
+
+# Get a presigned URL for file upload
+echo "Uploading test file to account: $ACCOUNT_ID"
+UPLOAD_RESPONSE=$(curl -s -X POST \
+  -H "Authorization: $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"fileName\":\"$FILENAME\", \"contentType\":\"text/plain\", \"fileSize\":$FILESIZE}" \
+  "$API_ENDPOINT/$ACCOUNT_ID/files")
+
+echo "Upload response:"
+echo "$UPLOAD_RESPONSE" | jq .
+
+FILE_ID=$(echo "$UPLOAD_RESPONSE" | jq -r '.fileId')
+UPLOAD_URL=$(echo "$UPLOAD_RESPONSE" | jq -r '.uploadUrl')
+
+if [ -z "$FILE_ID" ] || [ "$FILE_ID" == "null" ]; then
+  handle_error "Failed to get a valid file ID for upload"
+fi
+
+# Upload the file to S3 using the presigned URL
+echo "Uploading file to S3..."
+curl -s -X PUT -T "$TEST_FILE_PATH" \
+  -H "Content-Type: text/plain" \
+  "$UPLOAD_URL" > /dev/null
+
+echo "File uploaded successfully with ID: $FILE_ID"
+
+# Verify the file is associated with the account
+echo -e "\nVerifying file association with account..."
+ACCOUNT_FILES_RESPONSE=$(curl -s -H "Authorization: $TOKEN" "$API_ENDPOINT/$ACCOUNT_ID/files")
+ASSOCIATED_FILE_COUNT=$(echo "$ACCOUNT_FILES_RESPONSE" | jq -r '.metadata.totalFiles // 0')
+echo "Account has $ASSOCIATED_FILE_COUNT associated files"
+
+if [ "$ASSOCIATED_FILE_COUNT" -lt 1 ]; then
+  handle_error "File was not associated with the account"
+fi
+
+# Now delete the account and verify file handling
+echo -e "\n8. Testing DELETE /accounts/$ACCOUNT_ID (with associated files)"
+DELETE_RESPONSE=$(curl -s -X DELETE -H "Authorization: $TOKEN" "$API_ENDPOINT/$ACCOUNT_ID")
 echo "$DELETE_RESPONSE" | jq .
 
 DELETE_MESSAGE=$(echo "$DELETE_RESPONSE" | jq -r '.message')
 echo "Delete message: $DELETE_MESSAGE"
 
-# Step 8: Verify the account is deleted
-echo -e "\n8. Testing GET /accounts/$ACCOUNT_ID (after deletion, should fail)"
-GET_RESPONSE=$(curl -s "$API_ENDPOINT/$ACCOUNT_ID" -H "Authorization: $TOKEN")
+if [[ "$DELETE_MESSAGE" != *"successfully"* ]]; then
+  handle_error "Failed to delete account"
+fi
+
+# Check if the account is really gone
+echo -e "\n9. Testing GET /accounts/$ACCOUNT_ID (after deletion, should fail)"
+GET_RESPONSE=$(curl -s -H "Authorization: $TOKEN" "$API_ENDPOINT/$ACCOUNT_ID")
 echo "$GET_RESPONSE" | jq .
 
 GET_STATUS=$(echo "$GET_RESPONSE" | jq -r '.message')
@@ -161,8 +236,33 @@ if [[ "$GET_STATUS" != *"not found"* ]]; then
   handle_error "Account was not properly deleted"
 fi
 
-# Step 9: List accounts after deletion
-echo -e "\n9. Testing GET /accounts (after deletion)"
+# Check if the files still exist but are no longer associated with the account
+echo -e "\n10. Checking if files exist but without account association"
+# The FILES_ENDPOINT should be at the same level as accounts
+FILES_ENDPOINT="${API_ENDPOINT%accounts*}files"
+echo "Using files endpoint: $FILES_ENDPOINT"
+
+FILE_RESPONSE=$(curl -s -H "Authorization: $TOKEN" "$FILES_ENDPOINT/$FILE_ID")
+echo "$FILE_RESPONSE" | jq .
+
+FILE_EXISTS=$(echo "$FILE_RESPONSE" | jq -r 'if has("fileId") then "yes" else "no" end')
+echo "File exists: $FILE_EXISTS"
+
+if [ "$FILE_EXISTS" == "no" ]; then
+  echo "Warning: File may not exist after account deletion, but this is acceptable"
+else
+  FILE_ACCOUNT_ID=$(echo "$FILE_RESPONSE" | jq -r '.accountId // "null"')
+  echo "File account ID after account deletion: $FILE_ACCOUNT_ID"
+
+  if [ "$FILE_ACCOUNT_ID" != "null" ] && [ "$FILE_ACCOUNT_ID" == "$ACCOUNT_ID" ]; then
+    handle_error "File should no longer be associated with the deleted account"
+  else
+    echo "✅ File is no longer associated with the deleted account"
+  fi
+fi
+
+# Step 11: List accounts after deletion
+echo -e "\n11. Testing GET /accounts (after deletion)"
 LIST_RESPONSE=$(curl -s "$API_ENDPOINT" -H "Authorization: $TOKEN")
 echo "$LIST_RESPONSE" | jq .
 

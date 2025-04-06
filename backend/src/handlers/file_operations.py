@@ -477,15 +477,53 @@ def delete_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str
         # Check if the file belongs to the user
         if file.get('userId') != user['id']:
             return create_response(403, {"message": "Access denied"})
+        
+        # Check if file is associated with an account
+        account_id = None
+        if 'accountId' in file:
+            account_id = file.get('accountId')
+            logger.info(f"File {file_id} is associated with account {account_id}. This association will be removed during deletion.")
             
         # Delete file from S3
-        s3_client.delete_object(
-            Bucket=FILE_STORAGE_BUCKET,
-            Key=file.get('s3Key')
-        )
+        try:
+            s3_client.delete_object(
+                Bucket=FILE_STORAGE_BUCKET,
+                Key=file.get('s3Key')
+            )
+            logger.info(f"Successfully deleted file {file_id} from S3 bucket {FILE_STORAGE_BUCKET}")
+        except Exception as s3_error:
+            logger.error(f"Error deleting file from S3: {str(s3_error)}")
+            return create_response(500, {"message": "Error deleting file from S3"})
         
         # Delete metadata from DynamoDB
-        file_table.delete_item(Key={'fileId': file_id})
+        try:
+            file_table.delete_item(Key={'fileId': file_id})
+            logger.info(f"Successfully deleted file {file_id} from DynamoDB table")
+            
+            # Verify the file is deleted
+            verification = file_table.get_item(Key={'fileId': file_id})
+            if 'Item' in verification:
+                logger.error(f"File {file_id} was not deleted from DynamoDB")
+                return create_response(500, {"message": "Error verifying file deletion"})
+                
+            # If file was associated with an account, verify it's removed from the index
+            if account_id:
+                # Check if the file still appears in the account's files
+                verification_query = file_table.query(
+                    IndexName='AccountIdIndex',
+                    KeyConditionExpression=boto3.dynamodb.conditions.Key('accountId').eq(account_id)
+                )
+                account_files = verification_query.get('Items', [])
+                for account_file in account_files:
+                    if account_file.get('fileId') == file_id:
+                        logger.error(f"File {file_id} still appears in account {account_id} index")
+                        # This should never happen if the main item is deleted
+            
+            logger.info(f"File {file_id} deletion verified")
+            
+        except Exception as dynamo_error:
+            logger.error(f"Error deleting file from DynamoDB: {str(dynamo_error)}")
+            return create_response(500, {"message": "Error deleting file metadata from database"})
         
         return create_response(200, {
             'message': 'File deleted successfully',

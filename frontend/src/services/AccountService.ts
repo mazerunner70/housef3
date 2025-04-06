@@ -145,11 +145,11 @@ export const listAccounts = async (): Promise<AccountListResponse> => {
 };
 
 // Get single account by ID
-export const getAccount = async (accountId: string): Promise<Account> => {
+export const getAccount = async (accountId: string): Promise<{ account: Account }> => {
   try {
     const response = await authenticatedRequest(`${API_ENDPOINT}/${accountId}`);
     const data = await response.json();
-    return data.account;
+    return data;
   } catch (error) {
     console.error(`Error getting account ${accountId}:`, error);
     throw error;
@@ -193,9 +193,16 @@ export const getAccountFileUploadUrl = async (
   }
 };
 
+export const deleteAccount = async (accountId: string): Promise<void> => {
+  await authenticatedRequest(`${API_ENDPOINT}/${accountId}`, {
+    method: 'DELETE'
+  });
+};
+
 export default {
   listAccounts,
   getAccount,
   listAccountFiles,
-  getAccountFileUploadUrl
+  getAccountFileUploadUrl,
+  deleteAccount
 }; 

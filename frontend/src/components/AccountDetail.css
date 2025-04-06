@@ -177,4 +177,81 @@
     width: 100%;
     justify-content: flex-end;
   }
+}
+
+.account-actions {
+  margin-top: 20px;
+}
+
+.delete-account-btn {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.delete-account-btn:hover {
+  background-color: #c82333;
+}
+
+.delete-account-btn:disabled {
+  background-color: #e4606d;
+  cursor: not-allowed;
+}
+
+.delete-confirmation {
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+  border-radius: 4px;
+  padding: 10px 15px;
+  margin-top: 10px;
+}
+
+.delete-confirmation p {
+  color: #721c24;
+  margin-bottom: 10px;
+}
+
+.delete-confirmation-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.confirm-delete-btn {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.confirm-delete-btn:hover {
+  background-color: #bd2130;
+}
+
+.confirm-delete-btn:disabled {
+  background-color: #e4606d;
+  cursor: not-allowed;
+}
+
+.cancel-delete-btn {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.cancel-delete-btn:hover {
+  background-color: #5a6268;
+}
+
+.cancel-delete-btn:disabled {
+  background-color: #9aa0a6;
+  cursor: not-allowed;
 } 

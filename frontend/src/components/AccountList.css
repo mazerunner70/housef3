@@ -81,6 +81,28 @@
   color: #f5222d;
 }
 
+.account-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.create-account-btn {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+}
+
+.create-account-btn:hover {
+  background-color: #218838;
+}
+
 @media (max-width: 768px) {
   .account-list-container {
     flex-direction: column;
