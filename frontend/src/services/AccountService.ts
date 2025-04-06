@@ -1,15 +1,34 @@
 import { getCurrentUser, refreshToken, isAuthenticated } from './AuthService';
+import { FileMetadata } from './FileService';
 
-export interface FileMetadata {
-  fileId: string;
-  fileName: string;
-  contentType: string;
-  fileSize: number;
-  uploadDate: string;
-  lastModified: string;
+// Define interfaces
+export interface Account {
+  accountId: string;
+  accountName: string;
+  accountType: string;
+  balance: number;
+  currency: string;
+  institution?: string;
+  userId: string;
+  lastUpdated: string;
+  createdAt: string;
+  notes?: string;
+  isActive: boolean;
 }
 
-export interface FileListResponse {
+export interface AccountListResponse {
+  accounts: Account[];
+  user: {
+    id: string;
+    email: string;
+    auth_time: string;
+  };
+  metadata: {
+    totalAccounts: number;
+  };
+}
+
+export interface AccountFilesResponse {
   files: FileMetadata[];
   user: {
     id: string;
@@ -18,29 +37,25 @@ export interface FileListResponse {
   };
   metadata: {
     totalFiles: number;
-    timestamp: string;
+    accountId: string;
+    accountName: string;
   };
 }
 
-export interface UploadUrlResponse {
+export interface UploadFileToAccountResponse {
   fileId: string;
   uploadUrl: string;
   fileName: string;
   contentType: string;
   expires: number;
-}
-
-export interface DownloadUrlResponse {
-  fileId: string;
-  downloadUrl: string;
-  fileName: string;
-  contentType: string;
-  expires: number;
+  processingStatus: string;
+  fileFormat: string;
+  accountId: string;
 }
 
 // Get CloudFront domain from environment variables
 const CLOUDFRONT_DOMAIN = import.meta.env.VITE_CLOUDFRONT_DOMAIN || '';
-const API_ENDPOINT = `https://${CLOUDFRONT_DOMAIN}/files`;
+const API_ENDPOINT = `https://${CLOUDFRONT_DOMAIN}/accounts`;
 
 // Helper function to handle API requests with authentication
 const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
@@ -117,98 +132,70 @@ const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
   }
 };
 
-// Get list of files
-export const listFiles = async (): Promise<FileListResponse> => {
+// Get list of accounts
+export const listAccounts = async (): Promise<AccountListResponse> => {
   try {
     const response = await authenticatedRequest(API_ENDPOINT);
-    const data: FileListResponse = await response.json();
+    const data: AccountListResponse = await response.json();
     return data;
   } catch (error) {
-    console.error('Error listing files:', error);
+    console.error('Error listing accounts:', error);
     throw error;
   }
 };
 
-// Get upload URL for a file
-export const getUploadUrl = async (
-  fileName: string, 
-  contentType: string, 
-  fileSize: number, 
-  accountId?: string
-): Promise<UploadUrlResponse> => {
+// Get single account by ID
+export const getAccount = async (accountId: string): Promise<Account> => {
   try {
-    const requestBody: any = {
-      fileName,
-      contentType,
-      fileSize
-    };
-    
-    // Add accountId to request if provided
-    if (accountId) {
-      requestBody.accountId = accountId;
-    }
-    
-    const response = await authenticatedRequest(`${API_ENDPOINT}/upload`, {
+    const response = await authenticatedRequest(`${API_ENDPOINT}/${accountId}`);
+    const data = await response.json();
+    return data.account;
+  } catch (error) {
+    console.error(`Error getting account ${accountId}:`, error);
+    throw error;
+  }
+};
+
+// List files associated with an account
+export const listAccountFiles = async (accountId: string): Promise<AccountFilesResponse> => {
+  try {
+    const response = await authenticatedRequest(`${API_ENDPOINT}/${accountId}/files`);
+    const data: AccountFilesResponse = await response.json();
+    return data;
+  } catch (error) {
+    console.error(`Error listing files for account ${accountId}:`, error);
+    throw error;
+  }
+};
+
+// Get upload URL for a file associated with an account
+export const getAccountFileUploadUrl = async (
+  accountId: string,
+  fileName: string,
+  contentType: string,
+  fileSize: number
+): Promise<UploadFileToAccountResponse> => {
+  try {
+    const response = await authenticatedRequest(`${API_ENDPOINT}/${accountId}/files`, {
       method: 'POST',
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify({
+        fileName,
+        contentType,
+        fileSize
+      })
     });
     
-    const data: UploadUrlResponse = await response.json();
+    const data: UploadFileToAccountResponse = await response.json();
     return data;
   } catch (error) {
-    console.error('Error getting upload URL:', error);
-    throw error;
-  }
-};
-
-// Upload file to S3 using presigned URL
-export const uploadFileToS3 = async (uploadUrl: string, file: File): Promise<void> => {
-  try {
-    const response = await fetch(uploadUrl, {
-      method: 'PUT',
-      body: file,
-      headers: {
-        'Content-Type': file.type
-      }
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
-    }
-  } catch (error) {
-    console.error('Error uploading file to S3:', error);
-    throw error;
-  }
-};
-
-// Get download URL for a file
-export const getDownloadUrl = async (fileId: string): Promise<DownloadUrlResponse> => {
-  try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/${fileId}/download`);
-    const data: DownloadUrlResponse = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Error getting download URL:', error);
-    throw error;
-  }
-};
-
-// Delete a file
-export const deleteFile = async (fileId: string): Promise<void> => {
-  try {
-    await authenticatedRequest(`${API_ENDPOINT}/${fileId}`, {
-      method: 'DELETE'
-    });
-  } catch (error) {
-    console.error('Error deleting file:', error);
+    console.error(`Error getting upload URL for account ${accountId}:`, error);
     throw error;
   }
 };
 
 export default {
-  listFiles,
-  getUploadUrl,
-  uploadFileToS3,
-  getDownloadUrl,
-  deleteFile
+  listAccounts,
+  getAccount,
+  listAccountFiles,
+  getAccountFileUploadUrl
 }; 

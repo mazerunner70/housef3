@@ -181,6 +181,48 @@
   margin-right: 5px;
 }
 
+.account-selection {
+  margin: 15px 0;
+  padding: 12px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.account-selection label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #495057;
+  font-size: 14px;
+}
+
+.account-selection select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background-color: white;
+  color: #495057;
+  font-size: 14px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23495057' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px;
+}
+
+.account-selection select:focus {
+  border-color: #80bdff;
+  outline: 0;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.account-selection select:disabled {
+  background-color: #e9ecef;
+  cursor: not-allowed;
+}
+
 @media (max-width: 600px) {
   .file-upload-container {
     padding: 15px;
@@ -193,5 +235,14 @@
   .upload-button, .cancel-button {
     padding: 8px 16px;
     font-size: 14px;
+  }
+  
+  .account-selection {
+    padding: 10px;
+  }
+  
+  .account-selection select {
+    padding: 8px;
+    font-size: 13px;
   }
 } 

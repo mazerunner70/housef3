@@ -4,13 +4,14 @@ import Login from './components/Login';
 import UserProfile from './components/UserProfile';
 import ColorDisplay from './components/ColorDisplay';
 import FileManager from './components/FileManager';
+import AccountManager from './components/AccountManager';
 import { AuthUser, getCurrentUser, isAuthenticated, refreshToken } from './services/AuthService';
 
 function App() {
   const [authenticated, setAuthenticated] = useState<boolean>(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [activeSection, setActiveSection] = useState<'colors' | 'files'>('colors');
+  const [activeSection, setActiveSection] = useState<'colors' | 'files' | 'accounts'>('files');
 
   // Check authentication status on component mount
   useEffect(() => {
@@ -71,7 +72,7 @@ function App() {
     setUser(null);
   };
 
-  const handleSectionChange = (section: 'colors' | 'files') => {
+  const handleSectionChange = (section: 'colors' | 'files' | 'accounts') => {
     setActiveSection(section);
   };
 
@@ -89,29 +90,44 @@ function App() {
           
           <div className="section-tabs">
             <button 
-              className={`section-button ${activeSection === 'colors' ? 'active' : ''}`}
-              onClick={() => handleSectionChange('colors')}
-            >
-              Colors
-            </button>
-            <button 
               className={`section-button ${activeSection === 'files' ? 'active' : ''}`}
               onClick={() => handleSectionChange('files')}
             >
               File Manager
             </button>
+            <button 
+              className={`section-button ${activeSection === 'accounts' ? 'active' : ''}`}
+              onClick={() => handleSectionChange('accounts')}
+            >
+              Accounts
+            </button>
+            <button 
+              className={`section-button ${activeSection === 'colors' ? 'active' : ''}`}
+              onClick={() => handleSectionChange('colors')}
+            >
+              Colors
+            </button>
           </div>
           
           <div className="content">
-            {activeSection === 'colors' ? (
-              <>
-                <h2>Color Import</h2>
-                <ColorDisplay />
-              </>
-            ) : (
+            {activeSection === 'files' && (
               <>
                 <h2>File Management</h2>
                 <FileManager />
+              </>
+            )}
+            
+            {activeSection === 'accounts' && (
+              <>
+                <h2>Account Management</h2>
+                <AccountManager />
+              </>
+            )}
+            
+            {activeSection === 'colors' && (
+              <>
+                <h2>Color Import</h2>
+                <ColorDisplay />
               </>
             )}
           </div>

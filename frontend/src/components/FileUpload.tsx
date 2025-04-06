@@ -1,5 +1,6 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { getUploadUrl, uploadFileToS3 } from '../services/FileService';
+import { Account, listAccounts } from '../services/AccountService';
 import './FileUpload.css';
 
 // Maximum file size (5MB)
@@ -28,7 +29,27 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
   const [uploading, setUploading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<boolean>(false);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [loadingAccounts, setLoadingAccounts] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch accounts when component mounts
+  useEffect(() => {
+    const fetchAccounts = async () => {
+      try {
+        setLoadingAccounts(true);
+        const accountsData = await listAccounts();
+        setAccounts(accountsData.accounts);
+      } catch (err) {
+        console.error('Error fetching accounts:', err);
+      } finally {
+        setLoadingAccounts(false);
+      }
+    };
+
+    fetchAccounts();
+  }, []);
 
   // Handle file selection validation
   const validateAndSetFile = (file: File) => {
@@ -96,11 +117,12 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
       setUploading(true);
       setSuccess(false);
       
-      // Step 1: Get presigned URL
+      // Step 1: Get presigned URL (now with optional accountId)
       const uploadUrlData = await getUploadUrl(
         selectedFile.name,
         selectedFile.type,
-        selectedFile.size
+        selectedFile.size,
+        selectedAccountId // Pass the selected account ID if one is selected
       );
       
       // Step 2: Upload file to S3
@@ -110,6 +132,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
       setUploadProgress(100);
       setSuccess(true);
       setSelectedFile(null);
+      setSelectedAccountId(null); // Reset selected account
       
       // Reset file input
       if (fileInputRef.current) {
@@ -136,11 +159,18 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
     setSelectedFile(null);
     setError(null);
     setUploadProgress(0);
+    setSelectedAccountId(null); // Reset selected account
     
     // Reset file input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  // Handle account selection change
+  const handleAccountChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const accountId = e.target.value;
+    setSelectedAccountId(accountId === "none" ? null : accountId);
   };
 
   return (
@@ -183,6 +213,30 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
           </div>
         )}
       </div>
+      
+      {/* Account selection */}
+      {selectedFile && (
+        <div className="account-selection">
+          <label htmlFor="account-select">Associate with Account (Optional):</label>
+          <select 
+            id="account-select" 
+            value={selectedAccountId || "none"} 
+            onChange={handleAccountChange}
+            disabled={uploading || loadingAccounts}
+          >
+            <option value="none">None (No account association)</option>
+            {loadingAccounts ? (
+              <option disabled>Loading accounts...</option>
+            ) : (
+              accounts.map(account => (
+                <option key={account.accountId} value={account.accountId}>
+                  {account.accountName} ({account.accountType})
+                </option>
+              ))
+            )}
+          </select>
+        </div>
+      )}
       
       {/* Error message */}
       {error && (

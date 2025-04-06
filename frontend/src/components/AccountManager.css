@@ -1,0 +1,52 @@
+.account-manager {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.account-manager-header {
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.account-manager-header h2 {
+  font-size: 1.8rem;
+  color: #333;
+  margin-bottom: 0.5rem;
+}
+
+.account-manager-header p {
+  color: #666;
+  font-size: 1rem;
+}
+
+.account-manager-content {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 2rem;
+}
+
+.account-list-section {
+  border-right: 1px solid #eee;
+  padding-right: 1.5rem;
+}
+
+.account-detail-section {
+  flex: 1;
+}
+
+@media (max-width: 768px) {
+  .account-manager-content {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  
+  .account-list-section {
+    border-right: none;
+    border-bottom: 1px solid #eee;
+    padding-right: 0;
+    padding-bottom: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+} 

@@ -1,0 +1,92 @@
+.account-list {
+  margin-bottom: 1.5rem;
+}
+
+.account-list h3 {
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+  color: #333;
+}
+
+.account-list-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.account-card {
+  background-color: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 1rem;
+  width: 220px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.account-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.account-card.selected {
+  background-color: #e6f7ff;
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+.account-name {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+  color: #333;
+}
+
+.account-info {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.account-type {
+  font-size: 0.85rem;
+  color: #666;
+  text-transform: capitalize;
+  background-color: #f0f0f0;
+  padding: 0.15rem 0.5rem;
+  border-radius: 12px;
+}
+
+.account-balance {
+  font-weight: 600;
+  color: #1890ff;
+}
+
+.account-institution {
+  font-size: 0.85rem;
+  color: #999;
+}
+
+.account-list-loading,
+.account-list-error,
+.account-list-empty {
+  padding: 1rem;
+  background-color: #f5f5f5;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.account-list-error {
+  background-color: #fff2f0;
+  color: #f5222d;
+}
+
+@media (max-width: 768px) {
+  .account-list-container {
+    flex-direction: column;
+  }
+  
+  .account-card {
+    width: 100%;
+  }
+} 
