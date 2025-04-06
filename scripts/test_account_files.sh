@@ -102,6 +102,67 @@ fi
 
 echo "Received file ID: $FILE_ID"
 
+# 3b. Test account ownership validation with a made-up account ID
+echo -e "\n3b. Testing POST /accounts/invalid-account-id/files (ownership validation)"
+INVALID_ID="invalid-account-$(date +%s)"
+INVALID_UPLOAD_ENDPOINT="$API_ENDPOINT/$INVALID_ID/files"
+echo "Invalid upload endpoint: $INVALID_UPLOAD_ENDPOINT"
+
+INVALID_RESPONSE=$(curl -s -X POST \
+    -H "Content-Type: application/json" \
+    -H "Authorization: $ID_TOKEN" \
+    -d "$UPLOAD_PAYLOAD" \
+    "$INVALID_UPLOAD_ENDPOINT")
+
+echo "Response from invalid account ID:"
+echo "$INVALID_RESPONSE" | jq .
+
+ERROR_MSG=$(echo "$INVALID_RESPONSE" | jq -r '.message')
+if [[ "$ERROR_MSG" == *"not found"* ]]; then
+    echo "✅ Successfully verified account existence validation"
+else
+    echo "⚠️ WARNING: Expected 'not found' error but got a different response"
+fi
+
+# 3c. Test regular file upload with account association via the /files/upload endpoint
+echo -e "\n3c. Testing POST /files/upload with valid account association"
+FILES_UPLOAD_ENDPOINT="${API_ENDPOINT%accounts}files/upload"
+ASSOCIATION_PAYLOAD="{\"fileName\":\"association_test.txt\", \"contentType\":\"text/plain\", \"fileSize\": $FILE_SIZE, \"accountId\": \"$ACCOUNT_ID\"}"
+echo "Files upload endpoint: $FILES_UPLOAD_ENDPOINT"
+echo "Association payload: $ASSOCIATION_PAYLOAD"
+
+ASSOCIATION_RESPONSE=$(curl -s -X POST \
+    -H "Content-Type: application/json" \
+    -H "Authorization: $ID_TOKEN" \
+    -d "$ASSOCIATION_PAYLOAD" \
+    "$FILES_UPLOAD_ENDPOINT")
+
+echo "Association response:"
+echo "$ASSOCIATION_RESPONSE" | jq .
+
+ASSOCIATION_FILE_ID=$(echo "$ASSOCIATION_RESPONSE" | jq -r '.fileId')
+ASSOCIATION_UPLOAD_URL=$(echo "$ASSOCIATION_RESPONSE" | jq -r '.uploadUrl')
+RETURNED_ACCOUNT_ID=$(echo "$ASSOCIATION_RESPONSE" | jq -r '.accountId')
+
+if [ -z "$ASSOCIATION_FILE_ID" ] || [ "$ASSOCIATION_FILE_ID" = "null" ]; then
+    echo "Error: Failed to get association file ID from response"
+    exit 1
+fi
+
+if [ "$RETURNED_ACCOUNT_ID" = "$ACCOUNT_ID" ]; then
+    echo "✅ Account ID returned in response matches the requested account ID"
+else
+    echo "❌ Account ID mismatch: requested $ACCOUNT_ID but got $RETURNED_ACCOUNT_ID"
+    exit 1
+fi
+
+echo "Received association file ID: $ASSOCIATION_FILE_ID"
+
+# 3d. Upload file to S3 using pre-signed URL from association test
+echo -e "\n3d. Testing file upload using association pre-signed URL"
+ASSOCIATION_RESULT=$(curl -s -X PUT -H "Content-Type: text/plain" --upload-file "$TEST_FILE" "$ASSOCIATION_UPLOAD_URL")
+echo "Association file uploaded successfully"
+
 # 4. Upload file to S3 using pre-signed URL
 echo -e "\n4. Testing file upload using pre-signed URL"
 UPLOAD_RESULT=$(curl -s -X PUT -H "Content-Type: text/plain" --upload-file "$TEST_FILE" "$UPLOAD_URL")

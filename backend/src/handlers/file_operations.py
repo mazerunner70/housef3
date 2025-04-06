@@ -27,6 +27,7 @@ try:
     # Now try the imports
     from models.transaction_file import TransactionFile, FileFormat, ProcessingStatus, DateRange, validate_transaction_file_data
     from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_transaction_file
+    from utils.db_utils import get_account
     
     logger.info("Successfully imported modules using adjusted path")
 except ImportError as e:
@@ -37,6 +38,7 @@ except ImportError as e:
     try:
         from ..models.transaction_file import TransactionFile, FileFormat, ProcessingStatus, DateRange, validate_transaction_file_data
         from ..utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_transaction_file
+        from ..utils.db_utils import get_account
         logger.info("Successfully imported modules using relative imports")
     except ImportError as e2:
         logger.error(f"Final import attempt failed: {str(e2)}")
@@ -231,6 +233,14 @@ def get_files_by_account_handler(event: Dict[str, Any], user: Dict[str, Any]) ->
         
         if not account_id:
             return create_response(400, {"message": "Account ID is required"})
+        
+        # Verify the account exists and belongs to the user
+        account = get_account(account_id)
+        if not account:
+            return create_response(404, {"message": f"Account not found: {account_id}"})
+        
+        if account.user_id != user['id']:
+            return create_response(403, {"message": "Access denied. You do not own this account"})
             
         logger.info(f"Listing files for account: {account_id}")
         
@@ -306,13 +316,23 @@ def get_upload_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
         if not file_name:
             return create_response(400, {"message": "fileName is required"})
         
-        # Validate account_id if it's a transaction file
+        # Validate account_id if it's provided (for account-file association)
         if account_id:
             if not account_id.strip():
                 return create_response(400, {"message": "accountId cannot be empty if provided"})
+            
+            # Verify the account exists and belongs to the user
+            account = get_account(account_id)
+            if not account:
+                return create_response(404, {"message": f"Account not found: {account_id}"})
+            
+            if account.user_id != user['id']:
+                return create_response(403, {"message": "Access denied. You do not own this account"})
+            
+            logger.info(f"Associating file with account: {account_id}")
         else:
-            # If not associated with an account, it's a regular file
-            pass
+            # If not associated with an account, it's a standalone file
+            logger.info("Creating a standalone file (no account association)")
             
         # Generate a unique file ID
         file_id = generate_file_id()

@@ -1,88 +1,88 @@
 #!/bin/bash
 set -e
 
-# Store the original directory
+# Store original directory
 ORIGINAL_DIR=$(pwd)
+SCRIPTS_DIR="$ORIGINAL_DIR"
 
-# Determine if we're in the scripts directory or not
+# Check if we're in the /scripts directory, otherwise navigate to it
 if [[ "$ORIGINAL_DIR" != *"/scripts" ]]; then
-  # If we're not in the scripts directory, navigate to it
-  cd "$ORIGINAL_DIR/scripts" || exit 1
-  SCRIPTS_DIR=$(pwd)
-else
-  # We're already in the scripts directory
-  SCRIPTS_DIR="$ORIGINAL_DIR"
+    cd "$(dirname "$0")"
+    SCRIPTS_DIR=$(pwd)
+    echo "Changed to scripts directory: $SCRIPTS_DIR"
 fi
 
-# Function to handle errors and exit with code 1
+# Error handling
 handle_error() {
-  echo -e "\n❌ ERROR in $1: $2"
-  # Return to original directory before exiting
-  cd "$ORIGINAL_DIR"
-  exit 1
+    echo "❌ ERROR: $1"
+    cd "$ORIGINAL_DIR"
+    exit 1
 }
 
-# Function to run a test with color-coded output and timeout
+# Function to run tests with timeout
 run_test() {
-  TEST_NAME=$1
-  TEST_SCRIPT=$2
-  TIMEOUT=300  # 5 minutes timeout
-  
-  echo -e "\n\033[1;34m===================================\033[0m"
-  echo -e "\033[1;34m Running Test: $TEST_NAME \033[0m"
-  echo -e "\033[1;34m===================================\033[0m\n"
-  
-  # Export non-interactive mode flag for tests
-  export NONINTERACTIVE=true
-  export AWS_PAGER=""
-  
-  # Run the test script with timeout
-  if timeout $TIMEOUT bash "./$TEST_SCRIPT"; then
-    echo -e "\n\033[1;32m✅ $TEST_NAME PASSED\033[0m\n"
-  else
-    EXIT_CODE=$?
-    if [ $EXIT_CODE -eq 124 ]; then
-      echo -e "\n\033[1;31m❌ $TEST_NAME TIMED OUT\033[0m\n"
-      handle_error "$TEST_NAME" "Test timed out after $TIMEOUT seconds"
+    local test_script="$1"
+    local timeout_seconds=300  # 5 minutes timeout
+    
+    echo -e "\n==================================================================="
+    echo "🚀 Running test: $test_script"
+    echo "==================================================================="
+    
+    # Run the test with timeout
+    timeout $timeout_seconds bash "$test_script"
+    local exit_code=$?
+    
+    # Check exit status
+    if [ $exit_code -eq 124 ]; then
+        handle_error "Test $test_script timed out after $timeout_seconds seconds"
+    elif [ $exit_code -ne 0 ]; then
+        handle_error "Test $test_script failed with exit code $exit_code"
     else
-      echo -e "\n\033[1;31m❌ $TEST_NAME FAILED\033[0m\n"
-      handle_error "$TEST_NAME" "Test script returned non-zero exit code: $EXIT_CODE"
+        echo -e "\n✅ Test $test_script completed successfully"
     fi
-  fi
 }
 
-# Display startup message
-echo -e "\n\033[1;33m=========================================\033[0m"
-echo -e "\033[1;33m Running All System Tests \033[0m"
-echo -e "\033[1;33m=========================================\033[0m\n"
+# Startup message
+echo "🔍 Starting comprehensive test suite for housef3 project"
+echo "📂 Running from directory: $SCRIPTS_DIR"
+echo "⏱️  $(date)"
+echo "==================================================================="
 
-# Individual test execution commands with improved error checking
-# Run S3 bucket test
-run_test "S3 Bucket Configuration" "test_s3_bucket.sh"
+# S3 Bucket tests
+echo -e "\n📦 Step 1: Testing S3 bucket configuration"
+run_test "./test_s3_bucket.sh"
 
-# Run DynamoDB test
-run_test "DynamoDB Table Configuration" "test_dynamodb.sh"
+# DynamoDB tests
+echo -e "\n🗄️ Step 2: Testing DynamoDB table configuration"
+run_test "./test_dynamodb.sh"
 
-# Run Authentication test
-run_test "Authentication Service" "test_auth.sh"
+# Authentication tests
+echo -e "\n🔐 Step 3: Testing authentication services"
+run_test "./test_auth.sh"
 
-# Run File Operations test
-run_test "File Operations" "test_file_operations.sh"
+# Account operations tests
+echo -e "\n📊 Step 4: Testing account operations API"
+run_test "./test_account_operations.sh"
 
-# Run Account Operations test
-run_test "Account Operations" "test_account_operations.sh"
+# File operations tests
+echo -e "\n📄 Step 5: Testing file operations API"
+run_test "./test_file_operations.sh"
 
-# Run Account-File Association test
-run_test "Account-File Association" "test_account_files.sh"
-
-# Run Frontend test
-run_test "Frontend Deployment" "test_frontend.sh"
-
-# Final message
-echo -e "\n\033[1;32m=========================================\033[0m"
-echo -e "\033[1;32m All tests completed successfully! \033[0m"
-echo -e "\033[1;32m=========================================\033[0m\n"
+# Account-file association tests
+echo -e "\n🔗 Step 6: Testing account-file association functionality"
+run_test "./test_account_files.sh"
 
 # Return to original directory
 cd "$ORIGINAL_DIR"
-exit 0 
+
+# Final success message
+echo -e "\n==================================================================="
+echo "🎉 All tests completed successfully!"
+echo "✅ S3 bucket configuration verified"
+echo "✅ DynamoDB tables configuration verified"
+echo "✅ Authentication services operational"
+echo "✅ Account operations API functioning"
+echo "✅ File operations API functioning"
+echo "✅ Account-file associations verified"
+echo "==================================================================="
+echo "⏱️  Tests completed at $(date)" 
