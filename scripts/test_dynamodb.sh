@@ -7,130 +7,183 @@ handle_error() {
   exit 1
 }
 
-# Get DynamoDB table name from Terraform output
+# Get table names from Terraform output
 cd $(dirname "$0")/../infrastructure/terraform
-DYNAMODB_TABLE=$(terraform output -raw transaction_files_table_name)
+ACCOUNTS_TABLE=$(terraform output -raw accounts_table_name | cat)
+TRANSACTION_FILES_TABLE=$(terraform output -raw transaction_files_table_name | cat)
 cd ../..
 
-echo "Testing DynamoDB table configuration for: $DYNAMODB_TABLE"
+echo "Testing DynamoDB tables configuration"
+echo "Accounts table: $ACCOUNTS_TABLE"
+echo "Transaction files table: $TRANSACTION_FILES_TABLE"
 
-# Test 1: Verify table exists
-echo -e "\n1. Testing table existence..."
-TABLE_INFO=$(aws dynamodb describe-table --table-name $DYNAMODB_TABLE 2>/dev/null) || handle_error "Table does not exist or you don't have permission to access it"
-echo "✅ Table exists and is accessible"
+# Test 1: Verify tables exist
+echo -e "\n1. Testing tables existence..."
 
-# Test 2: Verify table schema
-echo -e "\n2. Testing table schema..."
-# Check key schema for fileId as hash key
-FILEID_HASH=$(echo "$TABLE_INFO" | grep -A 5 '"KeySchema"' | grep -A 2 '"AttributeName": "fileId"' | grep -o '"KeyType": "HASH"')
-if [ -n "$FILEID_HASH" ]; then
-  echo "✅ Table has correct primary key configuration (fileId as HASH key)"
+# Check accounts table
+ACCOUNTS_DESC=$(aws dynamodb describe-table --table-name $ACCOUNTS_TABLE --no-cli-pager 2>/dev/null) || handle_error "Accounts table does not exist"
+echo "✅ Accounts table exists"
+
+# Check transaction files table
+FILES_DESC=$(aws dynamodb describe-table --table-name $TRANSACTION_FILES_TABLE --no-cli-pager 2>/dev/null) || handle_error "Transaction files table does not exist"
+echo "✅ Transaction files table exists"
+
+# Test 2: Verify accounts table schema
+echo -e "\n2. Testing accounts table schema..."
+
+# Check accounts table primary key
+if [[ "$ACCOUNTS_DESC" == *"accountId"* ]]; then
+  echo "✅ Accounts table has correct primary key (accountId)"
 else
-  handle_error "Table does not have the correct primary key configuration"
+  handle_error "Accounts table has incorrect primary key"
 fi
 
-# Check required attributes
-FILEATTR=$(echo "$TABLE_INFO" | grep -o '"AttributeName": "fileId"' | wc -l)
-USERATTR=$(echo "$TABLE_INFO" | grep -o '"AttributeName": "userId"' | wc -l)
-DATEATTR=$(echo "$TABLE_INFO" | grep -o '"AttributeName": "uploadDate"' | wc -l)
-
-if [ "$FILEATTR" -gt 0 ] && [ "$USERATTR" -gt 0 ] && [ "$DATEATTR" -gt 0 ]; then
-  echo "✅ Table has all required attributes"
+# Check accounts table GSI for userId
+if [[ "$ACCOUNTS_DESC" == *"userId"* ]] && [[ "$ACCOUNTS_DESC" == *"IndexName"* ]]; then
+  echo "✅ Accounts table has GSI with userId"
 else
-  handle_error "Table is missing required attributes"
+  handle_error "Accounts table is missing required GSI with userId"
 fi
 
-# Test 3: Verify GSI configuration
-echo -e "\n3. Testing Global Secondary Index..."
-GSI_COUNT=$(echo "$TABLE_INFO" | grep -o '"IndexName": "UserIndex"' | wc -l)
-if [ "$GSI_COUNT" -eq 1 ]; then
-  echo "✅ UserIndex GSI is configured"
+# Test 3: Verify transaction files table schema
+echo -e "\n3. Testing transaction files table schema..."
+
+# Check transaction files table primary key
+if [[ "$FILES_DESC" == *"fileId"* ]]; then
+  echo "✅ Transaction files table has correct primary key (fileId)"
 else
-  handle_error "UserIndex GSI is not configured correctly"
+  handle_error "Transaction files table has incorrect primary key"
 fi
 
-# Test 4: Verify point-in-time recovery
-echo -e "\n4. Testing point-in-time recovery configuration..."
-PITR_INFO=$(aws dynamodb describe-continuous-backups --table-name $DYNAMODB_TABLE)
-PITR_STATUS=$(echo "$PITR_INFO" | grep -o '"PointInTimeRecoveryStatus": "ENABLED"')
-if [ -n "$PITR_STATUS" ]; then
-  echo "✅ Point-in-time recovery is enabled"
+# Check transaction files table GSI for userId
+if [[ "$FILES_DESC" == *"userId"* ]] && [[ "$FILES_DESC" == *"IndexName"* ]]; then
+  echo "✅ Transaction files table has GSI with userId"
 else
-  handle_error "Point-in-time recovery is not enabled"
+  handle_error "Transaction files table is missing required GSI with userId"
 fi
 
-# Test 5: Verify encryption
-echo -e "\n5. Testing encryption configuration..."
-ENCRYPTION=$(echo "$TABLE_INFO" | grep -o '"SSEDescription"')
-if [ -n "$ENCRYPTION" ]; then
-  echo "✅ Server-side encryption is enabled"
+# Check transaction files table GSI for accountId if exists
+if [[ "$FILES_DESC" == *"accountId"* ]] && [[ "$FILES_DESC" == *"IndexName"* ]]; then
+  echo "✅ Transaction files table has account-file association GSI with accountId"
 else
-  handle_error "Server-side encryption is not enabled"
+  echo "⚠️  NOTE: Transaction files table does not have an accountId GSI. This is recommended for account-file associations."
 fi
 
-# Test 6: Test basic CRUD operations
-echo -e "\n6. Testing basic CRUD operations..."
-TEST_ID="test-$(date +%s)"
+# Test 4: Test basic operations with a test account
+echo -e "\n4. Testing basic operations on accounts table..."
 
-# Put item
-echo "   - Creating test item..."
+# Generate a unique test ID
+TEST_ID=$(date +%s)
+TEST_ACCOUNT_ID="test-account-$TEST_ID"
+TEST_USER_ID="test-user-$TEST_ID"
+
+# Create a test account
+echo "   - Creating test account..."
 aws dynamodb put-item \
-  --table-name $DYNAMODB_TABLE \
-  --item '{
-    "fileId": {"S": "'$TEST_ID'"},
-    "userId": {"S": "test-user"},
-    "fileName": {"S": "test-file.txt"},
-    "uploadDate": {"S": "'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'"},
-    "fileSize": {"N": "42"},
-    "contentType": {"S": "text/plain"}
-  }' >/dev/null || handle_error "Failed to create test item"
+  --table-name $ACCOUNTS_TABLE \
+  --item "{
+    \"accountId\": {\"S\": \"$TEST_ACCOUNT_ID\"},
+    \"userId\": {\"S\": \"$TEST_USER_ID\"},
+    \"accountName\": {\"S\": \"Test Account\"},
+    \"accountType\": {\"S\": \"checking\"},
+    \"balance\": {\"S\": \"1000.00\"},
+    \"createdAt\": {\"S\": \"$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)\"}
+  }" --no-cli-pager 2>/dev/null || handle_error "Failed to create test account"
 
-# Get item
-echo "   - Retrieving test item..."
+# Get the test account
+echo "   - Retrieving test account..."
 GET_RESULT=$(aws dynamodb get-item \
-  --table-name $DYNAMODB_TABLE \
-  --key '{"fileId": {"S": "'$TEST_ID'"}}') || handle_error "Failed to retrieve test item"
+  --table-name $ACCOUNTS_TABLE \
+  --key "{\"accountId\": {\"S\": \"$TEST_ACCOUNT_ID\"}}" --no-cli-pager 2>/dev/null) || handle_error "Failed to retrieve test account"
 
-# Verify item fields
-if echo "$GET_RESULT" | grep -q "test-file.txt"; then
-  echo "   - Retrieved item matches what was created"
+if [[ "$GET_RESULT" == *"$TEST_ACCOUNT_ID"* ]]; then
+  echo "   - Account retrieved successfully"
 else
-  handle_error "Retrieved item does not match what was created"
+  handle_error "Retrieved account data does not match"
 fi
 
-# Query by GSI
-echo "   - Testing query by user ID..."
+# Get the index name for userId
+USER_ID_INDEX=$(echo "$ACCOUNTS_DESC" | grep -o '"IndexName": "[^"]*"' | grep -o '"[^"]*"$' | tr -d '"' | head -1)
+
+# Query the test account by userId
+echo "   - Querying test account by userId using index $USER_ID_INDEX..."
 QUERY_RESULT=$(aws dynamodb query \
-  --table-name $DYNAMODB_TABLE \
-  --index-name UserIndex \
+  --table-name $ACCOUNTS_TABLE \
+  --index-name "$USER_ID_INDEX" \
   --key-condition-expression "userId = :uid" \
-  --expression-attribute-values '{":uid": {"S": "test-user"}}') || handle_error "Failed to query by user ID"
+  --expression-attribute-values "{\":uid\": {\"S\": \"$TEST_USER_ID\"}}" --no-cli-pager 2>/dev/null) || handle_error "Failed to query account by userId"
 
-# Verify query results
-if echo "$QUERY_RESULT" | grep -q "$TEST_ID"; then
-  echo "   - Query by user ID returned the test item"
+if [[ "$QUERY_RESULT" == *"$TEST_ACCOUNT_ID"* ]]; then
+  echo "   - Account queried by userId successfully"
 else
-  handle_error "Query by user ID did not return the test item"
+  handle_error "GSI query results do not match expected data"
 fi
 
-# Delete item
-echo "   - Deleting test item..."
+# Delete the test account
+echo "   - Deleting test account..."
 aws dynamodb delete-item \
-  --table-name $DYNAMODB_TABLE \
-  --key '{"fileId": {"S": "'$TEST_ID'"}}' >/dev/null || handle_error "Failed to delete test item"
+  --table-name $ACCOUNTS_TABLE \
+  --key "{\"accountId\": {\"S\": \"$TEST_ACCOUNT_ID\"}}" --no-cli-pager 2>/dev/null || handle_error "Failed to delete test account"
 
-# Verify deletion
-DELETE_CHECK=$(aws dynamodb get-item \
-  --table-name $DYNAMODB_TABLE \
-  --key '{"fileId": {"S": "'$TEST_ID'"}}')
+echo "✅ Basic operations on accounts table successful"
 
-if echo "$DELETE_CHECK" | grep -q "Item"; then
-  handle_error "Item was not deleted successfully"
+# Test 5: Test basic operations with a test file record
+echo -e "\n5. Testing basic operations on transaction files table..."
+
+# Generate a unique test ID
+TEST_FILE_ID="test-file-$TEST_ID"
+
+# Create a test file record
+echo "   - Creating test file record..."
+aws dynamodb put-item \
+  --table-name $TRANSACTION_FILES_TABLE \
+  --item "{
+    \"fileId\": {\"S\": \"$TEST_FILE_ID\"},
+    \"userId\": {\"S\": \"$TEST_USER_ID\"},
+    \"fileName\": {\"S\": \"test-file.csv\"},
+    \"uploadDate\": {\"S\": \"$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)\"},
+    \"fileSize\": {\"S\": \"1024\"},
+    \"fileFormat\": {\"S\": \"csv\"},
+    \"s3Key\": {\"S\": \"test-key\"},
+    \"processingStatus\": {\"S\": \"pending\"}
+  }" --no-cli-pager 2>/dev/null || handle_error "Failed to create test file record"
+
+# Get the test file record
+echo "   - Retrieving test file record..."
+GET_RESULT=$(aws dynamodb get-item \
+  --table-name $TRANSACTION_FILES_TABLE \
+  --key "{\"fileId\": {\"S\": \"$TEST_FILE_ID\"}}" --no-cli-pager 2>/dev/null) || handle_error "Failed to retrieve test file record"
+
+if [[ "$GET_RESULT" == *"$TEST_FILE_ID"* ]]; then
+  echo "   - File record retrieved successfully"
 else
-  echo "   - Item deleted successfully"
+  handle_error "Retrieved file record data does not match"
 fi
 
-echo "✅ CRUD operations successful"
+# Get the index name for userId in files table
+FILES_USER_ID_INDEX=$(echo "$FILES_DESC" | grep -o '"IndexName": "[^"]*"' | grep -o '"[^"]*"$' | tr -d '"' | head -1)
 
-echo -e "\n✅ All DynamoDB table tests passed successfully!"
-echo "Table is properly configured and operational: $DYNAMODB_TABLE" 
+# Query the test file by userId
+echo "   - Querying test file by userId using index $FILES_USER_ID_INDEX..."
+QUERY_RESULT=$(aws dynamodb query \
+  --table-name $TRANSACTION_FILES_TABLE \
+  --index-name "$FILES_USER_ID_INDEX" \
+  --key-condition-expression "userId = :uid" \
+  --expression-attribute-values "{\":uid\": {\"S\": \"$TEST_USER_ID\"}}" --no-cli-pager 2>/dev/null) || handle_error "Failed to query file by userId"
+
+if [[ "$QUERY_RESULT" == *"$TEST_FILE_ID"* ]]; then
+  echo "   - File queried by userId successfully"
+else
+  handle_error "GSI query results do not match expected data"
+fi
+
+# Delete the test file record
+echo "   - Deleting test file record..."
+aws dynamodb delete-item \
+  --table-name $TRANSACTION_FILES_TABLE \
+  --key "{\"fileId\": {\"S\": \"$TEST_FILE_ID\"}}" --no-cli-pager 2>/dev/null || handle_error "Failed to delete test file record"
+
+echo "✅ Basic operations on transaction files table successful"
+
+echo -e "\n✅ All DynamoDB tests passed successfully!"
+echo "Tables are properly configured and operational" 

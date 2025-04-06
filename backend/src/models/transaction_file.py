@@ -49,12 +49,11 @@ class DateRange:
 
 class TransactionFile:
     """
-    Represents a transaction file uploaded by a user and associated with an account.
+    Represents a transaction file uploaded by a user and optionally associated with an account.
     """
     def __init__(
         self,
         file_id: str,
-        account_id: str,
         user_id: str,
         file_name: str,
         upload_date: str,
@@ -62,12 +61,12 @@ class TransactionFile:
         file_format: FileFormat,
         s3_key: str,
         processing_status: ProcessingStatus,
+        account_id: Optional[str] = None,
         record_count: Optional[int] = None,
         date_range: Optional[DateRange] = None,
         error_message: Optional[str] = None
     ):
         self.file_id = file_id
-        self.account_id = account_id
         self.user_id = user_id
         self.file_name = file_name
         self.upload_date = upload_date
@@ -75,6 +74,7 @@ class TransactionFile:
         self.file_format = file_format
         self.s3_key = s3_key
         self.processing_status = processing_status
+        self.account_id = account_id
         self.record_count = record_count
         self.date_range = date_range
         self.error_message = error_message
@@ -82,12 +82,12 @@ class TransactionFile:
     @classmethod
     def create(
         cls,
-        account_id: str,
         user_id: str,
         file_name: str,
         file_size: int,
         file_format: FileFormat,
         s3_key: str,
+        account_id: Optional[str] = None,
         processing_status: ProcessingStatus = ProcessingStatus.PENDING
     ) -> 'TransactionFile':
         """
@@ -95,14 +95,14 @@ class TransactionFile:
         """
         return cls(
             file_id=str(uuid.uuid4()),
-            account_id=account_id,
             user_id=user_id,
             file_name=file_name,
             upload_date=datetime.utcnow().isoformat(),
             file_size=file_size,
             file_format=file_format,
             s3_key=s3_key,
-            processing_status=processing_status
+            processing_status=processing_status,
+            account_id=account_id
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -111,7 +111,6 @@ class TransactionFile:
         """
         result = {
             "fileId": self.file_id,
-            "accountId": self.account_id,
             "userId": self.user_id,
             "fileName": self.file_name,
             "uploadDate": self.upload_date,
@@ -120,6 +119,10 @@ class TransactionFile:
             "s3Key": self.s3_key,
             "processingStatus": self.processing_status.value
         }
+        
+        # Add account_id only if it exists
+        if self.account_id:
+            result["accountId"] = self.account_id
         
         # Add optional fields if they exist
         if self.record_count is not None:
@@ -138,16 +141,18 @@ class TransactionFile:
         """
         Create a transaction file object from a dictionary (e.g. from DynamoDB).
         """
+        account_id = data.get("accountId")  # Use get() to handle optional field
+        
         file = cls(
             file_id=data["fileId"],
-            account_id=data["accountId"],
             user_id=data["userId"],
             file_name=data["fileName"],
             upload_date=data["uploadDate"],
             file_size=int(data["fileSize"]),
             file_format=FileFormat(data["fileFormat"]),
             s3_key=data["s3Key"],
-            processing_status=ProcessingStatus(data["processingStatus"])
+            processing_status=ProcessingStatus(data["processingStatus"]),
+            account_id=account_id
         )
         
         # Add optional fields if present in the data
@@ -190,7 +195,7 @@ def validate_transaction_file_data(data: Dict[str, Any]) -> bool:
     
     Returns True if valid, raises ValueError with details if invalid.
     """
-    required_fields = ["accountId", "userId", "fileName", "fileSize", "fileFormat", "s3Key"]
+    required_fields = ["userId", "fileName", "fileSize", "fileFormat", "s3Key"]
     
     # Check required fields
     for field in required_fields:
@@ -204,6 +209,10 @@ def validate_transaction_file_data(data: Dict[str, Any]) -> bool:
     # Validate processing status if provided
     if "processingStatus" in data and data["processingStatus"] not in [s.value for s in ProcessingStatus]:
         raise ValueError(f"Invalid processing status: {data['processingStatus']}")
+    
+    # Validate account_id if provided
+    if "accountId" in data and data["accountId"] and not isinstance(data["accountId"], str):
+        raise ValueError("Account ID must be a string")
     
     # Validate numeric fields
     if "fileSize" in data:
