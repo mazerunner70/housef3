@@ -57,8 +57,12 @@ dynamodb = boto3.resource('dynamodb')
 
 # Get environment variables
 ENVIRONMENT = os.environ.get('ENVIRONMENT', 'dev')
-FILE_STORAGE_BUCKET = os.environ.get('FILE_STORAGE_BUCKET')
+FILE_STORAGE_BUCKET = os.environ.get('FILE_STORAGE_BUCKET', 'housef3-dev-file-storage')
 FILES_TABLE = os.environ.get('FILES_TABLE')
+
+if not FILE_STORAGE_BUCKET:
+    logger.error("FILE_STORAGE_BUCKET environment variable not set")
+    raise ValueError("FILE_STORAGE_BUCKET environment variable not set")
 
 # Initialize table resource
 file_table = dynamodb.Table(FILES_TABLE)
@@ -103,6 +107,12 @@ def generate_file_id() -> str:
 def get_presigned_url(bucket: str, key: str, operation: str, expires_in: int = 3600) -> str:
     """Generate a presigned URL for S3 operations."""
     try:
+        if not isinstance(bucket, str) or not bucket:
+            raise ValueError("Bucket name must be a non-empty string")
+            
+        if not isinstance(key, str) or not key:
+            raise ValueError("Key must be a non-empty string")
+            
         if operation.lower() == 'put':
             return s3_client.generate_presigned_url(
                 'put_object',

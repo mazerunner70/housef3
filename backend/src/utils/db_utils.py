@@ -19,6 +19,8 @@ from models import (
     FileFormat,
     ProcessingStatus
 )
+from models.transaction import Transaction
+from boto3.dynamodb.conditions import Key
 
 # Configure logging
 logger = logging.getLogger()
@@ -31,10 +33,12 @@ dynamodb = boto3.resource('dynamodb')
 ENVIRONMENT = os.environ.get('ENVIRONMENT', 'dev')
 ACCOUNTS_TABLE = os.environ.get('ACCOUNTS_TABLE')
 FILES_TABLE = os.environ.get('FILES_TABLE')
+TRANSACTIONS_TABLE = os.environ.get('TRANSACTIONS_TABLE')
 
 # Initialize table resources
 accounts_table = dynamodb.Table(ACCOUNTS_TABLE)
 files_table = dynamodb.Table(FILES_TABLE)
+transactions_table = dynamodb.Table(TRANSACTIONS_TABLE)
 
 
 def get_account(account_id: str) -> Optional[Account]:
@@ -424,4 +428,80 @@ def delete_transaction_file(file_id: str) -> bool:
         return True
     except ClientError as e:
         logger.error(f"Error deleting file {file_id}: {str(e)}")
+        raise
+
+
+def list_file_transactions(file_id: str) -> List[Dict[str, Any]]:
+    """
+    List all transactions for a specific file.
+    
+    Args:
+        file_id: ID of the file to get transactions for
+        
+    Returns:
+        List of transaction objects
+    """
+    try:
+        response = transactions_table.query(
+            IndexName='FileIdIndex',
+            KeyConditionExpression=Key('fileId').eq(file_id)
+        )
+        return response.get('Items', [])
+    except Exception as e:
+        logger.error(f"Error listing transactions for file {file_id}: {str(e)}")
+        raise
+
+
+def create_transaction(transaction_data: Dict[str, Any]) -> Transaction:
+    """
+    Create a new transaction.
+    
+    Args:
+        transaction_data: Dictionary containing transaction data
+        
+    Returns:
+        The created Transaction object
+    """
+    try:
+        # Create a Transaction object
+        transaction = Transaction.create(**transaction_data)
+        
+        # Save to DynamoDB
+        transactions_table.put_item(Item=transaction.to_dict())
+        
+        return transaction
+    except Exception as e:
+        logger.error(f"Error creating transaction: {str(e)}")
+        raise
+
+
+def delete_file_transactions(file_id: str) -> int:
+    """
+    Delete all transactions for a file.
+    
+    Args:
+        file_id: ID of the file whose transactions should be deleted
+        
+    Returns:
+        Number of deleted transactions
+    """
+    try:
+        # First, get all transactions for the file
+        transactions = list_file_transactions(file_id)
+        deleted_count = 0
+        
+        # Delete each transaction
+        with transactions_table.batch_writer() as batch:
+            for transaction in transactions:
+                batch.delete_item(
+                    Key={
+                        'transactionId': transaction['transactionId']
+                    }
+                )
+                deleted_count += 1
+        
+        logger.info(f"Deleted {deleted_count} transactions for file {file_id}")
+        return deleted_count
+    except Exception as e:
+        logger.error(f"Error deleting transactions for file {file_id}: {str(e)}")
         raise 

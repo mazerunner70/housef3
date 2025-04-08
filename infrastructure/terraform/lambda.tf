@@ -7,19 +7,19 @@ data "archive_file" "lambda_code" {
 resource "aws_lambda_function" "colors" {
   filename         = "../../backend/lambda.zip"
   function_name    = "${var.project_name}-${var.environment}-colors"
-  role            = aws_iam_role.lambda_exec.arn
-  handler         = "handlers/list_imports.handler"
-  runtime         = "python3.9"
+  handler          = "handlers/list_imports.handler"
+  runtime          = "python3.9"
+  role             = aws_iam_role.lambda_exec.arn
+  timeout          = 30
   source_code_hash = data.archive_file.lambda_code.output_base64sha256
   
   environment {
     variables = {
-      ENVIRONMENT = var.environment
+      ENVIRONMENT    = var.environment
       DYNAMODB_TABLE = aws_dynamodb_table.transaction_files.name
-      FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.bucket
     }
   }
-
+  
   tags = {
     Environment = var.environment
     Project     = var.project_name
@@ -30,48 +30,23 @@ resource "aws_lambda_function" "colors" {
 resource "aws_lambda_function" "file_operations" {
   filename         = "../../backend/lambda.zip"
   function_name    = "${var.project_name}-${var.environment}-file-operations"
-  role            = aws_iam_role.lambda_exec.arn
-  handler         = "handlers/file_operations.handler"
-  runtime         = "python3.9"
+  handler          = "handlers/file_operations.handler"
+  runtime          = "python3.9"
+  role             = aws_iam_role.lambda_exec.arn
+  timeout          = 30
+  memory_size      = 256
   source_code_hash = data.archive_file.lambda_code.output_base64sha256
-  timeout         = 30
-  memory_size     = 256
   
   environment {
     variables = {
-      ENVIRONMENT = var.environment
-      ACCOUNTS_TABLE = aws_dynamodb_table.accounts.name
-      FILES_TABLE = aws_dynamodb_table.transaction_files.name
-      FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.bucket
+      ENVIRONMENT         = var.environment
+      FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.id
+      FILES_TABLE        = aws_dynamodb_table.transaction_files.name
+      ACCOUNTS_TABLE     = aws_dynamodb_table.accounts.name
+      TRANSACTIONS_TABLE = aws_dynamodb_table.transactions.name
     }
   }
-
-  tags = {
-    Environment = var.environment
-    Project     = var.project_name
-    ManagedBy   = "terraform"
-  }
-}
-
-resource "aws_lambda_function" "account_operations" {
-  filename         = "../../backend/lambda.zip"
-  function_name    = "${var.project_name}-${var.environment}-account-operations"
-  role            = aws_iam_role.lambda_exec.arn
-  handler         = "handlers/account_operations.handler"
-  runtime         = "python3.9"
-  source_code_hash = data.archive_file.lambda_code.output_base64sha256
-  timeout         = 30
-  memory_size     = 256
   
-  environment {
-    variables = {
-      ENVIRONMENT = var.environment
-      ACCOUNTS_TABLE = aws_dynamodb_table.accounts.name
-      FILES_TABLE = aws_dynamodb_table.transaction_files.name
-      FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.bucket
-    }
-  }
-
   tags = {
     Environment = var.environment
     Project     = var.project_name
@@ -82,21 +57,49 @@ resource "aws_lambda_function" "account_operations" {
 resource "aws_lambda_function" "file_processor" {
   filename         = "../../backend/lambda.zip"
   function_name    = "${var.project_name}-${var.environment}-file-processor"
-  role            = aws_iam_role.lambda_exec.arn
-  handler         = "handlers/file_processor.handler"
-  runtime         = "python3.9"
+  handler          = "handlers/file_processor.handler"
+  runtime          = "python3.9"
+  role             = aws_iam_role.lambda_exec.arn
+  timeout          = 60
+  memory_size      = 256
   source_code_hash = data.archive_file.lambda_code.output_base64sha256
-  timeout         = 60
-  memory_size     = 256
   
   environment {
     variables = {
-      ENVIRONMENT = var.environment
-      FILES_TABLE = aws_dynamodb_table.transaction_files.name
-      FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.bucket
+      ENVIRONMENT    = var.environment
+      FILES_TABLE    = aws_dynamodb_table.transaction_files.name
+      TRANSACTIONS_TABLE = aws_dynamodb_table.transactions.name
+      FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.id
     }
   }
+  
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
 
+resource "aws_lambda_function" "account_operations" {
+  filename         = "../../backend/lambda.zip"
+  function_name    = "${var.project_name}-${var.environment}-account-operations"
+  handler          = "handlers/account_operations.handler"
+  runtime          = "python3.9"
+  role             = aws_iam_role.lambda_exec.arn
+  timeout          = 30
+  memory_size      = 256
+  source_code_hash = data.archive_file.lambda_code.output_base64sha256
+  
+  environment {
+    variables = {
+      ENVIRONMENT    = var.environment
+      ACCOUNTS_TABLE = aws_dynamodb_table.accounts.name
+      FILES_TABLE    = aws_dynamodb_table.transaction_files.name
+      TRANSACTIONS_TABLE = aws_dynamodb_table.transactions.name
+      FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.id
+    }
+  }
+  
   tags = {
     Environment = var.environment
     Project     = var.project_name
@@ -174,7 +177,9 @@ resource "aws_iam_role_policy" "lambda_dynamodb_access" {
           aws_dynamodb_table.transaction_files.arn,
           "${aws_dynamodb_table.transaction_files.arn}/index/*",
           aws_dynamodb_table.accounts.arn,
-          "${aws_dynamodb_table.accounts.arn}/index/*"
+          "${aws_dynamodb_table.accounts.arn}/index/*",
+          aws_dynamodb_table.transactions.arn,
+          "${aws_dynamodb_table.transactions.arn}/index/*"
         ]
       }
     ]

@@ -223,14 +223,14 @@ fi
 
 # 9. Test account deletion with associated files
 echo -e "\n9. Testing account deletion with associated files"
-
+echo "api endpoint: ${API_ENDPOINT}"
 # Create a new account for deletion testing
 echo "Creating a test account for deletion test..."
 ACCOUNT_CREATE_RESPONSE=$(curl -s -X POST \
   -H "Authorization: $ID_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"accountName\":\"Test Account For Deletion $(date +%s)\", \"accountType\":\"savings\", \"institution\":\"Test Deletion Bank\", \"balance\":500, \"currency\":\"USD\", \"notes\":\"Test account for deletion test\"}" \
-  "${API_ENDPOINT%/*}")
+  "$API_ENDPOINT")
 
 echo "Account creation response:"
 echo "$ACCOUNT_CREATE_RESPONSE" | jq .
@@ -249,7 +249,7 @@ ASSOC_UPLOAD_RESPONSE=$(curl -s -X POST \
   -H "Authorization: $ID_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"fileName\":\"deletion_test.txt\", \"contentType\":\"text/plain\", \"fileSize\": 52}" \
-  "${API_ENDPOINT%/*}/$DELETION_ACCOUNT_ID/files")
+  "$API_ENDPOINT/$DELETION_ACCOUNT_ID/files")
 
 echo "Association upload response:"
 echo "$ASSOC_UPLOAD_RESPONSE" | jq .
@@ -271,7 +271,7 @@ curl -s -X PUT -T "/tmp/account_test_file.txt" \
 echo "File successfully associated with account for deletion test"
 
 # Verify the file is associated with the account
-ACCOUNT_FILES_BEFORE=$(curl -s -H "Authorization: $ID_TOKEN" "${API_ENDPOINT%/*}/$DELETION_ACCOUNT_ID/files")
+ACCOUNT_FILES_BEFORE=$(curl -s -H "Authorization: $ID_TOKEN" "$API_ENDPOINT/$DELETION_ACCOUNT_ID/files")
 FILE_COUNT_BEFORE=$(echo "$ACCOUNT_FILES_BEFORE" | jq -r '.metadata.totalFiles // 0')
 echo "Account has $FILE_COUNT_BEFORE associated files before deletion"
 
@@ -282,11 +282,11 @@ fi
 
 # Delete the account
 echo "Deleting account $DELETION_ACCOUNT_ID with associated files..."
-ACCOUNT_DELETE_RESPONSE=$(curl -s -X DELETE -H "Authorization: $ID_TOKEN" "${API_ENDPOINT%/*}/$DELETION_ACCOUNT_ID")
+ACCOUNT_DELETE_RESPONSE=$(curl -s -X DELETE -H "Authorization: $ID_TOKEN" "$API_ENDPOINT/$DELETION_ACCOUNT_ID")
 echo "$ACCOUNT_DELETE_RESPONSE" | jq .
 
 # Verify the account is deleted
-ACCOUNT_CHECK=$(curl -s -H "Authorization: $ID_TOKEN" "${API_ENDPOINT%/*}/$DELETION_ACCOUNT_ID")
+ACCOUNT_CHECK=$(curl -s -H "Authorization: $ID_TOKEN" "$API_ENDPOINT/$DELETION_ACCOUNT_ID")
 ACCOUNT_STATUS=$(echo "$ACCOUNT_CHECK" | jq -r '.message')
 
 if [[ "$ACCOUNT_STATUS" != *"not found"* ]]; then

@@ -81,7 +81,7 @@ fi
 # Step 2: Get upload URL
 echo -e "\n2. Testing POST /files/upload"
 UPLOAD_ENDPOINT="${API_ENDPOINT%/files}/files/upload"
-UPLOAD_PAYLOAD="{\"fileName\":\"test_file.txt\", \"contentType\":\"text/plain\", \"fileSize\": $FILE_SIZE, \"accountId\": \"$TEST_ACCOUNT_ID\"}"
+UPLOAD_PAYLOAD="{\"fileName\":\"test_file.txt\", \"contentType\":\"text/plain\", \"fileSize\": $FILE_SIZE, \"fileFormat\": \"other\"}"
 
 echo "Upload endpoint: $UPLOAD_ENDPOINT"
 echo "Upload payload: $UPLOAD_PAYLOAD"
