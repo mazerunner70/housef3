@@ -1,4 +1,12 @@
+resource "null_resource" "run_tests" {
+  provisioner "local-exec" {
+    working_dir = "../../backend"
+    command     = "chmod +x run_tests.sh && ./run_tests.sh"
+  }
+}
+
 data "archive_file" "lambda_code" {
+  depends_on = [null_resource.run_tests]
   type        = "zip"
   source_dir  = "../../backend/src"
   output_path = "../../backend/lambda.zip"

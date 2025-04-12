@@ -1,7 +1,7 @@
 import json
 from typing import Dict, Any
 import pytest
-from src.handlers.list_imports import list_imports
+from src.handlers.list_imports import handler
 
 @pytest.mark.unit
 def test_list_imports_success() -> None:
@@ -11,7 +11,7 @@ def test_list_imports_success() -> None:
     context: Dict[str, Any] = {}
 
     # Act
-    response = list_imports(event, context)
+    response = handler(event, context)
 
     # Assert
     assert response["statusCode"] == 200
@@ -34,7 +34,7 @@ def test_cors_headers() -> None:
     context: Dict[str, Any] = {}
 
     # Act
-    response = list_imports(event, context)
+    response = handler(event, context)
 
     # Assert
     headers = response["headers"]
@@ -53,7 +53,7 @@ def test_response_structure() -> None:
     context: Dict[str, Any] = {}
 
     # Act
-    response = list_imports(event, context)
+    response = handler(event, context)
 
     # Assert
     assert isinstance(response, dict)
@@ -77,7 +77,7 @@ def test_error_handling() -> None:
     context: Dict[str, Any] = {}
 
     # Act
-    response = list_imports(event, context)
+    response = handler(event, context)
 
     # Assert
     assert response["statusCode"] == 500

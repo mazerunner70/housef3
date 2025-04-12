@@ -1,0 +1,7 @@
+Date,Description,Amount,Type,Category,Memo
+2024-03-15,Grocery Store,-50.25,DEBIT,Food,Weekly groceries
+2024-03-16,Salary Deposit,1000.00,CREDIT,Income,March salary
+2024-03-17,Restaurant,-25.50,DEBIT,Dining,Lunch with team
+2024-03-18,Gas Station,-45.75,DEBIT,Transportation,Fill up tank
+2024-03-19,Online Shopping,-120.00,DEBIT,Shopping,Amazon order
+2024-03-20,Interest Credit,2.50,CREDIT,Interest,Monthly interest 
