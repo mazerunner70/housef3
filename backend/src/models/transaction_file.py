@@ -195,10 +195,10 @@ class TransactionFile:
         if record_count is not None:
             self.record_count = record_count
             
-        if date_range:
+        if date_range is not None:
             self.date_range = DateRange(date_range[0], date_range[1])
             
-        if error_message:
+        if error_message is not None:
             self.error_message = error_message
             
         if opening_balance is not None:

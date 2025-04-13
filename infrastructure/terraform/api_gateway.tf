@@ -62,6 +62,15 @@ resource "aws_apigatewayv2_route" "list_files" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# Get single file route
+resource "aws_apigatewayv2_route" "get_file" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /files/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 # List files by account route
 resource "aws_apigatewayv2_route" "list_files_by_account" {
   api_id             = aws_apigatewayv2_api.main.id

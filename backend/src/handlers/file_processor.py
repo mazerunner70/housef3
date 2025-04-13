@@ -10,6 +10,11 @@ import re
 import boto3
 from typing import Dict, Any, List, Tuple, Optional
 from decimal import Decimal
+from models.transaction_file import FileFormat, ProcessingStatus
+from utils.transaction_parser import parse_transactions
+from models.transaction import Transaction
+from utils.file_analyzer import analyze_file_format
+from utils.db_utils import get_transaction_file, update_transaction_file
 
 # Configure logging
 logger = logging.getLogger()
@@ -50,6 +55,13 @@ dynamodb = boto3.resource('dynamodb')
 s3_client = boto3.client('s3')
 FILES_TABLE = os.environ.get('FILES_TABLE', 'transaction-files')
 file_table = dynamodb.Table(FILES_TABLE)
+
+# Get table names from environment variables
+FILE_TABLE_NAME = os.environ.get('FILES_TABLE', 'transaction-files')
+TRANSACTIONS_TABLE = os.environ.get('TRANSACTIONS_TABLE', 'transactions')
+
+# Initialize DynamoDB tables
+transaction_table = dynamodb.Table(TRANSACTIONS_TABLE)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
@@ -92,7 +104,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 
                 # Update processing status to "processing"
                 update_transaction_file(file_id, {
-                    'processingStatus': ProcessingStatus.PROCESSING.value
+                    'processingStatus': ProcessingStatus.PROCESSING
                 })
                 
                 try:
@@ -116,12 +128,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     
                     # Prepare update data
                     update_data = {
-                        'processingStatus': ProcessingStatus.PROCESSED.value
+                        'processingStatus': ProcessingStatus.PROCESSED
                     }
                     
                     if current_format != detected_format:
                         logger.info(f"Updating file format from {current_format} to {detected_format}")
-                        update_data['fileFormat'] = detected_format.value
+                        update_data['fileFormat'] = detected_format
                     
                     if opening_balance is not None:
                         update_data['openingBalance'] = str(opening_balance)
@@ -129,10 +141,56 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     # Update the file record
                     update_transaction_file(file_id, update_data)
                         
+                    # Parse transactions
+                    transactions = parse_transactions(content_bytes, detected_format, opening_balance)
+                    
+                    # Store transactions in DynamoDB
+                    min_date = None
+                    max_date = None
+                    
+                    for idx, txn_data in enumerate(transactions):
+                        transaction = Transaction(
+                            transaction_id=f"{file_id}-{idx+1}",
+                            file_id=file_id,
+                            date=txn_data['date'],
+                            description=txn_data['description'],
+                            amount=txn_data['amount'],
+                            running_total=txn_data['running_total'],
+                            transaction_type=txn_data.get('transaction_type'),
+                            category=txn_data.get('category'),
+                            memo=txn_data.get('memo')
+                        )
+                        
+                        # Update date range
+                        if min_date is None or txn_data['date'] < min_date:
+                            min_date = txn_data['date']
+                        if max_date is None or txn_data['date'] > max_date:
+                            max_date = txn_data['date']
+                        
+                        # Store transaction
+                        transaction_table.put_item(Item=transaction.to_dict())
+                    
+                    # Update file record with transaction count and date range
+                    update_data = {
+                        'processingStatus': ProcessingStatus.PROCESSED,
+                        'recordCount': len(transactions)
+                    }
+                    
+                    if opening_balance is not None:
+                        update_data['openingBalance'] = str(opening_balance)
+                        
+                    if min_date and max_date:
+                        update_data['dateRange'] = {
+                            'startDate': min_date,
+                            'endDate': max_date
+                        }
+                    
+                    update_transaction_file(file_id, update_data)
+                    
                 except Exception as analysis_error:
                     logger.error(f"Error analyzing file {file_id}: {str(analysis_error)}")
                     update_transaction_file(file_id, {
-                        'processingStatus': ProcessingStatus.ERROR.value,
+                        'processingStatus': ProcessingStatus.ERROR,
                         'errorMessage': f"Error analyzing file format: {str(analysis_error)}"
                     })
                     

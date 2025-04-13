@@ -10,7 +10,7 @@ from io import BytesIO, StringIO
 import boto3
 from botocore.exceptions import ClientError
 
-from ..models.transaction_file import FileFormat
+from models.transaction_file import FileFormat
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)

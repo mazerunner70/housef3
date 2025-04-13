@@ -78,6 +78,7 @@ resource "aws_lambda_function" "file_processor" {
       FILES_TABLE    = aws_dynamodb_table.transaction_files.name
       TRANSACTIONS_TABLE = aws_dynamodb_table.transactions.name
       FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.id
+      ACCOUNTS_TABLE = aws_dynamodb_table.accounts.name
     }
   }
   

@@ -72,6 +72,10 @@ run_test "./test_file_operations.sh"
 echo -e "\n🔗 Step 6: Testing account-file association functionality"
 run_test "./test_account_files.sh"
 
+# Transaction parsing tests
+echo -e "\n📊 Step 7: Testing transaction file parsing"
+run_test "./test_transaction_parsing.sh"
+
 # Return to original directory
 cd "$ORIGINAL_DIR"
 
@@ -84,5 +88,6 @@ echo "✅ Authentication services operational"
 echo "✅ Account operations API functioning"
 echo "✅ File operations API functioning"
 echo "✅ Account-file associations verified"
+echo "✅ Transaction file parsing verified"
 echo "==================================================================="
 echo "⏱️  Tests completed at $(date)" 

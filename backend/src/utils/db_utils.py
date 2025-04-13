@@ -35,11 +35,31 @@ ACCOUNTS_TABLE = os.environ.get('ACCOUNTS_TABLE')
 FILES_TABLE = os.environ.get('FILES_TABLE')
 TRANSACTIONS_TABLE = os.environ.get('TRANSACTIONS_TABLE')
 
-# Initialize table resources
-accounts_table = dynamodb.Table(ACCOUNTS_TABLE)
-files_table = dynamodb.Table(FILES_TABLE)
-transactions_table = dynamodb.Table(TRANSACTIONS_TABLE)
+# Initialize table resources lazily
+_accounts_table = None
+_files_table = None
+_transactions_table = None
 
+def get_accounts_table():
+    """Get the accounts table resource, initializing it if needed."""
+    global _accounts_table
+    if _accounts_table is None and ACCOUNTS_TABLE:
+        _accounts_table = dynamodb.Table(ACCOUNTS_TABLE)
+    return _accounts_table
+
+def get_files_table():
+    """Get the files table resource, initializing it if needed."""
+    global _files_table
+    if _files_table is None and FILES_TABLE:
+        _files_table = dynamodb.Table(FILES_TABLE)
+    return _files_table
+
+def get_transactions_table():
+    """Get the transactions table resource, initializing it if needed."""
+    global _transactions_table
+    if _transactions_table is None and TRANSACTIONS_TABLE:
+        _transactions_table = dynamodb.Table(TRANSACTIONS_TABLE)
+    return _transactions_table
 
 def get_account(account_id: str) -> Optional[Account]:
     """
@@ -52,7 +72,7 @@ def get_account(account_id: str) -> Optional[Account]:
         Account object if found, None otherwise
     """
     try:
-        response = accounts_table.get_item(Key={'accountId': account_id})
+        response = get_accounts_table().get_item(Key={'accountId': account_id})
         
         if 'Item' in response:
             return Account.from_dict(response['Item'])
@@ -74,7 +94,7 @@ def list_user_accounts(user_id: str) -> List[Account]:
     """
     try:
         # Query using GSI for userId
-        response = accounts_table.query(
+        response = get_accounts_table().query(
             IndexName='UserIdIndex',
             KeyConditionExpression=boto3.dynamodb.conditions.Key('userId').eq(user_id)
         )
@@ -125,7 +145,7 @@ def create_account(account_data: Dict[str, Any]) -> Account:
         )
         
         # Save to DynamoDB
-        accounts_table.put_item(Item=account.to_dict())
+        get_accounts_table().put_item(Item=account.to_dict())
         
         return account
     except ValueError as e:
@@ -179,7 +199,7 @@ def update_account(account_id: str, update_data: Dict[str, Any]) -> Account:
         account.update(**update_data_snake_case)
         
         # Save updates to DynamoDB
-        accounts_table.put_item(Item=account.to_dict())
+        get_accounts_table().put_item(Item=account.to_dict())
         
         return account
     except ValueError as e:
@@ -225,7 +245,7 @@ def delete_account(account_id: str) -> bool:
                 # Continue with other files
         
         # Delete the account
-        accounts_table.delete_item(Key={'accountId': account_id})
+        get_accounts_table().delete_item(Key={'accountId': account_id})
         logger.info(f"Account {account_id} deleted successfully")
         
         return True
@@ -245,7 +265,7 @@ def get_transaction_file(file_id: str) -> Optional[TransactionFile]:
         TransactionFile object if found, None otherwise
     """
     try:
-        response = files_table.get_item(Key={'fileId': file_id})
+        response = get_files_table().get_item(Key={'fileId': file_id})
         
         if 'Item' in response:
             return TransactionFile.from_dict(response['Item'])
@@ -267,7 +287,7 @@ def list_account_files(account_id: str) -> List[TransactionFile]:
     """
     try:
         # Query using GSI for accountId
-        response = files_table.query(
+        response = get_files_table().query(
             IndexName='AccountIdIndex',
             KeyConditionExpression=boto3.dynamodb.conditions.Key('accountId').eq(account_id)
         )
@@ -294,7 +314,7 @@ def list_user_files(user_id: str) -> List[TransactionFile]:
     """
     try:
         # Query using GSI for userId
-        response = files_table.query(
+        response = get_files_table().query(
             IndexName='UserIdIndex',
             KeyConditionExpression=boto3.dynamodb.conditions.Key('userId').eq(user_id)
         )
@@ -347,7 +367,7 @@ def create_transaction_file(file_data: Dict[str, Any]) -> TransactionFile:
         )
         
         # Save to DynamoDB
-        files_table.put_item(Item=file.to_dict())
+        get_files_table().put_item(Item=file.to_dict())
         
         return file
     except ValueError as e:
@@ -395,7 +415,7 @@ def update_transaction_file(file_id: str, update_data: Dict[str, Any]) -> Transa
             )
         
         # Save updates to DynamoDB
-        files_table.put_item(Item=file.to_dict())
+        get_files_table().put_item(Item=file.to_dict())
         
         return file
     except ValueError as e:
@@ -423,7 +443,7 @@ def delete_transaction_file(file_id: str) -> bool:
             raise ValueError(f"File {file_id} not found")
         
         # Delete the file
-        files_table.delete_item(Key={'fileId': file_id})
+        get_files_table().delete_item(Key={'fileId': file_id})
         
         return True
     except ClientError as e:
@@ -442,7 +462,7 @@ def list_file_transactions(file_id: str) -> List[Dict[str, Any]]:
         List of transaction objects
     """
     try:
-        response = transactions_table.query(
+        response = get_transactions_table().query(
             IndexName='FileIdIndex',
             KeyConditionExpression=Key('fileId').eq(file_id)
         )
@@ -467,7 +487,7 @@ def create_transaction(transaction_data: Dict[str, Any]) -> Transaction:
         transaction = Transaction.create(**transaction_data)
         
         # Save to DynamoDB
-        transactions_table.put_item(Item=transaction.to_dict())
+        get_transactions_table().put_item(Item=transaction.to_dict())
         
         return transaction
     except Exception as e:
@@ -491,7 +511,7 @@ def delete_file_transactions(file_id: str) -> int:
         deleted_count = 0
         
         # Delete each transaction
-        with transactions_table.batch_writer() as batch:
+        with get_transactions_table().batch_writer() as batch:
             for transaction in transactions:
                 batch.delete_item(
                     Key={

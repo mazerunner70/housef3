@@ -745,6 +745,63 @@ def update_file_balance_handler(event: Dict[str, Any], user: Dict[str, Any]) -> 
         logger.error(f"Error updating file balance: {str(e)}")
         return create_response(500, {"message": "Error handling update balance request"})
 
+def get_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    """Get a single file by ID."""
+    try:
+        # Get file ID from path parameters
+        file_id = event.get('pathParameters', {}).get('id')
+        
+        if not file_id:
+            return create_response(400, {"message": "File ID is required"})
+            
+        # Get file metadata from DynamoDB
+        response = file_table.get_item(Key={'fileId': file_id})
+        file = response.get('Item')
+        
+        if not file:
+            return create_response(404, {"message": "File not found"})
+            
+        # Check if the file belongs to the user
+        if file.get('userId') != user['id']:
+            return create_response(403, {"message": "Access denied"})
+        
+        # Convert DynamoDB response to user-friendly format
+        formatted_file = {
+            'fileId': file.get('fileId'),
+            'fileName': file.get('fileName'),
+            'contentType': file.get('contentType'),
+            'fileSize': file.get('fileSize'),
+            'uploadDate': file.get('uploadDate'),
+            'lastModified': file.get('lastModified', file.get('uploadDate'))
+        }
+        
+        # Include TransactionFile model specific fields if they exist
+        if 'accountId' in file:
+            formatted_file['accountId'] = file.get('accountId')
+        
+        if 'fileFormat' in file:
+            formatted_file['fileFormat'] = file.get('fileFormat')
+            
+        if 'processingStatus' in file:
+            formatted_file['processingStatus'] = file.get('processingStatus')
+            
+        if 'recordCount' in file:
+            formatted_file['recordCount'] = file.get('recordCount')
+            
+        if 'dateRange' in file:
+            formatted_file['dateRange'] = file.get('dateRange')
+            
+        if 'errorMessage' in file:
+            formatted_file['errorMessage'] = file.get('errorMessage')
+        
+        if 'openingBalance' in file:
+            formatted_file['openingBalance'] = float(file.get('openingBalance'))
+        
+        return create_response(200, formatted_file)
+    except Exception as e:
+        logger.error(f"Error getting file: {str(e)}")
+        return create_response(500, {"message": "Error getting file"})
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main Lambda handler for file operations."""
     logger.info(f"Processing request with event: {json.dumps(event)}")
@@ -773,6 +830,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return get_files_by_account_handler(event, user)
     elif route == "POST /files/upload":
         return get_upload_url_handler(event, user)
+    elif route == "GET /files/{id}":
+        return get_file_handler(event, user)
     elif route == "GET /files/{id}/download":
         return get_download_url_handler(event, user)
     elif route == "DELETE /files/{id}":

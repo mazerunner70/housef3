@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 from decimal import Decimal
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
-from ..models.transaction_file import FileFormat
+from models.transaction_file import FileFormat
 
 # Configure logging
 logger = logging.getLogger()
