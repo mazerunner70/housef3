@@ -180,6 +180,7 @@ cython_debug/
 *.tfstate.*
 .terraform.lock.hcl
 terraform.tfvars
+tfplan
 
 # Local .terraform directories
 **/.terraform/*
@@ -204,3 +205,6 @@ terraform.rc
 
 # Ignore test credentials
 scripts/config.json
+
+# Ignore lambda.zip files
+lambda.zip

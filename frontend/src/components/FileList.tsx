@@ -13,6 +13,7 @@ import {
   Account
 } from '../services/AccountService';
 import './FileList.css';
+import TransactionList from './TransactionList';
 
 interface FileListProps {
   onRefreshNeeded: boolean;
@@ -36,6 +37,8 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [success, setSuccess] = useState<string | null>(null);
+  const [viewingTransactionsFileId, setViewingTransactionsFileId] = useState<string | null>(null);
+  const [viewingTransactionsFile, setViewingTransactionsFile] = useState<FileMetadata | null>(null);
 
   // Load files from API
   const loadFiles = async () => {
@@ -298,10 +301,6 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
           return {
             ...file,
             openingBalance: balanceValue,
-            // Update transaction count if provided in the response
-            recordCount: response.transactionCount !== undefined 
-              ? response.transactionCount 
-              : file.recordCount
           };
         }
         return file;
@@ -334,6 +333,18 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
   // Handle balance input change
   const handleBalanceInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setBalanceInput(e.target.value);
+  };
+
+  // Add this function to handle viewing transactions
+  const handleViewTransactions = (file: FileMetadata) => {
+    setViewingTransactionsFileId(file.fileId);
+    setViewingTransactionsFile(file);
+  };
+
+  // Add this function to handle closing the transaction view
+  const handleCloseTransactions = () => {
+    setViewingTransactionsFileId(null);
+    setViewingTransactionsFile(null);
   };
 
   // Render filtered and sorted files
@@ -584,6 +595,14 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
                         >
                           {deletingFileId === file.fileId ? '...' : 'Delete'}
                         </button>
+                        <button
+                          className="view-transactions-button"
+                          onClick={() => handleViewTransactions(file)}
+                          disabled={!file.openingBalance}
+                          title={!file.openingBalance ? "Set opening balance to view transactions" : "View transactions"}
+                        >
+                          View Transactions
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -599,6 +618,19 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
             }
           </div>
         </>
+      )}
+
+      {viewingTransactionsFileId && viewingTransactionsFile && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <TransactionList
+              fileId={viewingTransactionsFileId}
+              fileName={viewingTransactionsFile.fileName}
+              openingBalance={viewingTransactionsFile.openingBalance}
+              onClose={handleCloseTransactions}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

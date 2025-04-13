@@ -44,9 +44,8 @@ export interface DownloadUrlResponse {
   expires: number;
 }
 
-// Get CloudFront domain from environment variables
-const CLOUDFRONT_DOMAIN = import.meta.env.VITE_CLOUDFRONT_DOMAIN || '';
-const API_ENDPOINT = `https://${CLOUDFRONT_DOMAIN}/files`;
+// Get API endpoint from environment variables
+const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/files`;
 
 // Helper function to handle API requests with authentication
 const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
@@ -250,7 +249,8 @@ export const updateFileBalance = async (fileId: string, openingBalance: number):
       method: 'POST',
       body: JSON.stringify({ openingBalance })
     });
-    return response;
+    const data: UpdateBalanceResponse = await response.json();
+    return data;
   } catch (error) {
     console.error('Error updating file balance:', error);
     throw error;

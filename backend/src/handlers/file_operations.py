@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional, Union
 from decimal import Decimal
 from models.transaction_file import FileFormat, ProcessingStatus
 from models.transaction import Transaction
-from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_transaction_file, get_account
+from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_transaction_file, get_account, list_file_transactions
 from utils.transaction_parser import process_file_transactions
 
 # Configure logging
@@ -844,6 +844,64 @@ def get_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, A
         logger.error(f"Error getting file: {str(e)}")
         return create_response(500, {"message": "Error getting file"})
 
+def get_file_transactions_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    """Get all transactions for a specific file."""
+    try:
+        # Get file ID from path parameters
+        file_id = event.get('pathParameters', {}).get('id')
+        
+        if not file_id:
+            return create_response(400, {"message": "File ID is required"})
+            
+        # Get file metadata to verify ownership
+        response = file_table.get_item(Key={'fileId': file_id})
+        file = response.get('Item')
+        
+        if not file:
+            return create_response(404, {"message": "File not found"})
+            
+        # Check if the file belongs to the user
+        if file.get('userId') != user['id']:
+            return create_response(403, {"message": "Access denied"})
+        
+        # Get transactions for the file
+        try:
+            transactions = list_file_transactions(file_id)
+            
+            # Format transactions for response
+            formatted_transactions = []
+            for transaction in transactions:
+                formatted_transaction = {
+                    'transactionId': transaction.get('transactionId'),
+                    'date': transaction.get('date'),
+                    'description': transaction.get('description'),
+                    'amount': float(transaction.get('amount')),
+                    'runningTotal': float(transaction.get('runningTotal')),
+                    'transactionType': transaction.get('transactionType'),
+                    'category': transaction.get('category'),
+                    'memo': transaction.get('memo')
+                }
+                formatted_transactions.append(formatted_transaction)
+            
+            # Sort transactions by date
+            formatted_transactions.sort(key=lambda x: x['date'])
+            
+            return create_response(200, {
+                'fileId': file_id,
+                'transactions': formatted_transactions,
+                'metadata': {
+                    'totalTransactions': len(formatted_transactions),
+                    'timestamp': datetime.utcnow().isoformat()
+                }
+            })
+        except Exception as e:
+            logger.error(f"Error retrieving transactions for file {file_id}: {str(e)}")
+            return create_response(500, {"message": "Error retrieving transactions"})
+            
+    except Exception as e:
+        logger.error(f"Error in get_file_transactions_handler: {str(e)}")
+        return create_response(500, {"message": "Internal server error"})
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main Lambda handler for file operations."""
     logger.info(f"Processing request with event: {json.dumps(event)}")
@@ -876,6 +934,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return get_file_handler(event, user)
     elif route == "GET /files/{id}/download":
         return get_download_url_handler(event, user)
+    elif route == "GET /files/{id}/transactions":
+        return get_file_transactions_handler(event, user)
     elif route == "DELETE /files/{id}":
         return delete_file_handler(event, user)
     elif route == "POST /files/{id}/unassociate":

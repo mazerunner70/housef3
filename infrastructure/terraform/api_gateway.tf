@@ -53,6 +53,15 @@ resource "aws_apigatewayv2_integration" "file_operations" {
   description           = "Lambda integration for file operations endpoints"
 }
 
+# File transactions route
+resource "aws_apigatewayv2_route" "file_transactions" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /files/{id}/transactions"
+  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 # File listing route
 resource "aws_apigatewayv2_route" "list_files" {
   api_id             = aws_apigatewayv2_api.main.id
@@ -267,15 +276,15 @@ resource "aws_lambda_permission" "account_operations" {
 
 # Outputs
 output "api_endpoint" {
-  value = "${aws_apigatewayv2_stage.main.invoke_url}/colors"
+  value = "https://${aws_cloudfront_distribution.frontend.domain_name}/dev"
 }
 
 output "api_files_endpoint" {
-  value = "${aws_apigatewayv2_stage.main.invoke_url}/files"
+  value = "https://${aws_cloudfront_distribution.frontend.domain_name}/dev/files"
 }
 
 output "api_accounts_endpoint" {
-  value = "${aws_apigatewayv2_stage.main.invoke_url}/accounts"
+  value = "https://${aws_cloudfront_distribution.frontend.domain_name}/dev/accounts"
 }
 
 output "api_stage" {

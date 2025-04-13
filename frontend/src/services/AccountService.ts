@@ -53,9 +53,8 @@ export interface UploadFileToAccountResponse {
   accountId: string;
 }
 
-// Get CloudFront domain from environment variables
-const CLOUDFRONT_DOMAIN = import.meta.env.VITE_CLOUDFRONT_DOMAIN || '';
-const API_ENDPOINT = `https://${CLOUDFRONT_DOMAIN}/accounts`;
+// Get API endpoint from environment variables
+const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/accounts`;
 
 // Helper function to handle API requests with authentication
 const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
