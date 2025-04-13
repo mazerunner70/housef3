@@ -35,6 +35,7 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
   const [savingBalanceFileId, setSavingBalanceFileId] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
+  const [success, setSuccess] = useState<string | null>(null);
 
   // Load files from API
   const loadFiles = async () => {
@@ -289,14 +290,18 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
     
     try {
       // Call the API to update the file's opening balance
-      await updateFileBalance(fileId, balanceValue);
+      const response = await updateFileBalance(fileId, balanceValue);
       
-      // Update the file in our local state as well
+      // Update the file in our local state, including transaction count if returned
       const updatedFiles = files.map(file => {
         if (file.fileId === fileId) {
           return {
             ...file,
-            openingBalance: balanceValue
+            openingBalance: balanceValue,
+            // Update transaction count if provided in the response
+            recordCount: response.transactionCount !== undefined 
+              ? response.transactionCount 
+              : file.recordCount
           };
         }
         return file;
@@ -306,6 +311,12 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
       setEditingBalanceFileId(null);
       setBalanceInput('');
       
+      // If transactions were processed, show a success message
+      if (response.transactionCount !== undefined) {
+        setSuccess(`Opening balance updated and ${response.transactionCount} transactions processed`);
+      } else {
+        setSuccess('Opening balance updated successfully');
+      }
     } catch (error) {
       console.error('Error saving balance:', error);
       setError(error instanceof Error ? error.message : 'Failed to save opening balance');
@@ -356,6 +367,13 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
       {error && (
         <div className="file-list-error">
           <span className="error-icon">⚠️</span> {error}
+        </div>
+      )}
+      
+      {/* Success message */}
+      {success && (
+        <div className="file-list-success">
+          <span className="success-icon">✅</span> {success}
         </div>
       )}
       

@@ -11,10 +11,10 @@ import boto3
 from typing import Dict, Any, List, Tuple, Optional
 from decimal import Decimal
 from models.transaction_file import FileFormat, ProcessingStatus
-from utils.transaction_parser import parse_transactions
+from utils.transaction_parser import parse_transactions, process_file_transactions
 from models.transaction import Transaction
 from utils.file_analyzer import analyze_file_format
-from utils.db_utils import get_transaction_file, update_transaction_file
+from utils.db_utils import get_transaction_file, update_transaction_file, create_transaction, delete_file_transactions
 
 # Configure logging
 logger = logging.getLogger()
@@ -62,6 +62,59 @@ TRANSACTIONS_TABLE = os.environ.get('TRANSACTIONS_TABLE', 'transactions')
 
 # Initialize DynamoDB tables
 transaction_table = dynamodb.Table(TRANSACTIONS_TABLE)
+
+def process_file_transactions(file_id: str, content_bytes: bytes, file_format: FileFormat, opening_balance: float) -> int:
+    """
+    Process a file to extract and save transactions.
+    
+    Args:
+        file_id: ID of the file to process
+        content_bytes: File content as bytes
+        file_format: Format of the file
+        opening_balance: Opening balance to use for running totals
+        
+    Returns:
+        Number of transactions processed
+    """
+    try:
+        # Parse transactions using the utility
+        transactions = parse_transactions(
+            content_bytes, 
+            file_format,
+            opening_balance
+        )
+        
+        # Delete any existing transactions for this file
+        try:
+            delete_file_transactions(file_id)
+            logger.info(f"Deleted existing transactions for file {file_id}")
+        except Exception as del_error:
+            logger.warning(f"Error deleting existing transactions: {str(del_error)}")
+        
+        # Save new transactions to the database
+        transaction_count = 0
+        for transaction_data in transactions:
+            try:
+                # Add the file_id to each transaction
+                transaction_data['file_id'] = file_id
+                
+                # Create and save the transaction
+                create_transaction(transaction_data)
+                transaction_count += 1
+            except Exception as tx_error:
+                logger.warning(f"Error creating transaction: {str(tx_error)}")
+                
+        logger.info(f"Saved {transaction_count} transactions for file {file_id}")
+        
+        # Update the file record with transaction count
+        update_transaction_file(file_id, {
+            'transactionCount': str(transaction_count)
+        })
+        
+        return transaction_count
+    except Exception as parse_error:
+        logger.error(f"Error parsing transactions: {str(parse_error)}")
+        return 0
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """

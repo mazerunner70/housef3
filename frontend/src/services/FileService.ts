@@ -237,12 +237,20 @@ export const associateFileWithAccount = async (fileId: string, accountId: string
 };
 
 // Update file opening balance
-export const updateFileBalance = async (fileId: string, openingBalance: number): Promise<void> => {
+export interface UpdateBalanceResponse {
+  fileId: string;
+  openingBalance: number;
+  transactionCount?: number;
+  message: string;
+}
+
+export const updateFileBalance = async (fileId: string, openingBalance: number): Promise<UpdateBalanceResponse> => {
   try {
-    await authenticatedRequest(`${API_ENDPOINT}/${fileId}/balance`, {
+    const response = await authenticatedRequest(`${API_ENDPOINT}/${fileId}/balance`, {
       method: 'POST',
       body: JSON.stringify({ openingBalance })
     });
+    return response;
   } catch (error) {
     console.error('Error updating file balance:', error);
     throw error;

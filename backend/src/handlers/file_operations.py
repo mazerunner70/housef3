@@ -6,6 +6,10 @@ import boto3
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Union
 from decimal import Decimal
+from models.transaction_file import FileFormat, ProcessingStatus
+from models.transaction import Transaction
+from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_transaction_file, get_account
+from utils.transaction_parser import process_file_transactions
 
 # Configure logging
 logger = logging.getLogger()
@@ -733,11 +737,49 @@ def update_file_balance_handler(event: Dict[str, Any], user: Dict[str, Any]) -> 
                 ExpressionAttributeValues=expression_attribute_values
             )
             
-            return create_response(200, {
-                "message": "File opening balance updated successfully",
-                "fileId": file_id,
-                "openingBalance": opening_balance
-            })
+            # After successfully updating the opening balance, trigger transaction reprocessing
+            try:
+                logger.info(f"Triggering transaction reprocessing for file {file_id}")
+                # Get the file content from S3
+                s3_key = file.get('s3Key')
+                if not s3_key:
+                    logger.warning(f"File {file_id} has no S3 key, skipping transaction processing")
+                    return create_response(200, {
+                        "message": "File opening balance updated successfully",
+                        "fileId": file_id,
+                        "openingBalance": opening_balance
+                    })
+                
+                # Get file content from S3
+                response = s3_client.get_object(Bucket=FILE_STORAGE_BUCKET, Key=s3_key)
+                content_bytes = response['Body'].read()
+                
+                # Get file format
+                file_format = FileFormat(file.get('fileFormat', 'other'))
+                
+                # Process transactions with new opening balance
+                transaction_count = process_file_transactions(
+                    file_id, 
+                    content_bytes, 
+                    file_format, 
+                    opening_balance
+                )
+                
+                # Include transaction count in response
+                return create_response(200, {
+                    "message": "File opening balance updated successfully and transactions reprocessed",
+                    "fileId": file_id,
+                    "openingBalance": opening_balance,
+                    "transactionCount": transaction_count
+                })
+            except Exception as process_error:
+                logger.error(f"Error processing transactions after balance update: {str(process_error)}")
+                # Still return success for the balance update, even if processing failed
+                return create_response(200, {
+                    "message": "File opening balance updated successfully, but error processing transactions",
+                    "fileId": file_id,
+                    "openingBalance": opening_balance
+                })
         except Exception as update_error:
             logger.error(f"Error updating file: {str(update_error)}")
             return create_response(500, {"message": "Error updating file opening balance"})
