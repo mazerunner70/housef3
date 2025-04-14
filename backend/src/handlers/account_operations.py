@@ -282,6 +282,56 @@ def account_files_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[s
         logger.error(f"Error listing account files: {str(e)}")
         return create_response(500, {"message": "Error listing account files"})
 
+def delete_account_files_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    """Delete all files and their transactions for an account."""
+    try:
+        # Get account ID from path parameters
+        account_id = event.get('pathParameters', {}).get('id')
+        
+        if not account_id:
+            return create_response(400, {"message": "Account ID is required"})
+        
+        # Verify the account exists and belongs to the user
+        existing_account = get_account(account_id)
+        
+        if not existing_account:
+            return create_response(404, {"message": f"Account not found: {account_id}"})
+        
+        if existing_account.user_id != user['id']:
+            return create_response(403, {"message": "Access denied"})
+        
+        # Get all files for the account
+        files = list_account_files(account_id)
+        total_files = len(files)
+        total_transactions = 0
+        
+        # Delete each file and its transactions
+        for file in files:
+            try:
+                # Delete all transactions for the file
+                transactions_deleted = delete_file_transactions(file.file_id)
+                total_transactions += transactions_deleted
+                
+                # Delete the file
+                delete_transaction_file(file.file_id)
+                logger.info(f"Deleted file {file.file_id} and its {transactions_deleted} transactions")
+            except Exception as file_error:
+                logger.error(f"Error deleting file {file.file_id}: {str(file_error)}")
+                # Continue with other files
+        
+        return create_response(200, {
+            'message': 'Account files deleted successfully',
+            'metadata': {
+                'totalFiles': total_files,
+                'totalTransactions': total_transactions,
+                'accountId': account_id,
+                'accountName': existing_account.account_name
+            }
+        })
+    except Exception as e:
+        logger.error(f"Error deleting account files: {str(e)}")
+        return create_response(500, {"message": "Error deleting account files"})
+
 def account_file_upload_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     """Create a pre-signed URL for uploading a file to S3 and associate it with an account."""
     try:
@@ -392,41 +442,58 @@ def account_file_upload_handler(event: Dict[str, Any], user: Dict[str, Any]) -> 
         logger.error(f"Error processing file upload: {str(e)}")
         return create_response(500, {"message": "Error processing file upload request"})
 
+def delete_all_accounts_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    """Delete all accounts for the current user."""
+    try:
+        # Get all accounts for the user
+        accounts = list_user_accounts(user['id'])
+        
+        # Delete each account
+        for account in accounts:
+            delete_account(account.id)
+        
+        return create_response(200, {
+            'message': 'All accounts deleted successfully',
+            'deletedCount': len(accounts)
+        })
+    except Exception as e:
+        logger.error(f"Error deleting all accounts: {str(e)}")
+        return create_response(500, {"message": "Error deleting accounts"})
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Main Lambda handler for account operations."""
-    logger.info(f"Processing request with event: {json.dumps(event)}")
-    
-    # Handle preflight OPTIONS request
-    if event.get("requestContext", {}).get("http", {}).get("method") == "OPTIONS":
-        return create_response(200, {"message": "OK"})
-    
-    # Extract user information
-    user = get_user_from_event(event)
-    if not user:
-        logger.error("No user found in token")
-        return create_response(401, {"message": "Unauthorized"})
-    
-    # Get the HTTP method and route
-    method = event.get("requestContext", {}).get("http", {}).get("method", "").upper()
-    route = event.get("routeKey", "")
-    
-    # Log request details
-    logger.info(f"Request: {method} {route}")
-    
-    # Handle based on route
-    if route == "POST /accounts":
-        return create_account_handler(event, user)
-    elif route == "GET /accounts":
-        return list_accounts_handler(event, user)
-    elif route == "GET /accounts/{id}":
-        return get_account_handler(event, user)
-    elif route == "PUT /accounts/{id}":
-        return update_account_handler(event, user)
-    elif route == "DELETE /accounts/{id}":
-        return delete_account_handler(event, user)
-    elif route == "GET /accounts/{id}/files":
-        return account_files_handler(event, user)
-    elif route == "POST /accounts/{id}/files":
-        return account_file_upload_handler(event, user)
-    else:
-        return create_response(400, {"message": f"Unsupported route: {route}"}) 
+    """Main handler for account operations."""
+    try:
+        # Get user from Cognito
+        user = get_user_from_event(event)
+        if not user:
+            return create_response(401, {"message": "Unauthorized"})
+        
+        # Get route from event
+        route = event.get('routeKey')
+        if not route:
+            return create_response(400, {"message": "Route not specified"})
+        
+        # Route to appropriate handler
+        if route == "GET /accounts":
+            return list_accounts_handler(event, user)
+        elif route == "POST /accounts":
+            return create_account_handler(event, user)
+        elif route == "GET /accounts/{id}":
+            return get_account_handler(event, user)
+        elif route == "PUT /accounts/{id}":
+            return update_account_handler(event, user)
+        elif route == "DELETE /accounts/{id}":
+            return delete_account_handler(event, user)
+        elif route == "DELETE /accounts":
+            return delete_all_accounts_handler(event, user)
+        elif route == "GET /accounts/{id}/files":
+            return account_files_handler(event, user)
+        elif route == "POST /accounts/{id}/files":
+            return account_file_upload_handler(event, user)
+        elif route == "DELETE /accounts/{id}/files":
+            return delete_account_files_handler(event, user)
+        else:
+            return create_response(400, {"message": f"Unsupported route: {route}"})
+    except Exception as e:
+        logger.error(f"Error in account operations handler: {str(e)}")
+        return create_response(500, {"message": "Internal server error"}) 

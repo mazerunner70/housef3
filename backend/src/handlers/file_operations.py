@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional, Union
 from decimal import Decimal
 from models.transaction_file import FileFormat, ProcessingStatus
 from models.transaction import Transaction
-from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_transaction_file, get_account, list_file_transactions
+from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_transaction_file, get_account, list_file_transactions, delete_file_transactions
 from utils.transaction_parser import process_file_transactions
 
 # Configure logging
@@ -902,6 +902,46 @@ def get_file_transactions_handler(event: Dict[str, Any], user: Dict[str, Any]) -
         logger.error(f"Error in get_file_transactions_handler: {str(e)}")
         return create_response(500, {"message": "Internal server error"})
 
+def delete_file_transactions_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    """Delete all transactions for a specific file."""
+    try:
+        # Get file ID from path parameters
+        file_id = event.get('pathParameters', {}).get('id')
+        
+        if not file_id:
+            return create_response(400, {"message": "File ID is required"})
+            
+        # Get file metadata to verify ownership
+        response = file_table.get_item(Key={'fileId': file_id})
+        file = response.get('Item')
+        
+        if not file:
+            return create_response(404, {"message": "File not found"})
+            
+        # Check if the file belongs to the user
+        if file.get('userId') != user['id']:
+            return create_response(403, {"message": "Access denied"})
+        
+        # Delete all transactions for the file
+        try:
+            deleted_count = delete_file_transactions(file_id)
+            
+            return create_response(200, {
+                'fileId': file_id,
+                'message': f'Successfully deleted {deleted_count} transactions',
+                'metadata': {
+                    'deletedCount': deleted_count,
+                    'timestamp': datetime.utcnow().isoformat()
+                }
+            })
+        except Exception as e:
+            logger.error(f"Error deleting transactions for file {file_id}: {str(e)}")
+            return create_response(500, {"message": "Error deleting transactions"})
+            
+    except Exception as e:
+        logger.error(f"Error in delete_file_transactions_handler: {str(e)}")
+        return create_response(500, {"message": "Internal server error"})
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main Lambda handler for file operations."""
     logger.info(f"Processing request with event: {json.dumps(event)}")
@@ -936,6 +976,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return get_download_url_handler(event, user)
     elif route == "GET /files/{id}/transactions":
         return get_file_transactions_handler(event, user)
+    elif route == "DELETE /files/{id}/transactions":
+        return delete_file_transactions_handler(event, user)
     elif route == "DELETE /files/{id}":
         return delete_file_handler(event, user)
     elif route == "POST /files/{id}/unassociate":

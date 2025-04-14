@@ -62,6 +62,15 @@ resource "aws_apigatewayv2_route" "file_transactions" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# Delete file transactions route
+resource "aws_apigatewayv2_route" "delete_file_transactions" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "DELETE /files/{id}/transactions"
+  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 # File listing route
 resource "aws_apigatewayv2_route" "list_files" {
   api_id             = aws_apigatewayv2_api.main.id
@@ -170,6 +179,15 @@ resource "aws_apigatewayv2_route" "list_accounts" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# Account deletion route
+resource "aws_apigatewayv2_route" "delete_accounts" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "DELETE /accounts"
+  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 # Account details route
 resource "aws_apigatewayv2_route" "get_account" {
   api_id             = aws_apigatewayv2_api.main.id
@@ -210,6 +228,15 @@ resource "aws_apigatewayv2_route" "account_files" {
 resource "aws_apigatewayv2_route" "account_file_upload" {
   api_id             = aws_apigatewayv2_api.main.id
   route_key          = "POST /accounts/{id}/files"
+  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Delete account files route
+resource "aws_apigatewayv2_route" "delete_account_files" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "DELETE /accounts/{id}/files"
   target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
