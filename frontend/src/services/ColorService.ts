@@ -1,30 +1,25 @@
 import { getCurrentUser, refreshToken, isAuthenticated } from './AuthService';
 
+// Get API endpoint from environment variables
+const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/api/colors`;
+
 export interface Color {
+  id: string;
   name: string;
-  hexCode: string;
-  category: string;
+  hex: string;
+  rgb: string;
+  hsl: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
-export interface ColorResponse {
-  colors: Color[];
-  user: {
-    id: string;
-    email: string;
-    authTime: number;
-    scope: string;
-  };
-  metadata: {
-    totalColors: number;
-    timestamp: string;
-    version: string;
-  };
+export interface ColorListResponse {
+  items: Color[];
+  nextToken?: string;
 }
 
-// Get CloudFront domain from environment variables
-const CLOUDFRONT_DOMAIN = import.meta.env.VITE_CLOUDFRONT_DOMAIN || '';
-
-export const getColors = async (): Promise<ColorResponse> => {
+// List colors with pagination
+export const listColors = async (nextToken?: string): Promise<ColorListResponse> => {
   const currentUser = getCurrentUser();
   
   if (!currentUser || !currentUser.token) {
@@ -44,7 +39,7 @@ export const getColors = async (): Promise<ColorResponse> => {
       throw new Error('Authentication failed');
     }
     
-    const response = await fetch(`https://${CLOUDFRONT_DOMAIN}/colors`, {
+    const response = await fetch(API_ENDPOINT, {
       headers: {
         'Authorization': `Bearer ${user.token}`,
         'Content-Type': 'application/json'
@@ -57,7 +52,7 @@ export const getColors = async (): Promise<ColorResponse> => {
         const refreshedUser = await refreshToken(user.refreshToken);
         
         // Retry the request with the new token
-        const retryResponse = await fetch(`https://${CLOUDFRONT_DOMAIN}/colors`, {
+        const retryResponse = await fetch(API_ENDPOINT, {
           headers: {
             'Authorization': `Bearer ${refreshedUser.token}`,
             'Content-Type': 'application/json'
@@ -68,7 +63,7 @@ export const getColors = async (): Promise<ColorResponse> => {
           throw new Error(`Failed to fetch colors after token refresh: ${retryResponse.status} ${retryResponse.statusText}`);
         }
         
-        const data: ColorResponse = await retryResponse.json();
+        const data: ColorListResponse = await retryResponse.json();
         return data;
       } catch (refreshError) {
         console.error('Error refreshing token:', refreshError);
@@ -80,7 +75,7 @@ export const getColors = async (): Promise<ColorResponse> => {
       throw new Error(`Failed to fetch colors: ${response.status} ${response.statusText}`);
     }
     
-    const data: ColorResponse = await response.json();
+    const data: ColorListResponse = await response.json();
     return data;
   } catch (error) {
     console.error('Error fetching colors:', error);

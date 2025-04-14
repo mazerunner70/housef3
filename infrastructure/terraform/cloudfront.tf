@@ -62,6 +62,24 @@ resource "aws_cloudfront_response_headers_policy" "cors_policy" {
   }
 }
 
+# CloudFront function to rewrite API paths
+resource "aws_cloudfront_function" "rewrite_api_path" {
+  name    = "${var.project_name}-${var.environment}-rewrite-api-path"
+  runtime = "cloudfront-js-1.0"
+  publish = true
+  code    = <<-EOT
+    function handler(event) {
+      var request = event.request;
+      var uri = request.uri;
+      
+      // Remove /api prefix
+      request.uri = uri.replace(/^\/api/, '');
+      
+      return request;
+    }
+  EOT
+}
+
 resource "aws_cloudfront_distribution" "frontend" {
   origin {
     domain_name = aws_s3_bucket_website_configuration.frontend.website_endpoint
@@ -96,117 +114,52 @@ resource "aws_cloudfront_distribution" "frontend" {
   comment             = "CloudFront distribution for ${var.project_name} ${var.environment}"
   default_root_object = "index.html"
   
-  # Default cache behavior - S3 website
+  # API Gateway behavior for all API routes
+  ordered_cache_behavior {
+    path_pattern     = "/api/*"
+    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = local.api_origin_id
+
+    forwarded_values {
+      query_string = true
+      headers      = ["Authorization", "Origin", "Access-Control-Request-Headers", "Access-Control-Request-Method"]
+
+      cookies {
+        forward = "none"
+      }
+    }
+
+    min_ttl                = 0
+    default_ttl            = 0
+    max_ttl                = 0
+    compress               = true
+    viewer_protocol_policy = "redirect-to-https"
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.rewrite_api_path.arn
+    }
+  }
+
+  # Default behavior for S3 bucket
   default_cache_behavior {
     allowed_methods  = ["GET", "HEAD", "OPTIONS"]
     cached_methods   = ["GET", "HEAD"]
     target_origin_id = local.s3_origin_id
-    
+
     forwarded_values {
       query_string = false
       cookies {
         forward = "none"
       }
     }
-    
-    viewer_protocol_policy = "redirect-to-https"
+
     min_ttl                = 0
     default_ttl            = 3600
     max_ttl                = 86400
     compress               = true
-  }
-  
-  # API Gateway behavior - direct pass-through
-  ordered_cache_behavior {
-    path_pattern     = "/colors"  # Simple path pattern matching the example
-    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods   = ["GET", "HEAD"]
-    target_origin_id = local.api_origin_id
-    
-    response_headers_policy_id = aws_cloudfront_response_headers_policy.cors_policy.id
-    
-    compress               = true
-    viewer_protocol_policy = "https-only"
-    
-    forwarded_values {
-      query_string = true
-      headers = [
-        "Authorization",
-        "Origin",
-        "Access-Control-Request-Headers",
-        "Access-Control-Request-Method",
-        "Content-Type"
-      ]
-      cookies {
-        forward = "none"
-      }
-    }
-    
-    min_ttl     = 0
-    default_ttl = 0
-    max_ttl     = 0
-  }
-  
-  # API Gateway behavior for file operations
-  ordered_cache_behavior {
-    path_pattern     = "/files*"
-    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods   = ["GET", "HEAD"]
-    target_origin_id = local.api_origin_id
-    
-    response_headers_policy_id = aws_cloudfront_response_headers_policy.cors_policy.id
-    
-    compress               = true
-    viewer_protocol_policy = "https-only"
-    
-    forwarded_values {
-      query_string = true
-      headers = [
-        "Authorization",
-        "Origin",
-        "Access-Control-Request-Headers",
-        "Access-Control-Request-Method",
-        "Content-Type"
-      ]
-      cookies {
-        forward = "none"
-      }
-    }
-    
-    min_ttl     = 0
-    default_ttl = 0
-    max_ttl     = 0
-  }
-  
-  # API Gateway behavior for account operations
-  ordered_cache_behavior {
-    path_pattern     = "/accounts*"
-    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods   = ["GET", "HEAD"]
-    target_origin_id = local.api_origin_id
-    
-    response_headers_policy_id = aws_cloudfront_response_headers_policy.cors_policy.id
-    
-    compress               = true
-    viewer_protocol_policy = "https-only"
-    
-    forwarded_values {
-      query_string = true
-      headers = [
-        "Authorization",
-        "Origin",
-        "Access-Control-Request-Headers",
-        "Access-Control-Request-Method",
-        "Content-Type"
-      ]
-      cookies {
-        forward = "none"
-      }
-    }
-    
-    min_ttl     = 0
-    default_ttl = 0
-    max_ttl     = 0
+    viewer_protocol_policy = "redirect-to-https"
   }
 
   # For SPA routing, we need to serve index.html for all routes that don't match files

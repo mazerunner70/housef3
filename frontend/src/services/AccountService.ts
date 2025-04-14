@@ -54,7 +54,7 @@ export interface UploadFileToAccountResponse {
 }
 
 // Get API endpoint from environment variables
-const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/accounts`;
+const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/api/accounts`;
 
 // Helper function to handle API requests with authentication
 const authenticatedRequest = async (url: string, options: RequestInit = {}) => {

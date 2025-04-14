@@ -107,7 +107,7 @@ const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
 // Get transactions for a file
 export const getFileTransactions = async (fileId: string): Promise<TransactionListResponse> => {
   try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/files/${fileId}/transactions`);
+    const response = await authenticatedRequest(`${API_ENDPOINT}/api/files/${fileId}/transactions`);
     return response;
   } catch (error) {
     console.error('Error fetching file transactions:', error);
@@ -118,7 +118,7 @@ export const getFileTransactions = async (fileId: string): Promise<TransactionLi
 // Get transactions for an account
 export const getAccountTransactions = async (accountId: string): Promise<TransactionListResponse> => {
   try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/account/${accountId}`);
+    const response = await authenticatedRequest(`${API_ENDPOINT}/api/account/${accountId}`);
     return response;
   } catch (error) {
     console.error('Error fetching account transactions:', error);

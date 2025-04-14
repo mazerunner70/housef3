@@ -45,7 +45,7 @@ export interface DownloadUrlResponse {
 }
 
 // Get API endpoint from environment variables
-const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/files`;
+const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/api/files`;
 
 // Helper function to handle API requests with authentication
 const authenticatedRequest = async (url: string, options: RequestInit = {}) => {

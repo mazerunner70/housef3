@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import './App.css'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import Navigation from './components/Navigation';
 import Login from './components/Login';
 import UserProfile from './components/UserProfile';
-import ColorDisplay from './components/ColorDisplay';
+import { ColorDisplay } from './components/ColorDisplay';
 import FileManager from './components/FileManager';
 import AccountManager from './components/AccountManager';
 import { AuthUser, getCurrentUser, isAuthenticated, refreshToken } from './services/AuthService';
+import './App.css'
 
 function App() {
   const [authenticated, setAuthenticated] = useState<boolean>(false);
