@@ -5,6 +5,7 @@ import enum
 import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any, Tuple
+from dataclasses import dataclass
 
 
 class FileFormat(str, enum.Enum):
@@ -15,14 +16,17 @@ class FileFormat(str, enum.Enum):
     PDF = "pdf"
     XLSX = "xlsx"
     OTHER = "other"
+    JSON = "json"
+    EXCEL = "excel"
 
 
 class ProcessingStatus(str, enum.Enum):
     """Enum for file processing status"""
     PENDING = "pending"
     PROCESSING = "processing"
-    PROCESSED = "processed"
-    ERROR = "error"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    NEEDS_MAPPING = "needs_mapping"
 
 
 class DateRange:
@@ -47,67 +51,25 @@ class DateRange:
         )
 
 
+@dataclass
 class TransactionFile:
     """
     Represents a transaction file uploaded by a user and optionally associated with an account.
     """
-    def __init__(
-        self,
-        file_id: str,
-        user_id: str,
-        file_name: str,
-        upload_date: str,
-        file_size: int,
-        file_format: FileFormat,
-        s3_key: str,
-        processing_status: ProcessingStatus,
-        account_id: Optional[str] = None,
-        record_count: Optional[int] = None,
-        date_range: Optional[DateRange] = None,
-        error_message: Optional[str] = None,
-        opening_balance: Optional[float] = None
-    ):
-        self.file_id = file_id
-        self.user_id = user_id
-        self.file_name = file_name
-        self.upload_date = upload_date
-        self.file_size = file_size
-        self.file_format = file_format
-        self.s3_key = s3_key
-        self.processing_status = processing_status
-        self.account_id = account_id
-        self.record_count = record_count
-        self.date_range = date_range
-        self.error_message = error_message
-        self.opening_balance = opening_balance
-
-    @classmethod
-    def create(
-        cls,
-        user_id: str,
-        file_name: str,
-        file_size: int,
-        file_format: FileFormat,
-        s3_key: str,
-        account_id: Optional[str] = None,
-        processing_status: ProcessingStatus = ProcessingStatus.PENDING,
-        opening_balance: Optional[float] = None
-    ) -> 'TransactionFile':
-        """
-        Factory method to create a new transaction file with generated ID and timestamp.
-        """
-        return cls(
-            file_id=str(uuid.uuid4()),
-            user_id=user_id,
-            file_name=file_name,
-            upload_date=datetime.utcnow().isoformat(),
-            file_size=file_size,
-            file_format=file_format,
-            s3_key=s3_key,
-            processing_status=processing_status,
-            account_id=account_id,
-            opening_balance=opening_balance
-        )
+    file_id: str
+    user_id: str
+    file_name: str
+    upload_date: str
+    file_size: int
+    file_format: FileFormat
+    s3_key: str
+    processing_status: ProcessingStatus
+    account_id: Optional[str] = None
+    field_map_id: Optional[str] = None
+    record_count: Optional[int] = None
+    date_range_start: Optional[str] = None
+    date_range_end: Optional[str] = None
+    error_message: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -128,19 +90,19 @@ class TransactionFile:
         if self.account_id:
             result["accountId"] = self.account_id
         
+        if self.field_map_id:
+            result["fieldMapId"] = self.field_map_id
+        
         # Add optional fields if they exist
         if self.record_count is not None:
             result["recordCount"] = str(self.record_count)
         
-        if self.date_range:
-            result["dateRange"] = self.date_range.to_dict()
+        if self.date_range_start and self.date_range_end:
+            result["dateRangeStart"] = self.date_range_start
+            result["dateRangeEnd"] = self.date_range_end
         
         if self.error_message:
             result["errorMessage"] = self.error_message
-            
-        # Add opening balance if it exists
-        if self.opening_balance is not None:
-            result["openingBalance"] = str(self.opening_balance)  # Convert to string for DynamoDB
             
         return result
 
@@ -160,23 +122,14 @@ class TransactionFile:
             file_format=FileFormat(data["fileFormat"]),
             s3_key=data["s3Key"],
             processing_status=ProcessingStatus(data["processingStatus"]),
-            account_id=account_id
+            account_id=account_id,
+            field_map_id=data.get("fieldMapId"),
+            record_count=data.get("recordCount"),
+            date_range_start=data.get("dateRangeStart"),
+            date_range_end=data.get("dateRangeEnd"),
+            error_message=data.get("errorMessage")
         )
         
-        # Add optional fields if present in the data
-        if "recordCount" in data:
-            file.record_count = int(data["recordCount"])
-            
-        if "dateRange" in data:
-            file.date_range = DateRange.from_dict(data["dateRange"])
-            
-        if "errorMessage" in data:
-            file.error_message = data["errorMessage"]
-            
-        # Add opening balance if present
-        if "openingBalance" in data:
-            file.opening_balance = float(data["openingBalance"])
-            
         return file
 
     def update_processing_status(
@@ -196,13 +149,10 @@ class TransactionFile:
             self.record_count = record_count
             
         if date_range is not None:
-            self.date_range = DateRange(date_range[0], date_range[1])
+            self.date_range_start, self.date_range_end = date_range
             
         if error_message is not None:
             self.error_message = error_message
-            
-        if opening_balance is not None:
-            self.opening_balance = opening_balance
 
 
 def validate_transaction_file_data(data: Dict[str, Any]) -> bool:

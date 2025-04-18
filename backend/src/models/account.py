@@ -5,6 +5,7 @@ import enum
 import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any
+from decimal import Decimal
 
 
 class AccountType(str, enum.Enum):
@@ -30,35 +31,23 @@ class Currency(str, enum.Enum):
     OTHER = "other"
 
 
+@dataclass
 class Account:
     """
     Represents a financial account in the system.
     """
-    def __init__(
-        self,
-        account_id: str,
-        user_id: str,
-        account_name: str,
-        account_type: AccountType,
-        institution: str,
-        balance: float,
-        currency: Currency,
-        last_updated: str,
-        created_at: str,
-        notes: Optional[str] = None,
-        is_active: bool = True
-    ):
-        self.account_id = account_id
-        self.user_id = user_id
-        self.account_name = account_name
-        self.account_type = account_type
-        self.institution = institution
-        self.balance = balance
-        self.currency = currency
-        self.last_updated = last_updated
-        self.created_at = created_at
-        self.notes = notes
-        self.is_active = is_active
+    account_id: str
+    user_id: str
+    account_name: str
+    account_type: AccountType
+    institution: str
+    balance: Decimal
+    currency: Currency
+    notes: Optional[str] = None
+    is_active: bool = True
+    default_field_map_id: Optional[str] = None
+    created_at: str = datetime.utcnow().isoformat()
+    updated_at: str = datetime.utcnow().isoformat()
 
     @classmethod
     def create(
@@ -70,31 +59,30 @@ class Account:
         balance: float = 0.0,
         currency: Currency = Currency.USD,
         notes: Optional[str] = None,
-        is_active: bool = True
+        is_active: bool = True,
+        default_field_map_id: Optional[str] = None
     ) -> 'Account':
         """
         Factory method to create a new account with generated ID and timestamps.
         """
-        now = datetime.utcnow().isoformat()
         return cls(
             account_id=str(uuid.uuid4()),
             user_id=user_id,
             account_name=account_name,
             account_type=account_type,
             institution=institution,
-            balance=balance,
+            balance=Decimal(str(balance)),
             currency=currency,
-            last_updated=now,
-            created_at=now,
             notes=notes,
-            is_active=is_active
+            is_active=is_active,
+            default_field_map_id=default_field_map_id
         )
 
     def to_dict(self) -> Dict[str, Any]:
         """
         Convert the account object to a dictionary suitable for storage.
         """
-        return {
+        result = {
             "accountId": self.account_id,
             "userId": self.user_id,
             "accountName": self.account_name,
@@ -102,11 +90,15 @@ class Account:
             "institution": self.institution,
             "balance": str(self.balance),  # Convert to string for DynamoDB
             "currency": self.currency.value,
-            "lastUpdated": self.last_updated,
+            "isActive": self.is_active,
             "createdAt": self.created_at,
-            "notes": self.notes,
-            "isActive": self.is_active
+            "updatedAt": self.updated_at
         }
+        if self.notes:
+            result['notes'] = self.notes
+        if self.default_field_map_id:
+            result['defaultFieldMapId'] = self.default_field_map_id
+        return result
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Account':
@@ -119,12 +111,13 @@ class Account:
             account_name=data["accountName"],
             account_type=AccountType(data["accountType"]),
             institution=data["institution"],
-            balance=float(data["balance"]),
+            balance=Decimal(data["balance"]),
             currency=Currency(data["currency"]),
-            last_updated=data["lastUpdated"],
-            created_at=data["createdAt"],
             notes=data.get("notes"),
-            is_active=data.get("isActive", True)
+            is_active=data.get("isActive", True),
+            default_field_map_id=data.get("defaultFieldMapId"),
+            created_at=data.get("createdAt", datetime.utcnow().isoformat()),
+            updated_at=data.get("updatedAt", datetime.utcnow().isoformat())
         )
 
     def update(self, **kwargs) -> None:
@@ -132,11 +125,11 @@ class Account:
         Update account properties with new values.
         """
         for key, value in kwargs.items():
-            if hasattr(self, key) and key not in ("account_id", "user_id", "created_at"):
+            if hasattr(self, key) and key not in ("account_id", "user_id", "created_at", "updated_at"):
                 setattr(self, key, value)
         
-        # Always update the last_updated timestamp
-        self.last_updated = datetime.utcnow().isoformat()
+        # Always update the updated_at timestamp
+        self.updated_at = datetime.utcnow().isoformat()
 
 
 def validate_account_data(data: Dict[str, Any]) -> bool:
@@ -163,8 +156,8 @@ def validate_account_data(data: Dict[str, Any]) -> bool:
     # Validate numeric fields
     if "balance" in data:
         try:
-            float(data["balance"])
-        except (ValueError, TypeError):
+            Decimal(str(data["balance"]))
+        except (ValueError, TypeError, decimal.InvalidOperation):
             raise ValueError("Balance must be a valid number")
     
     # Validate string lengths

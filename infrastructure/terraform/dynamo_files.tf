@@ -6,9 +6,9 @@
 
 # DynamoDB table for transaction files
 resource "aws_dynamodb_table" "transaction_files" {
-  name         = "${var.project_name}-${var.environment}-transaction-files"
-  billing_mode = "PAY_PER_REQUEST"  # On-demand capacity mode
-  hash_key     = "fileId"           # Partition key
+  name           = "${var.project_name}-${var.environment}-transaction-files"
+  billing_mode   = "PAY_PER_REQUEST"  # On-demand capacity mode
+  hash_key       = "fileId"           # Partition key
 
   attribute {
     name = "fileId"
@@ -21,11 +21,6 @@ resource "aws_dynamodb_table" "transaction_files" {
   }
 
   attribute {
-    name = "uploadDate"
-    type = "S"  # String (ISO format date)
-  }
-  
-  attribute {
     name = "accountId"
     type = "S"  # String (for financial account association)
   }
@@ -37,9 +32,8 @@ resource "aws_dynamodb_table" "transaction_files" {
 
   # Global Secondary Index for querying files by user
   global_secondary_index {
-    name               = "UserIndex"
+    name               = "UserIdIndex"
     hash_key           = "userId"
-    range_key          = "uploadDate"
     projection_type    = "ALL"
   }
   
@@ -47,7 +41,6 @@ resource "aws_dynamodb_table" "transaction_files" {
   global_secondary_index {
     name               = "AccountIdIndex"
     hash_key           = "accountId"
-    range_key          = "uploadDate"
     projection_type    = "ALL"
   }
 

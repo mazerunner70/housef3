@@ -43,10 +43,11 @@ resource "aws_dynamodb_table" "accounts" {
     enabled = true
   }
 
-  tags = merge(var.tags, {
-    Name        = "${var.project_name}-${var.environment}-accounts"
-    Description = "DynamoDB table for financial accounts"
-  })
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
 }
 
 # Outputs for the accounts resources
