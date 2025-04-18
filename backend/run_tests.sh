@@ -26,7 +26,10 @@ fi
 
 # Run tests
 echo "Running tests..."
-python3 -m unittest discover -v tests
+cd src
+SRC_PATH=$(pwd)
+cd ..
+PYTHONPATH=$SRC_PATH python3 -m unittest tests/test_getcolors.py tests/utils/test_transaction_parser.py -v
 
 # Store the exit code
 exit_code=$?

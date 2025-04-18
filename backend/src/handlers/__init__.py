@@ -1,1 +1,3 @@
-# handlers package initialization file 
+"""
+Handlers package.
+""" 

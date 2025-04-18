@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Union
 from botocore.exceptions import ClientError
+from decimal import Decimal
 
 from models import (
     Account, 
@@ -21,6 +22,7 @@ from models import (
 )
 from models.transaction import Transaction
 from boto3.dynamodb.conditions import Key
+from models.field_map import FieldMap
 
 # Configure logging
 logger = logging.getLogger()
@@ -576,4 +578,166 @@ def delete_file_metadata(file_id: str) -> bool:
         return True
     except ClientError as e:
         logger.error(f"Error deleting file metadata {file_id}: {str(e)}")
-        raise 
+        raise
+
+
+def get_field_map(field_map_id: str) -> Optional[FieldMap]:
+    """
+    Get a field map by ID.
+    
+    Args:
+        field_map_id: ID of the field map to retrieve
+        
+    Returns:
+        FieldMap instance if found, None otherwise
+    """
+    try:
+        response = get_field_maps_table().get_item(
+            Key={'fieldMapId': field_map_id}
+        )
+        
+        if 'Item' in response:
+            return FieldMap.from_dict(response['Item'])
+        return None
+    except Exception as e:
+        logger.error(f"Error getting field map {field_map_id}: {str(e)}")
+        return None
+
+
+def get_account_default_field_map(account_id: str) -> Optional[FieldMap]:
+    """
+    Get the default field map for an account.
+    
+    Args:
+        account_id: ID of the account
+        
+    Returns:
+        FieldMap instance if found, None otherwise
+    """
+    try:
+        # Get the account record
+        response = get_accounts_table().get_item(
+            Key={'accountId': account_id}
+        )
+        
+        if 'Item' not in response:
+            return None
+            
+        # Check for default field map
+        default_field_map_id = response['Item'].get('defaultFieldMapId')
+        if not default_field_map_id:
+            return None
+            
+        # Get the field map
+        return get_field_map(default_field_map_id)
+    except Exception as e:
+        logger.error(f"Error getting default field map for account {account_id}: {str(e)}")
+        return None
+
+
+def create_field_map(field_map: FieldMap) -> bool:
+    """
+    Create a new field map.
+    
+    Args:
+        field_map: FieldMap instance to create
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        get_field_maps_table().put_item(
+            Item=field_map.to_dict(),
+            ConditionExpression='attribute_not_exists(fieldMapId)'
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Error creating field map: {str(e)}")
+        return False
+
+
+def update_field_map(field_map: FieldMap) -> bool:
+    """
+    Update an existing field map.
+    
+    Args:
+        field_map: FieldMap instance to update
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        get_field_maps_table().put_item(
+            Item=field_map.to_dict(),
+            ConditionExpression='attribute_exists(fieldMapId)'
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Error updating field map: {str(e)}")
+        return False
+
+
+def delete_field_map(field_map_id: str) -> bool:
+    """
+    Delete a field map.
+    
+    Args:
+        field_map_id: ID of the field map to delete
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        get_field_maps_table().delete_item(
+            Key={'fieldMapId': field_map_id}
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Error deleting field map: {str(e)}")
+        return False
+
+
+def list_field_maps_by_user(user_id: str) -> List[FieldMap]:
+    """
+    List all field maps for a user.
+    
+    Args:
+        user_id: ID of the user
+        
+    Returns:
+        List of FieldMap instances
+    """
+    try:
+        response = get_field_maps_table().query(
+            IndexName='userId-index',
+            KeyConditionExpression='userId = :userId',
+            ExpressionAttributeValues={':userId': user_id}
+        )
+        
+        return [FieldMap.from_dict(item) for item in response.get('Items', [])]
+    except Exception as e:
+        logger.error(f"Error listing field maps for user {user_id}: {str(e)}")
+        return []
+
+
+def list_account_field_maps(account_id: str) -> List[FieldMap]:
+    """
+    List all field maps for an account.
+    
+    Args:
+        account_id: ID of the account
+        
+    Returns:
+        List of FieldMap instances
+    """
+    try:
+        response = get_field_maps_table().query(
+            IndexName='accountId-index',
+            KeyConditionExpression='accountId = :accountId',
+            ExpressionAttributeValues={':accountId': account_id}
+        )
+        
+        return [FieldMap.from_dict(item) for item in response.get('Items', [])]
+    except Exception as e:
+        logger.error(f"Error listing field maps for account {account_id}: {str(e)}")
+        return [] 

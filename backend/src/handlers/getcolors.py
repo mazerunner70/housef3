@@ -49,6 +49,10 @@ def getcolors(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     logger.info(f"starting getcolors handler")
     try:
+        # Handle OPTIONS request
+        if event and event.get("requestContext", {}).get("http", {}).get("method") == "OPTIONS":
+            return create_response(200, {"message": "OK"})
+
         # Get user from event
         logger.info(f"Event structure: {json.dumps(event)}")
         logger.info(f"Request context: {json.dumps(event.get('requestContext', {}))}")

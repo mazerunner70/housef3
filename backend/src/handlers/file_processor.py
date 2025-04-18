@@ -11,10 +11,18 @@ import boto3
 from typing import Dict, Any, List, Tuple, Optional
 from decimal import Decimal
 from models.transaction_file import FileFormat, ProcessingStatus
+from models.field_map import FieldMap
 from utils.transaction_parser import parse_transactions, process_file_transactions
 from models.transaction import Transaction
 from utils.file_analyzer import analyze_file_format
-from utils.db_utils import get_transaction_file, update_transaction_file, create_transaction, delete_transactions_for_file
+from utils.db_utils import (
+    get_transaction_file,
+    update_transaction_file,
+    create_transaction,
+    delete_transactions_for_file,
+    get_field_map,
+    get_account_default_field_map
+)
 
 # Configure logging
 logger = logging.getLogger()
@@ -59,9 +67,11 @@ file_table = dynamodb.Table(FILES_TABLE)
 # Get table names from environment variables
 FILE_TABLE_NAME = os.environ.get('FILES_TABLE', 'transaction-files')
 TRANSACTIONS_TABLE = os.environ.get('TRANSACTIONS_TABLE', 'transactions')
+FIELD_MAPS_TABLE = os.environ.get('FIELD_MAPS_TABLE', 'field-maps')
 
 # Initialize DynamoDB tables
 transaction_table = dynamodb.Table(TRANSACTIONS_TABLE)
+field_maps_table = dynamodb.Table(FIELD_MAPS_TABLE)
 
 def process_file_transactions(file_id: str, content_bytes: bytes, file_format: FileFormat, opening_balance: float, user_id: str) -> int:
     """
@@ -78,12 +88,56 @@ def process_file_transactions(file_id: str, content_bytes: bytes, file_format: F
         Number of transactions processed
     """
     try:
+        # Get the file record to check for field map
+        file_record = get_transaction_file(file_id)
+        if not file_record:
+            logger.error(f"File record not found for ID: {file_id}")
+            return 0
+            
+        # Get field map if specified
+        field_map = None
+        field_map_id = file_record.get('fieldMapId')
+        account_id = file_record.get('accountId')
+        
+        if field_map_id:
+            # Use specified field map
+            field_map = get_field_map(field_map_id)
+            if not field_map:
+                logger.error(f"Specified field map not found: {field_map_id}")
+                update_transaction_file(file_id, {
+                    'processingStatus': ProcessingStatus.ERROR,
+                    'errorMessage': 'Specified field map not found'
+                })
+                return 0
+        elif account_id:
+            # Try to use account's default field map
+            field_map = get_account_default_field_map(account_id)
+            if field_map:
+                logger.info(f"Using account default field map for file {file_id}")
+                
+        if not field_map and file_format == FileFormat.CSV:
+            logger.warning(f"No field map found for CSV file {file_id}")
+            update_transaction_file(file_id, {
+                'processingStatus': ProcessingStatus.ERROR,
+                'errorMessage': 'Field map required for CSV files'
+            })
+            return 0
+            
         # Parse transactions using the utility
         transactions = parse_transactions(
             content_bytes, 
             file_format,
-            opening_balance
+            opening_balance,
+            field_map
         )
+        
+        if not transactions:
+            logger.error(f"No transactions parsed from file {file_id}")
+            update_transaction_file(file_id, {
+                'processingStatus': ProcessingStatus.ERROR,
+                'errorMessage': 'No transactions could be parsed from file'
+            })
+            return 0
         
         # Delete existing transactions if any
         delete_transactions_for_file(file_id)
@@ -95,6 +149,8 @@ def process_file_transactions(file_id: str, content_bytes: bytes, file_format: F
                 # Add the file_id and user_id to each transaction
                 transaction_data['file_id'] = file_id
                 transaction_data['user_id'] = user_id
+                if account_id:
+                    transaction_data['account_id'] = account_id
                 
                 # Create and save the transaction
                 create_transaction(transaction_data)
@@ -104,14 +160,23 @@ def process_file_transactions(file_id: str, content_bytes: bytes, file_format: F
                 
         logger.info(f"Saved {transaction_count} transactions for file {file_id}")
         
-        # Update the file record with transaction count
-        update_transaction_file(file_id, {
-            'transactionCount': str(transaction_count)
-        })
+        # Update the file record with transaction count and status
+        update_data = {
+            'transactionCount': str(transaction_count),
+            'processingStatus': ProcessingStatus.PROCESSED
+        }
+        if field_map:
+            update_data['fieldMapId'] = field_map.field_map_id
+            
+        update_transaction_file(file_id, update_data)
         
         return transaction_count
     except Exception as parse_error:
-        logger.error(f"Error parsing transactions: {str(parse_error)}")
+        logger.error(f"Error processing transactions: {str(parse_error)}")
+        update_transaction_file(file_id, {
+            'processingStatus': ProcessingStatus.ERROR,
+            'errorMessage': str(parse_error)
+        })
         return 0
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
