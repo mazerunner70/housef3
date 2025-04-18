@@ -15,7 +15,8 @@ from utils.db_utils import (
     update_account,
     delete_account,
     list_account_files,
-    delete_account_files
+    delete_file_metadata,
+    delete_transactions_for_file
 )
 from utils.auth import get_user_from_event
 
@@ -300,12 +301,12 @@ def delete_account_files_handler(event: Dict[str, Any], user: Dict[str, Any]) ->
         # Delete each file and its transactions
         for file in files:
             try:
-                # Delete all transactions for the file
-                transactions_deleted = delete_file_transactions(file.file_id)
+                # First delete all transactions associated with the file
+                transactions_deleted = delete_transactions_for_file(file.file_id)
                 total_transactions += transactions_deleted
                 
-                # Delete the file
-                delete_transaction_file(file.file_id)
+                # Then delete the file metadata itself
+                delete_file_metadata(file.file_id)
                 logger.info(f"Deleted file {file.file_id} and its {transactions_deleted} transactions")
             except Exception as file_error:
                 logger.error(f"Error deleting file {file.file_id}: {str(file_error)}")

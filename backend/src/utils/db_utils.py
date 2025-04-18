@@ -524,33 +524,50 @@ def create_transaction(transaction_data: Dict[str, Any]) -> Transaction:
         raise
 
 
-def delete_file_transactions(file_id: str) -> int:
+def delete_transactions_for_file(file_id: str) -> int:
     """
-    Delete all transactions for a file.
+    Delete all transactions associated with a file.
     
     Args:
-        file_id: ID of the file whose transactions should be deleted
+        file_id: The ID of the file whose transactions should be deleted
         
     Returns:
-        Number of deleted transactions
+        Number of transactions deleted
     """
     try:
-        # First, get all transactions for the file
+        # Get all transactions for the file
         transactions = list_file_transactions(file_id)
-        deleted_count = 0
+        count = len(transactions)
         
-        # Delete each transaction
-        with get_transactions_table().batch_writer() as batch:
-            for transaction in transactions:
-                batch.delete_item(
-                    Key={
-                        'transactionId': transaction['transactionId']
-                    }
-                )
-                deleted_count += 1
+        if count > 0:
+            # Delete transactions in batches of 25 (DynamoDB limit)
+            table = get_transactions_table()
+            with table.batch_writer() as batch:
+                for transaction in transactions:
+                    batch.delete_item(Key={'transactionId': transaction['transactionId']})
+            
+            logger.info(f"Deleted {count} transactions for file {file_id}")
         
-        logger.info(f"Deleted {deleted_count} transactions for file {file_id}")
-        return deleted_count
-    except Exception as e:
+        return count
+    except ClientError as e:
         logger.error(f"Error deleting transactions for file {file_id}: {str(e)}")
+        raise
+
+
+def delete_file_metadata(file_id: str) -> bool:
+    """
+    Delete a file metadata record from the files table.
+    
+    Args:
+        file_id: The ID of the file to delete
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        get_files_table().delete_item(Key={'fileId': file_id})
+        logger.info(f"Deleted file metadata for {file_id}")
+        return True
+    except ClientError as e:
+        logger.error(f"Error deleting file metadata {file_id}: {str(e)}")
         raise 

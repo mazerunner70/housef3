@@ -9,8 +9,9 @@ handle_error() {
 
 # Get configuration from Terraform
 echo "Getting configuration from Terraform..."
-cd "$(dirname "$0")/../infrastructure/terraform"
-API_ENDPOINT=$(terraform output -raw api_accounts_endpoint)
+cd "$(dirname "$0")/../../infrastructure/terraform"
+CLOUDFRONT_DOMAIN=$(terraform output -raw cloudfront_distribution_domain)
+API_ENDPOINT="https://$CLOUDFRONT_DOMAIN/api/accounts"
 CLIENT_ID=$(terraform output -raw cognito_user_pool_client_id)
 USER_POOL_ID=$(terraform output -raw cognito_user_pool_id)
 cd - > /dev/null
@@ -47,6 +48,9 @@ TEST_INSTITUTION="Test Bank"
 # Step 1: List initial accounts
 echo -e "\n1. Testing GET /accounts (initial list)"
 LIST_RESPONSE=$(curl -s "$API_ENDPOINT" -H "Authorization: $TOKEN")
+echo "Raw response:"
+echo "$LIST_RESPONSE"
+echo "Attempting to parse with jq:"
 echo "$LIST_RESPONSE" | jq .
 
 INITIAL_ACCOUNT_COUNT=$(echo "$LIST_RESPONSE" | jq -r '.metadata.totalAccounts // "0"')
