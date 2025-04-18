@@ -268,6 +268,59 @@ resource "aws_apigatewayv2_route" "delete_transaction" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# Field map routes
+resource "aws_apigatewayv2_integration" "field_map_operations" {
+  api_id                 = aws_apigatewayv2_api.main.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.field_map_operations.invoke_arn
+  payload_format_version = "2.0"
+}
+
+# Create field map
+resource "aws_apigatewayv2_route" "create_field_map" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /field-maps"
+  target             = "integrations/${aws_apigatewayv2_integration.field_map_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Get field map by ID
+resource "aws_apigatewayv2_route" "get_field_map" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /field-maps/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.field_map_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# List field maps
+resource "aws_apigatewayv2_route" "list_field_maps" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /field-maps"
+  target             = "integrations/${aws_apigatewayv2_integration.field_map_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Update field map
+resource "aws_apigatewayv2_route" "update_field_map" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "PUT /field-maps/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.field_map_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Delete field map
+resource "aws_apigatewayv2_route" "delete_field_map" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "DELETE /field-maps/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.field_map_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 resource "aws_apigatewayv2_stage" "main" {
   api_id      = aws_apigatewayv2_api.main.id
   name        = var.environment

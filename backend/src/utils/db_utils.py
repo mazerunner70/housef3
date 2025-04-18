@@ -34,11 +34,13 @@ ENVIRONMENT = os.environ.get('ENVIRONMENT', 'dev')
 ACCOUNTS_TABLE = os.environ.get('ACCOUNTS_TABLE')
 FILES_TABLE = os.environ.get('FILES_TABLE')
 TRANSACTIONS_TABLE = os.environ.get('TRANSACTIONS_TABLE')
+FIELD_MAPS_TABLE = os.environ.get('FIELD_MAPS_TABLE')
 
 # Initialize table resources lazily
 _accounts_table = None
 _files_table = None
 _transactions_table = None
+_field_maps_table = None
 
 def get_accounts_table():
     """Get the accounts table resource, initializing it if needed."""
@@ -60,6 +62,13 @@ def get_transactions_table():
     if _transactions_table is None and TRANSACTIONS_TABLE:
         _transactions_table = dynamodb.Table(TRANSACTIONS_TABLE)
     return _transactions_table
+
+def get_field_maps_table():
+    """Get the field maps table resource, initializing it if needed."""
+    global _field_maps_table
+    if _field_maps_table is None and FIELD_MAPS_TABLE:
+        _field_maps_table = dynamodb.Table(FIELD_MAPS_TABLE)
+    return _field_maps_table
 
 def get_account(account_id: str) -> Optional[Account]:
     """

@@ -72,8 +72,11 @@ resource "aws_cloudfront_function" "rewrite_api_path" {
       var request = event.request;
       var uri = request.uri;
       
-      // Remove /api prefix (origin_path will add /dev)
-      request.uri = uri.replace(/^\/api/, '');
+      // Only modify API requests
+      if (uri.startsWith('/api/')) {
+        // Remove /api prefix (origin_path will add /dev)
+        request.uri = uri.replace(/^\/api/, '');
+      }
       
       return request;
     }
@@ -142,7 +145,7 @@ resource "aws_cloudfront_distribution" "frontend" {
     }
   }
 
-  # Default behavior for S3 bucket
+  # Default behavior for S3 bucket (frontend)
   default_cache_behavior {
     allowed_methods  = ["GET", "HEAD", "OPTIONS"]
     cached_methods   = ["GET", "HEAD"]
@@ -162,17 +165,21 @@ resource "aws_cloudfront_distribution" "frontend" {
     viewer_protocol_policy = "redirect-to-https"
   }
 
-  # For SPA routing, we need to serve index.html for all routes that don't match files
+  # Only apply SPA routing (serving index.html) for frontend routes
+  # These won't affect /api/* routes due to the ordered_cache_behavior above
+  # which takes precedence for /api/* paths
   custom_error_response {
     error_code         = 403
-    response_code      = 200
+    response_code      = 403
     response_page_path = "/index.html"
+    error_caching_min_ttl = 0
   }
   
   custom_error_response {
     error_code         = 404
-    response_code      = 200
+    response_code      = 404
     response_page_path = "/index.html"
+    error_caching_min_ttl = 0
   }
 
   price_class = "PriceClass_100"
@@ -183,7 +190,6 @@ resource "aws_cloudfront_distribution" "frontend" {
     }
   }
 
-  # Using the CloudFront managed SSL certificate
   viewer_certificate {
     cloudfront_default_certificate = true
   }

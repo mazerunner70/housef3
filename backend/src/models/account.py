@@ -3,6 +3,7 @@ Account models for the financial account management system.
 """
 import enum
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, Dict, Any
 from decimal import Decimal

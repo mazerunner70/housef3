@@ -20,4 +20,8 @@ def create_response(status_code: int, body: Dict[str, Any]) -> Dict[str, Any]:
             "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS"
         },
         "body": json.dumps(body, cls=DecimalEncoder)
-    } 
+    }
+
+def handle_error(status_code: int, message: str) -> Dict[str, Any]:
+    """Create a standardized error response."""
+    return create_response(status_code, {"message": message}) 

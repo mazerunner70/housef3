@@ -186,7 +186,9 @@ resource "aws_iam_role_policy" "lambda_dynamodb_access" {
           aws_dynamodb_table.accounts.arn,
           "${aws_dynamodb_table.accounts.arn}/index/*",
           aws_dynamodb_table.transactions.arn,
-          "${aws_dynamodb_table.transactions.arn}/index/*"
+          "${aws_dynamodb_table.transactions.arn}/index/*",
+          aws_dynamodb_table.field_maps.arn,
+          "${aws_dynamodb_table.field_maps.arn}/index/*"
         ]
       }
     ]

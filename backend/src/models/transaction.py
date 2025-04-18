@@ -121,4 +121,56 @@ class Transaction:
             memo=data.get("memo"),
             check_number=data.get("checkNumber"),
             reference=data.get("reference")
-        ) 
+        )
+
+def validate_transaction_data(data: Dict[str, Any]) -> bool:
+    """
+    Validate transaction data according to business rules.
+    
+    Args:
+        data: Dictionary containing transaction data
+        
+    Returns:
+        True if valid
+        
+    Raises:
+        ValueError: If validation fails
+    """
+    required_fields = ["fileId", "userId", "date", "description", "amount", "runningTotal"]
+    
+    # Check required fields
+    for field in required_fields:
+        if field not in data or not data[field]:
+            raise ValueError(f"Missing required field: {field}")
+    
+    # Validate numeric fields
+    try:
+        float(data["amount"])
+    except (ValueError, TypeError):
+        raise ValueError("Amount must be a valid number")
+        
+    try:
+        float(data["runningTotal"])
+    except (ValueError, TypeError):
+        raise ValueError("Running total must be a valid number")
+    
+    # Validate string lengths
+    if len(data["description"]) > 1000:
+        raise ValueError("Description must be 1000 characters or less")
+        
+    if "memo" in data and data["memo"] and len(data["memo"]) > 1000:
+        raise ValueError("Memo must be 1000 characters or less")
+        
+    if "category" in data and data["category"] and len(data["category"]) > 100:
+        raise ValueError("Category must be 100 characters or less")
+        
+    if "payee" in data and data["payee"] and len(data["payee"]) > 100:
+        raise ValueError("Payee must be 100 characters or less")
+        
+    if "checkNumber" in data and data["checkNumber"] and len(data["checkNumber"]) > 50:
+        raise ValueError("Check number must be 50 characters or less")
+        
+    if "reference" in data and data["reference"] and len(data["reference"]) > 100:
+        raise ValueError("Reference must be 100 characters or less")
+    
+    return True 
