@@ -8,7 +8,7 @@ handle_error() {
 }
 
 # Get bucket name from Terraform output
-cd "$(dirname "$0")/../infrastructure/terraform"
+cd "$(dirname "$0")/../../infrastructure/terraform"
 S3_BUCKET=$(terraform output -raw file_storage_bucket_name | cat)
 cd - > /dev/null
 

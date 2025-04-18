@@ -8,14 +8,15 @@ handle_error() {
 }
 
 # Get table names from Terraform output
-cd $(dirname "$0")/../infrastructure/terraform
+cd "$(dirname "$0")/../../infrastructure/terraform"
 ACCOUNTS_TABLE=$(terraform output -raw accounts_table_name | cat)
-TRANSACTION_FILES_TABLE=$(terraform output -raw transaction_files_table_name | cat)
-cd ../..
+FILES_TABLE=$(terraform output -raw transaction_files_table_name | cat)
+TRANSACTIONS_TABLE=$(terraform output -raw transactions_table_name | cat)
+cd - > /dev/null
 
 echo "Testing DynamoDB tables configuration"
 echo "Accounts table: $ACCOUNTS_TABLE"
-echo "Transaction files table: $TRANSACTION_FILES_TABLE"
+echo "Transaction files table: $FILES_TABLE"
 
 # Test 1: Verify tables exist
 echo -e "\n1. Testing tables existence..."
@@ -25,7 +26,7 @@ ACCOUNTS_DESC=$(aws dynamodb describe-table --table-name $ACCOUNTS_TABLE --no-cl
 echo "✅ Accounts table exists"
 
 # Check transaction files table
-FILES_DESC=$(aws dynamodb describe-table --table-name $TRANSACTION_FILES_TABLE --no-cli-pager 2>/dev/null) || handle_error "Transaction files table does not exist"
+FILES_DESC=$(aws dynamodb describe-table --table-name $FILES_TABLE --no-cli-pager 2>/dev/null) || handle_error "Transaction files table does not exist"
 echo "✅ Transaction files table exists"
 
 # Test 2: Verify accounts table schema
@@ -136,7 +137,7 @@ TEST_FILE_ID="test-file-$TEST_ID"
 # Create a test file record
 echo "   - Creating test file record..."
 aws dynamodb put-item \
-  --table-name $TRANSACTION_FILES_TABLE \
+  --table-name $FILES_TABLE \
   --item "{
     \"fileId\": {\"S\": \"$TEST_FILE_ID\"},
     \"userId\": {\"S\": \"$TEST_USER_ID\"},
@@ -151,7 +152,7 @@ aws dynamodb put-item \
 # Get the test file record
 echo "   - Retrieving test file record..."
 GET_RESULT=$(aws dynamodb get-item \
-  --table-name $TRANSACTION_FILES_TABLE \
+  --table-name $FILES_TABLE \
   --key "{\"fileId\": {\"S\": \"$TEST_FILE_ID\"}}" --no-cli-pager 2>/dev/null) || handle_error "Failed to retrieve test file record"
 
 if [[ "$GET_RESULT" == *"$TEST_FILE_ID"* ]]; then
@@ -166,7 +167,7 @@ FILES_USER_ID_INDEX=$(echo "$FILES_DESC" | grep -o '"IndexName": "[^"]*"' | grep
 # Query the test file by userId
 echo "   - Querying test file by userId using index $FILES_USER_ID_INDEX..."
 QUERY_RESULT=$(aws dynamodb query \
-  --table-name $TRANSACTION_FILES_TABLE \
+  --table-name $FILES_TABLE \
   --index-name "$FILES_USER_ID_INDEX" \
   --key-condition-expression "userId = :uid" \
   --expression-attribute-values "{\":uid\": {\"S\": \"$TEST_USER_ID\"}}" --no-cli-pager 2>/dev/null) || handle_error "Failed to query file by userId"
@@ -180,7 +181,7 @@ fi
 # Delete the test file record
 echo "   - Deleting test file record..."
 aws dynamodb delete-item \
-  --table-name $TRANSACTION_FILES_TABLE \
+  --table-name $FILES_TABLE \
   --key "{\"fileId\": {\"S\": \"$TEST_FILE_ID\"}}" --no-cli-pager 2>/dev/null || handle_error "Failed to delete test file record"
 
 echo "✅ Basic operations on transaction files table successful"

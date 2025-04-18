@@ -24,18 +24,29 @@ def get_user_from_event(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
     try:
         request_context = event.get("requestContext", {})
-        authorizer = request_context.get("authorizer", {}).get("jwt", {})
-        claims = authorizer.get("claims", {})
+        logger.info(f"Request context: {request_context}")
+        
+        authorizer = request_context.get("authorizer", {})
+        logger.info(f"Authorizer: {authorizer}")
+        
+        # Get claims from authorizer.jwt.claims
+        claims = authorizer.get("jwt", {}).get("claims", {})
+        logger.info(f"Claims: {claims}")
         
         user_sub = claims.get("sub")
+        logger.info(f"User sub: {user_sub}")
+        
         if not user_sub:
+            logger.warning(f"No sub claim found in authorizer claims: {claims}")
             return None
         
-        return {
+        user_info = {
             "id": user_sub,
             "email": claims.get("email", "unknown"),
             "auth_time": claims.get("auth_time")
         }
+        logger.info(f"Returning user info: {user_info}")
+        return user_info
     except Exception as e:
         logger.error(f"Error extracting user from event: {str(e)}")
         return None 

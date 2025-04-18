@@ -28,18 +28,18 @@ resource "aws_apigatewayv2_authorizer" "cognito" {
   }
 }
 
-resource "aws_apigatewayv2_integration" "colors" {
+resource "aws_apigatewayv2_integration" "getcolors" {
   api_id                 = aws_apigatewayv2_api.main.id
   integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.colors.invoke_arn
+  integration_uri        = aws_lambda_function.getcolors.invoke_arn
   payload_format_version = "2.0"
-  description           = "Lambda integration for colors endpoint"
+  description           = "Lambda integration for getcolors endpoint"
 }
 
-resource "aws_apigatewayv2_route" "colors" {
+resource "aws_apigatewayv2_route" "getcolors" {
   api_id             = aws_apigatewayv2_api.main.id
   route_key          = "GET /colors"
-  target             = "integrations/${aws_apigatewayv2_integration.colors.id}"
+  target             = "integrations/${aws_apigatewayv2_integration.getcolors.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
@@ -304,7 +304,7 @@ resource "aws_cloudwatch_log_group" "api_gateway" {
 resource "aws_lambda_permission" "api_gateway_colors" {
   statement_id  = "AllowAPIGatewayInvokeColors"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.colors.function_name
+  function_name = aws_lambda_function.getcolors.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/colors"
 }
@@ -334,6 +334,15 @@ resource "aws_lambda_permission" "api_gateway_transactions" {
   function_name = aws_lambda_function.transaction_operations.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/transactions*"
+}
+
+# Lambda permission for getcolors
+resource "aws_lambda_permission" "getcolors" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.getcolors.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
 }
 
 # Outputs

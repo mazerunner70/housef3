@@ -14,30 +14,6 @@ data "archive_file" "lambda_code" {
   output_path = "../../backend/lambda.zip"
 }
 
-# Colors Lambda
-resource "aws_lambda_function" "colors" {
-  filename         = data.archive_file.lambda_code.output_path
-  function_name    = "${var.project_name}-${var.environment}-colors"
-  handler          = "handlers/list_imports.handler"
-  runtime          = "python3.9"
-  role            = aws_iam_role.lambda_exec.arn
-  timeout         = 30
-  source_code_hash = data.archive_file.lambda_code.output_base64sha256
-  
-  environment {
-    variables = {
-      ENVIRONMENT    = var.environment
-      DYNAMODB_TABLE = aws_dynamodb_table.transaction_files.name
-    }
-  }
-  
-  tags = {
-    Environment = var.environment
-    Project     = var.project_name
-    ManagedBy   = "terraform"
-  }
-}
-
 # File Operations Lambda
 resource "aws_lambda_function" "file_operations" {
   filename         = data.archive_file.lambda_code.output_path
@@ -217,17 +193,6 @@ resource "aws_iam_role_policy" "lambda_dynamodb_access" {
   })
 }
 
-# CloudWatch Log Groups
-resource "aws_cloudwatch_log_group" "colors" {
-  name              = "/aws/lambda/${aws_lambda_function.colors.function_name}"
-  retention_in_days = 7
-
-  tags = {
-    Environment = var.environment
-    Project     = var.project_name
-    ManagedBy   = "terraform"
-  }
-}
 
 resource "aws_cloudwatch_log_group" "file_operations" {
   name              = "/aws/lambda/${aws_lambda_function.file_operations.function_name}"
@@ -274,10 +239,6 @@ resource "aws_cloudwatch_log_group" "transaction_operations" {
 }
 
 # Outputs
-output "lambda_colors_name" {
-  value = aws_lambda_function.colors.function_name
-}
-
 output "lambda_file_operations_name" {
   value = aws_lambda_function.file_operations.function_name
 }
@@ -292,4 +253,34 @@ output "lambda_account_operations_name" {
 
 output "lambda_transaction_operations_name" {
   value = aws_lambda_function.transaction_operations.function_name
+}
+
+output "lambda_getcolors_name" {
+  value = aws_lambda_function.getcolors.function_name
+}
+
+resource "aws_lambda_function" "getcolors" {
+  filename         = data.archive_file.lambda_code.output_path
+  function_name    = "${var.project_name}-getcolors"
+  role            = aws_iam_role.lambda_exec.arn
+  handler         = "handlers/getcolors.handler"
+  source_code_hash = data.archive_file.lambda_code.output_base64sha256
+  runtime         = "python3.11"
+  timeout         = 30
+  memory_size     = 128
+
+  environment {
+    variables = {
+      DYNAMODB_ACCOUNTS_TABLE = aws_dynamodb_table.accounts.name
+      DYNAMODB_FILES_TABLE   = aws_dynamodb_table.transaction_files.name
+      DYNAMODB_TRANSACTIONS_TABLE = aws_dynamodb_table.transactions.name
+      S3_BUCKET             = aws_s3_bucket.file_storage.id
+      TESTING              = "false"
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+  }
 } 

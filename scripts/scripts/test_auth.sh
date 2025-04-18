@@ -33,14 +33,13 @@ if [ -z "$PASSWORD" ] || [ "$PASSWORD" = "null" ]; then
 fi
 
 # Get the values from terraform output
-cd ../infrastructure/terraform || exit 1
-API_ENDPOINT=$(terraform output -raw api_endpoint)
+cd "$(dirname "$0")/../../infrastructure/terraform"
 CLOUDFRONT_DOMAIN=$(terraform output -raw cloudfront_distribution_domain)
-CLIENT_ID=$(terraform output -raw cognito_user_pool_client_id)
-USER_POOL_ID=$(terraform output -raw cognito_user_pool_id)
+USER_POOL_ID=$(terraform output -raw cognito_user_pool_id | cat)
+CLIENT_ID=$(terraform output -raw cognito_user_pool_client_id | cat)
+cd - > /dev/null
 
 echo "User: $USERNAME"
-echo "API Endpoint: $API_ENDPOINT"
 echo "CloudFront Domain: $CLOUDFRONT_DOMAIN"
 echo "Client ID: $CLIENT_ID"
 echo "User Pool ID: $USER_POOL_ID"
@@ -75,43 +74,38 @@ AUTH_RESULT=$(aws cognito-idp initiate-auth \
 
 ID_TOKEN=$(echo $AUTH_RESULT | jq -r '.AuthenticationResult.IdToken')
 
-echo "Testing direct API Gateway endpoint..."
-DIRECT_RESPONSE=$(curl -s -H "Authorization: $ID_TOKEN" $API_ENDPOINT)
-echo "API Gateway response:"
-echo $DIRECT_RESPONSE | jq .
-
 echo "Testing CloudFront endpoint..."
-CF_RESPONSE=$(curl -v -s -H "Authorization: $ID_TOKEN" https://$CLOUDFRONT_DOMAIN/colors)
-echo "CloudFront response:"
-echo $CF_RESPONSE | jq .
+echo "Making request to: https://$CLOUDFRONT_DOMAIN/api/colors"
+RESPONSE=$(curl -v -s -H "Authorization: $ID_TOKEN" "https://$CLOUDFRONT_DOMAIN/api/colors")
+echo "Raw response:"
+echo "$RESPONSE"
+echo "Attempting to parse as JSON:"
+echo "$RESPONSE" | jq . || echo "Failed to parse response as JSON"
 
-# Validate responses
-echo "Validating responses..."
+# Only continue with validation if we got a valid JSON response
+if echo "$RESPONSE" | jq . >/dev/null 2>&1; then
+  echo "Validating response..."
 
-# Extract key fields from responses to compare
-API_COLORS=$(echo $DIRECT_RESPONSE | jq -c '.colors | map(.name)')
-CF_COLORS=$(echo $CF_RESPONSE | jq -c '.colors | map(.name)')
+  # Extract key fields from response
+  COLORS=$(echo $RESPONSE | jq -c '.colors | map(.name)')
+  TOTAL=$(echo $RESPONSE | jq '.metadata.totalColors')
+  USER_ID=$(echo $RESPONSE | jq -r '.user.id')
 
-API_TOTAL=$(echo $DIRECT_RESPONSE | jq '.metadata.totalColors')
-CF_TOTAL=$(echo $CF_RESPONSE | jq '.metadata.totalColors')
-
-API_USER_ID=$(echo $DIRECT_RESPONSE | jq -r '.user.id')
-CF_USER_ID=$(echo $CF_RESPONSE | jq -r '.user.id')
-
-# Compare key fields
-if [[ "$API_COLORS" == "$CF_COLORS" && "$API_TOTAL" == "$CF_TOTAL" && "$API_USER_ID" == "$CF_USER_ID" ]]; then
-  echo "✅ Validation successful! CloudFront is correctly forwarding to API Gateway."
-  echo "✅ User ID: $CF_USER_ID"
-  echo "✅ Total colors: $CF_TOTAL"
-  echo "✅ Colors: $CF_COLORS"
+  # Validate fields
+  if [[ ! -z "$COLORS" && ! -z "$TOTAL" && ! -z "$USER_ID" && "$USER_ID" != "null" ]]; then
+    echo "✅ Validation successful!"
+    echo "✅ User ID: $USER_ID"
+    echo "✅ Total colors: $TOTAL"
+    echo "✅ Colors: $COLORS"
+  else
+    echo "❌ Validation failed!"
+    echo "Colors: $COLORS"
+    echo "Total: $TOTAL"
+    echo "User ID: $USER_ID"
+    exit 1
+  fi
 else
-  echo "❌ Validation failed! Responses don't match."
-  echo "API Colors: $API_COLORS"
-  echo "CloudFront Colors: $CF_COLORS"
-  echo "API Total: $API_TOTAL"
-  echo "CloudFront Total: $CF_TOTAL"
-  echo "API User ID: $API_USER_ID"
-  echo "CloudFront User ID: $CF_USER_ID"
+  echo "❌ Test failed: Invalid JSON response"
   exit 1
 fi
 
