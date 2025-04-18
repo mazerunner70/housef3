@@ -162,7 +162,7 @@ else
 fi
 
 # Get the index name for userId in files table
-FILES_USER_ID_INDEX=$(echo "$FILES_DESC" | grep -o '"IndexName": "[^"]*"' | grep -o '"[^"]*"$' | tr -d '"' | head -1)
+FILES_USER_ID_INDEX=$(echo "$FILES_DESC" | grep -o '"IndexName": "[^"]*"' | grep -o '"[^"]*"$' | tr -d '"' | grep "UserIdIndex")
 
 # Query the test file by userId
 echo "   - Querying test file by userId using index $FILES_USER_ID_INDEX..."

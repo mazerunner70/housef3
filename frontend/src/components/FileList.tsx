@@ -14,6 +14,8 @@ import {
 } from '../services/AccountService';
 import './FileList.css';
 import TransactionList from './TransactionList';
+import FileFieldMapStatus from './FileFieldMapStatus';
+import FieldMapList from './FieldMapList';
 
 interface FileListProps {
   onRefreshNeeded: boolean;
@@ -39,6 +41,8 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
   const [success, setSuccess] = useState<string | null>(null);
   const [viewingTransactionsFileId, setViewingTransactionsFileId] = useState<string | null>(null);
   const [viewingTransactionsFile, setViewingTransactionsFile] = useState<FileMetadata | null>(null);
+  const [selectedMapFileId, setSelectedMapFileId] = useState<string | null>(null);
+  const [showFieldMapModal, setShowFieldMapModal] = useState<boolean>(false);
 
   // Load files from API
   const loadFiles = async () => {
@@ -347,6 +351,15 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
     setViewingTransactionsFile(null);
   };
 
+  const handleSelectMap = (fileId: string) => {
+    setSelectedMapFileId(fileId);
+    setShowFieldMapModal(true);
+  };
+
+  const handleCreateMap = () => {
+    setShowFieldMapModal(true);
+  };
+
   // Render filtered and sorted files
   const filteredAndSortedFiles = getFilteredAndSortedFiles();
 
@@ -427,6 +440,7 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
                     <th>Status</th>
                     <th>Account</th>
                     <th>Opening Balance</th>
+                    <th>Field Map</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -580,6 +594,14 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
                           </button>
                         )}
                       </td>
+                      <td>
+                        <FileFieldMapStatus
+                          fieldMap={file.fieldMap}
+                          onSelectMap={() => handleSelectMap(file.fileId)}
+                          onCreateMap={handleCreateMap}
+                          className="file-list-field-map"
+                        />
+                      </td>
                       <td className="file-actions">
                         <button 
                           className="download-button"
@@ -629,6 +651,37 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
               openingBalance={viewingTransactionsFile.openingBalance}
               onClose={handleCloseTransactions}
             />
+          </div>
+        </div>
+      )}
+
+      {showFieldMapModal && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <FieldMapList
+              onSelectMap={(map) => {
+                // Handle map selection
+                setShowFieldMapModal(false);
+              }}
+              onCreateMap={() => {
+                // Handle map creation
+                setShowFieldMapModal(false);
+              }}
+              onEditMap={(map) => {
+                // Handle map editing
+                setShowFieldMapModal(false);
+              }}
+              onDeleteMap={(map) => {
+                // Handle map deletion
+                setShowFieldMapModal(false);
+              }}
+            />
+            <button 
+              className="modal-close-button"
+              onClick={() => setShowFieldMapModal(false)}
+            >
+              Close
+            </button>
           </div>
         </div>
       )}

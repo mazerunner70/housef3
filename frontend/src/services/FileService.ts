@@ -13,6 +13,11 @@ export interface FileMetadata {
   processingStatus?: 'pending' | 'processing' | 'processed' | 'error';
   errorMessage?: string;
   openingBalance?: number;
+  fieldMap?: {
+    fieldMapId: string;
+    name: string;
+    description?: string;
+  };
 }
 
 export interface FileListResponse {

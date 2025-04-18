@@ -4,22 +4,29 @@ import { getCurrentUser, refreshToken, isAuthenticated } from './AuthService';
 const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/api/colors`;
 
 export interface Color {
-  id: string;
+  id?: string;
   name: string;
   hex: string;
-  rgb: string;
-  hsl: string;
-  createdAt: string;
-  updatedAt: string;
+  rgb?: string;
+  hsl?: string;
+  category?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ColorListResponse {
-  items: Color[];
-  nextToken?: string;
+  colors: Color[];
+  metadata: {
+    totalColors: number;
+  };
+  user: {
+    id: string;
+    email: string;
+  };
 }
 
 // List colors with pagination
-export const listColors = async (nextToken?: string): Promise<ColorListResponse> => {
+export const listColors = async (): Promise<ColorListResponse> => {
   const currentUser = getCurrentUser();
   
   if (!currentUser || !currentUser.token) {

@@ -1,10 +1,14 @@
 .color-display {
-  margin-top: 2rem;
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .color-display h2 {
-  margin-bottom: 1rem;
+  font-size: 2rem;
   color: #333;
+  margin-bottom: 2rem;
+  text-align: center;
 }
 
 .metadata {
@@ -23,38 +27,58 @@
 
 .color-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 1.5rem;
-  margin-top: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 2rem;
+  padding: 1rem;
 }
 
-.color-card {
-  display: flex;
-  flex-direction: column;
-  border-radius: 8px;
+.color-item {
+  background: white;
+  border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.color-card:hover {
+.color-item:hover {
   transform: translateY(-5px);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
 }
 
-.color-preview {
-  height: 140px;
+.color-swatch {
+  height: 160px;
   width: 100%;
+  transition: opacity 0.2s ease;
+}
+
+.color-swatch:hover {
+  opacity: 0.9;
 }
 
 .color-info {
-  padding: 1rem;
-  background-color: white;
+  padding: 1.5rem;
+  background: white;
 }
 
 .color-info h3 {
-  margin: 0 0 0.5rem 0;
+  margin: 0 0 1rem 0;
+  font-size: 1.4rem;
   color: #333;
+}
+
+.color-info p {
+  margin: 0.5rem 0;
+  font-family: monospace;
+  font-size: 1rem;
+  color: #666;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.color-info p::before {
+  content: "•";
+  color: #999;
 }
 
 .color-category {
@@ -72,18 +96,22 @@
   margin-top: 0.5rem;
 }
 
-.loading {
-  padding: 2rem;
+.color-display .loading {
   text-align: center;
+  padding: 3rem;
   color: #666;
+  font-size: 1.2rem;
 }
 
-.error {
-  padding: 1rem;
-  background-color: #ffebee;
-  color: #e53935;
-  border-radius: 4px;
-  margin-top: 1rem;
+.color-display .error {
+  text-align: center;
+  padding: 2rem;
+  color: #dc3545;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin: 2rem auto;
+  max-width: 600px;
 }
 
 .no-data {
@@ -92,4 +120,25 @@
   color: #666;
   background-color: #f5f5f5;
   border-radius: 4px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .color-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1.5rem;
+    padding: 0.5rem;
+  }
+
+  .color-swatch {
+    height: 140px;
+  }
+
+  .color-info {
+    padding: 1rem;
+  }
+
+  .color-info h3 {
+    font-size: 1.2rem;
+  }
 } 

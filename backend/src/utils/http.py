@@ -16,7 +16,7 @@ def create_response(status_code: int, body: Dict[str, Any]) -> Dict[str, Any]:
         "headers": {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": ["Content-Type", "Authorization"],
+            "Access-Control-Allow-Headers": "Content-Type,Authorization",
             "Access-Control-Allow-Methods": "GET,OPTIONS"
         },
         "body": json.dumps(body, cls=DecimalEncoder)
