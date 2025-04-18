@@ -24,5 +24,13 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+echo -e "\n3. Running load_files.sh..."
+bash "$SCRIPT_DIR/load_files.sh"
+
+if [ $? -ne 0 ]; then
+    echo "❌ load_files.sh failed"
+    exit 1
+fi
+
 echo -e "\n=== Test Use Case Complete ==="
 echo "✅ All steps completed successfully" 

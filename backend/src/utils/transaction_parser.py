@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 from models.transaction_file import FileFormat
-from utils.db_utils import create_transaction, delete_file_transactions, update_transaction_file
+from utils.db_utils import create_transaction, delete_transactions_for_file, update_transaction_file
 
 # Configure logging
 logger = logging.getLogger()
@@ -57,12 +57,8 @@ def process_file_transactions(file_id: str, content_bytes: bytes, file_format: F
             opening_balance
         )
         
-        # Delete any existing transactions for this file
-        try:
-            delete_file_transactions(file_id)
-            logger.info(f"Deleted existing transactions for file {file_id}")
-        except Exception as del_error:
-            logger.warning(f"Error deleting existing transactions: {str(del_error)}")
+        # Delete existing transactions if any
+        delete_transactions_for_file(file_id)
         
         # Save new transactions to the database
         transaction_count = 0
@@ -92,10 +88,22 @@ def process_file_transactions(file_id: str, content_bytes: bytes, file_format: F
 
 def find_column_index(header: List[str], possible_names: List[str]) -> Optional[int]:
     """Find the index of a column given possible column names."""
+    # Convert header to lowercase for case-insensitive comparison
+    header_lower = [col.lower() for col in header]
+    
+    # Check for exact matches first
     for name in possible_names:
-        for i, col in enumerate(header):
-            if name.lower() in col.lower():
+        name_lower = name.lower()
+        if name_lower in header_lower:
+            return header_lower.index(name_lower)
+    
+    # Check for partial matches
+    for name in possible_names:
+        name_lower = name.lower()
+        for i, col in enumerate(header_lower):
+            if name_lower in col:
                 return i
+    
     return None
 
 def parse_date(date_str: str) -> Optional[str]:
@@ -140,13 +148,24 @@ def parse_csv_transactions(content: bytes, opening_balance: float) -> List[Dict[
         if not header:
             return []
             
-        # Try to identify column positions
-        date_col = find_column_index(header, ['date', 'transaction date', 'posted date'])
-        desc_col = find_column_index(header, ['description', 'payee', 'memo', 'note'])
-        amount_col = find_column_index(header, ['amount', 'transaction amount'])
+        # Try to identify column positions with expanded column names
+        date_col = find_column_index(header, [
+            'date', 'transaction date', 'posted date', 'trans date', 
+            'date posted', 'posting date', 'txn date'
+        ])
+        desc_col = find_column_index(header, [
+            'description', 'payee', 'memo', 'note', 'details', 
+            'transaction description', 'merchant', 'name'
+        ])
+        amount_col = find_column_index(header, [
+            'amount', 'transaction amount', 'debit', 'credit',
+            'withdrawal', 'deposit', 'value', 'sum'
+        ])
         
         if date_col is None or desc_col is None or amount_col is None:
             logger.warning("Could not identify required columns in CSV file")
+            logger.info(f"Available columns: {header}")
+            logger.info(f"Found: date_col={date_col}, desc_col={desc_col}, amount_col={amount_col}")
             return []
             
         # Parse transactions

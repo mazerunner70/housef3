@@ -230,18 +230,14 @@ def delete_account(account_id: str) -> bool:
         associated_files = list_account_files(account_id)
         logger.info(f"Found {len(associated_files)} files associated with account {account_id}")
         
-        # Update associated files to remove the account association
+        # Delete each associated file and its transactions
         for file in associated_files:
             try:
-                # Create updated file data without the account association
-                updated_data = file.to_dict()
-                updated_data.pop('accountId', None)  # Remove the account ID association
-                
-                # Update the file
-                update_transaction_file(file.file_id, updated_data)
-                logger.info(f"Removed account association from file {file.file_id}")
+                # Delete the file and its transactions
+                delete_transaction_file(file.file_id)
+                logger.info(f"Deleted file {file.file_id} and its transactions")
             except Exception as file_error:
-                logger.error(f"Error updating file {file.file_id}: {str(file_error)}")
+                logger.error(f"Error deleting file {file.file_id}: {str(file_error)}")
                 # Continue with other files
         
         # Delete the account
@@ -395,29 +391,24 @@ def update_transaction_file(file_id: str, update_data: Dict[str, Any]) -> Transa
         if not file:
             raise ValueError(f"File {file_id} not found")
         
-        # Update processing status if provided
-        if 'processingStatus' in update_data:
-            status = update_data['processingStatus']
-            record_count = int(update_data['recordCount']) if 'recordCount' in update_data else None
-            
-            date_range = None
-            if 'dateRange' in update_data:
-                dr = update_data['dateRange']
-                date_range = (dr['startDate'], dr['endDate'])
-                
-            error_message = update_data.get('errorMessage')
-            
-            file.update_processing_status(
-                status=status,
-                record_count=record_count,
-                date_range=date_range,
-                error_message=error_message
-            )
+        # Get the current file data as a dictionary
+        file_dict = file.to_dict()
+        
+        # Update with new data
+        for key, value in update_data.items():
+            if value is None:
+                # If value is None, remove the field
+                file_dict.pop(key, None)
+            else:
+                file_dict[key] = value
+        
+        # Create a new TransactionFile object with updated data
+        updated_file = TransactionFile.from_dict(file_dict)
         
         # Save updates to DynamoDB
-        get_files_table().put_item(Item=file.to_dict())
+        get_files_table().put_item(Item=file_dict)
         
-        return file
+        return updated_file
     except ValueError as e:
         logger.error(f"Validation error updating file {file_id}: {str(e)}")
         raise
@@ -428,7 +419,7 @@ def update_transaction_file(file_id: str, update_data: Dict[str, Any]) -> Transa
 
 def delete_transaction_file(file_id: str) -> bool:
     """
-    Delete a transaction file.
+    Delete a transaction file and all its associated transactions.
     
     Args:
         file_id: The unique identifier of the file to delete
@@ -442,8 +433,13 @@ def delete_transaction_file(file_id: str) -> bool:
         if not file:
             raise ValueError(f"File {file_id} not found")
         
-        # Delete the file
+        # First delete all associated transactions
+        transactions_deleted = delete_transactions_for_file(file_id)
+        logger.info(f"Deleted {transactions_deleted} transactions for file {file_id}")
+        
+        # Then delete the file metadata
         get_files_table().delete_item(Key={'fileId': file_id})
+        logger.info(f"Deleted file metadata for {file_id}")
         
         return True
     except ClientError as e:
@@ -463,6 +459,7 @@ def list_file_transactions(file_id: str) -> List[Dict[str, Any]]:
     """
     try:
         response = get_transactions_table().query(
+            IndexName='FileIdIndex',
             KeyConditionExpression=Key('fileId').eq(file_id)
         )
         return response.get('Items', [])

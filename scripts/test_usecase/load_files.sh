@@ -73,12 +73,21 @@ for SUBFOLDER in "$DATA_DIR"/*/; do
         FILE_NAME=$(basename "$FILE")
         echo "Processing file: $FILE_NAME"
 
-        # Get upload URL
-        echo "Getting upload URL..."
+        # Get file size
+        FILE_SIZE=$(wc -c < "$FILE")
+        echo "File size: $FILE_SIZE bytes"
+
+        # Get upload URL with account association
+        echo "Getting upload URL with account association..."
         UPLOAD_URL_RESPONSE=$(curl -s -X POST "https://${CLOUDFRONT_DOMAIN}/api/files/upload" \
             -H "Authorization: Bearer ${ID_TOKEN}" \
             -H "Content-Type: application/json" \
-            -d "{\"fileName\": \"$FILE_NAME\"}")
+            -d "{
+                \"fileName\": \"$FILE_NAME\",
+                \"contentType\": \"text/csv\",
+                \"fileSize\": $FILE_SIZE,
+                \"accountId\": \"$ACCOUNT_ID\"
+            }")
 
         echo "Upload URL Response: $UPLOAD_URL_RESPONSE"
 
@@ -97,14 +106,7 @@ for SUBFOLDER in "$DATA_DIR"/*/; do
             -H "Content-Type: text/csv" \
             --data-binary "@$FILE"
 
-        # Associate file with account
-        echo "Associating file with account..."
-        curl -s -X POST "https://${CLOUDFRONT_DOMAIN}/api/accounts/${ACCOUNT_ID}/files" \
-            -H "Authorization: Bearer ${ID_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "{\"fileId\": \"$FILE_ID\", \"fileName\": \"$FILE_NAME\"}"
-
-        echo "File processed successfully"
+        echo "File uploaded and associated with account successfully"
     done
 done
 

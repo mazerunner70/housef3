@@ -5,14 +5,14 @@ set -e
 
 # Get directory of this script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Navigate to project root
 cd "$PROJECT_ROOT"
 
 # Update environment variables from Terraform outputs
 echo "Updating frontend environment variables..."
-bash scripts/update-frontend-env.sh
+bash scripts/scripts/update-frontend-env.sh
 
 # Navigate to frontend directory
 cd frontend

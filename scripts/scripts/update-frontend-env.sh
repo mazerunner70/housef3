@@ -2,7 +2,7 @@
 set -e
 
 # Navigate to the Terraform directory
-cd "$(dirname "$0")/../infrastructure/terraform"
+cd "$(dirname "$0")/../../infrastructure/terraform"
 
 # Extract Cognito configuration variables
 COGNITO_USER_POOL_ID=$(terraform output -raw cognito_user_pool_id)

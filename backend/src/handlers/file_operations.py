@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional, Union
 from decimal import Decimal
 from models.transaction_file import FileFormat, ProcessingStatus
 from models.transaction import Transaction
-from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_transaction_file, get_account, list_file_transactions, delete_file_transactions
+from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_file_metadata, get_account, list_file_transactions, delete_transactions_for_file
 from utils.transaction_parser import process_file_transactions
 
 # Configure logging
@@ -30,7 +30,7 @@ try:
     
     # Now try the imports
     from models.transaction_file import TransactionFile, FileFormat, ProcessingStatus, DateRange, validate_transaction_file_data
-    from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_transaction_file
+    from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_file_metadata
     from utils.db_utils import get_account
     
     logger.info("Successfully imported modules using adjusted path")
@@ -41,7 +41,7 @@ except ImportError as e:
     # Last resort, try relative import
     try:
         from ..models.transaction_file import TransactionFile, FileFormat, ProcessingStatus, DateRange, validate_transaction_file_data
-        from ..utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_transaction_file
+        from ..utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_file_metadata
         from ..utils.db_utils import get_account
         logger.info("Successfully imported modules using relative imports")
     except ImportError as e2:
@@ -924,7 +924,7 @@ def delete_file_transactions_handler(event: Dict[str, Any], user: Dict[str, Any]
         
         # Delete all transactions for the file
         try:
-            deleted_count = delete_file_transactions(file_id)
+            deleted_count = delete_transactions_for_file(file_id)
             
             return create_response(200, {
                 'fileId': file_id,

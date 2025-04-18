@@ -14,7 +14,7 @@ from models.transaction_file import FileFormat, ProcessingStatus
 from utils.transaction_parser import parse_transactions, process_file_transactions
 from models.transaction import Transaction
 from utils.file_analyzer import analyze_file_format
-from utils.db_utils import get_transaction_file, update_transaction_file, create_transaction, delete_file_transactions
+from utils.db_utils import get_transaction_file, update_transaction_file, create_transaction, delete_transactions_for_file
 
 # Configure logging
 logger = logging.getLogger()
@@ -85,12 +85,8 @@ def process_file_transactions(file_id: str, content_bytes: bytes, file_format: F
             opening_balance
         )
         
-        # Delete any existing transactions for this file
-        try:
-            delete_file_transactions(file_id)
-            logger.info(f"Deleted existing transactions for file {file_id}")
-        except Exception as del_error:
-            logger.warning(f"Error deleting existing transactions: {str(del_error)}")
+        # Delete existing transactions if any
+        delete_transactions_for_file(file_id)
         
         # Save new transactions to the database
         transaction_count = 0
@@ -376,21 +372,21 @@ def find_file_records_by_s3_key(s3_key: str) -> List[Dict[str, Any]]:
     Find file records in DynamoDB that match the given S3 key.
     
     Args:
-        s3_key: S3 object key to match
+        s3_key: The S3 key to search for
         
     Returns:
         List of matching file records
     """
     try:
-        # Query for records with the matching S3 key
-        response = file_table.scan(
-            FilterExpression="s3Key = :key",
-            ExpressionAttributeValues={
-                ":key": s3_key
-            }
+        # Query DynamoDB using the S3Key index
+        response = file_table.query(
+            IndexName='S3KeyIndex',
+            KeyConditionExpression=boto3.dynamodb.conditions.Key('s3Key').eq(s3_key)
         )
         
-        return response.get('Items', [])
+        files = response.get('Items', [])
+        logger.info(f"Found {len(files)} file records for S3 key: {s3_key}")
+        return files
     except Exception as e:
-        logger.error(f"Error querying for file records by S3 key: {str(e)}")
+        logger.error(f"Error finding file records by S3 key: {str(e)}")
         return [] 
