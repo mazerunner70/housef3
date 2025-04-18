@@ -456,19 +456,48 @@ def list_file_transactions(file_id: str) -> List[Dict[str, Any]]:
     List all transactions for a specific file.
     
     Args:
-        file_id: ID of the file to get transactions for
+        file_id: The unique identifier of the file
         
     Returns:
-        List of transaction objects
+        List of transaction dictionaries
     """
     try:
         response = get_transactions_table().query(
-            IndexName='FileIdIndex',
             KeyConditionExpression=Key('fileId').eq(file_id)
         )
         return response.get('Items', [])
-    except Exception as e:
+    except ClientError as e:
         logger.error(f"Error listing transactions for file {file_id}: {str(e)}")
+        raise
+
+
+def list_user_transactions(user_id: str) -> List[Transaction]:
+    """
+    List all transactions for a specific user using the UserIdIndex GSI.
+    
+    Args:
+        user_id: The ID of the user whose transactions to retrieve
+        
+    Returns:
+        List of Transaction objects
+        
+    Raises:
+        ClientError if the query fails
+    """
+    try:
+        response = get_transactions_table().query(
+            IndexName='UserIdIndex',
+            KeyConditionExpression=Key('userId').eq(user_id)
+        )
+        
+        transactions = []
+        for item in response.get('Items', []):
+            transactions.append(Transaction.from_dict(item))
+        
+        return transactions
+            
+    except ClientError as e:
+        logger.error(f"Error querying transactions by user: {str(e)}")
         raise
 
 

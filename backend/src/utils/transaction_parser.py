@@ -35,7 +35,7 @@ def parse_transactions(content: bytes,
         logger.warning(f"Unsupported file format for transaction parsing: {file_format}")
         return []
 
-def process_file_transactions(file_id: str, content_bytes: bytes, file_format: FileFormat, opening_balance: float) -> int:
+def process_file_transactions(file_id: str, content_bytes: bytes, file_format: FileFormat, opening_balance: float, user_id: str) -> int:
     """
     Process a file to extract and save transactions.
     
@@ -44,6 +44,7 @@ def process_file_transactions(file_id: str, content_bytes: bytes, file_format: F
         content_bytes: File content as bytes
         file_format: Format of the file
         opening_balance: Opening balance to use for running totals
+        user_id: ID of the user who owns the file
         
     Returns:
         Number of transactions processed
@@ -67,8 +68,9 @@ def process_file_transactions(file_id: str, content_bytes: bytes, file_format: F
         transaction_count = 0
         for transaction_data in transactions:
             try:
-                # Add the file_id to each transaction
+                # Add the file_id and user_id to each transaction
                 transaction_data['file_id'] = file_id
+                transaction_data['user_id'] = user_id
                 
                 # Create and save the transaction
                 create_transaction(transaction_data)

@@ -1,6 +1,12 @@
 import uuid
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
+import os
+import boto3
+import logging
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 class Transaction:
     """
@@ -10,6 +16,7 @@ class Transaction:
         self,
         transaction_id: str,
         file_id: str,
+        user_id: str,
         date: str,
         description: str,
         amount: float,
@@ -23,6 +30,7 @@ class Transaction:
     ):
         self.transaction_id = transaction_id
         self.file_id = file_id
+        self.user_id = user_id
         self.date = date
         self.description = description
         self.amount = amount
@@ -38,6 +46,7 @@ class Transaction:
     def create(
         cls,
         file_id: str,
+        user_id: str,
         date: str,
         description: str,
         amount: float,
@@ -50,6 +59,7 @@ class Transaction:
         return cls(
             transaction_id=str(uuid.uuid4()),
             file_id=file_id,
+            user_id=user_id,
             date=date,
             description=description,
             amount=amount,
@@ -64,6 +74,7 @@ class Transaction:
         result = {
             "transactionId": self.transaction_id,
             "fileId": self.file_id,
+            "userId": self.user_id,
             "date": self.date,
             "description": self.description,
             "amount": str(self.amount),  # Convert to string for DynamoDB
@@ -99,6 +110,7 @@ class Transaction:
         return cls(
             transaction_id=data["transactionId"],
             file_id=data["fileId"],
+            user_id=data["userId"],
             date=data["date"],
             description=data["description"],
             amount=float(data["amount"]),

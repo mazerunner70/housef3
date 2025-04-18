@@ -16,10 +16,22 @@ resource "aws_dynamodb_table" "transactions" {
     type = "S"
   }
   
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+  
   # GSI to query transactions by file ID
   global_secondary_index {
     name               = "FileIdIndex"
     hash_key           = "fileId"
+    projection_type    = "ALL"
+  }
+  
+  # GSI to query transactions by user ID
+  global_secondary_index {
+    name               = "UserIdIndex"
+    hash_key           = "userId"
     projection_type    = "ALL"
   }
   

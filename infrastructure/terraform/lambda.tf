@@ -1,3 +1,4 @@
+# Run tests before packaging
 resource "null_resource" "run_tests" {
   provisioner "local-exec" {
     working_dir = "../../backend"
@@ -5,20 +6,22 @@ resource "null_resource" "run_tests" {
   }
 }
 
+# Package Lambda code
 data "archive_file" "lambda_code" {
-  depends_on = [null_resource.run_tests]
+  depends_on  = [null_resource.run_tests]
   type        = "zip"
   source_dir  = "../../backend/src"
   output_path = "../../backend/lambda.zip"
 }
 
+# Colors Lambda
 resource "aws_lambda_function" "colors" {
-  filename         = "../../backend/lambda.zip"
+  filename         = data.archive_file.lambda_code.output_path
   function_name    = "${var.project_name}-${var.environment}-colors"
   handler          = "handlers/list_imports.handler"
   runtime          = "python3.9"
-  role             = aws_iam_role.lambda_exec.arn
-  timeout          = 30
+  role            = aws_iam_role.lambda_exec.arn
+  timeout         = 30
   source_code_hash = data.archive_file.lambda_code.output_base64sha256
   
   environment {
@@ -35,23 +38,24 @@ resource "aws_lambda_function" "colors" {
   }
 }
 
+# File Operations Lambda
 resource "aws_lambda_function" "file_operations" {
-  filename         = "../../backend/lambda.zip"
+  filename         = data.archive_file.lambda_code.output_path
   function_name    = "${var.project_name}-${var.environment}-file-operations"
   handler          = "handlers/file_operations.handler"
   runtime          = "python3.9"
-  role             = aws_iam_role.lambda_exec.arn
-  timeout          = 30
-  memory_size      = 256
+  role            = aws_iam_role.lambda_exec.arn
+  timeout         = 30
+  memory_size     = 256
   source_code_hash = data.archive_file.lambda_code.output_base64sha256
   
   environment {
     variables = {
       ENVIRONMENT         = var.environment
       FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.id
-      FILES_TABLE        = aws_dynamodb_table.transaction_files.name
-      ACCOUNTS_TABLE     = aws_dynamodb_table.accounts.name
-      TRANSACTIONS_TABLE = aws_dynamodb_table.transactions.name
+      FILES_TABLE         = aws_dynamodb_table.transaction_files.name
+      ACCOUNTS_TABLE      = aws_dynamodb_table.accounts.name
+      TRANSACTIONS_TABLE  = aws_dynamodb_table.transactions.name
     }
   }
   
@@ -62,23 +66,24 @@ resource "aws_lambda_function" "file_operations" {
   }
 }
 
+# File Processor Lambda
 resource "aws_lambda_function" "file_processor" {
-  filename         = "../../backend/lambda.zip"
+  filename         = data.archive_file.lambda_code.output_path
   function_name    = "${var.project_name}-${var.environment}-file-processor"
   handler          = "handlers/file_processor.handler"
   runtime          = "python3.9"
-  role             = aws_iam_role.lambda_exec.arn
-  timeout          = 60
-  memory_size      = 256
+  role            = aws_iam_role.lambda_exec.arn
+  timeout         = 60
+  memory_size     = 256
   source_code_hash = data.archive_file.lambda_code.output_base64sha256
   
   environment {
     variables = {
-      ENVIRONMENT    = var.environment
-      FILES_TABLE    = aws_dynamodb_table.transaction_files.name
-      TRANSACTIONS_TABLE = aws_dynamodb_table.transactions.name
+      ENVIRONMENT         = var.environment
+      FILES_TABLE         = aws_dynamodb_table.transaction_files.name
+      TRANSACTIONS_TABLE  = aws_dynamodb_table.transactions.name
       FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.id
-      ACCOUNTS_TABLE = aws_dynamodb_table.accounts.name
+      ACCOUNTS_TABLE      = aws_dynamodb_table.accounts.name
     }
   }
   
@@ -89,22 +94,23 @@ resource "aws_lambda_function" "file_processor" {
   }
 }
 
+# Account Operations Lambda
 resource "aws_lambda_function" "account_operations" {
-  filename         = "../../backend/lambda.zip"
+  filename         = data.archive_file.lambda_code.output_path
   function_name    = "${var.project_name}-${var.environment}-account-operations"
   handler          = "handlers/account_operations.handler"
   runtime          = "python3.9"
-  role             = aws_iam_role.lambda_exec.arn
-  timeout          = 30
-  memory_size      = 256
+  role            = aws_iam_role.lambda_exec.arn
+  timeout         = 30
+  memory_size     = 256
   source_code_hash = data.archive_file.lambda_code.output_base64sha256
   
   environment {
     variables = {
-      ENVIRONMENT    = var.environment
-      ACCOUNTS_TABLE = aws_dynamodb_table.accounts.name
-      FILES_TABLE    = aws_dynamodb_table.transaction_files.name
-      TRANSACTIONS_TABLE = aws_dynamodb_table.transactions.name
+      ENVIRONMENT         = var.environment
+      ACCOUNTS_TABLE      = aws_dynamodb_table.accounts.name
+      FILES_TABLE         = aws_dynamodb_table.transaction_files.name
+      TRANSACTIONS_TABLE  = aws_dynamodb_table.transactions.name
       FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.id
     }
   }
@@ -116,7 +122,34 @@ resource "aws_lambda_function" "account_operations" {
   }
 }
 
-# Configure S3 to trigger Lambda on file uploads
+# Transaction Operations Lambda
+resource "aws_lambda_function" "transaction_operations" {
+  filename         = data.archive_file.lambda_code.output_path
+  function_name    = "${var.project_name}-${var.environment}-transaction-operations"
+  handler          = "handlers/transaction_operations.handler"
+  runtime          = "python3.9"
+  role            = aws_iam_role.lambda_exec.arn
+  timeout         = 30
+  memory_size     = 256
+  source_code_hash = data.archive_file.lambda_code.output_base64sha256
+
+  environment {
+    variables = {
+      ENVIRONMENT        = var.environment
+      TRANSACTIONS_TABLE = aws_dynamodb_table.transactions.name
+      FILES_TABLE        = aws_dynamodb_table.transaction_files.name
+      ACCOUNTS_TABLE     = aws_dynamodb_table.accounts.name
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
+# S3 Trigger for File Processor
 resource "aws_lambda_permission" "allow_s3" {
   statement_id  = "AllowExecutionFromS3"
   action        = "lambda:InvokeFunction"
@@ -125,18 +158,7 @@ resource "aws_lambda_permission" "allow_s3" {
   source_arn    = aws_s3_bucket.file_storage.arn
 }
 
-# CloudWatch Log Group for file processor Lambda
-resource "aws_cloudwatch_log_group" "file_processor" {
-  name              = "/aws/lambda/${aws_lambda_function.file_processor.function_name}"
-  retention_in_days = 7
-
-  tags = {
-    Environment = var.environment
-    Project     = var.project_name
-    ManagedBy   = "terraform"
-  }
-}
-
+# IAM Role and Policies
 resource "aws_iam_role" "lambda_exec" {
   name = "${var.project_name}-${var.environment}-lambda-role"
 
@@ -163,10 +185,10 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
   role       = aws_iam_role.lambda_exec.name
 }
 
-# IAM policy for Lambda to access DynamoDB
 resource "aws_iam_role_policy" "lambda_dynamodb_access" {
-  name   = "dynamodb-access"
-  role   = aws_iam_role.lambda_exec.id
+  name = "dynamodb-access"
+  role = aws_iam_role.lambda_exec.id
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -181,7 +203,7 @@ resource "aws_iam_role_policy" "lambda_dynamodb_access" {
           "dynamodb:BatchGetItem",
           "dynamodb:BatchWriteItem"
         ]
-        Effect   = "Allow"
+        Effect = "Allow"
         Resource = [
           aws_dynamodb_table.transaction_files.arn,
           "${aws_dynamodb_table.transaction_files.arn}/index/*",
@@ -195,7 +217,18 @@ resource "aws_iam_role_policy" "lambda_dynamodb_access" {
   })
 }
 
-# CloudWatch log group for file operations Lambda
+# CloudWatch Log Groups
+resource "aws_cloudwatch_log_group" "colors" {
+  name              = "/aws/lambda/${aws_lambda_function.colors.function_name}"
+  retention_in_days = 7
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
 resource "aws_cloudwatch_log_group" "file_operations" {
   name              = "/aws/lambda/${aws_lambda_function.file_operations.function_name}"
   retention_in_days = 7
@@ -207,7 +240,17 @@ resource "aws_cloudwatch_log_group" "file_operations" {
   }
 }
 
-# CloudWatch log group for account operations Lambda
+resource "aws_cloudwatch_log_group" "file_processor" {
+  name              = "/aws/lambda/${aws_lambda_function.file_processor.function_name}"
+  retention_in_days = 7
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
 resource "aws_cloudwatch_log_group" "account_operations" {
   name              = "/aws/lambda/${aws_lambda_function.account_operations.function_name}"
   retention_in_days = 7
@@ -219,9 +262,8 @@ resource "aws_cloudwatch_log_group" "account_operations" {
   }
 }
 
-# CloudWatch log group for Lambda
-resource "aws_cloudwatch_log_group" "lambda" {
-  name              = "/aws/lambda/${aws_lambda_function.colors.function_name}"
+resource "aws_cloudwatch_log_group" "transaction_operations" {
+  name              = "/aws/lambda/${aws_lambda_function.transaction_operations.function_name}"
   retention_in_days = 7
 
   tags = {
@@ -232,26 +274,22 @@ resource "aws_cloudwatch_log_group" "lambda" {
 }
 
 # Outputs
-output "lambda_function_name" {
+output "lambda_colors_name" {
   value = aws_lambda_function.colors.function_name
 }
 
-output "lambda_function_arn" {
-  value = aws_lambda_function.colors.arn
-}
-
-output "file_operations_function_name" {
+output "lambda_file_operations_name" {
   value = aws_lambda_function.file_operations.function_name
 }
 
-output "file_operations_function_arn" {
-  value = aws_lambda_function.file_operations.arn
+output "lambda_file_processor_name" {
+  value = aws_lambda_function.file_processor.function_name
 }
 
-output "account_operations_function_name" {
+output "lambda_account_operations_name" {
   value = aws_lambda_function.account_operations.function_name
 }
 
-output "account_operations_function_arn" {
-  value = aws_lambda_function.account_operations.arn
+output "lambda_transaction_operations_name" {
+  value = aws_lambda_function.transaction_operations.function_name
 } 

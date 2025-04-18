@@ -59,6 +59,7 @@ echo "Found $ACCOUNT_COUNT accounts to delete"
 
 TOTAL_FILES=0
 TOTAL_TRANSACTIONS=0
+ORPHANED_TRANSACTIONS=0
 
 # For each account, get its files and transactions
 for i in $(seq 0 $(($ACCOUNT_COUNT - 1))); do
@@ -98,11 +99,44 @@ echo "Found $ALL_FILE_COUNT total files (including those not associated with acc
 UNASSOCIATED_FILES=$((ALL_FILE_COUNT - TOTAL_FILES))
 echo "Found $UNASSOCIATED_FILES files not associated with accounts"
 
+# Get all transactions for the user
+echo "Fetching all transactions for user..."
+ALL_TRANSACTIONS_RESPONSE=$(curl -s -X GET "https://${CLOUDFRONT_DOMAIN}/api/transactions" \
+    -H "Authorization: Bearer ${ID_TOKEN}")
+
+echo "Raw API Response:"
+echo "$ALL_TRANSACTIONS_RESPONSE"
+
+ALL_TRANSACTIONS=$(echo "$ALL_TRANSACTIONS_RESPONSE" | jq -r '.transactions')
+ALL_TRANSACTION_COUNT=$(echo "$ALL_TRANSACTIONS" | jq 'length')
+
+# Find orphaned transactions (transactions not associated with any file)
+echo "Finding orphaned transactions..."
+for i in $(seq 0 $(($ALL_TRANSACTION_COUNT - 1))); do
+    TRANSACTION_ID=$(echo "$ALL_TRANSACTIONS" | jq -r ".[$i].transactionId")
+    FILE_ID=$(echo "$ALL_TRANSACTIONS" | jq -r ".[$i].fileId")
+    
+    # Check if the file exists
+    FILE_EXISTS=false
+    for j in $(seq 0 $(($ALL_FILE_COUNT - 1))); do
+        EXISTING_FILE_ID=$(echo "$ALL_FILES" | jq -r ".[$j].fileId")
+        if [ "$FILE_ID" = "$EXISTING_FILE_ID" ]; then
+            FILE_EXISTS=true
+            break
+        fi
+    done
+    
+    if [ "$FILE_EXISTS" = false ]; then
+        ORPHANED_TRANSACTIONS=$((ORPHANED_TRANSACTIONS + 1))
+    fi
+done
+
 echo "Summary of resources to be deleted:"
 echo "- Accounts: $ACCOUNT_COUNT"
 echo "- Files associated with accounts: $TOTAL_FILES"
 echo "- Files not associated with accounts: $UNASSOCIATED_FILES"
-echo "- Transactions: $TOTAL_TRANSACTIONS"
+echo "- Transactions associated with files: $TOTAL_TRANSACTIONS"
+echo "- Orphaned transactions: $ORPHANED_TRANSACTIONS"
 
 read -p "Do you want to proceed with deletion? (y/n) " -n 1 -r
 echo
@@ -110,6 +144,31 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]
 then
     echo "Deletion cancelled"
     exit 0
+fi
+
+# Delete orphaned transactions first
+if [ $ORPHANED_TRANSACTIONS -gt 0 ]; then
+    echo "Deleting orphaned transactions..."
+    for i in $(seq 0 $(($ALL_TRANSACTION_COUNT - 1))); do
+        TRANSACTION_ID=$(echo "$ALL_TRANSACTIONS" | jq -r ".[$i].transactionId")
+        FILE_ID=$(echo "$ALL_TRANSACTIONS" | jq -r ".[$i].fileId")
+        
+        # Check if the file exists
+        FILE_EXISTS=false
+        for j in $(seq 0 $(($ALL_FILE_COUNT - 1))); do
+            EXISTING_FILE_ID=$(echo "$ALL_FILES" | jq -r ".[$j].fileId")
+            if [ "$FILE_ID" = "$EXISTING_FILE_ID" ]; then
+                FILE_EXISTS=true
+                break
+            fi
+        done
+        
+        if [ "$FILE_EXISTS" = false ]; then
+            echo "Deleting orphaned transaction: $TRANSACTION_ID"
+            curl -s -X DELETE "https://${CLOUDFRONT_DOMAIN}/api/transactions/${TRANSACTION_ID}" \
+                -H "Authorization: Bearer ${ID_TOKEN}"
+        fi
+    done
 fi
 
 echo "Deleting all accounts and their files..."

@@ -53,8 +53,8 @@ resource "aws_apigatewayv2_integration" "file_operations" {
   description           = "Lambda integration for file operations endpoints"
 }
 
-# File transactions route
-resource "aws_apigatewayv2_route" "file_transactions" {
+# File Transaction Routes
+resource "aws_apigatewayv2_route" "get_file_transactions" {
   api_id             = aws_apigatewayv2_api.main.id
   route_key          = "GET /files/{id}/transactions"
   target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
@@ -62,7 +62,6 @@ resource "aws_apigatewayv2_route" "file_transactions" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
-# Delete file transactions route
 resource "aws_apigatewayv2_route" "delete_file_transactions" {
   api_id             = aws_apigatewayv2_api.main.id
   route_key          = "DELETE /files/{id}/transactions"
@@ -161,6 +160,7 @@ resource "aws_apigatewayv2_integration" "account_operations" {
   description           = "Lambda integration for account operations endpoints"
 }
 
+
 # Account creation route
 resource "aws_apigatewayv2_route" "create_account" {
   api_id             = aws_apigatewayv2_api.main.id
@@ -242,6 +242,32 @@ resource "aws_apigatewayv2_route" "delete_account_files" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# Transaction operations integration
+resource "aws_apigatewayv2_integration" "transaction_operations" {
+  api_id                 = aws_apigatewayv2_api.main.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.transaction_operations.invoke_arn
+  payload_format_version = "2.0"
+  description           = "Lambda integration for transaction operations"
+}
+
+# Transaction Routes
+resource "aws_apigatewayv2_route" "get_transactions" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /transactions"
+  target             = "integrations/${aws_apigatewayv2_integration.transaction_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "delete_transaction" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "DELETE /transactions/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.transaction_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 resource "aws_apigatewayv2_stage" "main" {
   api_id      = aws_apigatewayv2_api.main.id
   name        = var.environment
@@ -275,8 +301,8 @@ resource "aws_cloudwatch_log_group" "api_gateway" {
 }
 
 # Lambda permission to allow API Gateway to invoke the function
-resource "aws_lambda_permission" "api_gateway" {
-  statement_id  = "AllowAPIGatewayInvoke"
+resource "aws_lambda_permission" "api_gateway_colors" {
+  statement_id  = "AllowAPIGatewayInvokeColors"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.colors.function_name
   principal     = "apigateway.amazonaws.com"
@@ -284,7 +310,7 @@ resource "aws_lambda_permission" "api_gateway" {
 }
 
 # Lambda permission for file operations
-resource "aws_lambda_permission" "file_operations" {
+resource "aws_lambda_permission" "api_gateway_files" {
   statement_id  = "AllowAPIGatewayInvokeFiles"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.file_operations.function_name
@@ -293,12 +319,21 @@ resource "aws_lambda_permission" "file_operations" {
 }
 
 # Lambda permission for account operations
-resource "aws_lambda_permission" "account_operations" {
+resource "aws_lambda_permission" "api_gateway_accounts" {
   statement_id  = "AllowAPIGatewayInvokeAccounts"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.account_operations.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/accounts*"
+}
+
+# Lambda permission for API Gateway to invoke transaction operations
+resource "aws_lambda_permission" "api_gateway_transactions" {
+  statement_id  = "AllowAPIGatewayInvokeTransactions"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.transaction_operations.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/transactions*"
 }
 
 # Outputs

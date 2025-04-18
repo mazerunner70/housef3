@@ -7,6 +7,18 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from decimal import Decimal
 
+from models import Account, AccountType, Currency
+from utils.db_utils import (
+    get_account,
+    list_user_accounts,
+    create_account,
+    update_account,
+    delete_account,
+    list_account_files,
+    delete_account_files
+)
+from utils.auth import get_user_from_event
+
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -65,26 +77,6 @@ def create_response(status_code: int, body: Any) -> Dict[str, Any]:
         },
         "body": json.dumps(body, cls=DecimalEncoder)
     }
-
-def get_user_from_event(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Extract user information from the event."""
-    try:
-        request_context = event.get("requestContext", {})
-        authorizer = request_context.get("authorizer", {}).get("jwt", {})
-        claims = authorizer.get("claims", {})
-        
-        user_sub = claims.get("sub")
-        if not user_sub:
-            return None
-        
-        return {
-            "id": user_sub,
-            "email": claims.get("email", "unknown"),
-            "auth_time": claims.get("auth_time")
-        }
-    except Exception as e:
-        logger.error(f"Error extracting user from event: {str(e)}")
-        return None
 
 def create_account_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     """Create a new financial account."""
