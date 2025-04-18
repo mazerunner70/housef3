@@ -37,21 +37,119 @@ fi
 echo "Fetching test user's Cognito ID..."
 USER_ID=$(aws cognito-idp list-users \
     --user-pool-id $COGNITO_USER_POOL_ID \
-    --filter "email = \"usecase@example.com\"" \
-    --query "Users[0].Username" \
+    --filter "username = \"$USERNAME\"" \
+    --query 'Users[0].Username' \
     --output text)
 
-if [ -z "$USER_ID" ] || [ "$USER_ID" = "None" ]; then
-    echo "Error: Could not find test user in Cognito"
+if [ -z "$USER_ID" ] || [ "$USER_ID" = "null" ]; then
+    echo "Error: Failed to get user ID"
     exit 1
 fi
 
 echo "Cleaning up resources for user: $USER_ID"
 
-# Delete all accounts and their files
-echo "Deleting all accounts and their files..."
-DELETE_RESPONSE=$(curl -s -X DELETE "${API_ENDPOINT}/accounts" \
-  -H "Authorization: Bearer ${ID_TOKEN}")
-echo "Delete response: $DELETE_RESPONSE"
+# Get all accounts for the user
+echo "Fetching accounts..."
+ACCOUNTS_RESPONSE=$(curl -s -X GET "https://${CLOUDFRONT_DOMAIN}/api/accounts" \
+    -H "Authorization: Bearer ${ID_TOKEN}")
 
-echo "Cleanup complete!" 
+ACCOUNTS=$(echo "$ACCOUNTS_RESPONSE" | jq -r '.accounts')
+ACCOUNT_COUNT=$(echo "$ACCOUNTS" | jq 'length')
+echo "Found $ACCOUNT_COUNT accounts to delete"
+
+TOTAL_FILES=0
+TOTAL_TRANSACTIONS=0
+
+# For each account, get its files and transactions
+for i in $(seq 0 $(($ACCOUNT_COUNT - 1))); do
+    ACCOUNT_ID=$(echo "$ACCOUNTS" | jq -r ".[$i].accountId")
+    
+    # Get files for this account
+    FILES_RESPONSE=$(curl -s -X GET "https://${CLOUDFRONT_DOMAIN}/api/accounts/${ACCOUNT_ID}/files" \
+        -H "Authorization: Bearer ${ID_TOKEN}")
+    
+    FILES=$(echo "$FILES_RESPONSE" | jq -r '.files')
+    FILE_COUNT=$(echo "$FILES" | jq 'length')
+    TOTAL_FILES=$((TOTAL_FILES + FILE_COUNT))
+    
+    # For each file, get its transactions
+    for j in $(seq 0 $(($FILE_COUNT - 1))); do
+        FILE_ID=$(echo "$FILES" | jq -r ".[$j].fileId")
+        
+        TRANSACTIONS_RESPONSE=$(curl -s -X GET "https://${CLOUDFRONT_DOMAIN}/api/files/${FILE_ID}/transactions" \
+            -H "Authorization: Bearer ${ID_TOKEN}")
+        
+        TRANSACTIONS=$(echo "$TRANSACTIONS_RESPONSE" | jq -r '.transactions')
+        TRANSACTION_COUNT=$(echo "$TRANSACTIONS" | jq 'length')
+        TOTAL_TRANSACTIONS=$((TOTAL_TRANSACTIONS + TRANSACTION_COUNT))
+    done
+done
+
+# Get all files for the user (including those not associated with accounts)
+echo "Fetching all files for user..."
+ALL_FILES_RESPONSE=$(curl -s -X GET "https://${CLOUDFRONT_DOMAIN}/api/files" \
+    -H "Authorization: Bearer ${ID_TOKEN}")
+
+ALL_FILES=$(echo "$ALL_FILES_RESPONSE" | jq -r '.files')
+ALL_FILE_COUNT=$(echo "$ALL_FILES" | jq 'length')
+echo "Found $ALL_FILE_COUNT total files (including those not associated with accounts)"
+
+# Calculate files not associated with accounts
+UNASSOCIATED_FILES=$((ALL_FILE_COUNT - TOTAL_FILES))
+echo "Found $UNASSOCIATED_FILES files not associated with accounts"
+
+echo "Summary of resources to be deleted:"
+echo "- Accounts: $ACCOUNT_COUNT"
+echo "- Files associated with accounts: $TOTAL_FILES"
+echo "- Files not associated with accounts: $UNASSOCIATED_FILES"
+echo "- Transactions: $TOTAL_TRANSACTIONS"
+
+read -p "Do you want to proceed with deletion? (y/n) " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]
+then
+    echo "Deletion cancelled"
+    exit 0
+fi
+
+echo "Deleting all accounts and their files..."
+
+# Delete all accounts
+for i in $(seq 0 $(($ACCOUNT_COUNT - 1))); do
+    ACCOUNT_ID=$(echo "$ACCOUNTS" | jq -r ".[$i].accountId")
+    echo "Deleting account: $ACCOUNT_ID"
+    
+    # Delete the account
+    curl -s -X DELETE "https://${CLOUDFRONT_DOMAIN}/api/accounts/${ACCOUNT_ID}" \
+        -H "Authorization: Bearer ${ID_TOKEN}"
+done
+
+# Delete files not associated with accounts
+if [ $UNASSOCIATED_FILES -gt 0 ]; then
+    echo "Deleting files not associated with accounts..."
+    for i in $(seq 0 $(($ALL_FILE_COUNT - 1))); do
+        FILE_ID=$(echo "$ALL_FILES" | jq -r ".[$i].fileId")
+        FILE_NAME=$(echo "$ALL_FILES" | jq -r ".[$i].fileName")
+        
+        # Check if this file is associated with any account
+        IS_ASSOCIATED=false
+        for j in $(seq 0 $(($ACCOUNT_COUNT - 1))); do
+            ACCOUNT_ID=$(echo "$ACCOUNTS" | jq -r ".[$j].accountId")
+            FILES_RESPONSE=$(curl -s -X GET "https://${CLOUDFRONT_DOMAIN}/api/accounts/${ACCOUNT_ID}/files" \
+                -H "Authorization: Bearer ${ID_TOKEN}")
+            ASSOCIATED_FILES=$(echo "$FILES_RESPONSE" | jq -r '.files')
+            if echo "$ASSOCIATED_FILES" | jq -e ".[] | select(.fileId == \"$FILE_ID\")" > /dev/null; then
+                IS_ASSOCIATED=true
+                break
+            fi
+        done
+        
+        if [ "$IS_ASSOCIATED" = false ]; then
+            echo "Deleting unassociated file: $FILE_NAME"
+            curl -s -X DELETE "https://${CLOUDFRONT_DOMAIN}/api/files/${FILE_ID}" \
+                -H "Authorization: Bearer ${ID_TOKEN}"
+        fi
+    done
+fi
+
+echo "Cleanup completed successfully!" 

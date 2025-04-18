@@ -72,7 +72,7 @@ resource "aws_cloudfront_function" "rewrite_api_path" {
       var request = event.request;
       var uri = request.uri;
       
-      // Remove /api prefix
+      // Remove /api prefix (origin_path will add /dev)
       request.uri = uri.replace(/^\/api/, '');
       
       return request;
