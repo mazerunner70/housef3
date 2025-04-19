@@ -4,6 +4,7 @@ import { DataPreviewPanel } from './DataPreviewPanel';
 import FileService, { FileMetadata } from '../services/FileService';
 import './FieldMapForm.css';
 import { transactionFields } from '../services/TransactionService';
+import { parseCSV as parseCSVContent } from '../utils/csvParser';
 
 interface FieldMapping {
   sourceField: string;
@@ -49,25 +50,8 @@ export const FieldMapForm: React.FC<FieldMapFormProps> = ({
   }, [fileId]);
 
   const parseCSV = (content: string): Array<Record<string, any>> => {
-    const lines = content.split('\n');
-    if (lines.length === 0) return [];
-
-    // Parse header row
-    const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
-    
-    // Parse all data rows
-    const data = lines.slice(1).map(line => {
-      // Skip empty lines
-      if (!line.trim()) return null;
-      
-      const values = line.split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
-      return headers.reduce((obj, header, index) => {
-        obj[header] = values[index] || '';
-        return obj;
-      }, {} as Record<string, any>);
-    }).filter((row): row is Record<string, any> => row !== null); // Remove empty lines
-
-    return data;
+    const result = parseCSVContent(content);
+    return result.data;
   };
 
   const parseOFX = (content: string): Array<Record<string, any>> => {

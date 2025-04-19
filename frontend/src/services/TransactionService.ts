@@ -17,6 +17,7 @@ export interface Transaction {
   memo?: string;
   checkNumber?: string;
   reference?: string;
+  debitOrCredit?: string;
 }
 // Extract the fields from the Transaction interface
 export const transactionFields = Object.keys({
@@ -25,6 +26,7 @@ export const transactionFields = Object.keys({
   amount: 0,
   transactionType: '',
   category: '',
+  debitOrCredit: ''
 });
 
 // Response interface for transaction list

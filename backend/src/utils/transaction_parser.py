@@ -182,14 +182,27 @@ def parse_csv_transactions(content: bytes, opening_balance: float, field_map: Op
         # Decode the content
         text_content = content.decode('utf-8')
         
-        # Parse CSV
-        csv_reader = csv.reader(io.StringIO(text_content))
+        # Create a custom dialect for handling unquoted fields with commas
+        class UnquotedDialect(csv.Dialect):
+            delimiter = ','
+            quotechar = '"'
+            doublequote = True
+            skipinitialspace = True
+            lineterminator = '\n'
+            quoting = csv.QUOTE_MINIMAL
+        
+        # Parse CSV using custom dialect
+        csv_file = io.StringIO(text_content)
+        reader = csv.reader(csv_file, dialect=UnquotedDialect())
         
         # Get header row
-        header = next(csv_reader, None)
+        header = next(reader, None)
         if not header:
             return []
             
+        # Clean up headers
+        header = [h.strip() for h in header]
+        
         # If using field map, validate required fields are present
         if field_map:
             missing_fields = []
@@ -204,11 +217,12 @@ def parse_csv_transactions(content: bytes, opening_balance: float, field_map: Op
             # Find columns by common names if no field map
             date_col = find_column_index(header, ['date', 'transaction date', 'posted date'])
             desc_col = find_column_index(header, ['description', 'payee', 'merchant', 'transaction'])
-            amount_col = find_column_index(header, ['amount', 'transaction amount'])
+            amount_col = find_column_index(header, ['amount', 'transaction amount', 'billing amount'])
             type_col = find_column_index(header, ['type', 'transaction type'])
             category_col = find_column_index(header, ['category', 'transaction category'])
             memo_col = find_column_index(header, ['memo', 'notes', 'description'])
             balance_col = find_column_index(header, ['balance', 'running balance'])
+            debit_credit_col = find_column_index(header, ['debit or credit'])
             
             if None in [date_col, desc_col, amount_col]:
                 logger.error("Missing required columns in CSV")
@@ -217,8 +231,21 @@ def parse_csv_transactions(content: bytes, opening_balance: float, field_map: Op
         transactions = []
         running_total = Decimal(str(opening_balance))
         
-        for row in csv_reader:
+        for row in reader:
             try:
+                if not row or all(not cell.strip() for cell in row):
+                    continue
+                    
+                # Handle unquoted fields with commas by joining them back together
+                # This is needed because the CSV might have been split incorrectly
+                if len(row) > len(header):
+                    # Find the description column and join any extra fields
+                    if desc_col is not None and desc_col < len(row):
+                        # Join all fields from desc_col onwards with commas
+                        row[desc_col] = ','.join(row[desc_col:])
+                        # Truncate the row to match header length
+                        row = row[:len(header)]
+                    
                 if field_map:
                     # Apply field mapping
                     row_data = dict(zip(header, row))
@@ -231,6 +258,11 @@ def parse_csv_transactions(content: bytes, opening_balance: float, field_map: Op
                         
                     # Parse amount and calculate running total
                     amount = Decimal(str(mapped_data['amount']).replace(',', ''))
+                    
+                    # Check if this is a credit transaction
+                    if 'debitOrCredit' in mapped_data and mapped_data['debitOrCredit'].upper() == 'CRDT':
+                        amount = -abs(amount)
+                    
                     running_total += amount
                     
                     # Create transaction with mapped data
@@ -260,6 +292,11 @@ def parse_csv_transactions(content: bytes, opening_balance: float, field_map: Op
                         
                     try:
                         amount = Decimal(str(row[amount_col]).replace(',', ''))
+                        
+                        # Check if this is a credit transaction
+                        if debit_credit_col is not None and row[debit_credit_col].strip().upper() == 'CRDT':
+                            amount = -abs(amount)
+                            
                     except (ValueError, TypeError):
                         logger.warning(f"Invalid amount: {row[amount_col]}")
                         continue
