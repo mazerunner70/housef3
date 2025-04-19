@@ -1,4 +1,5 @@
 import { getCurrentUser, refreshToken, isAuthenticated } from './AuthService';
+import { FieldMap } from './FieldMapService';
 
 export interface FileMetadata {
   fileId: string;
@@ -47,6 +48,39 @@ export interface DownloadUrlResponse {
   fileName: string;
   contentType: string;
   expires: number;
+}
+
+export interface File {
+  fileId: string;
+  fileName: string;
+  contentType: string;
+  size: number;
+  uploadedAt: string;
+  userId: string;
+  accountId?: string;
+  fieldMap?: FieldMap;
+  openingBalance?: number;
+}
+
+export interface FilePreviewResponse {
+  data: Array<Record<string, any>>;
+  totalRows: number;
+  columns: string[];
+}
+
+export interface FileResponse {
+  fileId: string;
+  fileName: string;
+  contentType: string;
+  fileSize: number;
+  content: string;
+  uploadDate: string;
+  accountId?: string;
+  fieldMap?: {
+    fieldMapId: string;
+    name: string;
+    description?: string;
+  };
 }
 
 // Get API endpoint from environment variables
@@ -262,6 +296,78 @@ export const updateFileBalance = async (fileId: string, openingBalance: number):
   }
 };
 
+// Associate a field map with a file
+export const associateFieldMap = async (fileId: string, fieldMapId: string): Promise<void> => {
+  try {
+    const response = await authenticatedRequest(`${API_ENDPOINT}/${fileId}/associate`, {
+      method: 'POST',
+      body: JSON.stringify({ fieldMapId })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to associate field map: ${response.status} ${response.statusText}`);
+    }
+  } catch (error) {
+    console.error('Error associating field map:', error);
+    throw error;
+  }
+};
+
+// Get preview data for a file
+// export const getFilePreview = async (fileId: string): Promise<FilePreviewResponse> => {
+//   try {
+//     const response = await authenticatedRequest(`${API_ENDPOINT}/${fileId}/preview`);
+//     const data: FilePreviewResponse = await response.json();
+//     return data;
+//   } catch (error) {
+//     console.error('Error getting file preview:', error);
+//     throw error;
+//   }
+// };
+
+// Get file content
+export const getFile = async (fileId: string): Promise<FileResponse> => {
+  try {
+    console.log(`Loading ${API_ENDPOINT}/${fileId}`);
+    const response = await authenticatedRequest(`${API_ENDPOINT}/${fileId}`);
+    const data: FileResponse = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error getting file:', error);
+    throw error;
+  }
+};
+
+export const getFileMetadata = async (fileId: string): Promise<FileMetadata> => {
+  try {
+    const response = await authenticatedRequest(`${API_ENDPOINT}/${fileId}/metadata`);
+    const data: FileMetadata = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error getting file metadata:', error);
+    throw error;
+  }
+};
+
+// Get file content directly from API
+export interface FileContentResponse {
+  fileId: string;
+  content: string;
+  contentType: string;
+  fileName: string;
+}
+
+export const getFileContent = async (fileId: string): Promise<FileContentResponse> => {
+  try {
+    const response = await authenticatedRequest(`${API_ENDPOINT}/${fileId}/content`);
+    const data: FileContentResponse = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error getting file content:', error);
+    throw error;
+  }
+};
+
 export default {
   listFiles,
   getUploadUrl,
@@ -270,5 +376,8 @@ export default {
   deleteFile,
   unassociateFileFromAccount,
   associateFileWithAccount,
-  updateFileBalance
+  updateFileBalance,
+  associateFieldMap,
+  getFileMetadata,
+  getFileContent
 }; 

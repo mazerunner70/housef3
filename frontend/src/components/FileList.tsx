@@ -16,6 +16,10 @@ import './FileList.css';
 import TransactionList from './TransactionList';
 import FileFieldMapStatus from './FileFieldMapStatus';
 import FieldMapList from './FieldMapList';
+import { FieldMapForm } from './FieldMapForm';
+import FileService, { File } from '../services/FileService';
+import { FieldMap } from '../services/FieldMapService';
+import { downloadFile } from '../utils/downloadUtils';
 
 interface FileListProps {
   onRefreshNeeded: boolean;
@@ -43,6 +47,8 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
   const [viewingTransactionsFile, setViewingTransactionsFile] = useState<FileMetadata | null>(null);
   const [selectedMapFileId, setSelectedMapFileId] = useState<string | null>(null);
   const [showFieldMapModal, setShowFieldMapModal] = useState<boolean>(false);
+  const [showFieldMapForm, setShowFieldMapForm] = useState(false);
+  const [selectedFileForMap, setSelectedFileForMap] = useState<string | null>(null);
 
   // Load files from API
   const loadFiles = async () => {
@@ -109,25 +115,18 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
   };
 
   // Handle file download
-  const handleDownloadFile = async (fileId: string) => {
-    setDownloadingFileId(fileId);
-    setError(null);
-    
+  const handleDownload = async (fileId: string) => {
     try {
-      const downloadData = await getDownloadUrl(fileId);
+      setLoading(true);
+      setError(null);
       
-      // Create a temporary link element and trigger download
-      const link = document.createElement('a');
-      link.href = downloadData.downloadUrl;
-      link.setAttribute('download', downloadData.fileName);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (error) {
-      console.error('Error downloading file:', error);
-      setError(error instanceof Error ? error.message : 'Failed to download file');
+      const fileData = await FileService.getFileContent(fileId);
+      await downloadFile(fileData.content, fileData.fileName, fileData.contentType);
+    } catch (err) {
+      setError('Failed to download file');
+      console.error('Download error:', err);
     } finally {
-      setDownloadingFileId(null);
+      setLoading(false);
     }
   };
 
@@ -352,12 +351,22 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
   };
 
   const handleSelectMap = (fileId: string) => {
-    setSelectedMapFileId(fileId);
-    setShowFieldMapModal(true);
+    setSelectedFileForMap(fileId);
+    setShowFieldMapForm(true);
   };
 
-  const handleCreateMap = () => {
-    setShowFieldMapModal(true);
+  const handleFieldMapSave = async (fieldMap: FieldMap) => {
+    try {
+      if (selectedFileForMap) {
+        await FileService.associateFieldMap(selectedFileForMap, fieldMap.fieldMapId);
+        await loadFiles();
+      }
+      setShowFieldMapForm(false);
+      setSelectedFileForMap(null);
+    } catch (error) {
+      console.error('Error saving field map:', error);
+      setError(error instanceof Error ? error.message : 'Failed to save field map');
+    }
   };
 
   // Render filtered and sorted files
@@ -598,17 +607,20 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
                         <FileFieldMapStatus
                           fieldMap={file.fieldMap}
                           onSelectMap={() => handleSelectMap(file.fileId)}
-                          onCreateMap={handleCreateMap}
+                          onCreateMap={() => {
+                            setSelectedFileForMap(file.fileId);
+                            setShowFieldMapForm(true);
+                          }}
                           className="file-list-field-map"
                         />
                       </td>
                       <td className="file-actions">
                         <button 
                           className="download-button"
-                          onClick={() => handleDownloadFile(file.fileId)}
-                          disabled={downloadingFileId === file.fileId}
+                          onClick={() => handleDownload(file.fileId)}
+                          disabled={loading}
                         >
-                          {downloadingFileId === file.fileId ? '...' : 'Download'}
+                          {loading ? '...' : 'Download'}
                         </button>
                         <button 
                           className="delete-button"
@@ -660,12 +672,19 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
           <div className="modal-content">
             <FieldMapList
               onSelectMap={(map) => {
-                // Handle map selection
-                setShowFieldMapModal(false);
+                if (selectedFileForMap) {
+                  FileService.associateFieldMap(selectedFileForMap, map.fieldMapId)
+                    .then(() => {
+                      loadFiles();
+                      setShowFieldMapModal(false);
+                      setSelectedFileForMap(null);
+                    })
+                    .catch(console.error);
+                }
               }}
               onCreateMap={() => {
-                // Handle map creation
-                setShowFieldMapModal(false);
+                setSelectedFileForMap(selectedMapFileId);
+                setShowFieldMapForm(true);
               }}
               onEditMap={(map) => {
                 // Handle map editing
@@ -678,10 +697,30 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
             />
             <button 
               className="modal-close-button"
-              onClick={() => setShowFieldMapModal(false)}
+              onClick={() => {
+                setShowFieldMapModal(false);
+                setSelectedFileForMap(null);
+              }}
             >
               Close
             </button>
+          </div>
+        </div>
+      )}
+
+      {showFieldMapForm && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h2>Create Field Map</h2>
+            <FieldMapForm
+              onSave={handleFieldMapSave}
+              onCancel={() => {
+                setShowFieldMapForm(false);
+                setSelectedFileForMap(null);
+              }}
+              accountId={selectedFileForMap ? files.find(f => f.fileId === selectedFileForMap)?.accountId : undefined}
+              fileId={selectedFileForMap || undefined}
+            />
           </div>
         </div>
       )}

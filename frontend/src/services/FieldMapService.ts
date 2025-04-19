@@ -5,6 +5,10 @@ export interface FieldMap {
   name: string;
   description?: string;
   accountId?: string;
+  mappings: Array<{
+    sourceField: string;
+    targetField: string;
+  }>;
   createdAt: string;
   updatedAt: string;
 }

@@ -151,6 +151,15 @@ resource "aws_apigatewayv2_route" "file_balance" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# File metadata route
+resource "aws_apigatewayv2_route" "get_file_metadata" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /files/{id}/metadata"
+  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 # Account Operations Integration
 resource "aws_apigatewayv2_integration" "account_operations" {
   api_id                 = aws_apigatewayv2_api.main.id

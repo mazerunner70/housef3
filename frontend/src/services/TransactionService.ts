@@ -18,6 +18,14 @@ export interface Transaction {
   checkNumber?: string;
   reference?: string;
 }
+// Extract the fields from the Transaction interface
+export const transactionFields = Object.keys({
+  date: '',
+  description: '',
+  amount: 0,
+  transactionType: '',
+  category: '',
+});
 
 // Response interface for transaction list
 export interface TransactionListResponse {

@@ -787,8 +787,8 @@ def update_file_balance_handler(event: Dict[str, Any], user: Dict[str, Any]) -> 
         logger.error(f"Error updating file balance: {str(e)}")
         return create_response(500, {"message": "Error handling update balance request"})
 
-def get_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
-    """Get a single file by ID."""
+def get_file_metadata_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    """Get metadata for a single file by ID."""
     try:
         # Get file ID from path parameters
         file_id = event.get('pathParameters', {}).get('id')
@@ -841,8 +841,8 @@ def get_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, A
         
         return create_response(200, formatted_file)
     except Exception as e:
-        logger.error(f"Error getting file: {str(e)}")
-        return create_response(500, {"message": "Error getting file"})
+        logger.error(f"Error getting file metadata: {str(e)}")
+        return create_response(500, {"message": "Error getting file metadata"})
 
 def get_file_transactions_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     """Get all transactions for a specific file."""
@@ -942,6 +942,48 @@ def delete_file_transactions_handler(event: Dict[str, Any], user: Dict[str, Any]
         logger.error(f"Error in delete_file_transactions_handler: {str(e)}")
         return create_response(500, {"message": "Internal server error"})
 
+def get_file_content_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    """Get the content of a file by ID."""
+    try:
+        # Get file ID from path parameters
+        file_id = event.get('pathParameters', {}).get('id')
+        
+        if not file_id:
+            return create_response(400, {"message": "File ID is required"})
+            
+        # Get file metadata from DynamoDB
+        response = file_table.get_item(Key={'fileId': file_id})
+        file = response.get('Item')
+        
+        if not file:
+            return create_response(404, {"message": "File not found"})
+            
+        # Check if the file belongs to the user
+        if file.get('userId') != user['id']:
+            return create_response(403, {"message": "Access denied"})
+        
+        # Get the file content from S3
+        try:
+            s3_response = s3_client.get_object(
+                Bucket=FILE_STORAGE_BUCKET,
+                Key=file.get('s3Key')
+            )
+            content = s3_response['Body'].read().decode('utf-8')
+            
+            return create_response(200, {
+                'fileId': file_id,
+                'content': content,
+                'contentType': file.get('contentType'),
+                'fileName': file.get('fileName')
+            })
+        except Exception as s3_error:
+            logger.error(f"Error reading file from S3: {str(s3_error)}")
+            return create_response(500, {"message": "Error reading file content"})
+            
+    except Exception as e:
+        logger.error(f"Error getting file content: {str(e)}")
+        return create_response(500, {"message": "Error getting file content"})
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main Lambda handler for file operations."""
     logger.info(f"Processing request with event: {json.dumps(event)}")
@@ -970,8 +1012,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return get_files_by_account_handler(event, user)
     elif route == "POST /files/upload":
         return get_upload_url_handler(event, user)
-    elif route == "GET /files/{id}":
-        return get_file_handler(event, user)
+    elif route == "GET /files/{id}/metadata":
+        return get_file_metadata_handler(event, user)
+    elif route == "GET /files/{id}/content":
+        return get_file_content_handler(event, user)
     elif route == "GET /files/{id}/download":
         return get_download_url_handler(event, user)
     elif route == "GET /files/{id}/transactions":
