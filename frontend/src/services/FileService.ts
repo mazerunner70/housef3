@@ -299,8 +299,8 @@ export const updateFileBalance = async (fileId: string, openingBalance: number):
 // Associate a field map with a file
 export const associateFieldMap = async (fileId: string, fieldMapId: string): Promise<void> => {
   try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/${fileId}/associate`, {
-      method: 'POST',
+    const response = await authenticatedRequest(`${API_ENDPOINT}/${fileId}/field-map`, {
+      method: 'PUT',
       body: JSON.stringify({ fieldMapId })
     });
     

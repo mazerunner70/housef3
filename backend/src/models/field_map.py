@@ -117,9 +117,18 @@ def validate_field_map_data(data: Dict[str, Any]) -> None:
             
     if not isinstance(data['mappings'], list):
         raise ValueError("Mappings must be a list")
-        
+    
     for mapping in data['mappings']:
         if not isinstance(mapping, dict):
             raise ValueError("Each mapping must be a dictionary")
+            
+        # Check for required mapping fields
         if 'sourceField' not in mapping or 'targetField' not in mapping:
-            raise ValueError("Each mapping must have sourceField and targetField") 
+            raise ValueError("Each mapping must have sourceField and targetField")
+            
+        # Validate field values
+        if not isinstance(mapping['sourceField'], str) or not mapping['sourceField'].strip():
+            raise ValueError("sourceField must be a non-empty string")
+            
+        if not isinstance(mapping['targetField'], str) or not mapping['targetField'].strip():
+            raise ValueError("targetField must be a non-empty string")

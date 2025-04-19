@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional, Union
 from decimal import Decimal
 from models.transaction_file import FileFormat, ProcessingStatus
 from models.transaction import Transaction
-from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_file_metadata, get_account, list_file_transactions, delete_transactions_for_file
+from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_file_metadata, get_account, list_file_transactions, delete_transactions_for_file, get_field_maps_table, get_field_map
 from utils.transaction_parser import process_file_transactions
 
 # Configure logging
@@ -197,6 +197,7 @@ def list_files_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str,
         # Convert DynamoDB response to more user-friendly format
         formatted_files = []
         for file in files:
+            print("file", file)
             formatted_file = {
                 'fileId': file.get('fileId'),
                 'fileName': file.get('fileName'),
@@ -227,6 +228,17 @@ def list_files_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str,
             
             if 'openingBalance' in file:
                 formatted_file['openingBalance'] = float(file.get('openingBalance'))
+
+            if 'fieldMapId' in file:
+                formatted_file['fieldMapId'] = file.get('fieldMapId')
+                # Get the field map details
+                field_map = get_field_map(file.get('fieldMapId'))
+                if field_map:
+                    formatted_file['fieldMap'] = {
+                        'fieldMapId': field_map.field_map_id,
+                        'name': field_map.name,
+                        'description': field_map.description
+                    }
             
             formatted_files.append(formatted_file)
             
@@ -839,6 +851,17 @@ def get_file_metadata_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Di
         if 'openingBalance' in file:
             formatted_file['openingBalance'] = float(file.get('openingBalance'))
         
+        if 'fieldMapId' in file:
+            formatted_file['fieldMapId'] = file.get('fieldMapId')
+            # Get the field map details
+            field_map = get_field_map(file.get('fieldMapId'))
+            if field_map:
+                formatted_file['fieldMap'] = {
+                    'fieldMapId': field_map.field_map_id,
+                    'name': field_map.name,
+                    'description': field_map.description
+                }
+        
         return create_response(200, formatted_file)
     except Exception as e:
         logger.error(f"Error getting file metadata: {str(e)}")
@@ -984,6 +1007,83 @@ def get_file_content_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dic
         logger.error(f"Error getting file content: {str(e)}")
         return create_response(500, {"message": "Error getting file content"})
 
+def update_file_field_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    """Update a file's field map."""
+    try:
+        # Get file ID from path parameters
+        file_id = event.get('pathParameters', {}).get('id')
+        
+        if not file_id:
+            return create_response(400, {"message": "File ID is required"})
+            
+        # Get file metadata from DynamoDB
+        response = file_table.get_item(Key={'fileId': file_id})
+        file = response.get('Item')
+        
+        if not file:
+            return create_response(404, {"message": "File not found"})
+            
+        # Check if the file belongs to the user
+        if file.get('userId') != user['id']:
+            return create_response(403, {"message": "Access denied"})
+        
+        # Parse the request body to get the field map ID
+        try:
+            request_body = json.loads(event.get('body', '{}'))
+            field_map_id = request_body.get('fieldMapId')
+            
+            if not field_map_id:
+                return create_response(400, {"message": "Field map ID is required"})
+        except Exception as parse_error:
+            logger.error(f"Error parsing request body: {str(parse_error)}")
+            return create_response(400, {"message": "Invalid request body"})
+        
+        # Verify that the field map exists and belongs to the user
+        try:
+            field_map_response = get_field_maps_table().get_item(Key={'fieldMapId': field_map_id})
+            
+            if 'Item' not in field_map_response:
+                return create_response(404, {"message": "Field map not found"})
+                
+            field_map = field_map_response['Item']
+            
+            # Check if the field map belongs to the user
+            if field_map.get('userId') != user['id']:
+                return create_response(403, {"message": "Access denied to the specified field map"})
+        except Exception as field_map_error:
+            logger.error(f"Error verifying field map: {str(field_map_error)}")
+            return create_response(500, {"message": "Error verifying field map"})
+        
+        # Update the file to add field map association
+        try:
+            logger.info(f"Associating file {file_id} with field map {field_map_id}")
+            
+            # Create update expression to add fieldMapId
+            update_expression = "SET fieldMapId = :fieldMapId"
+            expression_attribute_values = {
+                ":fieldMapId": field_map_id
+            }
+            
+            # Update the file
+            file_table.update_item(
+                Key={'fileId': file_id},
+                UpdateExpression=update_expression,
+                ExpressionAttributeValues=expression_attribute_values
+            )
+            
+            return create_response(200, {
+                "message": "File successfully associated with field map",
+                "fileId": file_id,
+                "fieldMapId": field_map_id,
+                "fieldMapName": field_map.get('name')
+            })
+        except Exception as update_error:
+            logger.error(f"Error updating file: {str(update_error)}")
+            return create_response(500, {"message": "Error associating file with field map"})
+    except Exception as e:
+        logger.error(f"Error updating file field map: {str(e)}")
+        return create_response(500, {"message": "Error handling field map update request"})
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main Lambda handler for file operations."""
     logger.info(f"Processing request with event: {json.dumps(event)}")
@@ -1030,5 +1130,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return associate_file_handler(event, user)
     elif route == "POST /files/{id}/balance":
         return update_file_balance_handler(event, user)
+    elif route == "PUT /files/{id}/field-map":
+        return update_file_field_map_handler(event, user)
     else:
         return create_response(400, {"message": f"Unsupported route: {route}"}) 

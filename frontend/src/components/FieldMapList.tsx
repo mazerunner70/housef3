@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './FieldMapList.css';
 import FieldMapService, { FieldMap } from '../services/FieldMapService';
-import { Account } from '../services/AccountService';
+
 
 interface FieldMapListProps {
   onSelectMap?: (map: FieldMap) => void;

@@ -32,6 +32,7 @@ resource "aws_lambda_function" "file_operations" {
       FILES_TABLE         = aws_dynamodb_table.transaction_files.name
       ACCOUNTS_TABLE      = aws_dynamodb_table.accounts.name
       TRANSACTIONS_TABLE  = aws_dynamodb_table.transactions.name
+      FIELD_MAPS_TABLE    = aws_dynamodb_table.field_maps.name
     }
   }
   

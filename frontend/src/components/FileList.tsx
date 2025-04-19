@@ -18,7 +18,7 @@ import FileFieldMapStatus from './FileFieldMapStatus';
 import FieldMapList from './FieldMapList';
 import { FieldMapForm } from './FieldMapForm';
 import FileService, { File } from '../services/FileService';
-import { FieldMap } from '../services/FieldMapService';
+import FieldMapService, { FieldMap } from '../services/FieldMapService';
 import { downloadFile } from '../utils/downloadUtils';
 
 interface FileListProps {
@@ -49,6 +49,7 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
   const [showFieldMapModal, setShowFieldMapModal] = useState<boolean>(false);
   const [showFieldMapForm, setShowFieldMapForm] = useState(false);
   const [selectedFileForMap, setSelectedFileForMap] = useState<string | null>(null);
+  const [selectedFieldMap, setSelectedFieldMap] = useState<FieldMap | null>(null);
 
   // Load files from API
   const loadFiles = async () => {
@@ -350,19 +351,50 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
     setViewingTransactionsFile(null);
   };
 
-  const handleSelectMap = (fileId: string) => {
+  const handleSelectMap = async (fileId: string) => {
     setSelectedFileForMap(fileId);
-    setShowFieldMapForm(true);
+    try {
+      const file = files.find(f => f.fileId === fileId);
+      if (file?.fieldMap?.fieldMapId) {
+        const fieldMap = await FieldMapService.getFieldMap(file.fieldMap.fieldMapId);
+        setShowFieldMapForm(true);
+        // Pass the field map to the form
+        setSelectedFieldMap(fieldMap);
+      } else {
+        setShowFieldMapForm(true);
+      }
+    } catch (error) {
+      console.error('Error fetching field map:', error);
+      setError('Failed to load field map details');
+    }
   };
 
   const handleFieldMapSave = async (fieldMap: FieldMap) => {
     try {
       if (selectedFileForMap) {
         await FileService.associateFieldMap(selectedFileForMap, fieldMap.fieldMapId);
+        
+        // Update the local state immediately
+        setFiles(prevFiles => prevFiles.map(file => {
+          if (file.fileId === selectedFileForMap) {
+            return {
+              ...file,
+              fieldMap: {
+                fieldMapId: fieldMap.fieldMapId,
+                name: fieldMap.name,
+                description: fieldMap.description
+              }
+            };
+          }
+          return file;
+        }));
+        
+        // Still call loadFiles to ensure we have the latest data
         await loadFiles();
       }
       setShowFieldMapForm(false);
       setSelectedFileForMap(null);
+      setSelectedFieldMap(null);
     } catch (error) {
       console.error('Error saving field map:', error);
       setError(error instanceof Error ? error.message : 'Failed to save field map');
@@ -711,12 +743,14 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
       {showFieldMapForm && (
         <div className="modal-overlay">
           <div className="modal-content">
-            <h2>Create Field Map</h2>
+            <h2>{selectedFieldMap ? 'Edit Field Map' : 'Create Field Map'}</h2>
             <FieldMapForm
+              fieldMap={selectedFieldMap || undefined}
               onSave={handleFieldMapSave}
               onCancel={() => {
                 setShowFieldMapForm(false);
                 setSelectedFileForMap(null);
+                setSelectedFieldMap(null);
               }}
               accountId={selectedFileForMap ? files.find(f => f.fileId === selectedFileForMap)?.accountId : undefined}
               fileId={selectedFileForMap || undefined}

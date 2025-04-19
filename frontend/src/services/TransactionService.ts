@@ -20,14 +20,14 @@ export interface Transaction {
   debitOrCredit?: string;
 }
 // Extract the fields from the Transaction interface
-export const transactionFields = Object.keys({
-  date: '',
-  description: '',
-  amount: 0,
-  transactionType: '',
-  category: '',
-  debitOrCredit: ''
-});
+export const transactionFields = [
+  'date',
+  'description',
+  'amount',
+  'transactionType',
+  'category',
+  'debitOrCredit'
+];
 
 // Response interface for transaction list
 export interface TransactionListResponse {

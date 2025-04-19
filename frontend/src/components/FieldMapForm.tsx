@@ -28,15 +28,26 @@ export const FieldMapForm: React.FC<FieldMapFormProps> = ({
 }) => {
   const [name, setName] = useState(fieldMap?.name || '');
   const [description, setDescription] = useState(fieldMap?.description || '');
-  const [mappings, setMappings] = useState<FieldMapping[]>(
-    fieldMap?.mappings || [
-      { sourceField: '', targetField: 'date' },
-      { sourceField: '', targetField: 'description' },
-      { sourceField: '', targetField: 'amount' },
-      { sourceField: '', targetField: 'type' },
-      { sourceField: '', targetField: 'balance' }
-    ]
-  );
+  const [mappings, setMappings] = useState<FieldMapping[]>(() => {
+    if (fieldMap?.mappings) {
+      // Create a map of targetField to sourceField for quick lookup
+      const mappingMap = new Map(
+        fieldMap.mappings.map(m => [m.targetField, m.sourceField])
+      );
+      
+      // Create mappings in the order of transactionFields
+      return transactionFields.map(targetField => ({
+        sourceField: mappingMap.get(targetField) || '',
+        targetField
+      }));
+    }
+    
+    // If no fieldMap, initialize with empty source fields
+    return transactionFields.map(targetField => ({
+      sourceField: '',
+      targetField
+    }));
+  });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [previewData, setPreviewData] = useState<Array<Record<string, any>>>([]);
@@ -147,11 +158,6 @@ export const FieldMapForm: React.FC<FieldMapFormProps> = ({
       return;
     }
 
-    if (mappings.some(m => !m.sourceField || !m.targetField)) {
-      setError('All mappings must have both source and target fields');
-      return;
-    }
-
     try {
       setSaving(true);
       setError(null);
@@ -159,7 +165,7 @@ export const FieldMapForm: React.FC<FieldMapFormProps> = ({
       const fieldMapData = {
         name,
         description,
-        mappings,
+        mappings: mappings.filter(m => m.sourceField !== '' && m.targetField !== ''),
         accountId
       };
 
@@ -212,31 +218,21 @@ export const FieldMapForm: React.FC<FieldMapFormProps> = ({
                       value={mappings[index]?.sourceField || ''}
                       onChange={(e) => handleMappingChange(index, 'sourceField', e.target.value)}
                     >
-                      <option value="" disabled>Select source field</option>
-                      {previewData[0] && Object.keys(previewData[0]).map((column, idx) => (
-                        <option key={idx} value={column}>{column}</option>
-                      ))}
+                      <option value="">Unassigned</option>
+                      {previewData[0] && Object.keys(previewData[0])
+                        .filter(column => {
+                          if (mappings[index]?.sourceField === column) return true;
+                          return !mappings.some((m, i) => i !== index && m.sourceField === column);
+                        })
+                        .map((column, idx) => (
+                          <option key={idx} value={column}>{column}</option>
+                        ))}
                     </select>
                     <span className="mapping-arrow">→</span>
                     <span>{field}</span>
                   </div>
-                  <button
-                    type="button"
-                    className="remove-mapping-button"
-                    onClick={() => handleRemoveMapping(index)}
-                    title="Remove mapping"
-                  >
-                    ×
-                  </button>
                 </div>
               ))}
-              <button
-                type="button"
-                className="add-mapping-button"
-                onClick={handleAddMapping}
-              >
-                + Add Field Mapping
-              </button>
             </div>
 
             {error && <div className="error-message">{error}</div>}
