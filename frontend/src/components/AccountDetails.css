@@ -174,4 +174,111 @@
   border-radius: 4px;
   color: #495057;
   font-weight: 500;
+}
+
+.transactions-section {
+  margin-top: 2rem;
+}
+
+.transactions-section h3 {
+  margin: 0 0 1rem 0;
+  color: #333;
+}
+
+.no-transactions {
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+  color: #666;
+  text-align: center;
+}
+
+.transactions-table {
+  border: 1px solid #eee;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.transactions-header {
+  display: grid;
+  grid-template-columns: 120px 1fr 120px 120px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #eee;
+  font-weight: 500;
+  color: #666;
+}
+
+.header-cell {
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+
+.header-cell:hover {
+  background: #e9ecef;
+}
+
+.header-cell.asc::after {
+  content: '↑';
+  margin-left: 0.5rem;
+}
+
+.header-cell.desc::after {
+  content: '↓';
+  margin-left: 0.5rem;
+}
+
+.transactions-body {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.transaction-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 120px 120px;
+  border-bottom: 1px solid #eee;
+  transition: background-color 0.2s ease;
+}
+
+.transaction-row:last-child {
+  border-bottom: none;
+}
+
+.transaction-row:hover {
+  background: #f8f9fa;
+}
+
+.cell {
+  padding: 0.75rem 1rem;
+  color: #333;
+}
+
+.cell.date {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.cell.description {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cell.amount {
+  text-align: right;
+  font-weight: 500;
+}
+
+.cell.amount.positive {
+  color: #28a745;
+}
+
+.cell.amount.negative {
+  color: #dc3545;
+}
+
+.cell.category {
+  color: #666;
+  font-size: 0.9rem;
 } 

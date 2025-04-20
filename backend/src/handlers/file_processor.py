@@ -125,8 +125,8 @@ def process_file_transactions(file_id: str, content_bytes: bytes, file_format: F
             
         # Get field map if specified
         field_map = None
-        field_map_id = file_record.get('fieldMapId')
-        account_id = file_record.get('accountId')
+        field_map_id = file_record.field_map_id
+        account_id = file_record.account_id
         
         if field_map_id:
             # Use specified field map
@@ -259,6 +259,42 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 file_id = file_record.get('fileId')
                 logger.info(f"Found file record with ID: {file_id}")
                 
+                # Get the file record to check for field map
+                file_details = get_transaction_file(file_id)
+                if not file_details:
+                    logger.error(f"File record not found for ID: {file_id}")
+                    continue
+                
+                # Check for field map
+                field_map = None
+                field_map_id = file_details.field_map_id
+                account_id = file_details.account_id
+                logger.info(f"Field map ID: {field_map_id}, Account ID: {account_id}")
+                
+                if field_map_id:
+                    # Use specified field map
+                    field_map = get_field_map(field_map_id)
+                    if not field_map:
+                        logger.warning(f"Specified field map not found: {field_map_id}")
+                        update_transaction_file(file_id, {
+                            'processingStatus': ProcessingStatus.NEEDS_MAPPING,
+                            'errorMessage': 'Specified field map not found'
+                        })
+                        continue
+                elif account_id:
+                    # Try to use account's default field map
+                    field_map = get_account_default_field_map(account_id)
+                    if field_map:
+                        logger.info(f"Using account default field map for file {file_id}")
+                
+                if not field_map:
+                    logger.info(f"No field map available for file {file_id}, skipping processing")
+                    update_transaction_file(file_id, {
+                        'processingStatus': ProcessingStatus.NEEDS_MAPPING,
+                        'errorMessage': 'No field map available for processing'
+                    })
+                    continue
+                
                 # Update processing status to "processing"
                 update_transaction_file(file_id, {
                     'processingStatus': ProcessingStatus.PROCESSING
@@ -281,7 +317,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             logger.info(f"Extracted opening balance: {opening_balance}")
                     
                     # Compare with the format in the record
-                    current_format = FileFormat(file_record.get('fileFormat', 'other'))
+                    current_format = FileFormat(file_details.get('fileFormat', 'other'))
                     
                     # Prepare update data
                     update_data = {
@@ -299,7 +335,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     update_transaction_file(file_id, update_data)
                         
                     # Parse transactions
-                    transactions = parse_transactions(content_bytes, detected_format, opening_balance)
+                    transactions = parse_transactions(content_bytes, detected_format, opening_balance, field_map)
                     
                     # Store transactions in DynamoDB
                     min_date = None

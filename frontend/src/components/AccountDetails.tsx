@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Account, getAccount, listAccountFiles, deleteAccount } from '../services/AccountService';
+import { Transaction, getAccountTransactions } from '../services/TransactionService';
 import { FileMetadata } from '../services/FileService';
 import AccountForm from './AccountForm';
 import './AccountDetails.css';
@@ -12,9 +13,12 @@ interface AccountDetailsProps {
 const AccountDetails: React.FC<AccountDetailsProps> = ({ accountId, onAccountDeleted }) => {
   const [account, setAccount] = useState<Account | null>(null);
   const [files, setFiles] = useState<FileMetadata[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sortField, setSortField] = useState<keyof Transaction>('date');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   const fetchAccountDetails = async () => {
     try {
@@ -38,9 +42,20 @@ const AccountDetails: React.FC<AccountDetailsProps> = ({ accountId, onAccountDel
     }
   };
 
+  const fetchAccountTransactions = async () => {
+    try {
+      const response = await getAccountTransactions(accountId);
+      setTransactions(response.transactions);
+    } catch (err) {
+      console.error('Error fetching account transactions:', err);
+      setError('Failed to load account transactions');
+    }
+  };
+
   useEffect(() => {
     fetchAccountDetails();
     fetchAccountFiles();
+    fetchAccountTransactions();
   }, [accountId]);
 
   const handleUpdateAccount = async (updatedData: Partial<Account>) => {
@@ -64,6 +79,30 @@ const AccountDetails: React.FC<AccountDetailsProps> = ({ accountId, onAccountDel
         setError('Failed to delete account');
       }
     }
+  };
+
+  const handleSortChange = (field: keyof Transaction) => {
+    if (field === sortField) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: account?.currency || 'USD'
+    }).format(amount);
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
   };
 
   if (loading) {
@@ -118,10 +157,7 @@ const AccountDetails: React.FC<AccountDetailsProps> = ({ accountId, onAccountDel
           <div className="info-item">
             <span className="label">Balance:</span>
             <span className="value">
-              {new Intl.NumberFormat('en-US', {
-                style: 'currency',
-                currency: account.currency
-              }).format(account.balance)}
+              {formatCurrency(account.balance)}
             </span>
           </div>
           <div className="info-item">
@@ -153,6 +189,68 @@ const AccountDetails: React.FC<AccountDetailsProps> = ({ accountId, onAccountDel
             <span className="value">{new Date(account.updatedAt).toLocaleDateString()}</span>
           </div>
         </div>
+      </div>
+
+      <div className="transactions-section">
+        <h3>Transactions</h3>
+        {transactions.length === 0 ? (
+          <div className="no-transactions">No transactions found for this account.</div>
+        ) : (
+          <div className="transactions-table">
+            <div className="transactions-header">
+              <div 
+                className={`header-cell date ${sortField === 'date' ? sortDirection : ''}`}
+                onClick={() => handleSortChange('date')}
+              >
+                Date
+              </div>
+              <div 
+                className={`header-cell description ${sortField === 'description' ? sortDirection : ''}`}
+                onClick={() => handleSortChange('description')}
+              >
+                Description
+              </div>
+              <div 
+                className={`header-cell amount ${sortField === 'amount' ? sortDirection : ''}`}
+                onClick={() => handleSortChange('amount')}
+              >
+                Amount
+              </div>
+              <div 
+                className={`header-cell category ${sortField === 'category' ? sortDirection : ''}`}
+                onClick={() => handleSortChange('category')}
+              >
+                Category
+              </div>
+            </div>
+            <div className="transactions-body">
+              {transactions
+                .sort((a, b) => {
+                  const aValue = a[sortField];
+                  const bValue = b[sortField];
+                  const direction = sortDirection === 'asc' ? 1 : -1;
+                  
+                  if (sortField === 'date') {
+                    return direction * (new Date(aValue as string).getTime() - new Date(bValue as string).getTime());
+                  }
+                  if (sortField === 'amount') {
+                    return direction * ((aValue as number) - (bValue as number));
+                  }
+                  return direction * String(aValue).localeCompare(String(bValue));
+                })
+                .map(transaction => (
+                  <div key={transaction.transactionId} className="transaction-row">
+                    <div className="cell date">{formatDate(transaction.date)}</div>
+                    <div className="cell description">{transaction.description}</div>
+                    <div className={`cell amount ${transaction.amount >= 0 ? 'positive' : 'negative'}`}>
+                      {formatCurrency(transaction.amount)}
+                    </div>
+                    <div className="cell category">{transaction.category || '-'}</div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="files-section">
