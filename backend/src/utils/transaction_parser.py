@@ -192,6 +192,16 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
         # Clean up headers
         header = [h.strip() for h in header]
         
+        # Find columns by common names if no field map
+        date_col = find_column_index(header, ['date', 'transaction date', 'posted date'])
+        desc_col = find_column_index(header, ['description', 'payee', 'merchant', 'transaction'])
+        amount_col = find_column_index(header, ['amount', 'transaction amount', 'billing amount'])
+        type_col = find_column_index(header, ['type', 'transaction type'])
+        category_col = find_column_index(header, ['category', 'transaction category'])
+        memo_col = find_column_index(header, ['memo', 'notes', 'description'])
+        balance_col = find_column_index(header, ['balance', 'running balance'])
+        debit_credit_col = find_column_index(header, ['debit or credit'])
+        
         # If using field map, validate required fields are present
         if field_map:
             missing_fields = []
@@ -203,16 +213,7 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
                 logger.error(f"Missing required fields in CSV: {missing_fields}")
                 return []
         else:
-            # Find columns by common names if no field map
-            date_col = find_column_index(header, ['date', 'transaction date', 'posted date'])
-            desc_col = find_column_index(header, ['description', 'payee', 'merchant', 'transaction'])
-            amount_col = find_column_index(header, ['amount', 'transaction amount', 'billing amount'])
-            type_col = find_column_index(header, ['type', 'transaction type'])
-            category_col = find_column_index(header, ['category', 'transaction category'])
-            memo_col = find_column_index(header, ['memo', 'notes', 'description'])
-            balance_col = find_column_index(header, ['balance', 'running balance'])
-            debit_credit_col = find_column_index(header, ['debit or credit'])
-            
+            # Validate required columns if no field map
             if None in [date_col, desc_col, amount_col]:
                 logger.error("Missing required columns in CSV")
                 return []

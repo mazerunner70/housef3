@@ -24,8 +24,8 @@ class ProcessingStatus(str, enum.Enum):
     """Enum for file processing status"""
     PENDING = "pending"
     PROCESSING = "processing"
-    COMPLETED = "completed"
-    FAILED = "failed"
+    PROCESSED = "processed"
+    ERROR = "error"
     NEEDS_MAPPING = "needs_mapping"
 
 

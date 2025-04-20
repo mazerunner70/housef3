@@ -23,6 +23,7 @@ from utils.db_utils import (
     get_field_map,
     get_account_default_field_map
 )
+from datetime import datetime
 
 # Configure logging
 logger = logging.getLogger()
@@ -157,12 +158,22 @@ def process_file_with_account(file_id: str, content_bytes: bytes, file_format: F
             return 0
             
         # Parse transactions using the utility
-        transactions = parse_transactions(
-            content_bytes, 
-            file_format,
-            opening_balance,
-            field_map
-        )
+        try:
+            transactions = parse_transactions(
+                content_bytes, 
+                file_format,
+                opening_balance,
+                field_map
+            )
+        except Exception as parse_error:
+            logger.error(f"Error parsing transactions: {str(parse_error)}")
+            logger.error(f"Error type: {type(parse_error).__name__}")
+            logger.error(f"Error args: {parse_error.args}")
+            update_transaction_file(file_id, {
+                'processingStatus': ProcessingStatus.ERROR,
+                'errorMessage': f'Error parsing transactions: {str(parse_error)}'
+            })
+            return 0
         
         if not transactions:
             logger.error(f"No transactions parsed from file {file_id}")
@@ -200,15 +211,18 @@ def process_file_with_account(file_id: str, content_bytes: bytes, file_format: F
                 create_transaction(transaction_data)
                 transaction_count += 1
             except Exception as tx_error:
-                logger.warning(f"Error creating transaction: {str(tx_error)}")
+                logger.error(f"Error creating transaction: {str(tx_error)}")
+                logger.error(f"Error type: {type(tx_error).__name__}")
+                logger.error(f"Error args: {tx_error.args}")
+                logger.error(f"Transaction data that caused error: {transaction_data}")
                 
         logger.info(f"Saved {transaction_count} transactions for file {file_id} ({duplicate_count} duplicates)")
         
         # Update the file record with transaction count and status
         update_data = {
-            'transactionCount': str(transaction_count),
-            'duplicateCount': str(duplicate_count),
-            'processingStatus': ProcessingStatus.PROCESSED
+            'processing_status': ProcessingStatus.PROCESSED.value,
+            'processed_at': datetime.now().isoformat(),
+            'transaction_count': len(transactions)
         }
         if field_map:
             update_data['fieldMapId'] = field_map.field_map_id
@@ -216,11 +230,13 @@ def process_file_with_account(file_id: str, content_bytes: bytes, file_format: F
         update_transaction_file(file_id, update_data)
         
         return transaction_count
-    except Exception as parse_error:
-        logger.error(f"Error processing transactions: {str(parse_error)}")
+    except Exception as e:
+        logger.error(f"Error processing transactions: {str(e)}")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error args: {e.args}")
         update_transaction_file(file_id, {
             'processingStatus': ProcessingStatus.ERROR,
-            'errorMessage': str(parse_error)
+            'errorMessage': f'Error processing transactions: {str(e)}'
         })
         return 0
 
