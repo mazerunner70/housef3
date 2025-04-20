@@ -31,6 +31,11 @@ resource "aws_dynamodb_table" "transactions" {
     type = "S"
   }
   
+  attribute {
+    name = "importOrder"
+    type = "N"
+  }
+  
   # GSI to query transactions by file ID
   global_secondary_index {
     name               = "FileIdIndex"
@@ -56,6 +61,14 @@ resource "aws_dynamodb_table" "transactions" {
   global_secondary_index {
     name               = "AccountIdIndex"
     hash_key           = "accountId"
+    projection_type    = "ALL"
+  }
+  
+  # GSI to sort transactions by import order
+  global_secondary_index {
+    name               = "ImportOrderIndex"
+    hash_key           = "fileId"
+    range_key          = "importOrder"
     projection_type    = "ALL"
   }
   

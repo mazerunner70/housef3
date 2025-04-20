@@ -18,8 +18,9 @@ const TransactionList: React.FC<TransactionListProps> = ({
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [sortField, setSortField] = useState<keyof Transaction>('date');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [sortField, setSortField] = useState<keyof Transaction>('importOrder');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [isCustomSorted, setIsCustomSorted] = useState(false);
 
   // Load transactions when component mounts
   useEffect(() => {
@@ -61,6 +62,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
 
   // Handle sort change
   const handleSortChange = (field: keyof Transaction) => {
+    setIsCustomSorted(true);
     if (field === sortField) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
@@ -69,8 +71,20 @@ const TransactionList: React.FC<TransactionListProps> = ({
     }
   };
 
+  // Reset to import order
+  const resetToImportOrder = () => {
+    setIsCustomSorted(false);
+    setSortField('importOrder');
+    setSortDirection('asc');
+  };
+
   // Get sorted transactions
   const getSortedTransactions = () => {
+    if (!isCustomSorted) {
+      // Use importOrder when no custom sorting is applied
+      return [...transactions].sort((a, b) => a.importOrder - b.importOrder);
+    }
+
     return [...transactions].sort((a, b) => {
       let aValue = a[sortField];
       let bValue = b[sortField];
@@ -107,7 +121,18 @@ const TransactionList: React.FC<TransactionListProps> = ({
     <div className="transaction-list-container">
       <div className="transaction-list-header">
         <h2>{fileName ? `Transactions - ${fileName}` : 'Transactions'}</h2>
-        <button className="close-button" onClick={onClose}>×</button>
+        <div className="header-actions">
+          {isCustomSorted && (
+            <button 
+              className="reset-order-button" 
+              onClick={resetToImportOrder}
+              title="Reset to original import order"
+            >
+              Reset Order
+            </button>
+          )}
+          <button className="close-button" onClick={onClose}>×</button>
+        </div>
       </div>
 
       {/* Opening balance */}

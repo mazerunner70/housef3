@@ -28,7 +28,8 @@ class Transaction:
         check_number: Optional[str] = None,
         reference: Optional[str] = None,
         account_id: Optional[str] = None,
-        status: Optional[str] = None
+        status: Optional[str] = None,
+        import_order: Optional[int] = None
     ):
         self.transaction_id = transaction_id
         self.file_id = file_id
@@ -45,6 +46,7 @@ class Transaction:
         self.reference = reference
         self.account_id = account_id
         self.status = status
+        self.import_order = import_order
         
     @classmethod
     def create(
@@ -110,6 +112,9 @@ class Transaction:
         if self.status:
             result["status"] = self.status
             
+        if self.import_order is not None:
+            result["importOrder"] = self.import_order
+            
         return result
     
     @classmethod
@@ -132,7 +137,8 @@ class Transaction:
             check_number=data.get("checkNumber"),
             reference=data.get("reference"),
             account_id=data.get("accountId"),
-            status=data.get("status")
+            status=data.get("status"),
+            import_order=data.get("importOrder")
         )
 
 def validate_transaction_data(data: Dict[str, Any]) -> bool:

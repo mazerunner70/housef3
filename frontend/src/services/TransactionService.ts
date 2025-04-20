@@ -18,7 +18,9 @@ export interface Transaction {
   checkNumber?: string;
   reference?: string;
   debitOrCredit?: string;
+  importOrder: number;
 }
+
 // Extract the fields from the Transaction interface
 export const transactionFields = [
   'date',
@@ -26,7 +28,8 @@ export const transactionFields = [
   'amount',
   'transactionType',
   'category',
-  'debitOrCredit'
+  'debitOrCredit',
+  'importOrder'
 ];
 
 // Response interface for transaction list

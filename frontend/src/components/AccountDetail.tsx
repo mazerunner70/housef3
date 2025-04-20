@@ -17,8 +17,8 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
   const [error, setError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<boolean>(false);
   const [deleting, setDeleting] = useState<boolean>(false);
-  const [sortField, setSortField] = useState<keyof Transaction>('date');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [sortField, setSortField] = useState<keyof Transaction>('importOrder');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   useEffect(() => {
     if (accountId) {
@@ -270,10 +270,16 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
                 Amount
               </div>
               <div 
-                className={`header-cell category ${sortField === 'category' ? sortDirection : ''}`}
-                onClick={() => handleSortChange('category')}
+                className={`header-cell running-total ${sortField === 'runningTotal' ? sortDirection : ''}`}
+                onClick={() => handleSortChange('runningTotal')}
               >
-                Category
+                Balance
+              </div>
+              <div 
+                className={`header-cell import-order ${sortField === 'importOrder' ? sortDirection : ''}`}
+                onClick={() => handleSortChange('importOrder')}
+              >
+                Order
               </div>
             </div>
             <div className="transactions-body">
@@ -286,7 +292,7 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
                   if (sortField === 'date') {
                     return direction * (new Date(aValue as string).getTime() - new Date(bValue as string).getTime());
                   }
-                  if (sortField === 'amount') {
+                  if (sortField === 'amount' || sortField === 'runningTotal' || sortField === 'importOrder') {
                     return direction * ((aValue as number) - (bValue as number));
                   }
                   return direction * String(aValue).localeCompare(String(bValue));
@@ -298,7 +304,12 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
                     <div className={`cell amount ${transaction.amount >= 0 ? 'positive' : 'negative'}`}>
                       {formatCurrency(transaction.amount)}
                     </div>
-                    <div className="cell category">{transaction.category || '-'}</div>
+                    <div className="cell running-total">
+                      {formatCurrency(transaction.runningTotal)}
+                    </div>
+                    <div className="cell import-order">
+                      {transaction.importOrder}
+                    </div>
                   </div>
                 ))}
             </div>

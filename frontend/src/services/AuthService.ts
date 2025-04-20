@@ -2,11 +2,6 @@ import {
   CognitoIdentityProviderClient, 
   InitiateAuthCommand,
   InitiateAuthCommandInput,
-  InitiateAuthCommandOutput,
-  SignUpCommand,
-  SignUpCommandInput,
-  ConfirmSignUpCommand,
-  ConfirmSignUpCommandInput,
   GlobalSignOutCommand
 } from "@aws-sdk/client-cognito-identity-provider";
 
@@ -210,7 +205,6 @@ export const refreshToken = async (refreshToken: string): Promise<AuthUser> => {
 // Helper function to parse JWT
 function parseJwt(token: string) {
   try {
-    // Split the token and get the payload part
     const base64Url = token.split('.')[1];
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
     const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {

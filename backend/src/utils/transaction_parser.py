@@ -126,6 +126,12 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
     Returns:
         List of transaction dictionaries
     """
+    def process_amount(amount: Decimal, debit_credit: Optional[str] = None) -> Decimal:
+        """Process amount based on debit/credit indicator."""
+        if debit_credit and debit_credit.upper() == 'DBIT':
+            return -abs(amount)
+        return amount
+
     try:
         # Decode the content
         text_content = content.decode('utf-8')
@@ -219,13 +225,10 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
                         amount_str = str(mapped_data['amount']).replace(',', '').strip()
                         logger.info(f"Row {row_num}: Attempting to convert amount string: '{amount_str}'")
                         amount = Decimal(amount_str)
+                        amount = process_amount(amount, mapped_data.get('debitOrCredit'))
                     except (decimal.InvalidOperation, decimal.ConversionSyntax) as e:
                         logger.error(f"Row {row_num}: Invalid amount format. Original value: '{mapped_data['amount']}', Cleaned value: '{amount_str}', Error: {str(e)}")
                         continue
-                    
-                    # Check if this is a credit transaction
-                    if 'debitOrCredit' in mapped_data and mapped_data['debitOrCredit'].upper() == 'CRDT':
-                        amount = -abs(amount)
                     
                     running_total += amount
                     
@@ -234,7 +237,8 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
                         'date': mapped_data['date'],
                         'description': mapped_data['description'],
                         'amount': str(amount),
-                        'running_total': str(running_total)
+                        'running_total': str(running_total),
+                        'import_order': row_num - 2  # Subtract 2 to account for header row and 1-based index
                     }
                     
                     # Add optional fields if present in mapping
@@ -258,11 +262,7 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
                         amount_str = str(row[amount_col]).replace(',', '').strip()
                         logger.info(f"Row {row_num}: Attempting to convert amount string: '{amount_str}'")
                         amount = Decimal(amount_str)
-                        
-                        # Check if this is a credit transaction
-                        if debit_credit_col is not None and row[debit_credit_col].strip().upper() == 'CRDT':
-                            amount = -abs(amount)
-                            
+                        amount = process_amount(amount, row[debit_credit_col].strip() if debit_credit_col is not None else None)
                     except (decimal.InvalidOperation, decimal.ConversionSyntax) as e:
                         logger.error(f"Row {row_num}: Invalid amount format. Original value: '{row[amount_col]}', Cleaned value: '{amount_str}', Error: {str(e)}")
                         continue
@@ -275,7 +275,8 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
                         'date': date,
                         'description': description,
                         'amount': str(amount),
-                        'running_total': str(running_total)
+                        'running_total': str(running_total),
+                        'import_order': row_num - 2  # Subtract 2 to account for header row and 1-based index
                     }
                     
                     # Add optional fields if available
@@ -336,7 +337,7 @@ def parse_ofx_transactions(content: bytes, opening_balance: float, field_map: Op
         transactions = []
         running_total = Decimal(str(opening_balance))
         
-        for block in transaction_blocks:
+        for i, block in enumerate(transaction_blocks):
             try:
                 # Extract transaction details using appropriate patterns
                 if is_xml:
@@ -394,7 +395,8 @@ def parse_ofx_transactions(content: bytes, opening_balance: float, field_map: Op
                     'amount': str(amount),
                     'balance': str(running_total),
                     'running_total': str(running_total),
-                    'transaction_type': type_match.group(1).strip() if type_match else ('DEBIT' if amount < 0 else 'CREDIT')
+                    'transaction_type': type_match.group(1).strip() if type_match else ('DEBIT' if amount < 0 else 'CREDIT'),
+                    'import_order': i  # Add import order based on position in file
                 }
                 
                 # Add memo if different from description

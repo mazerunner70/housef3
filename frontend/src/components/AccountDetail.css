@@ -272,7 +272,7 @@
 
 .transactions-header {
   display: grid;
-  grid-template-columns: 120px 1fr 120px 120px;
+  grid-template-columns: 120px 1fr 120px 120px 80px;
   background: #f8f9fa;
   border-bottom: 1px solid #eee;
   font-weight: 500;
@@ -307,7 +307,7 @@
 
 .transaction-row {
   display: grid;
-  grid-template-columns: 120px 1fr 120px 120px;
+  grid-template-columns: 120px 1fr 120px 120px 80px;
   border-bottom: 1px solid #eee;
   transition: background-color 0.2s ease;
 }
@@ -347,6 +347,18 @@
 
 .cell.amount.negative {
   color: #dc3545;
+}
+
+.cell.running-total {
+  text-align: right;
+  font-family: monospace;
+  font-weight: 500;
+}
+
+.cell.import-order {
+  text-align: center;
+  color: #666;
+  font-size: 0.9em;
 }
 
 .delete-confirmation {

@@ -1,6 +1,4 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import Navigation from './components/Navigation';
 import Login from './components/Login';
 import UserProfile from './components/UserProfile';
 import { ColorDisplay } from './components/ColorDisplay';

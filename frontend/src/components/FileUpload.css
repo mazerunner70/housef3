@@ -1,6 +1,6 @@
 .file-upload-container {
   width: 100%;
-  max-width: 600px;
+  max-width: 95%;
   margin: 0 auto;
   padding: 20px;
   background-color: #fff;
@@ -223,7 +223,13 @@
   cursor: not-allowed;
 }
 
-@media (max-width: 600px) {
+@media (min-width: 1200px) {
+  .file-upload-container {
+    max-width: 600px;
+  }
+}
+
+@media (max-width: 768px) {
   .file-upload-container {
     padding: 15px;
   }

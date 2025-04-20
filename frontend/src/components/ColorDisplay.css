@@ -1,6 +1,6 @@
 .color-display {
   padding: 2rem;
-  max-width: 1200px;
+  max-width: 95%;
   margin: 0 auto;
 }
 
@@ -123,7 +123,17 @@
 }
 
 /* Responsive adjustments */
+@media (min-width: 1200px) {
+  .color-display {
+    max-width: 1200px;
+  }
+}
+
 @media (max-width: 768px) {
+  .color-display {
+    padding: 1rem;
+  }
+
   .color-grid {
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
     gap: 1.5rem;

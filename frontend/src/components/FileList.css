@@ -1,6 +1,6 @@
 .file-list-container {
   width: 100%;
-  max-width: 900px;
+  max-width: 95%;
   margin: 20px auto;
   padding: 20px;
   background-color: #fff;
@@ -397,6 +397,12 @@
 }
 
 /* Responsive adjustments */
+@media (min-width: 1200px) {
+  .file-list-container {
+    max-width: 900px;
+  }
+}
+
 @media (max-width: 768px) {
   .file-list-container {
     padding: 15px;

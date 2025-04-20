@@ -1,6 +1,7 @@
 import { getCurrentUser, refreshToken, isAuthenticated } from './AuthService';
 import { FileMetadata } from './FileService';
 
+
 // Define enums to match backend
 export enum AccountType {
   CHECKING = "checking",
