@@ -1071,12 +1071,58 @@ def update_file_field_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -
                 ExpressionAttributeValues=expression_attribute_values
             )
             
-            return create_response(200, {
-                "message": "File successfully associated with field map",
-                "fileId": file_id,
-                "fieldMapId": field_map_id,
-                "fieldMapName": field_map.get('name')
-            })
+            # After successfully updating the field map, trigger transaction processing
+            try:
+                logger.info(f"Triggering transaction processing for file {file_id}")
+                # Get the file content from S3
+                s3_key = file.get('s3Key')
+                if not s3_key:
+                    logger.warning(f"File {file_id} has no S3 key, skipping transaction processing")
+                    return create_response(200, {
+                        "message": "File successfully associated with field map",
+                        "fileId": file_id,
+                        "fieldMapId": field_map_id,
+                        "fieldMapName": field_map.get('name')
+                    })
+                
+                # Get file content from S3
+                response = s3_client.get_object(Bucket=FILE_STORAGE_BUCKET, Key=s3_key)
+                content_bytes = response['Body'].read()
+                
+                # Get file format
+                file_format = FileFormat(file.get('fileFormat', 'other'))
+                
+                # Get opening balance if exists
+                opening_balance = float(file.get('openingBalance', 0)) if file.get('openingBalance') else None
+                
+                # Process transactions with new field map
+                transaction_count = process_file_transactions(
+                    file_id, 
+                    content_bytes, 
+                    file_format, 
+                    opening_balance,
+                    user['id']
+                )
+                
+                # Include transaction count in response
+                return create_response(200, {
+                    "message": "File successfully associated with field map and transactions reprocessed",
+                    "fileId": file_id,
+                    "fieldMapId": field_map_id,
+                    "fieldMapName": field_map.get('name'),
+                    "transactionCount": transaction_count
+                })
+                
+            except Exception as process_error:
+                logger.error(f"Error processing transactions: {str(process_error)}")
+                return create_response(200, {
+                    "message": "File associated with field map but transaction processing failed",
+                    "fileId": file_id,
+                    "fieldMapId": field_map_id,
+                    "fieldMapName": field_map.get('name'),
+                    "error": str(process_error)
+                })
+                
         except Exception as update_error:
             logger.error(f"Error updating file: {str(update_error)}")
             return create_response(500, {"message": "Error associating file with field map"})

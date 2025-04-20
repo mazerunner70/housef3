@@ -4,6 +4,42 @@
   min-height: 600px;
 }
 
+.field-map-selector {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.field-map-selector label {
+  display: block;
+  margin-bottom: 8px;
+  color: #495057;
+  font-weight: 500;
+}
+
+.field-map-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 14px;
+  color: #495057;
+  background-color: white;
+  cursor: pointer;
+}
+
+.field-map-select:hover {
+  border-color: #adb5bd;
+}
+
+.field-map-select:focus {
+  border-color: #80bdff;
+  outline: 0;
+  box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+}
+
 .field-map-form-content {
   display: flex;
   gap: 2rem;
@@ -81,7 +117,21 @@
   gap: 1rem;
   align-items: center;
   margin-bottom: 1rem;
-  animation: fadeIn 0.3s ease;
+  padding: 8px;
+  border-radius: 4px;
+  background: white;
+  transition: all 0.2s ease;
+}
+
+.mapping-row.mapping-mismatch {
+  background: #fff3e0;
+  border: 1px solid #ffb74d;
+}
+
+.mapping-warning {
+  color: #f57c00;
+  font-size: 18px;
+  cursor: help;
 }
 
 .mapping-fields {
@@ -97,6 +147,11 @@
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 1rem;
+}
+
+.mapping-fields input:disabled {
+  background: #f5f5f5;
+  cursor: not-allowed;
 }
 
 .mapping-arrow {
@@ -153,24 +208,19 @@
 
 .form-actions {
   display: flex;
+  justify-content: flex-end;
   gap: 1rem;
   margin-top: 2rem;
-  justify-content: flex-end;
 }
 
-.form-actions button {
+.cancel-button,
+.save-button {
   padding: 0.75rem 1.5rem;
   border: none;
   border-radius: 4px;
   font-size: 1rem;
-  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
-}
-
-.form-actions button:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
+  transition: all 0.2s ease;
 }
 
 .cancel-button {
@@ -178,7 +228,7 @@
   color: #666;
 }
 
-.cancel-button:hover:not(:disabled) {
+.cancel-button:hover {
   background: #e0e0e0;
 }
 
@@ -189,6 +239,19 @@
 
 .save-button:hover:not(:disabled) {
   background: #43A047;
+}
+
+.save-button:disabled {
+  background: #A5D6A7;
+  cursor: not-allowed;
+}
+
+.preview-error {
+  color: #d32f2f;
+  padding: 1rem;
+  background: #ffebee;
+  border-radius: 4px;
+  margin-bottom: 1rem;
 }
 
 @keyframes fadeIn {

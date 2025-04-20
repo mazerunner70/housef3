@@ -166,13 +166,13 @@ def parse_date(date_str: str) -> Optional[str]:
     
     return None
 
-def parse_csv_transactions(content: bytes, opening_balance: float, field_map: Optional[FieldMap] = None) -> List[Dict[str, Any]]:
+def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = None, field_map: Optional[FieldMap] = None) -> List[Dict[str, Any]]:
     """
     Parse transactions from CSV file content.
     
     Args:
         content: The raw CSV file content
-        opening_balance: The opening balance to use for running total calculation
+        opening_balance: Optional opening balance to use for running total calculation. Defaults to 0.00 if not provided.
         field_map: Optional field mapping configuration
         
     Returns:
@@ -229,9 +229,19 @@ def parse_csv_transactions(content: bytes, opening_balance: float, field_map: Op
                 return []
         
         transactions = []
-        running_total = Decimal(str(opening_balance))
         
-        for row in reader:
+        # Handle missing opening balance
+        if opening_balance is None:
+            logger.warning("Opening balance is missing, will use 0.00 as default")
+            running_total = Decimal('0.00')
+        else:
+            try:
+                running_total = Decimal(str(opening_balance))
+            except (decimal.InvalidOperation, decimal.ConversionSyntax) as e:
+                logger.warning(f"Invalid opening balance format '{opening_balance}', will use 0.00 as default: {str(e)}")
+                running_total = Decimal('0.00')
+        
+        for row_num, row in enumerate(reader, start=2):  # Start from 2 to account for header row
             try:
                 if not row or all(not cell.strip() for cell in row):
                     continue
@@ -253,11 +263,17 @@ def parse_csv_transactions(content: bytes, opening_balance: float, field_map: Op
                     
                     # Ensure required fields are present
                     if not all(key in mapped_data for key in ['date', 'description', 'amount']):
-                        logger.warning("Missing required fields after mapping")
+                        logger.warning(f"Row {row_num}: Missing required fields after mapping")
                         continue
                         
                     # Parse amount and calculate running total
-                    amount = Decimal(str(mapped_data['amount']).replace(',', ''))
+                    try:
+                        amount_str = str(mapped_data['amount']).replace(',', '').strip()
+                        logger.info(f"Row {row_num}: Attempting to convert amount string: '{amount_str}'")
+                        amount = Decimal(amount_str)
+                    except (decimal.InvalidOperation, decimal.ConversionSyntax) as e:
+                        logger.error(f"Row {row_num}: Invalid amount format. Original value: '{mapped_data['amount']}', Cleaned value: '{amount_str}', Error: {str(e)}")
+                        continue
                     
                     # Check if this is a credit transaction
                     if 'debitOrCredit' in mapped_data and mapped_data['debitOrCredit'].upper() == 'CRDT':
@@ -270,7 +286,7 @@ def parse_csv_transactions(content: bytes, opening_balance: float, field_map: Op
                         'date': mapped_data['date'],
                         'description': mapped_data['description'],
                         'amount': str(amount),
-                        'balance': str(running_total)
+                        'running_total': str(running_total)
                     }
                     
                     # Add optional fields if present in mapping
@@ -282,23 +298,25 @@ def parse_csv_transactions(content: bytes, opening_balance: float, field_map: Op
                     # Parse without field mapping
                     date = parse_date(row[date_col].strip())
                     if not date:
-                        logger.warning(f"Invalid date format: {row[date_col]}")
+                        logger.warning(f"Row {row_num}: Invalid date format: {row[date_col]}")
                         continue
                         
                     description = row[desc_col].strip()
                     if not description:
-                        logger.warning("Empty description")
+                        logger.warning(f"Row {row_num}: Empty description")
                         continue
                         
                     try:
-                        amount = Decimal(str(row[amount_col]).replace(',', ''))
+                        amount_str = str(row[amount_col]).replace(',', '').strip()
+                        logger.info(f"Row {row_num}: Attempting to convert amount string: '{amount_str}'")
+                        amount = Decimal(amount_str)
                         
                         # Check if this is a credit transaction
                         if debit_credit_col is not None and row[debit_credit_col].strip().upper() == 'CRDT':
                             amount = -abs(amount)
                             
-                    except (ValueError, TypeError):
-                        logger.warning(f"Invalid amount: {row[amount_col]}")
+                    except (decimal.InvalidOperation, decimal.ConversionSyntax) as e:
+                        logger.error(f"Row {row_num}: Invalid amount format. Original value: '{row[amount_col]}', Cleaned value: '{amount_str}', Error: {str(e)}")
                         continue
                         
                     # Calculate running total
@@ -309,7 +327,7 @@ def parse_csv_transactions(content: bytes, opening_balance: float, field_map: Op
                         'date': date,
                         'description': description,
                         'amount': str(amount),
-                        'balance': str(running_total)
+                        'running_total': str(running_total)
                     }
                     
                     # Add optional fields if available
@@ -325,7 +343,7 @@ def parse_csv_transactions(content: bytes, opening_balance: float, field_map: Op
                 transactions.append(transaction)
                 
             except (ValueError, IndexError) as e:
-                logger.warning(f"Error parsing row: {str(e)}")
+                logger.warning(f"Row {row_num}: Error parsing row: {str(e)}")
                 continue
         
         return transactions
@@ -427,6 +445,7 @@ def parse_ofx_transactions(content: bytes, opening_balance: float, field_map: Op
                     'description': description,
                     'amount': str(amount),
                     'balance': str(running_total),
+                    'running_total': str(running_total),
                     'transaction_type': type_match.group(1).strip() if type_match else ('DEBIT' if amount < 0 else 'CREDIT')
                 }
                 

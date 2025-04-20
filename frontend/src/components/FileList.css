@@ -480,9 +480,10 @@
 }
 
 .file-list-field-map {
-  min-width: 200px;
+  min-width: unset;
   margin: 0;
-  padding: 4px;
+  padding: 0;
+  width: auto;
 }
 
 .modal-overlay {

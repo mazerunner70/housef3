@@ -24,37 +24,29 @@ const FileFieldMapStatus: React.FC<FileFieldMapStatusProps> = ({
     <div className={`file-field-map-status ${className}`}>
       {fieldMap ? (
         <div className="field-map-info">
-          <span className="field-map-name" title={fieldMap.description || ''}>
-            {fieldMap.name}
-          </span>
-          <button
-            className="change-map-button"
-            onClick={onSelectMap}
-            title="Change field map"
-          >
-            Change
-          </button>
-        </div>
-      ) : (
-        <div className="no-field-map">
-          <span className="warning-text">No field map selected</span>
-          <div className="action-buttons">
-            <button
-              className="select-map-button"
+          <div className="field-map-details">
+            <span 
+              className="field-map-name clickable" 
+              title={fieldMap.description || 'Click to change field map'} 
               onClick={onSelectMap}
-              title="Select an existing field map"
             >
-              Select Map
-            </button>
-            <button
-              className="create-map-button"
-              onClick={onCreateMap}
-              title="Create a new field map"
-            >
-              Create Map
-            </button>
+              {fieldMap.name}
+            </span>
+            {fieldMap.description && (
+              <span className="field-map-description" title={fieldMap.description}>
+                {fieldMap.description}
+              </span>
+            )}
           </div>
         </div>
+      ) : (
+        <button
+          className="link-button"
+          onClick={onSelectMap}
+          title="Link to a field map"
+        >
+          Link
+        </button>
       )}
     </div>
   );

@@ -30,19 +30,11 @@ export const FieldMapForm: React.FC<FieldMapFormProps> = ({
   const [description, setDescription] = useState(fieldMap?.description || '');
   const [mappings, setMappings] = useState<FieldMapping[]>(() => {
     if (fieldMap?.mappings) {
-      // Create a map of targetField to sourceField for quick lookup
-      const mappingMap = new Map(
-        fieldMap.mappings.map(m => [m.targetField, m.sourceField])
-      );
-      
-      // Create mappings in the order of transactionFields
       return transactionFields.map(targetField => ({
-        sourceField: mappingMap.get(targetField) || '',
+        sourceField: fieldMap.mappings.find(m => m.targetField === targetField)?.sourceField || '',
         targetField
       }));
     }
-    
-    // If no fieldMap, initialize with empty source fields
     return transactionFields.map(targetField => ({
       sourceField: '',
       targetField
@@ -53,15 +45,45 @@ export const FieldMapForm: React.FC<FieldMapFormProps> = ({
   const [previewData, setPreviewData] = useState<Array<Record<string, any>>>([]);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [previewError, setPreviewError] = useState<string | undefined>();
+  const [availableFieldMaps, setAvailableFieldMaps] = useState<FieldMap[]>([]);
+  const [selectedFieldMapId, setSelectedFieldMapId] = useState<string | undefined>(fieldMap?.fieldMapId);
+  const [availableColumns, setAvailableColumns] = useState<string[]>([]);
 
   useEffect(() => {
+    loadFieldMaps();
     if (fileId) {
       loadPreviewData();
     }
   }, [fileId]);
 
+  const loadFieldMaps = async () => {
+    try {
+      const response = await FieldMapService.listFieldMaps();
+      setAvailableFieldMaps(response.fieldMaps);
+    } catch (error) {
+      console.error('Error loading field maps:', error);
+      setError('Failed to load existing field maps');
+    }
+  };
+
+  const handleFieldMapSelect = async (fieldMapId: string) => {
+    const selectedMap = availableFieldMaps.find(fm => fm.fieldMapId === fieldMapId);
+    if (selectedMap) {
+      setSelectedFieldMapId(fieldMapId);
+      setName(selectedMap.name);
+      setDescription(selectedMap.description || '');
+      setMappings(transactionFields.map(targetField => ({
+        sourceField: selectedMap.mappings.find(m => m.targetField === targetField)?.sourceField || '',
+        targetField
+      })));
+    }
+  };
+
   const parseCSV = (content: string): Array<Record<string, any>> => {
     const result = parseCSVContent(content);
+    if (result.data.length > 0) {
+      setAvailableColumns(Object.keys(result.data[0]));
+    }
     return result.data;
   };
 
@@ -97,17 +119,13 @@ export const FieldMapForm: React.FC<FieldMapFormProps> = ({
     setPreviewError(undefined);
 
     try {
-      // First get the file metadata
       const metadata = await FileService.getFileMetadata(fileId);
-      
-      // Then get the file content using the download URL
       const downloadResponse = await FileService.getDownloadUrl(fileId);
       const contentResponse = await fetch(downloadResponse.downloadUrl);
       const content = await contentResponse.text();
       
       let parsedData: Array<Record<string, any>> = [];
 
-      // Safely check content type and file extension
       const contentType = metadata.contentType || '';
       const fileName = metadata.fileName || '';
       const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
@@ -131,138 +149,122 @@ export const FieldMapForm: React.FC<FieldMapFormProps> = ({
     }
   };
 
-  const handleAddMapping = () => {
-    setMappings([...mappings, { sourceField: '', targetField: '' }]);
-  };
-
-  const handleRemoveMapping = (index: number) => {
-    setMappings(mappings.filter((_, i) => i !== index));
-  };
-
-  const handleMappingChange = (index: number, field: 'sourceField' | 'targetField', value: string) => {
-    const newMappings = [...mappings];
-    newMappings[index] = { ...newMappings[index], [field]: value };
-    setMappings(newMappings);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!name.trim()) {
-      setError('Name is required');
-      return;
-    }
-
-    if (mappings.length === 0) {
-      setError('At least one field mapping is required');
-      return;
-    }
-
-    try {
-      setSaving(true);
-      setError(null);
-
-      const fieldMapData = {
-        name,
-        description,
-        mappings: mappings.filter(m => m.sourceField !== '' && m.targetField !== ''),
-        accountId
-      };
-
-      const savedFieldMap = fieldMap
-        ? await FieldMapService.updateFieldMap(fieldMap.fieldMapId, fieldMapData)
-        : await FieldMapService.createFieldMap(fieldMapData);
-
-      onSave(savedFieldMap);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save field map');
-    } finally {
-      setSaving(false);
-    }
+  const isMappingMismatched = (sourceField: string): boolean => {
+    return sourceField !== '' && !availableColumns.includes(sourceField);
   };
 
   return (
     <div className="field-map-form-container">
+      <div className="field-map-selector">
+        <label htmlFor="fieldMapSelect">Use Existing Field Map:</label>
+        <select
+          id="fieldMapSelect"
+          value={selectedFieldMapId || ''}
+          onChange={(e) => handleFieldMapSelect(e.target.value)}
+          className="field-map-select"
+        >
+          <option value="">Create New Map</option>
+          {availableFieldMaps.map(fm => (
+            <option key={fm.fieldMapId} value={fm.fieldMapId}>
+              {fm.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <div className="field-map-form-content">
         <div className="field-map-form">
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label htmlFor="name">Name *</label>
-              <input
-                id="name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Enter field map name"
-                required
-              />
-            </div>
+          <div className="form-group">
+            <label htmlFor="name">Name:</label>
+            <input
+              id="name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Enter field map name"
+            />
+          </div>
 
-            <div className="form-group">
-              <label htmlFor="description">Description</label>
-              <textarea
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Enter description (optional)"
-                rows={3}
-              />
-            </div>
+          <div className="form-group">
+            <label htmlFor="description">Description:</label>
+            <textarea
+              id="description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Enter field map description"
+            />
+          </div>
 
-            <div className="mappings-section">
-              <h3>Field Mappings</h3>
-              {transactionFields.map((field, index) => (
-                <div key={index} className="mapping-row">
-                  <div className="mapping-fields">
-                    <select
-                      value={mappings[index]?.sourceField || ''}
-                      onChange={(e) => handleMappingChange(index, 'sourceField', e.target.value)}
-                    >
-                      <option value="">Unassigned</option>
-                      {previewData[0] && Object.keys(previewData[0])
-                        .filter(column => {
-                          if (mappings[index]?.sourceField === column) return true;
-                          return !mappings.some((m, i) => i !== index && m.sourceField === column);
-                        })
-                        .map((column, idx) => (
-                          <option key={idx} value={column}>{column}</option>
-                        ))}
-                    </select>
-                    <span className="mapping-arrow">→</span>
-                    <span>{field}</span>
-                  </div>
+          <div className="mappings-section">
+            <h3>Field Mappings</h3>
+            {mappings.map((mapping, index) => (
+              <div key={mapping.targetField} className={`mapping-row ${isMappingMismatched(mapping.sourceField) ? 'mapping-mismatch' : ''}`}>
+                <div className="mapping-fields">
+                  <input
+                    type="text"
+                    value={mapping.sourceField}
+                    onChange={(e) => {
+                      const newMappings = [...mappings];
+                      newMappings[index].sourceField = e.target.value;
+                      setMappings(newMappings);
+                    }}
+                    placeholder="Source field"
+                    list="availableColumns"
+                  />
+                  <span className="mapping-arrow">→</span>
+                  <input
+                    type="text"
+                    value={mapping.targetField}
+                    disabled
+                    title="Target field cannot be changed"
+                  />
                 </div>
+                {isMappingMismatched(mapping.sourceField) && (
+                  <span className="mapping-warning" title="This column is not found in the file">⚠️</span>
+                )}
+              </div>
+            ))}
+            <datalist id="availableColumns">
+              {availableColumns.map(column => (
+                <option key={column} value={column} />
               ))}
-            </div>
+            </datalist>
+          </div>
 
-            {error && <div className="error-message">{error}</div>}
+          <div className="form-actions">
+            <button onClick={onCancel} className="cancel-button">
+              Cancel
+            </button>
+            <button
+              onClick={() => onSave({
+                fieldMapId: selectedFieldMapId || '',
+                name,
+                description,
+                mappings: mappings.map(m => ({
+                  sourceField: m.sourceField,
+                  targetField: m.targetField
+                }))
+              })}
+              className="save-button"
+              disabled={saving || !name || (!selectedFieldMapId && mappings.some(m => !m.sourceField))}
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </div>
 
-            <div className="form-actions">
-              <button
-                type="button"
-                className="cancel-button"
-                onClick={onCancel}
-                disabled={saving}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="save-button"
-                disabled={saving}
-              >
-                {saving ? 'Saving...' : (fieldMap ? 'Update' : 'Create')}
-              </button>
-            </div>
-          </form>
-        </div>
-        <div className="field-map-preview">
-          <DataPreviewPanel
-            data={previewData}
-            loading={loadingPreview}
-            error={previewError}
-          />
-        </div>
+        {fileId && (
+          <div className="field-map-preview">
+            <h3>File Preview</h3>
+            {loadingPreview ? (
+              <div>Loading preview...</div>
+            ) : previewError ? (
+              <div className="preview-error">{previewError}</div>
+            ) : (
+              <DataPreviewPanel data={previewData} />
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
