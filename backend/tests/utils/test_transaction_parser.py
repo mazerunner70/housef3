@@ -10,7 +10,8 @@ from utils.transaction_parser import (
     parse_ofx_transactions,
     apply_field_mapping,
     find_column_index,
-    parse_date
+    parse_date,
+    detect_date_order
 )
 
 class TestTransactionParser(unittest.TestCase):
@@ -276,4 +277,86 @@ bad,data,here'''.encode('utf-8')
         
         row_data = {"Amount": "$123.45"}
         result = apply_field_mapping(row_data, field_map_with_bad_transform)
-        self.assertNotIn("amount", result) 
+        self.assertNotIn("amount", result)
+
+    def test_detect_date_order_ascending(self):
+        """Test detection of ascending date order."""
+        dates = [
+            "2024-01-01",
+            "2024-01-02",
+            "2024-01-03",
+            "2024-01-04"
+        ]
+        result = detect_date_order(dates)
+        self.assertEqual(result, "asc")
+
+    def test_detect_date_order_descending(self):
+        """Test detection of descending date order."""
+        dates = [
+            "2024-01-04",
+            "2024-01-03",
+            "2024-01-02",
+            "2024-01-01"
+        ]
+        result = detect_date_order(dates)
+        self.assertEqual(result, "desc")
+
+    def test_detect_date_order_mixed(self):
+        """Test detection with mixed date order (should default to ascending)."""
+        dates = [
+            "2024-01-01",
+            "2024-01-03",
+            "2024-01-02",
+            "2024-01-04"
+        ]
+        result = detect_date_order(dates)
+        self.assertEqual(result, "asc")
+
+    def test_detect_date_order_single_date(self):
+        """Test detection with single date (should default to ascending)."""
+        dates = ["2024-01-01"]
+        result = detect_date_order(dates)
+        self.assertEqual(result, "asc")
+
+    def test_detect_date_order_empty(self):
+        """Test detection with empty list (should default to ascending)."""
+        dates = []
+        result = detect_date_order(dates)
+        self.assertEqual(result, "asc")
+
+    def test_detect_date_order_invalid_dates(self):
+        """Test detection with invalid dates (should skip invalid dates)."""
+        dates = [
+            "2024-01-01",
+            "invalid-date",
+            "2024-01-03",
+            "2024-01-02"
+        ]
+        result = detect_date_order(dates)
+        self.assertEqual(result, "asc")
+
+    def test_detect_date_order_real_dates(self):
+        """Test detection real dates."""
+        dates = [
+            '2024-12-16', '2024-12-03', '2024-12-01', '2024-12-01', '2024-11-03', '2024-11-01', '2024-11-01', '2024-10-13', '2024-10-03', '2024-10-01', '2024-10-01', '2024-09-24', '2024-09-03', '2024-09-01', '2024-09-01', '2024-08-28', '2024-08-05', '2024-08-05', '2024-08-04', '2024-08-01', '2024-08-01', '2024-07-21', '2024-07-03', '2024-07-03', '2024-07-01', '2024-07-01', '2024-06-20', '2024-06-03', '2024-06-02', '2024-06-02', '2024-05-19'
+        ]
+        result = detect_date_order(dates)
+        self.assertEqual(result, "desc")
+
+    def test_dates_with_equal_timestamps(self):
+        """Test dates with equal timestamps."""
+        dates = [
+            '2024-12-03', '2024-12-01', '2024-12-01'
+        ]
+        result = detect_date_order(dates)
+        self.assertEqual(result, "desc")
+
+    def test_equality(self):
+        """Test equality of two dates."""
+        date1 = datetime.strptime("2024-12-01", "%Y-%m-%d")
+        date2 = datetime.strptime("2024-12-01", "%Y-%m-%d")
+        self.assertEqual(date1, date2)
+
+
+if __name__ == '__main__':
+    unittest.main() 

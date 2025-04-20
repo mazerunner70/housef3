@@ -14,6 +14,41 @@ import decimal
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+__all__ = [
+    'parse_transactions',
+    'parse_csv_transactions',
+    'parse_ofx_transactions',
+    'apply_field_mapping',
+    'find_column_index',
+    'parse_date',
+    'detect_date_order'
+]
+
+def detect_date_order(dates: List[str]) -> str:
+    """Detect if dates are in ascending or descending order."""
+    if len(dates) < 2:
+        return 'asc'  # Default to ascending if not enough dates
+        
+    # Convert dates to timestamps
+    timestamps = []
+    for date in dates:
+        try:
+            parsed_date = datetime.strptime(date, "%Y-%m-%d")
+            timestamps.append(parsed_date.timestamp())
+        except ValueError:
+            continue
+    if len(timestamps) < 2:
+        return 'asc'  # Default to ascending if not enough valid dates
+        
+    # Find first non-equal pair of timestamps
+    for i in range(1, len(timestamps)):
+        if timestamps[i] != timestamps[i-1]:
+            # Return 'desc' if later dates come first, 'asc' otherwise
+            return 'desc' if timestamps[i] < timestamps[i-1] else 'asc'
+            
+    # If all timestamps are equal, default to ascending
+    return 'asc'
+
 def apply_field_mapping(row_data: Dict[str, Any], field_map: FieldMap) -> Dict[str, Any]:
     """
     Apply field mapping to a row of data.
@@ -182,6 +217,38 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
                 logger.error("Missing required columns in CSV")
                 return []
         
+        # Read all rows first to detect date order
+        rows = []
+        for row in reader:
+            if not row or all(not cell.strip() for cell in row):
+                continue
+            rows.append(row)
+            
+        # Extract dates to detect order
+        dates = []
+        for row in rows:
+            try:
+                if field_map:
+                    row_data = dict(zip(header, row))
+                    mapped_data = apply_field_mapping(row_data, field_map)
+                    if 'date' in mapped_data:
+                        dates.append(mapped_data['date'])
+                else:
+                    date = parse_date(row[date_col].strip())
+                    if date:
+                        dates.append(date)
+            except (ValueError, IndexError):
+                continue
+        logger.info(f"Dates: {dates}")          
+        # Detect date order
+        date_order = detect_date_order(dates)
+        logger.info(f"Detected date order: {date_order}")
+        
+        # If dates are in descending order, reverse the rows
+        if date_order == 'desc':
+            rows.reverse()
+            logger.info("Reversed transaction order to ascending date order")
+        
         transactions = []
         
         # Handle missing opening balance
@@ -195,11 +262,8 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
                 logger.warning(f"Invalid opening balance format '{opening_balance}', will use 0.00 as default: {str(e)}")
                 running_total = Decimal('0.00')
         
-        for row_num, row in enumerate(reader, start=2):  # Start from 2 to account for header row
+        for row_num, row in enumerate(rows, start=2):  # Start from 2 to account for header row
             try:
-                if not row or all(not cell.strip() for cell in row):
-                    continue
-                    
                 # Handle unquoted fields with commas by joining them back together
                 # This is needed because the CSV might have been split incorrectly
                 if len(row) > len(header):
@@ -393,7 +457,6 @@ def parse_ofx_transactions(content: bytes, opening_balance: float, field_map: Op
                     'date': date,
                     'description': description,
                     'amount': str(amount),
-                    'balance': str(running_total),
                     'running_total': str(running_total),
                     'transaction_type': type_match.group(1).strip() if type_match else ('DEBIT' if amount < 0 else 'CREDIT'),
                     'import_order': i  # Add import order based on position in file
