@@ -9,7 +9,8 @@ from decimal import Decimal
 from models.transaction_file import FileFormat, ProcessingStatus
 from models.transaction import Transaction
 from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_file_metadata, get_account, list_file_transactions, delete_transactions_for_file, get_field_maps_table, get_field_map
-from utils.transaction_parser import process_file_transactions
+from utils.transaction_parser import parse_transactions
+from handlers.file_processor import process_file_with_account
 
 # Configure logging
 logger = logging.getLogger()
@@ -160,13 +161,13 @@ def list_files_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str,
             except Exception as query_error:
                 logger.error(f"Error querying AccountIdIndex: {str(query_error)}. Exception type: {type(query_error).__name__}")
         else:
-            # First try using UserIndex GSI
+            # First try using UserIdIndex GSI
             try:
-                logger.info(f"Attempting to query UserIndex GSI for user: {user['id']}")
+                logger.info(f"Attempting to query UserIdIndex GSI for user: {user['id']}")
                 
                 # Query DynamoDB for user's files
                 response = file_table.query(
-                    IndexName='UserIndex',
+                    IndexName='UserIdIndex',
                     KeyConditionExpression=boto3.dynamodb.conditions.Key('userId').eq(user['id'])
                 )
                 
@@ -174,7 +175,7 @@ def list_files_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str,
                 logger.info(f"Query successful: Found {len(files)} files for user {user['id']} using GSI")
                 
             except Exception as query_error:
-                logger.error(f"Error querying UserIndex: {str(query_error)}. Exception type: {type(query_error).__name__}")
+                logger.error(f"Error querying UserIdIndex: {str(query_error)}. Exception type: {type(query_error).__name__}")
             
             # If GSI query returned no results or failed, fallback to scan
             if not files:
@@ -620,36 +621,31 @@ def associate_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
     """Associate a file with an account."""
     try:
         # Get file ID from path parameters
-        file_id = event.get('pathParameters', {}).get('id')
+        file_id = event["pathParameters"]["id"]
         
-        if not file_id:
-            return create_response(400, {"message": "File ID is required"})
+        # Get account ID from request body
+        body = json.loads(event["body"])
+        account_id = body.get("accountId")
+        
+        if not account_id:
+            return create_response(400, {"message": "Account ID is required"})
             
-        # Get file metadata from DynamoDB
-        response = file_table.get_item(Key={'fileId': file_id})
-        file = response.get('Item')
-        
-        if not file:
-            return create_response(404, {"message": "File not found"})
-            
-        # Check if the file belongs to the user
-        if file.get('userId') != user['id']:
-            return create_response(403, {"message": "Access denied"})
-        
-        # Check if file is already associated with an account
-        if 'accountId' in file:
-            return create_response(400, {"message": "File is already associated with an account"})
-        
-        # Parse the request body to get the account ID
+        # Get the file to verify it exists and belongs to the user
         try:
-            request_body = json.loads(event.get('body', '{}'))
-            account_id = request_body.get('accountId')
-            
-            if not account_id:
-                return create_response(400, {"message": "Account ID is required"})
-        except Exception as parse_error:
-            logger.error(f"Error parsing request body: {str(parse_error)}")
-            return create_response(400, {"message": "Invalid request body"})
+            file = get_transaction_file(file_id)
+            if not file:
+                return create_response(404, {"message": "File not found"})
+                
+            # Check if the file already belongs to the user
+            if file.user_id != user['id']:
+                return create_response(403, {"message": "Access denied to the specified file"})
+                
+            # Check if the file is already associated with an account
+            if file.account_id:
+                return create_response(400, {"message": "File is already associated with an account"})
+        except Exception as file_error:
+            logger.error(f"Error verifying file: {str(file_error)}")
+            return create_response(500, {"message": "Error verifying file"})
         
         # Verify that the account exists and belongs to the user
         try:
@@ -682,12 +678,58 @@ def associate_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
                 ExpressionAttributeValues=expression_attribute_values
             )
             
-            return create_response(200, {
-                "message": "File successfully associated with account",
-                "fileId": file_id,
-                "accountId": account_id,
-                "accountName": account_response.account_name
-            })
+            # After successfully updating the account association, trigger transaction reprocessing
+            try:
+                logger.info(f"Triggering transaction reprocessing for file {file_id}")
+                # Get the file content from S3
+                s3_key = file.s3_key
+                if not s3_key:
+                    logger.warning(f"File {file_id} has no S3 key, skipping transaction processing")
+                    return create_response(200, {
+                        "message": "File successfully associated with account",
+                        "fileId": file_id,
+                        "accountId": account_id,
+                        "accountName": account_response.account_name
+                    })
+                
+                # Get file content from S3
+                response = s3_client.get_object(Bucket=FILE_STORAGE_BUCKET, Key=s3_key)
+                content_bytes = response['Body'].read()
+                
+                # Get file format
+                file_format = file.file_format
+                
+                # Get opening balance if exists
+                opening_balance = float(file.openingBalance) if hasattr(file, 'openingBalance') and file.openingBalance else 0.0
+                
+                # Process transactions with account association
+                transaction_count = process_file_with_account(
+                    file_id, 
+                    content_bytes, 
+                    file_format, 
+                    opening_balance,
+                    user['id']
+                )
+                
+                # Include transaction count in response
+                return create_response(200, {
+                    "message": "File successfully associated with account and transactions reprocessed",
+                    "fileId": file_id,
+                    "accountId": account_id,
+                    "accountName": account_response.account_name,
+                    "transactionCount": transaction_count
+                })
+                
+            except Exception as process_error:
+                logger.error(f"Error processing transactions: {str(process_error)}")
+                return create_response(200, {
+                    "message": "File associated with account but transaction processing failed",
+                    "fileId": file_id,
+                    "accountId": account_id,
+                    "accountName": account_response.account_name,
+                    "error": str(process_error)
+                })
+            
         except Exception as update_error:
             logger.error(f"Error updating file: {str(update_error)}")
             return create_response(500, {"message": "Error associating file with account"})
@@ -770,11 +812,12 @@ def update_file_balance_handler(event: Dict[str, Any], user: Dict[str, Any]) -> 
                 file_format = FileFormat(file.get('fileFormat', 'other'))
                 
                 # Process transactions with new opening balance
-                transaction_count = process_file_transactions(
+                transaction_count = process_file_with_account(
                     file_id, 
                     content_bytes, 
                     file_format, 
-                    opening_balance
+                    opening_balance,
+                    user['id']
                 )
                 
                 # Include transaction count in response
@@ -1096,7 +1139,7 @@ def update_file_field_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -
                 opening_balance = float(file.get('openingBalance', 0)) if file.get('openingBalance') else None
                 
                 # Process transactions with new field map
-                transaction_count = process_file_transactions(
+                transaction_count = process_file_with_account(
                     file_id, 
                     content_bytes, 
                     file_format, 

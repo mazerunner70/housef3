@@ -26,7 +26,9 @@ class Transaction:
         payee: Optional[str] = None,
         memo: Optional[str] = None,
         check_number: Optional[str] = None,
-        reference: Optional[str] = None
+        reference: Optional[str] = None,
+        account_id: Optional[str] = None,
+        status: Optional[str] = None
     ):
         self.transaction_id = transaction_id
         self.file_id = file_id
@@ -41,6 +43,8 @@ class Transaction:
         self.memo = memo
         self.check_number = check_number
         self.reference = reference
+        self.account_id = account_id
+        self.status = status
         
     @classmethod
     def create(
@@ -100,6 +104,12 @@ class Transaction:
         if self.reference:
             result["reference"] = self.reference
             
+        if self.account_id:
+            result["accountId"] = self.account_id
+            
+        if self.status:
+            result["status"] = self.status
+            
         return result
     
     @classmethod
@@ -120,7 +130,9 @@ class Transaction:
             payee=data.get("payee"),
             memo=data.get("memo"),
             check_number=data.get("checkNumber"),
-            reference=data.get("reference")
+            reference=data.get("reference"),
+            account_id=data.get("accountId"),
+            status=data.get("status")
         )
 
 def validate_transaction_data(data: Dict[str, Any]) -> bool:

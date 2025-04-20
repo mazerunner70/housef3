@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Account, getAccount, listAccountFiles, deleteAccount } from '../services/AccountService';
 import { FileMetadata, deleteFile, getDownloadUrl } from '../services/FileService';
+import { Transaction, getAccountTransactions } from '../services/TransactionService';
 import './AccountDetail.css';
 
 interface AccountDetailProps {
@@ -11,10 +12,13 @@ interface AccountDetailProps {
 const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDeleted }) => {
   const [account, setAccount] = useState<Account | null>(null);
   const [files, setFiles] = useState<FileMetadata[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<boolean>(false);
   const [deleting, setDeleting] = useState<boolean>(false);
+  const [sortField, setSortField] = useState<keyof Transaction>('date');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
     if (accountId) {
@@ -22,6 +26,7 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
     } else {
       setAccount(null);
       setFiles([]);
+      setTransactions([]);
     }
     // Reset confirmation when changing accounts
     setDeleteConfirm(false);
@@ -37,6 +42,9 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
       
       const filesData = await listAccountFiles(id);
       setFiles(filesData.files || []);
+
+      const transactionsData = await getAccountTransactions(id);
+      setTransactions(transactionsData.transactions || []);
     } catch (err) {
       console.error('Error fetching account details:', err);
       setError('Failed to load account details');
@@ -114,16 +122,38 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
     setDeleteConfirm(false);
   };
 
-  if (loading) {
-    return <div className="account-detail-loading">Loading account details...</div>;
-  }
+  const handleSortChange = (field: keyof Transaction) => {
+    if (field === sortField) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
 
-  if (error) {
-    return <div className="account-detail-error">{error}</div>;
-  }
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: account?.currency || 'USD'
+    }).format(amount);
+  };
 
-  if (!account) {
-    return <div className="account-detail-empty">Select an account to view details</div>;
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  if (loading || !account) {
+    return (
+      <div className="account-detail">
+        <div className="loading-message">
+          {loading ? 'Loading account details...' : 'No account selected'}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -137,7 +167,7 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
           </div>
           <div>
             <span className="account-detail-label">Balance:</span>
-            <span className="account-detail-balance">${parseFloat(account.balance.toString()).toFixed(2)}</span>
+            <span className="account-detail-balance">{formatCurrency(account.balance)}</span>
           </div>
           {account.institution && (
             <div>
@@ -183,14 +213,16 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
       <div className="account-files-section">
         <h4>Associated Files</h4>
         {files.length === 0 ? (
-          <div className="no-files-message">No files associated with this account</div>
+          <div className="no-files-message">No files associated with this account.</div>
         ) : (
           <div className="account-files-list">
             {files.map(file => (
               <div key={file.fileId} className="account-file-item">
                 <div className="file-info">
-                  <span className="file-name">{file.fileName}</span>
-                  <span className="file-date">Uploaded: {new Date(file.uploadDate).toLocaleString()}</span>
+                  <div className="file-name">{file.fileName}</div>
+                  <div className="file-date">
+                    Uploaded: {new Date(file.uploadDate).toLocaleDateString()}
+                  </div>
                 </div>
                 <div className="file-actions">
                   <button
@@ -208,6 +240,68 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      <div className="transactions-section">
+        <h4>Transactions</h4>
+        {transactions.length === 0 ? (
+          <div className="no-transactions">No transactions found for this account.</div>
+        ) : (
+          <div className="transactions-table">
+            <div className="transactions-header">
+              <div 
+                className={`header-cell date ${sortField === 'date' ? sortDirection : ''}`}
+                onClick={() => handleSortChange('date')}
+              >
+                Date
+              </div>
+              <div 
+                className={`header-cell description ${sortField === 'description' ? sortDirection : ''}`}
+                onClick={() => handleSortChange('description')}
+              >
+                Description
+              </div>
+              <div 
+                className={`header-cell amount ${sortField === 'amount' ? sortDirection : ''}`}
+                onClick={() => handleSortChange('amount')}
+              >
+                Amount
+              </div>
+              <div 
+                className={`header-cell category ${sortField === 'category' ? sortDirection : ''}`}
+                onClick={() => handleSortChange('category')}
+              >
+                Category
+              </div>
+            </div>
+            <div className="transactions-body">
+              {transactions
+                .sort((a, b) => {
+                  const aValue = a[sortField];
+                  const bValue = b[sortField];
+                  const direction = sortDirection === 'asc' ? 1 : -1;
+                  
+                  if (sortField === 'date') {
+                    return direction * (new Date(aValue as string).getTime() - new Date(bValue as string).getTime());
+                  }
+                  if (sortField === 'amount') {
+                    return direction * ((aValue as number) - (bValue as number));
+                  }
+                  return direction * String(aValue).localeCompare(String(bValue));
+                })
+                .map(transaction => (
+                  <div key={transaction.transactionId} className="transaction-row">
+                    <div className="cell date">{formatDate(transaction.date)}</div>
+                    <div className="cell description">{transaction.description}</div>
+                    <div className={`cell amount ${transaction.amount >= 0 ? 'positive' : 'negative'}`}>
+                      {formatCurrency(transaction.amount)}
+                    </div>
+                    <div className="cell category">{transaction.category || '-'}</div>
+                  </div>
+                ))}
+            </div>
           </div>
         )}
       </div>

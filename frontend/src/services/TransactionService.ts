@@ -128,7 +128,7 @@ export const getFileTransactions = async (fileId: string): Promise<TransactionLi
 // Get transactions for an account
 export const getAccountTransactions = async (accountId: string): Promise<TransactionListResponse> => {
   try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/api/account/${accountId}`);
+    const response = await authenticatedRequest(`${API_ENDPOINT}/api/accounts/${accountId}/transactions`);
     return response;
   } catch (error) {
     console.error('Error fetching account transactions:', error);

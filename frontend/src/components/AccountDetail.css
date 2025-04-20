@@ -52,15 +52,18 @@
 
 .account-files-section {
   margin-top: 1rem;
+  margin-bottom: 2rem;
 }
 
-.account-files-section h4 {
+.account-files-section h4,
+.transactions-section h4 {
   font-size: 1.2rem;
   margin-bottom: 1rem;
   color: #333;
 }
 
-.no-files-message {
+.no-files-message,
+.no-transactions {
   text-align: center;
   color: #999;
   padding: 2rem 0;
@@ -129,12 +132,12 @@
 }
 
 .delete-btn {
-  background-color: #fff2f0;
+  background-color: #fff1f0;
   color: #ff4d4f;
 }
 
 .delete-btn:hover {
-  background-color: #ffccc7;
+  background-color: #ffd4d4;
 }
 
 .download-btn:disabled,
@@ -253,5 +256,147 @@
 
 .cancel-delete-btn:disabled {
   background-color: #9aa0a6;
+  cursor: not-allowed;
+}
+
+/* Transactions Section Styles */
+.transactions-section {
+  margin-top: 2rem;
+}
+
+.transactions-table {
+  border: 1px solid #eee;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.transactions-header {
+  display: grid;
+  grid-template-columns: 120px 1fr 120px 120px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #eee;
+  font-weight: 500;
+  color: #666;
+}
+
+.header-cell {
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+
+.header-cell:hover {
+  background: #e9ecef;
+}
+
+.header-cell.asc::after {
+  content: '↑';
+  margin-left: 0.5rem;
+}
+
+.header-cell.desc::after {
+  content: '↓';
+  margin-left: 0.5rem;
+}
+
+.transactions-body {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.transaction-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 120px 120px;
+  border-bottom: 1px solid #eee;
+  transition: background-color 0.2s ease;
+}
+
+.transaction-row:last-child {
+  border-bottom: none;
+}
+
+.transaction-row:hover {
+  background: #f8f9fa;
+}
+
+.cell {
+  padding: 0.75rem 1rem;
+  color: #333;
+}
+
+.cell.date {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.cell.description {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cell.amount {
+  text-align: right;
+  font-weight: 500;
+}
+
+.cell.amount.positive {
+  color: #28a745;
+}
+
+.cell.amount.negative {
+  color: #dc3545;
+}
+
+.delete-confirmation {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: #fff1f0;
+  border-radius: 6px;
+  border: 1px solid #ffccc7;
+}
+
+.delete-confirmation p {
+  color: #cf1322;
+  margin: 0 0 1rem 0;
+}
+
+.delete-confirmation-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.confirm-delete-btn,
+.cancel-delete-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  border: none;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.confirm-delete-btn {
+  background-color: #ff4d4f;
+  color: white;
+}
+
+.confirm-delete-btn:hover {
+  background-color: #ff7875;
+}
+
+.cancel-delete-btn {
+  background-color: #f0f0f0;
+  color: #666;
+}
+
+.cancel-delete-btn:hover {
+  background-color: #d9d9d9;
+}
+
+.confirm-delete-btn:disabled,
+.cancel-delete-btn:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 } 

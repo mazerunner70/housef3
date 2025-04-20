@@ -457,31 +457,50 @@ def delete_all_accounts_handler(event: Dict[str, Any], user: Dict[str, Any]) -> 
 def get_account_transactions_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     """Get paginated transactions for an account."""
     try:
+        logger.info(f"Starting get_account_transactions_handler with event: {json.dumps(event)}")
+        logger.info(f"User context: {json.dumps(user)}")
+        
         # Get account ID from path parameters
         account_id = event.get('pathParameters', {}).get('id')
+        logger.info(f"Account ID from path parameters: {account_id}")
         
         if not account_id:
+            logger.error("No account ID provided in path parameters")
             return create_response(400, {"message": "Account ID is required"})
         
         # Verify the account exists and belongs to the user
+        logger.info(f"Fetching account with ID: {account_id}")
         existing_account = get_account(account_id)
         
         if not existing_account:
+            logger.error(f"Account not found: {account_id}")
             return create_response(404, {"message": f"Account not found: {account_id}"})
         
         if existing_account.user_id != user['id']:
+            logger.error(f"Access denied - User {user['id']} does not own account {account_id}")
             return create_response(403, {"message": "Access denied"})
         
         # Get query parameters for pagination
         query_params = event.get('queryStringParameters', {}) or {}
+        logger.info(f"Query parameters: {json.dumps(query_params)}")
+        
         limit = int(query_params.get('limit', 50))
         last_evaluated_key = query_params.get('lastEvaluatedKey')
+        logger.info(f"Pagination parameters - limit: {limit}, lastEvaluatedKey: {last_evaluated_key}")
         
         # Get transactions for the account
-        transactions = list_account_transactions(account_id, limit, last_evaluated_key)
+        logger.info(f"Fetching transactions for account {account_id}")
+        try:
+            transactions = list_account_transactions(account_id, limit, last_evaluated_key)
+            logger.info(f"Retrieved {len(transactions)} transactions")
+        except Exception as tx_error:
+            logger.error(f"Error fetching transactions: {str(tx_error)}")
+            logger.error(f"Error type: {type(tx_error).__name__}")
+            raise
         
         # Convert transactions to dictionary format
         transaction_dicts = [transaction.to_dict() for transaction in transactions]
+        logger.info(f"Converted {len(transaction_dicts)} transactions to dictionary format")
         
         return create_response(200, {
             'transactions': transaction_dicts,
@@ -492,7 +511,9 @@ def get_account_transactions_handler(event: Dict[str, Any], user: Dict[str, Any]
             }
         })
     except Exception as e:
-        logger.error(f"Error getting account transactions: {str(e)}")
+        logger.error(f"Error in get_account_transactions_handler: {str(e)}")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Full error details: {json.dumps(e.__dict__) if hasattr(e, '__dict__') else 'No additional error details'}")
         return create_response(500, {"message": "Error retrieving account transactions"})
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -507,6 +528,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         route = event.get('routeKey')
         if not route:
             return create_response(400, {"message": "Route not specified"})
+        
+            # Log request details
+                # Get the HTTP method and route
+        method = event.get("requestContext", {}).get("http", {}).get("method", "").upper()
+        logger.info(f"Request: {method} {route}")
         
         # Route to appropriate handler
         if route == "GET /accounts":

@@ -26,6 +26,11 @@ resource "aws_dynamodb_table" "transactions" {
     type = "S"
   }
   
+  attribute {
+    name = "accountId"
+    type = "S"
+  }
+  
   # GSI to query transactions by file ID
   global_secondary_index {
     name               = "FileIdIndex"
@@ -44,6 +49,13 @@ resource "aws_dynamodb_table" "transactions" {
   global_secondary_index {
     name               = "StatusIndex"
     hash_key           = "status"
+    projection_type    = "ALL"
+  }
+  
+  # GSI to query transactions by account ID
+  global_secondary_index {
+    name               = "AccountIdIndex"
+    hash_key           = "accountId"
     projection_type    = "ALL"
   }
   

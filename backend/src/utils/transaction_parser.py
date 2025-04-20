@@ -8,7 +8,6 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 from models.transaction_file import FileFormat
 from models.field_map import FieldMap, FieldMapping
-from utils.db_utils import create_transaction, delete_transactions_for_file, update_transaction_file
 import decimal
 
 # Configure logging
@@ -75,57 +74,6 @@ def parse_transactions(content: bytes,
     else:
         logger.warning(f"Unsupported file format for transaction parsing: {file_format}")
         return []
-
-def process_file_transactions(file_id: str, content_bytes: bytes, file_format: FileFormat, opening_balance: float, user_id: str) -> int:
-    """
-    Process a file to extract and save transactions.
-    
-    Args:
-        file_id: ID of the file to process
-        content_bytes: File content as bytes
-        file_format: Format of the file
-        opening_balance: Opening balance to use for running totals
-        user_id: ID of the user who owns the file
-        
-    Returns:
-        Number of transactions processed
-    """
-    try:
-        # Parse transactions using the utility
-        transactions = parse_transactions(
-            content_bytes, 
-            file_format,
-            opening_balance
-        )
-        
-        # Delete existing transactions if any
-        delete_transactions_for_file(file_id)
-        
-        # Save new transactions to the database
-        transaction_count = 0
-        for transaction_data in transactions:
-            try:
-                # Add the file_id and user_id to each transaction
-                transaction_data['file_id'] = file_id
-                transaction_data['user_id'] = user_id
-                
-                # Create and save the transaction
-                create_transaction(transaction_data)
-                transaction_count += 1
-            except Exception as tx_error:
-                logger.warning(f"Error creating transaction: {str(tx_error)}")
-                
-        logger.info(f"Saved {transaction_count} transactions for file {file_id}")
-        
-        # Update the file record with transaction count
-        update_transaction_file(file_id, {
-            'transactionCount': str(transaction_count)
-        })
-        
-        return transaction_count
-    except Exception as parse_error:
-        logger.error(f"Error parsing transactions: {str(parse_error)}")
-        return 0
 
 def find_column_index(header: List[str], possible_names: List[str]) -> Optional[int]:
     """Find the index of a column given possible column names."""

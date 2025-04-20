@@ -12,7 +12,7 @@ from typing import Dict, Any, List, Tuple, Optional
 from decimal import Decimal
 from models.transaction_file import FileFormat, ProcessingStatus
 from models.field_map import FieldMap
-from utils.transaction_parser import parse_transactions, process_file_transactions
+from utils.transaction_parser import parse_transactions
 from models.transaction import Transaction
 from utils.file_analyzer import analyze_file_format
 from utils.db_utils import (
@@ -100,11 +100,14 @@ def check_duplicate_transaction(transaction: Dict[str, Any], account_id: str) ->
         logger.error(f"Error checking for duplicate transaction: {str(e)}")
         return False
 
-
-
-def process_file_transactions(file_id: str, content_bytes: bytes, file_format: FileFormat, opening_balance: float, user_id: str) -> int:
+def process_file_with_account(file_id: str, content_bytes: bytes, file_format: FileFormat, opening_balance: float, user_id: str) -> int:
     """
-    Process a file to extract and save transactions.
+    Process a file and its transactions with account-specific logic.
+    This includes:
+    - Field map handling (account-specific or file-specific)
+    - Duplicate transaction detection
+    - Account association
+    - Transaction status tracking
     
     Args:
         file_id: ID of the file to process
@@ -127,7 +130,8 @@ def process_file_transactions(file_id: str, content_bytes: bytes, file_format: F
         field_map = None
         field_map_id = file_record.field_map_id
         account_id = file_record.account_id
-        
+        logger.info(f"Field map ID: {field_map_id}")
+        logger.info(f"Account ID: {account_id}")
         if field_map_id:
             # Use specified field map
             field_map = get_field_map(field_map_id)
@@ -191,7 +195,7 @@ def process_file_transactions(file_id: str, content_bytes: bytes, file_format: F
                         duplicate_count += 1
                     else:
                         transaction_data['status'] = 'new'
-                
+                logger.info(f"Transaction data: {transaction_data}")
                 # Create and save the transaction
                 create_transaction(transaction_data)
                 transaction_count += 1
@@ -220,180 +224,69 @@ def process_file_transactions(file_id: str, content_bytes: bytes, file_format: F
         })
         return 0
 
-def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+def lambda_handler(event, context):
     """
-    Main Lambda handler for processing S3 upload events.
-    
-    Args:
-        event: S3 event data
-        context: Lambda context
+    Lambda handler for processing transaction files.
+    """
+    try:
+        # Extract file ID from the event
+        file_id = event.get('fileId')
+        if not file_id:
+            raise ValueError("No fileId provided in event")
+            
+        # Get the file record
+        file_record = get_transaction_file(file_id)
+        if not file_record:
+            raise ValueError(f"File record not found for ID: {file_id}")
+            
+        # Get user ID and account ID
+        user_id = file_record.get('userId')
+        account_id = file_record.get('accountId')
+        if not user_id:
+            raise ValueError(f"No userId found for file: {file_id}")
+            
+        # Get file content from S3
+        content_bytes = get_file_content(file_id)
+        if not content_bytes:
+            raise ValueError(f"Could not retrieve file content for ID: {file_id}")
+            
+        # Process the file
+        transaction_count = process_file_with_account(
+            file_id=file_id,
+            content_bytes=content_bytes,
+            file_format=file_record.get('fileFormat', FileFormat.CSV),
+            opening_balance=float(file_record.get('openingBalance', 0)),
+            user_id=user_id,
+            account_id=account_id
+        )
         
-    Returns:
-        Response object
-    """
-    logger.info(f"Processing S3 event: {json.dumps(event)}")
-    
-    # Process each record in the S3 event
-    for record in event.get('Records', []):
-        try:
-            # Extract S3 bucket and key
-            s3_event = record.get('s3', {})
-            bucket_name = s3_event.get('bucket', {}).get('name')
-            object_key = urllib.parse.unquote_plus(s3_event.get('object', {}).get('key'))
-            
-            if not bucket_name or not object_key:
-                logger.error("Missing bucket name or object key in S3 event")
-                continue
-                
-            logger.info(f"Processing file: {object_key} in bucket: {bucket_name}")
-            
-            # Find the file record in DynamoDB that matches the S3 key
-            file_records = find_file_records_by_s3_key(object_key)
-            
-            if not file_records:
-                logger.warning(f"No file record found for S3 key: {object_key}")
-                continue
-                
-            # There should typically be only one record, but process all matches just in case
-            for file_record in file_records:
-                file_id = file_record.get('fileId')
-                logger.info(f"Found file record with ID: {file_id}")
-                
-                # Get the file record to check for field map
-                file_details = get_transaction_file(file_id)
-                if not file_details:
-                    logger.error(f"File record not found for ID: {file_id}")
-                    continue
-                
-                # Check for field map
-                field_map = None
-                field_map_id = file_details.field_map_id
-                account_id = file_details.account_id
-                logger.info(f"Field map ID: {field_map_id}, Account ID: {account_id}")
-                
-                if field_map_id:
-                    # Use specified field map
-                    field_map = get_field_map(field_map_id)
-                    if not field_map:
-                        logger.warning(f"Specified field map not found: {field_map_id}")
-                        update_transaction_file(file_id, {
-                            'processingStatus': ProcessingStatus.NEEDS_MAPPING,
-                            'errorMessage': 'Specified field map not found'
-                        })
-                        continue
-                elif account_id:
-                    # Try to use account's default field map
-                    field_map = get_account_default_field_map(account_id)
-                    if field_map:
-                        logger.info(f"Using account default field map for file {file_id}")
-                
-                if not field_map:
-                    logger.info(f"No field map available for file {file_id}, skipping processing")
-                    update_transaction_file(file_id, {
-                        'processingStatus': ProcessingStatus.NEEDS_MAPPING,
-                        'errorMessage': 'No field map available for processing'
-                    })
-                    continue
-                
-                # Update processing status to "processing"
-                update_transaction_file(file_id, {
-                    'processingStatus': ProcessingStatus.PROCESSING
-                })
-                
-                try:
-                    # Get the file content
-                    response = s3_client.get_object(Bucket=bucket_name, Key=object_key)
-                    content_bytes = response['Body'].read()
-                    
-                    # Analyze the file format
-                    detected_format = analyze_file_format(bucket_name, object_key)
-                    logger.info(f"Detected file format: {detected_format} for file: {file_id}")
-                    
-                    # Try to extract opening balance from financial files
-                    opening_balance = None
-                    if detected_format in [FileFormat.OFX, FileFormat.QFX, FileFormat.CSV]:
-                        opening_balance = extract_opening_balance(content_bytes, detected_format)
-                        if opening_balance is not None:
-                            logger.info(f"Extracted opening balance: {opening_balance}")
-                    
-                    # Compare with the format in the record
-                    current_format = FileFormat(file_details.get('fileFormat', 'other'))
-                    
-                    # Prepare update data
-                    update_data = {
-                        'processingStatus': ProcessingStatus.PROCESSED
-                    }
-                    
-                    if current_format != detected_format:
-                        logger.info(f"Updating file format from {current_format} to {detected_format}")
-                        update_data['fileFormat'] = detected_format
-                    
-                    if opening_balance is not None:
-                        update_data['openingBalance'] = str(opening_balance)
-                    
-                    # Update the file record
-                    update_transaction_file(file_id, update_data)
-                        
-                    # Parse transactions
-                    transactions = parse_transactions(content_bytes, detected_format, opening_balance, field_map)
-                    
-                    # Store transactions in DynamoDB
-                    min_date = None
-                    max_date = None
-                    
-                    for idx, txn_data in enumerate(transactions):
-                        transaction = Transaction(
-                            transaction_id=f"{file_id}-{idx+1}",
-                            file_id=file_id,
-                            date=txn_data['date'],
-                            description=txn_data['description'],
-                            amount=txn_data['amount'],
-                            running_total=txn_data['running_total'],
-                            transaction_type=txn_data.get('transaction_type'),
-                            category=txn_data.get('category'),
-                            memo=txn_data.get('memo')
-                        )
-                        
-                        # Update date range
-                        if min_date is None or txn_data['date'] < min_date:
-                            min_date = txn_data['date']
-                        if max_date is None or txn_data['date'] > max_date:
-                            max_date = txn_data['date']
-                        
-                        # Store transaction
-                        transaction_table.put_item(Item=transaction.to_dict())
-                    
-                    # Update file record with transaction count and date range
-                    update_data = {
-                        'processingStatus': ProcessingStatus.PROCESSED,
-                        'recordCount': len(transactions)
-                    }
-                    
-                    if opening_balance is not None:
-                        update_data['openingBalance'] = str(opening_balance)
-                        
-                    if min_date and max_date:
-                        update_data['dateRange'] = {
-                            'startDate': min_date,
-                            'endDate': max_date
-                        }
-                    
-                    update_transaction_file(file_id, update_data)
-                    
-                except Exception as analysis_error:
-                    logger.error(f"Error analyzing file {file_id}: {str(analysis_error)}")
-                    update_transaction_file(file_id, {
-                        'processingStatus': ProcessingStatus.ERROR,
-                        'errorMessage': f"Error analyzing file format: {str(analysis_error)}"
-                    })
-                    
-        except Exception as e:
-            logger.error(f"Error processing S3 event record: {str(e)}")
-    
-    return {
-        "statusCode": 200,
-        "body": json.dumps({"message": "File processing completed"})
-    }
+        return {
+            'statusCode': 200,
+            'headers': {
+                'Content-Type': 'application/json'
+            },
+            'body': json.dumps({
+                'message': f'Successfully processed {transaction_count} transactions',
+                'transactionCount': transaction_count
+            })
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in file processor lambda: {str(e)}")
+        if file_id:
+            update_transaction_file(file_id, {
+                'processingStatus': ProcessingStatus.ERROR,
+                'errorMessage': str(e)
+            })
+        return {
+            'statusCode': 500,
+            'headers': {
+                'Content-Type': 'application/json'
+            },
+            'body': json.dumps({
+                'message': f'Error processing file: {str(e)}'
+            })
+        }
 
 def extract_opening_balance(content_bytes: bytes, file_format: FileFormat) -> Optional[float]:
     """
