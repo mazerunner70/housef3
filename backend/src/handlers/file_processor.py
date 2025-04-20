@@ -73,6 +73,35 @@ FIELD_MAPS_TABLE = os.environ.get('FIELD_MAPS_TABLE', 'field-maps')
 transaction_table = dynamodb.Table(TRANSACTIONS_TABLE)
 field_maps_table = dynamodb.Table(FIELD_MAPS_TABLE)
 
+def check_duplicate_transaction(transaction: Dict[str, Any], account_id: str) -> bool:
+    """
+    Check if a transaction is a duplicate of an existing transaction in the account.
+    
+    Args:
+        transaction: The transaction to check
+        account_id: The account ID to check against
+        
+    Returns:
+        True if the transaction is a duplicate, False otherwise
+    """
+    try:
+        # Query transactions table for potential duplicates
+        response = transaction_table.query(
+            IndexName='AccountIdIndex',
+            KeyConditionExpression=boto3.dynamodb.conditions.Key('accountId').eq(account_id),
+            FilterExpression=boto3.dynamodb.conditions.Attr('date').eq(transaction['date']) &
+                           boto3.dynamodb.conditions.Attr('description').eq(transaction['description']) &
+                           boto3.dynamodb.conditions.Attr('amount').eq(str(transaction['amount']))
+        )
+        
+        # If we found any matches, it's a duplicate
+        return len(response.get('Items', [])) > 0
+    except Exception as e:
+        logger.error(f"Error checking for duplicate transaction: {str(e)}")
+        return False
+
+
+
 def process_file_transactions(file_id: str, content_bytes: bytes, file_format: FileFormat, opening_balance: float, user_id: str) -> int:
     """
     Process a file to extract and save transactions.
@@ -144,6 +173,7 @@ def process_file_transactions(file_id: str, content_bytes: bytes, file_format: F
         
         # Save new transactions to the database
         transaction_count = 0
+        duplicate_count = 0
         for transaction_data in transactions:
             try:
                 # Add the file_id and user_id to each transaction
@@ -152,17 +182,28 @@ def process_file_transactions(file_id: str, content_bytes: bytes, file_format: F
                 if account_id:
                     transaction_data['account_id'] = account_id
                 
+                # Check for duplicates if we have an account_id
+                is_duplicate = False
+                if account_id:
+                    is_duplicate = check_duplicate_transaction(transaction_data, account_id)
+                    if is_duplicate:
+                        transaction_data['status'] = 'duplicate'
+                        duplicate_count += 1
+                    else:
+                        transaction_data['status'] = 'new'
+                
                 # Create and save the transaction
                 create_transaction(transaction_data)
                 transaction_count += 1
             except Exception as tx_error:
                 logger.warning(f"Error creating transaction: {str(tx_error)}")
                 
-        logger.info(f"Saved {transaction_count} transactions for file {file_id}")
+        logger.info(f"Saved {transaction_count} transactions for file {file_id} ({duplicate_count} duplicates)")
         
         # Update the file record with transaction count and status
         update_data = {
             'transactionCount': str(transaction_count),
+            'duplicateCount': str(duplicate_count),
             'processingStatus': ProcessingStatus.PROCESSED
         }
         if field_map:

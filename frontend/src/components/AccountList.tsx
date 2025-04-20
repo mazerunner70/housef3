@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Account, listAccounts } from '../services/AccountService';
+import { Account, listAccounts, AccountType, Currency, createAccount } from '../services/AccountService';
+import AccountForm from './AccountForm';
 import './AccountList.css';
 
 interface AccountListProps {
@@ -16,6 +17,7 @@ const AccountList: React.FC<AccountListProps> = ({
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState<boolean>(false);
 
   const fetchAccounts = useCallback(async () => {
     setLoading(true);
@@ -54,6 +56,17 @@ const AccountList: React.FC<AccountListProps> = ({
     fetchAccounts();
   }, [fetchAccounts, refreshTrigger]); // Re-fetch when refreshTrigger changes
 
+  const handleCreateAccount = async (accountData: Partial<Account>) => {
+    try {
+      await createAccount(accountData);
+      setIsCreating(false);
+      fetchAccounts(); // Refresh the account list
+    } catch (err) {
+      console.error('Error creating account:', err);
+      setError('Failed to create account. Please try again.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="account-list">
@@ -72,10 +85,32 @@ const AccountList: React.FC<AccountListProps> = ({
     );
   }
 
+  if (isCreating) {
+    return (
+      <div className="account-list">
+        <div className="account-list-header">
+          <h3>Create New Account</h3>
+          <button className="cancel-button" onClick={() => setIsCreating(false)}>
+            Cancel
+          </button>
+        </div>
+        <AccountForm
+          onSubmit={handleCreateAccount}
+          onCancel={() => setIsCreating(false)}
+        />
+      </div>
+    );
+  }
+
   if (accounts.length === 0) {
     return (
       <div className="account-list">
-        <h3>Your Accounts</h3>
+        <div className="account-list-header">
+          <h3>Your Accounts</h3>
+          <button className="create-account-btn" onClick={() => setIsCreating(true)}>
+            + New Account
+          </button>
+        </div>
         <div className="account-list-empty">No accounts found.</div>
       </div>
     );
@@ -85,7 +120,7 @@ const AccountList: React.FC<AccountListProps> = ({
     <div className="account-list">
       <div className="account-list-header">
         <h3>Your Accounts</h3>
-        <button className="create-account-btn" onClick={() => window.alert('Create Account functionality will be implemented soon!')}>
+        <button className="create-account-btn" onClick={() => setIsCreating(true)}>
           + New Account
         </button>
       </div>
@@ -96,14 +131,35 @@ const AccountList: React.FC<AccountListProps> = ({
             className={`account-card ${selectedAccountId === account.accountId ? 'selected' : ''}`}
             onClick={() => onSelectAccount(account.accountId)}
           >
-            <div className="account-name">{account.accountName}</div>
-            <div className="account-info">
-              <span className="account-type">{account.accountType}</span>
-              <span className="account-balance">${parseFloat(account.balance.toString()).toFixed(2)}</span>
+            <div className="account-header">
+              <div className="account-name">{account.accountName}</div>
+              <div className="account-type">{account.accountType}</div>
             </div>
-            {account.institution && (
-              <div className="account-institution">{account.institution}</div>
+            
+            {account.notes && (
+              <div className="account-notes">{account.notes}</div>
             )}
+            
+            <div className="account-info">
+              <div className="account-balance">
+                {new Intl.NumberFormat('en-US', {
+                  style: 'currency',
+                  currency: account.currency
+                }).format(parseFloat(account.balance.toString()))}
+              </div>
+              <div className="account-currency">{account.currency}</div>
+            </div>
+            
+            <div className="account-institution">{account.institution}</div>
+            
+            <div className="account-meta">
+              <div className="account-created">
+                Created: {new Date(account.createdAt).toLocaleDateString()}
+              </div>
+              <div className="account-updated">
+                Updated: {new Date(account.updatedAt).toLocaleDateString()}
+              </div>
+            </div>
           </div>
         ))}
       </div>

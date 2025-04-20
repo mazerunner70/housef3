@@ -1,184 +1,149 @@
-# Implementation Plan
+# Accounts Functionality Implementation Plan
 
-## Field Mapping System
+## Overview
+This document outlines the implementation plan for the accounts functionality, including CRUD operations for account metadata, transaction deduplication, and UI components.
 
-### 1. Data Models
+## Backend Implementation
 
-#### FieldMap Model
+### 1. Account CRUD Operations
+- Create new Lambda handler `account_operations.py` with the following endpoints:
+  - `POST /accounts` - Create new account
+  - `GET /accounts` - List all accounts
+  - `GET /accounts/{id}` - Get account details
+  - `GET /accounts/{id}/transactions` - Get paginated account transactions (ignoring records marked as duplicate)
+  - `PUT /accounts/{id}` - Update account metadata
+  - `DELETE /accounts/{id}` - Delete account
+
+### 2. Account Metadata Schema
 ```typescript
-interface FieldMap {
-  fieldMapId: string;
-  userId: string;
-  accountId?: string;  // Optional - for default account mappings
+interface Account {
+  accountId: string;
   name: string;
   description?: string;
-  mappings: FieldMapping[];
+  type: 'checking' | 'savings' | 'credit' | 'investment';
+  currency: string;
   createdAt: string;
   updatedAt: string;
 }
+```
 
-interface FieldMapping {
-  sourceField: string;  // Column name/identifier in source file
-  targetField: string;  // Transaction model field name
-  transformation?: string;  // Optional transformation logic
+### 3. Transaction Deduplication Logic
+When a file is associated with an account:
+1. Fetch all transactions for the account
+2. For each new transaction:
+   - Compare with existing transactions using precise matching on:
+     - Date 
+     - Amount
+     - Description 
+   - If match found:
+     - update a 'duplication' field in the associating file transaction as true
+
+
+When a file is unassociated:
+1. update all transactions from the file with duplicated status to not duplicated
+
+
+### 4. API Gateway Configuration
+Add new routes in `api_gateway.tf`:
+```hcl
+resource "aws_apigatewayv2_route" "create_account" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "POST /accounts"
+  target    = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Similar routes for other operations
+```
+
+## Frontend Implementation
+
+### 1. Account Service
+Create `AccountService.ts`:
+```typescript
+class AccountService {
+  static async createAccount(data: AccountCreateData): Promise<Account>;
+  static async getAccounts(): Promise<Account[]>;
+  static async getAccount(id: string): Promise<Account>;
+  static async updateAccount(id: string, data: AccountUpdateData): Promise<Account>;
+  static async deleteAccount(id: string): Promise<void>;
 }
 ```
 
-#### Updates to Existing Models
-- Add `fieldMapId` to `TransactionFile` model
-- Add `defaultFieldMapId` to `Account` model
+### 2. Account List Component
+Create `AccountList.tsx`:
+- Display list of accounts with basic metadata
+- Search/filter functionality
+- Link to account details
 
-### 2. Database Changes
+### 3. Account Details Component
+Create `AccountDetails.tsx`:
+- Display account metadata
+- Edit account information
+- List of associated files
+- Paginated transaction view with:
+  - Transaction details
+  - Duplicate status indicators
+  - Filtering options
 
-#### New DynamoDB Table: field_maps
-- Primary Key: `fieldMapId` (string)
-- GSI1: `userId-index` on `userId`
-- GSI2: `accountId-index` on `accountId`
+### 4. Transaction List Component
+Create `TransactionList.tsx`:
+- Paginated view of transactions (ignoring duplicates)
+- Filter by date range, amount, status
 
-#### Table Updates
-- Update `transaction_files` table to include `fieldMapId` field
-- Update `accounts` table to include `defaultFieldMapId` field
+## Database Schema Updates
 
-### 3. Backend Implementation
+### 1. Accounts Table
+```hcl
+resource "aws_dynamodb_table" "accounts" {
+  name           = "${var.project_name}-${var.environment}-accounts"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "accountId"
 
-#### New Lambda Functions
-1. `field_map_operations.py`:
-   - Create field map
-   - Update field map
-   - Delete field map
-   - List field maps by user
-   - Get field map by ID
-   - List account default maps
-
-#### Updates to Existing Functions
-1. `file_processor.py`:
-   - Update to require field map before processing
-   - Implement field mapping logic during file parsing
-   - Add validation for required fields
-
-2. `file_operations.py`:
-   - Add endpoints for associating field maps with files
-   - Update file status to include field map status
-
-3. `account_operations.py`:
-   - Add endpoints for managing default field maps
-
-### 4. Frontend Implementation
-
-#### New Components
-1. `FieldMapList.tsx`:
-   - Display all field maps for user
-   - Filter by account
-   - Create/edit/delete maps
-
-2. `FieldMapEditor.tsx`:
-   - Drag-and-drop interface for mapping fields
-   - Preview of mapping results
-   - Validation feedback
-
-3. `FileFieldMapStatus.tsx`:
-   - Visual indicator for field map status
-   - Quick actions for mapping assignment
-
-#### Updates to Existing Components
-1. `FileList.tsx`:
-   - Add field map status indicator
-   - Add "View/Edit Mapping" button
-   - Update file upload flow to handle mappings
-
-2. `AccountSettings.tsx`:
-   - Add default field map management
-   - Preview of default mappings
-
-3. `FileUpload.tsx`:
-   - Add field map selection step
-   - Option to create new mapping during upload
-
-### 5. API Endpoints
-
-#### New Endpoints
-```
-POST   /field-maps                 # Create new field map
-GET    /field-maps                 # List user's field maps
-GET    /field-maps/{id}           # Get specific field map
-PUT    /field-maps/{id}           # Update field map
-DELETE /field-maps/{id}           # Delete field map
-GET    /accounts/{id}/field-maps  # Get account default maps
-PUT    /files/{id}/field-map      # Associate map with file
+  attribute {
+    name = "accountId"
+    type = "S"
+  }
+}
 ```
 
-### 6. User Interface Flow
+### 2. Transactions Table Updates
+Add new attributes:
+- `duplicateStatus`: 'unique' | 'duplicated'
+- `duplicateOf`: reference to duplicate transaction ID
 
-1. File Upload Flow:
-   - Upload file
-   - Select existing map or create new
-   - Preview mapping results
-   - Confirm and process
+## Testing Plan
 
-2. Field Map Management:
-   - List view of all maps
-   - Edit interface with drag-drop
-   - Preview capabilities
-   - Default map assignment
+### 1. Backend Tests
+- Account CRUD operations
+- Transaction deduplication logic
+- File association/unassociation effects
 
-3. File List View:
-   - Status indicator for mapping
-   - Quick actions for mapping
-   - Filter by mapping status
+### 2. Frontend Tests
+- Account list rendering
+- Account details view
+- Transaction list with duplicates
+- Pagination and filtering
 
-### 7. Implementation Phases
+### 3. Integration Tests
+- End-to-end account creation
+- File association with deduplication
+- Transaction status updates
 
-#### Phase 1: Core Infrastructure
-- Create field_maps table
-- Implement basic CRUD operations
-- Update file and account models
+## Deployment Steps
 
-#### Phase 2: Backend Processing
-- Implement mapping logic in file processor
-- Add validation and error handling
-- Update file processing workflow
+1. Create DynamoDB tables
+2. Deploy Lambda functions
+3. Update API Gateway configuration
+4. Deploy frontend components
+5. Run database migrations
+6. Verify functionality
 
-#### Phase 3: Frontend Basic
-- Add field map status to file list
-- Implement basic mapping interface
-- Update file upload flow
+## Future Enhancements
 
-#### Phase 4: Frontend Advanced
-- Implement drag-drop interface
-- Add preview capabilities
-- Enhance validation feedback
-
-#### Phase 5: Testing & Refinement
-- End-to-end testing
-- Performance optimization
-- UX improvements
-
-### 8. Testing Strategy
-
-1. Unit Tests:
-   - Field map CRUD operations
-   - Mapping logic validation
-   - File processing with maps
-
-2. Integration Tests:
-   - File upload with mapping
-   - Account default maps
-   - Error handling
-
-3. UI Tests:
-   - Mapping interface usability
-   - Status indicators
-   - Preview functionality
-
-### 9. Monitoring & Metrics
-
-1. Track:
-   - Mapping success rates
-   - Common mapping patterns
-   - Processing times
-   - Error rates
-
-2. Alerts:
-   - High failure rates
-   - Processing delays
-   - Error spikes
+1. Batch processing for large transaction sets
+2. Machine learning for improved duplicate detection
+3. Account reconciliation features
+4. Export functionality for account data
+5. Account analytics and reporting

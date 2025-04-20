@@ -1,19 +1,42 @@
 import { getCurrentUser, refreshToken, isAuthenticated } from './AuthService';
 import { FileMetadata } from './FileService';
 
+// Define enums to match backend
+export enum AccountType {
+  CHECKING = "checking",
+  SAVINGS = "savings",
+  CREDIT_CARD = "credit_card",
+  INVESTMENT = "investment",
+  LOAN = "loan",
+  OTHER = "other"
+}
+
+export enum Currency {
+  USD = "USD",
+  EUR = "EUR",
+  GBP = "GBP",
+  CAD = "CAD",
+  JPY = "JPY",
+  AUD = "AUD",
+  CHF = "CHF",
+  CNY = "CNY",
+  OTHER = "other"
+}
+
 // Define interfaces
 export interface Account {
   accountId: string;
-  accountName: string;
-  accountType: string;
-  balance: number;
-  currency: string;
-  institution?: string;
   userId: string;
-  lastUpdated: string;
-  createdAt: string;
+  accountName: string;
+  accountType: AccountType;
+  institution: string;
+  balance: number;
+  currency: Currency;
   notes?: string;
   isActive: boolean;
+  defaultFieldMapId?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AccountListResponse {
@@ -198,10 +221,26 @@ export const deleteAccount = async (accountId: string): Promise<void> => {
   });
 };
 
+// Create a new account
+export const createAccount = async (accountData: Partial<Account>): Promise<{ account: Account }> => {
+  try {
+    const response = await authenticatedRequest(API_ENDPOINT, {
+      method: 'POST',
+      body: JSON.stringify(accountData)
+    });
+    const data: { account: Account } = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error creating account:', error);
+    throw error;
+  }
+};
+
 export default {
   listAccounts,
   getAccount,
   listAccountFiles,
   getAccountFileUploadUrl,
-  deleteAccount
+  deleteAccount,
+  createAccount
 }; 

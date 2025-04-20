@@ -16,7 +16,8 @@ from utils.db_utils import (
     delete_account,
     list_account_files,
     delete_file_metadata,
-    delete_transactions_for_file
+    delete_transactions_for_file,
+    list_account_transactions
 )
 from utils.auth import get_user_from_event
 
@@ -453,6 +454,47 @@ def delete_all_accounts_handler(event: Dict[str, Any], user: Dict[str, Any]) -> 
         logger.error(f"Error deleting all accounts: {str(e)}")
         return create_response(500, {"message": "Error deleting accounts"})
 
+def get_account_transactions_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    """Get paginated transactions for an account."""
+    try:
+        # Get account ID from path parameters
+        account_id = event.get('pathParameters', {}).get('id')
+        
+        if not account_id:
+            return create_response(400, {"message": "Account ID is required"})
+        
+        # Verify the account exists and belongs to the user
+        existing_account = get_account(account_id)
+        
+        if not existing_account:
+            return create_response(404, {"message": f"Account not found: {account_id}"})
+        
+        if existing_account.user_id != user['id']:
+            return create_response(403, {"message": "Access denied"})
+        
+        # Get query parameters for pagination
+        query_params = event.get('queryStringParameters', {}) or {}
+        limit = int(query_params.get('limit', 50))
+        last_evaluated_key = query_params.get('lastEvaluatedKey')
+        
+        # Get transactions for the account
+        transactions = list_account_transactions(account_id, limit, last_evaluated_key)
+        
+        # Convert transactions to dictionary format
+        transaction_dicts = [transaction.to_dict() for transaction in transactions]
+        
+        return create_response(200, {
+            'transactions': transaction_dicts,
+            'metadata': {
+                'totalTransactions': len(transaction_dicts),
+                'accountId': account_id,
+                'accountName': existing_account.account_name
+            }
+        })
+    except Exception as e:
+        logger.error(f"Error getting account transactions: {str(e)}")
+        return create_response(500, {"message": "Error retrieving account transactions"})
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main handler for account operations."""
     try:
@@ -485,6 +527,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return account_file_upload_handler(event, user)
         elif route == "DELETE /accounts/{id}/files":
             return delete_account_files_handler(event, user)
+        elif route == "GET /accounts/{id}/transactions":
+            return get_account_transactions_handler(event, user)
         else:
             return create_response(400, {"message": f"Unsupported route: {route}"})
     except Exception as e:

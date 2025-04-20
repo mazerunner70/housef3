@@ -740,4 +740,88 @@ def list_account_field_maps(account_id: str) -> List[FieldMap]:
         return [FieldMap.from_dict(item) for item in response.get('Items', [])]
     except Exception as e:
         logger.error(f"Error listing field maps for account {account_id}: {str(e)}")
-        return [] 
+        return []
+
+
+def list_account_transactions(account_id: str, limit: int = 50, last_evaluated_key: Optional[Dict] = None) -> List[Transaction]:
+    """List transactions for an account with pagination."""
+    try:
+        # Query transactions table using AccountIdIndex
+        query_params = {
+            'IndexName': 'AccountIdIndex',
+            'KeyConditionExpression': Key('accountId').eq(account_id),
+            'Limit': limit
+        }
+        
+        if last_evaluated_key:
+            query_params['ExclusiveStartKey'] = last_evaluated_key
+            
+        response = get_transactions_table().query(**query_params)
+        
+        # Convert DynamoDB items to Transaction objects
+        transactions = []
+        for item in response.get('Items', []):
+            transaction = Transaction.from_dict(item)
+            transactions.append(transaction)
+            
+        return transactions
+    except Exception as e:
+        logger.error(f"Error listing account transactions: {str(e)}")
+        raise
+
+
+def update_transaction_statuses_by_status(old_status: str, new_status: str) -> int:
+    """
+    Update all transactions with a specific status to a new status.
+    Uses a GSI on the status field for efficient querying.
+    
+    Args:
+        old_status: The current status to match
+        new_status: The new status to set
+        
+    Returns:
+        Number of transactions updated
+    """
+    try:
+        table = get_transactions_table()
+        count = 0
+        
+        # Query using StatusIndex GSI
+        response = table.query(
+            IndexName='StatusIndex',
+            KeyConditionExpression=Key('status').eq(old_status)
+        )
+        
+        # Process in batches of 25 (DynamoDB limit)
+        while True:
+            items = response.get('Items', [])
+            if not items:
+                break
+                
+            # Update items in batches
+            with table.batch_writer() as batch:
+                for item in items:
+                    batch.put_item(
+                        Item={
+                            **item,
+                            'status': new_status
+                        }
+                    )
+                    count += 1
+            
+            # Check if there are more items
+            if 'LastEvaluatedKey' not in response:
+                break
+                
+            response = table.query(
+                IndexName='StatusIndex',
+                KeyConditionExpression=Key('status').eq(old_status),
+                ExclusiveStartKey=response['LastEvaluatedKey']
+            )
+        
+        logger.info(f"Updated {count} transactions from status '{old_status}' to '{new_status}'")
+        return count
+        
+    except Exception as e:
+        logger.error(f"Error updating transaction statuses: {str(e)}")
+        raise 

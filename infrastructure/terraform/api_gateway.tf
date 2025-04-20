@@ -260,6 +260,15 @@ resource "aws_apigatewayv2_route" "delete_account_files" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# Account transactions route
+resource "aws_apigatewayv2_route" "get_account_transactions" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /accounts/{id}/transactions"
+  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 # Transaction operations integration
 resource "aws_apigatewayv2_integration" "transaction_operations" {
   api_id                 = aws_apigatewayv2_api.main.id
