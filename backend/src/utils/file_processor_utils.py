@@ -1,0 +1,243 @@
+"""
+Utility functions for processing transaction files.
+"""
+import logging
+import os
+import re
+import boto3
+from typing import Dict, Any, List, Optional
+from decimal import Decimal
+from datetime import datetime
+
+from models.transaction_file import FileFormat, ProcessingStatus
+from models.field_map import FieldMap
+from utils.transaction_parser import parse_transactions
+from utils.db_utils import (
+    get_transaction_file,
+    update_transaction_file,
+    create_transaction,
+    delete_transactions_for_file,
+    get_field_map,
+    get_account_default_field_map
+)
+
+# Configure logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# Initialize clients
+dynamodb = boto3.resource('dynamodb')
+s3_client = boto3.client('s3')
+
+# Get table names from environment variables
+TRANSACTIONS_TABLE = os.environ.get('TRANSACTIONS_TABLE', 'transactions')
+FILES_TABLE = os.environ.get('FILES_TABLE', 'transaction-files')
+
+# Initialize DynamoDB tables
+transaction_table = dynamodb.Table(TRANSACTIONS_TABLE)
+file_table = dynamodb.Table(FILES_TABLE)
+
+def check_duplicate_transaction(transaction: Dict[str, Any], account_id: str, 
+                              table: Any = None) -> bool:
+    """
+    Check if a transaction is a duplicate of an existing transaction in the account.
+    
+    Args:
+        transaction: The transaction to check
+        account_id: The account ID to check against
+        table: Optional DynamoDB table for testing
+        
+    Returns:
+        True if the transaction is a duplicate, False otherwise
+    """
+    try:
+        # Use provided table or default to transaction_table
+        table = table or transaction_table
+        
+        # Query transactions table for potential duplicates
+        response = table.query(
+            IndexName='AccountIdIndex',
+            KeyConditionExpression=boto3.dynamodb.conditions.Key('accountId').eq(account_id),
+            FilterExpression=boto3.dynamodb.conditions.Attr('date').eq(transaction['date']) &
+                           boto3.dynamodb.conditions.Attr('description').eq(transaction['description']) &
+                           boto3.dynamodb.conditions.Attr('amount').eq(str(transaction['amount']))
+        )
+        
+        # If we found any matches, it's a duplicate
+        return len(response.get('Items', [])) > 0
+    except Exception as e:
+        logger.error(f"Error checking for duplicate transaction: {str(e)}")
+        return False
+
+def get_file_content(file_id: str, s3_client: Any = None) -> Optional[bytes]:
+    """
+    Get file content from S3.
+    
+    Args:
+        file_id: ID of the file to retrieve
+        s3_client: Optional S3 client for testing
+        
+    Returns:
+        File content as bytes if found, None otherwise
+    """
+    try:
+        # Use provided client or default to s3_client
+        s3_client = s3_client or s3_client
+        
+        # Get the file record to find the S3 key
+        file_record = get_transaction_file(file_id)
+        if not file_record or not file_record.s3_key:
+            logger.error(f"File record or S3 key not found for ID: {file_id}")
+            return None
+            
+        # Get the file content from S3
+        response = s3_client.get_object(
+            Bucket=os.environ.get('FILE_STORAGE_BUCKET'),
+            Key=file_record.s3_key
+        )
+        return response['Body'].read()
+    except Exception as e:
+        logger.error(f"Error getting file content: {str(e)}")
+        return None
+
+def find_file_records_by_s3_key(s3_key: str, table: Any = None) -> List[Dict[str, Any]]:
+    """
+    Find file records in DynamoDB that match the given S3 key.
+    
+    Args:
+        s3_key: The S3 key to search for
+        table: Optional DynamoDB table for testing
+        
+    Returns:
+        List of matching file records
+    """
+    try:
+        # Use provided table or default to file_table
+        table = table or file_table
+        
+        # Query DynamoDB using the S3Key index
+        response = table.query(
+            IndexName='S3KeyIndex',
+            KeyConditionExpression=boto3.dynamodb.conditions.Key('s3Key').eq(s3_key)
+        )
+        
+        files = response.get('Items', [])
+        logger.info(f"Found {len(files)} file records for S3 key: {s3_key}")
+        return files
+    except Exception as e:
+        logger.error(f"Error finding file records by S3 key: {str(e)}")
+        return []
+
+def extract_opening_balance(content_bytes: bytes, file_format: FileFormat) -> Optional[float]:
+    """
+    Extract the opening balance from file content based on its format.
+    
+    Args:
+        content_bytes: The file content
+        file_format: The detected file format
+        
+    Returns:
+        Opening balance as float if found, None otherwise
+    """
+    try:
+        # Convert bytes to string for text processing
+        try:
+            content_text = content_bytes.decode('utf-8')
+        except UnicodeDecodeError:
+            # For binary formats like OFX/QFX, try another encoding
+            try:
+                content_text = content_bytes.decode('latin-1')
+            except UnicodeDecodeError:
+                return None
+        
+        # Process based on file format
+        if file_format == FileFormat.OFX or file_format == FileFormat.QFX:
+            return extract_opening_balance_ofx(content_text)
+        elif file_format == FileFormat.CSV:
+            return extract_opening_balance_csv(content_text)
+        
+        return None
+    except Exception as e:
+        logger.error(f"Error extracting opening balance: {str(e)}")
+        return None
+
+def extract_opening_balance_ofx(content: str) -> Optional[float]:
+    """
+    Extract opening balance from OFX/QFX file.
+    
+    Args:
+        content: File content as string
+        
+    Returns:
+        Opening balance as float if found, None otherwise
+    """
+    # Look for opening balance in OFX format
+    # Modern OFX (XML-like)
+    match = re.search(r'<LEDGERBAL>.*?<BALAMT>([-+]?\d*\.?\d+)</BALAMT>', content, re.DOTALL)
+    if match:
+        try:
+            return float(match.group(1))
+        except (ValueError, TypeError):
+            pass
+    
+    # SGML format OFX
+    match = re.search(r'LEDGERBAL\s+BALAMT:([-+]?\d*\.?\d+)', content)
+    if match:
+        try:
+            return float(match.group(1))
+        except (ValueError, TypeError):
+            pass
+    
+    # Some files have AVAILBAL (available balance) which can be used as a fallback
+    match = re.search(r'<AVAILBAL>.*?<BALAMT>([-+]?\d*\.?\d+)</BALAMT>', content, re.DOTALL)
+    if match:
+        try:
+            return float(match.group(1))
+        except (ValueError, TypeError):
+            pass
+    
+    return None
+
+def extract_opening_balance_csv(content: str) -> Optional[float]:
+    """
+    Extract opening balance from CSV file.
+    This is more heuristic as CSV formats vary widely by institution.
+    
+    Args:
+        content: File content as string
+        
+    Returns:
+        Opening balance as float if found, None otherwise
+    """
+    # Common patterns for opening balance in CSVs
+    patterns = [
+        r'opening\s+balance[^,]*,\s*([-+]?\d*\.?\d+)',  # "Opening Balance, 1000.00"
+        r'beginning\s+balance[^,]*,\s*([-+]?\d*\.?\d+)', # "Beginning Balance, 1000.00"
+        r'balance\s+forward[^,]*,\s*([-+]?\d*\.?\d+)',   # "Balance Forward, 1000.00"
+        r'previous\s+balance[^,]*,\s*([-+]?\d*\.?\d+)'   # "Previous Balance, 1000.00"
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, content, re.IGNORECASE)
+        if match:
+            try:
+                return float(match.group(1))
+            except (ValueError, TypeError):
+                continue
+    
+    # Look for potential header and first transaction
+    lines = content.split('\n')
+    if len(lines) >= 2:
+        # Some institutions put the opening balance as the first transaction
+        # Heuristic: Look for a row that contains words like "opening", "balance", "beginning"
+        for i, line in enumerate(lines[:min(10, len(lines))]):
+            if re.search(r'open|balanc|begin', line, re.IGNORECASE):
+                # Try to extract any numbers from this line
+                numbers = re.findall(r'([-+]?\d*\.?\d+)', line)
+                for num in numbers:
+                    try:
+                        return float(num)
+                    except (ValueError, TypeError):
+                        continue
+                        
+    return None 

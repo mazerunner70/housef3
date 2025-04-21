@@ -7,18 +7,21 @@ const API_ENDPOINT = import.meta.env.VITE_API_ENDPOINT;
 export interface Transaction {
   transactionId: string;
   fileId: string;
+  userId: string;
   date: string;
   description: string;
   amount: number;
-  runningTotal: number;
+  balance: number;
   transactionType?: string;
   category?: string;
   payee?: string;
   memo?: string;
   checkNumber?: string;
   reference?: string;
+  accountId?: string;
+  status?: string;
   debitOrCredit?: string;
-  importOrder: number;
+  importOrder?: number;
 }
 
 // Extract the fields from the Transaction interface

@@ -270,8 +270,8 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
                 Amount
               </div>
               <div 
-                className={`header-cell running-total ${sortField === 'runningTotal' ? sortDirection : ''}`}
-                onClick={() => handleSortChange('runningTotal')}
+                className={`header-cell balance ${sortField === 'balance' ? sortDirection : ''}`}
+                onClick={() => handleSortChange('balance')}
               >
                 Balance
               </div>
@@ -292,7 +292,7 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
                   if (sortField === 'date') {
                     return direction * (new Date(aValue as string).getTime() - new Date(bValue as string).getTime());
                   }
-                  if (sortField === 'amount' || sortField === 'runningTotal' || sortField === 'importOrder') {
+                  if (sortField === 'amount' || sortField === 'balance' || sortField === 'importOrder') {
                     return direction * ((aValue as number) - (bValue as number));
                   }
                   return direction * String(aValue).localeCompare(String(bValue));
@@ -304,8 +304,8 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
                     <div className={`cell amount ${transaction.amount >= 0 ? 'positive' : 'negative'}`}>
                       {formatCurrency(transaction.amount)}
                     </div>
-                    <div className="cell running-total">
-                      {formatCurrency(transaction.runningTotal)}
+                    <div className="cell transaction-balance">
+                      {formatCurrency(transaction.balance)}
                     </div>
                     <div className="cell import-order">
                       {transaction.importOrder}

@@ -168,8 +168,8 @@ const TransactionList: React.FC<TransactionListProps> = ({
                 <th onClick={() => handleSortChange('amount')} className="sortable">
                   Amount {getSortIndicator('amount')}
                 </th>
-                <th onClick={() => handleSortChange('runningTotal')} className="sortable">
-                  Balance {getSortIndicator('runningTotal')}
+                <th onClick={() => handleSortChange('balance')} className="sortable">
+                  Balance {getSortIndicator('balance')}
                 </th>
                 <th>Type</th>
                 <th>Category</th>
@@ -189,8 +189,8 @@ const TransactionList: React.FC<TransactionListProps> = ({
                   <td className={`amount-cell ${transaction.amount >= 0 ? 'positive' : 'negative'}`}>
                     {formatCurrency(transaction.amount)}
                   </td>
-                  <td className="balance-cell">
-                    {formatCurrency(transaction.runningTotal)}
+                  <td className="transaction-balance">
+                    {formatCurrency(transaction.balance)}
                   </td>
                   <td>{transaction.transactionType}</td>
                   <td>{transaction.category}</td>

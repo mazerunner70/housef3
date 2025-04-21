@@ -20,7 +20,7 @@ class Transaction:
         date: str,
         description: str,
         amount: float,
-        running_total: float,
+        balance: float,
         transaction_type: Optional[str] = None,
         category: Optional[str] = None,
         payee: Optional[str] = None,
@@ -37,7 +37,7 @@ class Transaction:
         self.date = date
         self.description = description
         self.amount = amount
-        self.running_total = running_total
+        self.balance = balance
         self.transaction_type = transaction_type
         self.category = category
         self.payee = payee
@@ -56,7 +56,7 @@ class Transaction:
         date: str,
         description: str,
         amount: float,
-        running_total: float,
+        balance: float,
         **kwargs
     ) -> 'Transaction':
         """
@@ -69,7 +69,7 @@ class Transaction:
             date=date,
             description=description,
             amount=amount,
-            running_total=running_total,
+            balance=balance,
             **kwargs
         )
     
@@ -84,7 +84,7 @@ class Transaction:
             "date": self.date,
             "description": self.description,
             "amount": str(self.amount),  # Convert to string for DynamoDB
-            "runningTotal": str(self.running_total)  # Convert to string for DynamoDB
+            "balance": str(self.balance)  # Convert to string for DynamoDB
         }
         
         # Add optional fields if they exist
@@ -129,7 +129,7 @@ class Transaction:
             date=data["date"],
             description=data["description"],
             amount=float(data["amount"]),
-            running_total=float(data["runningTotal"]),
+            balance=float(data["balance"]),
             transaction_type=data.get("transactionType"),
             category=data.get("category"),
             payee=data.get("payee"),
@@ -154,7 +154,7 @@ def validate_transaction_data(data: Dict[str, Any]) -> bool:
     Raises:
         ValueError: If validation fails
     """
-    required_fields = ["fileId", "userId", "date", "description", "amount", "runningTotal"]
+    required_fields = ["fileId", "userId", "date", "description", "amount", "balance"]
     
     # Check required fields
     for field in required_fields:
@@ -168,9 +168,9 @@ def validate_transaction_data(data: Dict[str, Any]) -> bool:
         raise ValueError("Amount must be a valid number")
         
     try:
-        float(data["runningTotal"])
+        float(data["balance"])
     except (ValueError, TypeError):
-        raise ValueError("Running total must be a valid number")
+        raise ValueError("Balance must be a valid number")
     
     # Validate string lengths
     if len(data["description"]) > 1000:

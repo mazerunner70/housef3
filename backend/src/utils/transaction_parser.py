@@ -193,177 +193,94 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
         header = [h.strip() for h in header]
         
         # Find columns by common names if no field map
-        date_col = find_column_index(header, ['date', 'transaction date', 'posted date'])
-        desc_col = find_column_index(header, ['description', 'payee', 'merchant', 'transaction'])
-        amount_col = find_column_index(header, ['amount', 'transaction amount', 'billing amount'])
-        type_col = find_column_index(header, ['type', 'transaction type'])
-        category_col = find_column_index(header, ['category', 'transaction category'])
-        memo_col = find_column_index(header, ['memo', 'notes', 'description'])
-        balance_col = find_column_index(header, ['balance', 'running balance'])
-        debit_credit_col = find_column_index(header, ['debit or credit'])
-        
-        # If using field map, validate required fields are present
         if field_map:
-            missing_fields = []
-            for mapping in field_map.mappings:
-                if mapping.source_field not in header:
-                    missing_fields.append(mapping.source_field)
-            
-            if missing_fields:
-                logger.error(f"Missing required fields in CSV: {missing_fields}")
-                return []
+            # Use field mapping to get column indices
+            date_col = find_column_index(header, [m.source_field for m in field_map.mappings if m.target_field == 'date'])
+            desc_col = find_column_index(header, [m.source_field for m in field_map.mappings if m.target_field == 'description'])
+            amount_col = find_column_index(header, [m.source_field for m in field_map.mappings if m.target_field == 'amount'])
+            debitOrCredit_col = find_column_index(header, [m.source_field for m in field_map.mappings if m.target_field == 'debitOrCredit'])
+            category_col = find_column_index(header, [m.source_field for m in field_map.mappings if m.target_field == 'category'])
+            memo_col = find_column_index(header, [m.source_field for m in field_map.mappings if m.target_field == 'memo'])
         else:
-            # Validate required columns if no field map
-            if None in [date_col, desc_col, amount_col]:
-                logger.error("Missing required columns in CSV")
-                return []
+            # Use default column names
+            date_col = find_column_index(header, ['date', 'transaction date', 'posted date'])
+            desc_col = find_column_index(header, ['description', 'payee', 'merchant', 'transaction'])
+            amount_col = find_column_index(header, ['amount', 'transaction amount', 'billing amount'])
+            debitOrCredit_col = find_column_index(header, ['type', 'transaction type'])
+            category_col = find_column_index(header, ['category', 'transaction category'])
+            memo_col = find_column_index(header, ['memo', 'notes', 'reference'])
         
-        # Read all rows first to detect date order
-        rows = []
-        for row in reader:
-            if not row or all(not cell.strip() for cell in row):
-                continue
-            rows.append(row)
+        # Validate required columns
+        if date_col is None or desc_col is None or amount_col is None:
+            logger.warning("Missing required columns in CSV")
+            return []
             
-        # Extract dates to detect order
-        dates = []
-        for row in rows:
-            try:
-                if field_map:
-                    row_data = dict(zip(header, row))
-                    mapped_data = apply_field_mapping(row_data, field_map)
-                    if 'date' in mapped_data:
-                        dates.append(mapped_data['date'])
-                else:
-                    date = parse_date(row[date_col].strip())
-                    if date:
-                        dates.append(date)
-            except (ValueError, IndexError):
-                continue
-        logger.info(f"Dates: {dates}")          
-        # Detect date order
+        # Read all rows first to detect date order
+        rows = list(reader)
+        dates = [row[date_col] for row in rows if len(row) > date_col]
         date_order = detect_date_order(dates)
-        logger.info(f"Detected date order: {date_order}")
         
-        # If dates are in descending order, reverse the rows
+        # Reverse rows if dates are in descending order
         if date_order == 'desc':
             rows.reverse()
-            logger.info("Reversed transaction order to ascending date order")
+            logger.info("Reversed transaction order to ascending")
+            
+        # Initialize balance
+        balance = Decimal(str(opening_balance)) if opening_balance is not None else Decimal('0.00')
         
+        # Process each row
         transactions = []
-        
-        # Handle missing opening balance
-        if opening_balance is None:
-            logger.warning("Opening balance is missing, will use 0.00 as default")
-            running_total = Decimal('0.00')
-        else:
-            try:
-                running_total = Decimal(str(opening_balance))
-            except (decimal.InvalidOperation, decimal.ConversionSyntax) as e:
-                logger.warning(f"Invalid opening balance format '{opening_balance}', will use 0.00 as default: {str(e)}")
-                running_total = Decimal('0.00')
-        
-        for row_num, row in enumerate(rows, start=2):  # Start from 2 to account for header row
-            try:
-                # Handle unquoted fields with commas by joining them back together
-                # This is needed because the CSV might have been split incorrectly
-                if len(row) > len(header):
-                    # Find the description column and join any extra fields
-                    if desc_col is not None and desc_col < len(row):
-                        # Join all fields from desc_col onwards with commas
-                        row[desc_col] = ','.join(row[desc_col:])
-                        # Truncate the row to match header length
-                        row = row[:len(header)]
-                    
-                if field_map:
-                    # Apply field mapping
-                    row_data = dict(zip(header, row))
-                    mapped_data = apply_field_mapping(row_data, field_map)
-                    
-                    # Ensure required fields are present
-                    if not all(key in mapped_data for key in ['date', 'description', 'amount']):
-                        logger.warning(f"Row {row_num}: Missing required fields after mapping")
-                        continue
-                        
-                    # Parse amount and calculate running total
-                    try:
-                        amount_str = str(mapped_data['amount']).replace(',', '').strip()
-                        logger.info(f"Row {row_num}: Attempting to convert amount string: '{amount_str}'")
-                        amount = Decimal(amount_str)
-                        amount = process_amount(amount, mapped_data.get('debitOrCredit'))
-                    except (decimal.InvalidOperation, decimal.ConversionSyntax) as e:
-                        logger.error(f"Row {row_num}: Invalid amount format. Original value: '{mapped_data['amount']}', Cleaned value: '{amount_str}', Error: {str(e)}")
-                        continue
-                    
-                    running_total += amount
-                    
-                    # Create transaction with mapped data
-                    transaction = {
-                        'date': mapped_data['date'],
-                        'description': mapped_data['description'],
-                        'amount': str(amount),
-                        'running_total': str(running_total),
-                        'import_order': row_num - 2  # Subtract 2 to account for header row and 1-based index
-                    }
-                    
-                    # Add optional fields if present in mapping
-                    for field in ['transaction_type', 'category', 'memo']:
-                        if field in mapped_data:
-                            transaction[field] = mapped_data[field]
-                            
-                else:
-                    # Parse without field mapping
-                    date = parse_date(row[date_col].strip())
-                    if not date:
-                        logger.warning(f"Row {row_num}: Invalid date format: {row[date_col]}")
-                        continue
-                        
-                    description = row[desc_col].strip()
-                    if not description:
-                        logger.warning(f"Row {row_num}: Empty description")
-                        continue
-                        
-                    try:
-                        amount_str = str(row[amount_col]).replace(',', '').strip()
-                        logger.info(f"Row {row_num}: Attempting to convert amount string: '{amount_str}'")
-                        amount = Decimal(amount_str)
-                        amount = process_amount(amount, row[debit_credit_col].strip() if debit_credit_col is not None else None)
-                    except (decimal.InvalidOperation, decimal.ConversionSyntax) as e:
-                        logger.error(f"Row {row_num}: Invalid amount format. Original value: '{row[amount_col]}', Cleaned value: '{amount_str}', Error: {str(e)}")
-                        continue
-                        
-                    # Calculate running total
-                    running_total += amount
-                    
-                    # Create transaction
-                    transaction = {
-                        'date': date,
-                        'description': description,
-                        'amount': str(amount),
-                        'running_total': str(running_total),
-                        'import_order': row_num - 2  # Subtract 2 to account for header row and 1-based index
-                    }
-                    
-                    # Add optional fields if available
-                    if type_col is not None:
-                        transaction['transaction_type'] = row[type_col].strip() or ('DEBIT' if amount < 0 else 'CREDIT')
-                    if category_col is not None:
-                        transaction['category'] = row[category_col].strip()
-                    if memo_col is not None and memo_col != desc_col:
-                        memo = row[memo_col].strip()
-                        if memo and memo != description:
-                            transaction['memo'] = memo
-                
-                transactions.append(transaction)
-                
-            except (ValueError, IndexError) as e:
-                logger.warning(f"Row {row_num}: Error parsing row: {str(e)}")
+        for i, row in enumerate(rows):
+            if len(row) <= max(date_col, desc_col, amount_col):
                 continue
-        
+                
+            # Create raw row data dictionary
+            row_data = {
+                'date': row[date_col],
+                'description': row[desc_col],
+                'amount': row[amount_col],
+                'debitOrCredit': row[debitOrCredit_col] if debitOrCredit_col is not None and len(row) > debitOrCredit_col else None,
+                'category': row[category_col] if category_col is not None and len(row) > category_col else None,
+                'memo': row[memo_col] if memo_col is not None and len(row) > memo_col else None
+            }
+            logger.info(f"Row: {row}")
+            logger.info(f"Row data: {row_data}")    
+
+            # Apply field mapping if provided
+            # if field_map:
+            #     mapped_data = apply_field_mapping(row_data, field_map)
+            # else:
+            #     mapped_data = row_data
+                
+            # Process the amount
+            raw_amount = Decimal(row_data['amount'].replace('$', '').replace(',', ''))
+            processed_amount = process_amount(raw_amount, row_data.get('debitOrCredit'))
+            
+            # Create transaction dictionary
+            transaction = {
+                'date': parse_date(row_data['date']),
+                'description': row_data['description'].strip(),
+                'amount': str(processed_amount),
+                'balance': str(balance + processed_amount),
+                'import_order': i + 1,  # Add 1-based import order
+                'transaction_type': row_data.get('debitOrCredit')  # Use debitOrCredit value for transaction_type
+            }
+            
+            # Update balance with processed amount
+            balance += processed_amount
+            
+            # Add optional fields
+            if row_data.get('category'):
+                transaction['category'] = row_data['category'].strip()
+            if row_data.get('memo'):
+                transaction['memo'] = row_data['memo'].strip()
+                
+            transactions.append(transaction)
+            
         return transactions
         
     except Exception as e:
-        logger.error(f"Error parsing CSV file: {str(e)}")
+        logger.error(f"Error parsing CSV transactions: {str(e)}")
         return []
 
 def parse_ofx_transactions(content: bytes, opening_balance: float, field_map: Optional[FieldMap] = None) -> List[Dict[str, Any]]:
@@ -372,109 +289,120 @@ def parse_ofx_transactions(content: bytes, opening_balance: float, field_map: Op
     
     Args:
         content: The raw OFX/QFX file content
-        opening_balance: The opening balance to use for running total calculation
+        opening_balance: Opening balance to use for running total calculation
         field_map: Optional field mapping configuration
         
     Returns:
         List of transaction dictionaries
     """
     try:
-        # Decode content
-        try:
-            text_content = content.decode('utf-8')
-        except UnicodeDecodeError:
-            text_content = content.decode('latin-1')
-            
-        # Extract transaction sections - handle both XML and SGML formats
-        transaction_blocks = []
+        # Decode the content
+        text_content = content.decode('utf-8')
         
-        # Try XML format first
-        xml_blocks = re.findall(r'<STMTTRN>(.*?)</STMTTRN>', text_content, re.DOTALL)
-        if xml_blocks:
-            transaction_blocks = xml_blocks
-            is_xml = True
+        # Strip OFX header if present
+        if text_content.startswith('OFXHEADER:'):
+            # Find the start of the XML content
+            xml_start = text_content.find('<OFX>')
+            if xml_start != -1:
+                # XML format
+                text_content = text_content[xml_start:]
+                return parse_ofx_xml(text_content, opening_balance)
+            else:
+                # Colon-separated format
+                return parse_ofx_colon_separated(text_content, opening_balance)
         else:
-            # Try SGML format - match from STMTTRN to next blank line or end of file
-            sgml_blocks = re.findall(r'STMTTRN\n(.*?)(?:\n\s*\n|\Z)', text_content, re.DOTALL)
-            transaction_blocks = sgml_blocks
-            is_xml = False
-        
-        transactions = []
-        running_total = Decimal(str(opening_balance))
-        
-        for i, block in enumerate(transaction_blocks):
+            # Try parsing as XML
             try:
-                # Extract transaction details using appropriate patterns
-                if is_xml:
-                    date_match = re.search(r'<DTPOSTED>(.*?)</DTPOSTED>', block)
-                    amount_match = re.search(r'<TRNAMT>(.*?)</TRNAMT>', block)
-                    name_match = re.search(r'<(?:NAME|n)>(.*?)</(?:NAME|n)>', block)
-                    memo_match = re.search(r'<MEMO>(.*?)</MEMO>', block)
-                    type_match = re.search(r'<TRNTYPE>(.*?)</TRNTYPE>', block)
-                else:
-                    date_match = re.search(r'DTPOSTED:(\d+)', block)
-                    amount_match = re.search(r'TRNAMT:([^\n]+)', block)
-                    name_match = re.search(r'NAME:([^\n]+)', block)
-                    memo_match = re.search(r'MEMO:([^\n]+)', block)
-                    type_match = re.search(r'TRNTYPE:([^\n]+)', block)
-                
-                if not (date_match and amount_match):
-                    logger.warning("Missing required fields in transaction block")
-                    continue
-                    
-                # Parse date (format: YYYYMMDD)
-                date_str = date_match.group(1).strip()
-                if len(date_str) >= 8:
-                    year = date_str[0:4]
-                    month = date_str[4:6]
-                    day = date_str[6:8]
-                    date = f"{year}-{month}-{day}"
-                else:
-                    date = date_str
-                        
-                # Parse amount - clean up whitespace and handle negative signs
-                amount_str = amount_match.group(1).strip()
-                try:
-                    amount = Decimal(amount_str)
-                except decimal.InvalidOperation:
-                    # Try cleaning the string
-                    amount_str = re.sub(r'[^\d.-]', '', amount_str)
-                    amount = Decimal(amount_str)
-                
-                # Get description from NAME or MEMO
-                description = None
-                if name_match:
-                    description = name_match.group(1).strip()
-                if not description and memo_match:
-                    description = memo_match.group(1).strip()
-                if not description:
-                    description = "Unknown Transaction"
-                    
-                # Calculate running total
-                running_total += amount
-                
-                # Create transaction
-                transaction = {
-                    'date': date,
-                    'description': description,
-                    'amount': str(amount),
-                    'running_total': str(running_total),
-                    'transaction_type': type_match.group(1).strip() if type_match else ('DEBIT' if amount < 0 else 'CREDIT'),
-                    'import_order': i  # Add import order based on position in file
-                }
-                
-                # Add memo if different from description
-                if memo_match:
-                    memo = memo_match.group(1).strip()
-                    if memo and memo != description:
-                        transaction['memo'] = memo
-                
-                transactions.append(transaction)
-            except Exception as e:
-                logger.error(f"Error parsing OFX transaction block: {str(e)}")
-                continue
-                
-        return transactions
+                return parse_ofx_xml(text_content, opening_balance)
+            except ET.ParseError:
+                # Try parsing as colon-separated
+                return parse_ofx_colon_separated(text_content, opening_balance)
+        
     except Exception as e:
         logger.error(f"Error parsing OFX transactions: {str(e)}")
-        return [] 
+        return []
+
+def parse_ofx_xml(text_content: str, opening_balance: float) -> List[Dict[str, Any]]:
+    """Parse OFX content in XML format."""
+    root = ET.fromstring(text_content)
+    transactions = []
+    balance = Decimal(str(opening_balance))
+    
+    for i, stmttrn in enumerate(root.findall('.//STMTTRN')):
+        # Extract transaction details
+        date = stmttrn.find('DTPOSTED').text
+        amount = Decimal(stmttrn.find('TRNAMT').text)
+        # Try both NAME and n elements for description
+        name = stmttrn.find('NAME')
+        if name is None:
+            name = stmttrn.find('n')
+        name = name.text if name is not None else ''
+        memo = stmttrn.find('MEMO').text if stmttrn.find('MEMO') is not None else ''
+        trntype = stmttrn.find('TRNTYPE').text if stmttrn.find('TRNTYPE') is not None else 'DEBIT'
+        
+        # Create transaction dictionary
+        transaction = {
+            'date': parse_date(date),
+            'description': name.strip(),
+            'amount': str(amount),
+            'balance': str(balance + amount),
+            'transaction_type': trntype.strip().upper(),
+            'memo': memo.strip(),
+            'import_order': i + 1  # Add 1-based import order
+        }
+        
+        # Update balance
+        balance += amount
+        
+        transactions.append(transaction)
+    
+    return transactions
+
+def parse_ofx_colon_separated(text_content: str, opening_balance: float) -> List[Dict[str, Any]]:
+    """Parse OFX content in colon-separated format."""
+    transactions = []
+    balance = Decimal(str(opening_balance))
+    current_transaction = {}
+    in_transaction = False
+    import_order = 1  # Initialize import order counter
+    
+    for line in text_content.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+            
+        if line == 'STMTTRN':
+            if in_transaction and current_transaction:
+                # Add the previous transaction
+                transaction = {
+                    'date': parse_date(current_transaction.get('DTPOSTED', '')),
+                    'description': current_transaction.get('NAME', '').strip(),
+                    'amount': str(Decimal(current_transaction.get('TRNAMT', '0'))),
+                    'balance': str(balance + Decimal(current_transaction.get('TRNAMT', '0'))),
+                    'transaction_type': current_transaction.get('TRNTYPE', 'DEBIT').strip().upper(),
+                    'memo': current_transaction.get('MEMO', '').strip(),
+                    'import_order': import_order  # Add import order
+                }
+                transactions.append(transaction)
+                balance += Decimal(current_transaction.get('TRNAMT', '0'))
+                current_transaction = {}
+                import_order += 1  # Increment import order counter
+            in_transaction = True
+        elif in_transaction and ':' in line:
+            key, value = line.split(':', 1)
+            current_transaction[key] = value.strip()
+    
+    # Add the last transaction if we have one
+    if in_transaction and current_transaction:
+        transaction = {
+            'date': parse_date(current_transaction.get('DTPOSTED', '')),
+            'description': current_transaction.get('NAME', '').strip(),
+            'amount': str(Decimal(current_transaction.get('TRNAMT', '0'))),
+            'balance': str(balance + Decimal(current_transaction.get('TRNAMT', '0'))),
+            'transaction_type': current_transaction.get('TRNTYPE', 'DEBIT').strip().upper(),
+            'memo': current_transaction.get('MEMO', '').strip(),
+            'import_order': import_order  # Add import order
+        }
+        transactions.append(transaction)
+    
+    return transactions 

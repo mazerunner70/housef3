@@ -23,6 +23,14 @@ from utils.db_utils import (
     get_field_map,
     get_account_default_field_map
 )
+from utils.file_processor_utils import (
+    check_duplicate_transaction,
+    extract_opening_balance,
+    extract_opening_balance_ofx,
+    extract_opening_balance_csv,
+    find_file_records_by_s3_key,
+    get_file_content
+)
 from datetime import datetime
 
 # Configure logging
@@ -73,33 +81,6 @@ FIELD_MAPS_TABLE = os.environ.get('FIELD_MAPS_TABLE', 'field-maps')
 # Initialize DynamoDB tables
 transaction_table = dynamodb.Table(TRANSACTIONS_TABLE)
 field_maps_table = dynamodb.Table(FIELD_MAPS_TABLE)
-
-def check_duplicate_transaction(transaction: Dict[str, Any], account_id: str) -> bool:
-    """
-    Check if a transaction is a duplicate of an existing transaction in the account.
-    
-    Args:
-        transaction: The transaction to check
-        account_id: The account ID to check against
-        
-    Returns:
-        True if the transaction is a duplicate, False otherwise
-    """
-    try:
-        # Query transactions table for potential duplicates
-        response = transaction_table.query(
-            IndexName='AccountIdIndex',
-            KeyConditionExpression=boto3.dynamodb.conditions.Key('accountId').eq(account_id),
-            FilterExpression=boto3.dynamodb.conditions.Attr('date').eq(transaction['date']) &
-                           boto3.dynamodb.conditions.Attr('description').eq(transaction['description']) &
-                           boto3.dynamodb.conditions.Attr('amount').eq(str(transaction['amount']))
-        )
-        
-        # If we found any matches, it's a duplicate
-        return len(response.get('Items', [])) > 0
-    except Exception as e:
-        logger.error(f"Error checking for duplicate transaction: {str(e)}")
-        return False
 
 def process_file_with_account(file_id: str, content_bytes: bytes, file_format: FileFormat, opening_balance: float, user_id: str) -> int:
     """
@@ -302,142 +283,4 @@ def lambda_handler(event, context):
             'body': json.dumps({
                 'message': f'Error processing file: {str(e)}'
             })
-        }
-
-def extract_opening_balance(content_bytes: bytes, file_format: FileFormat) -> Optional[float]:
-    """
-    Extract the opening balance from file content based on its format.
-    
-    Args:
-        content_bytes: The file content
-        file_format: The detected file format
-        
-    Returns:
-        Opening balance as float if found, None otherwise
-    """
-    try:
-        # Convert bytes to string for text processing
-        try:
-            content_text = content_bytes.decode('utf-8')
-        except UnicodeDecodeError:
-            # For binary formats like OFX/QFX, try another encoding
-            try:
-                content_text = content_bytes.decode('latin-1')
-            except UnicodeDecodeError:
-                return None
-        
-        # Process based on file format
-        if file_format == FileFormat.OFX or file_format == FileFormat.QFX:
-            return extract_opening_balance_ofx(content_text)
-        elif file_format == FileFormat.CSV:
-            return extract_opening_balance_csv(content_text)
-        
-        return None
-    except Exception as e:
-        logger.error(f"Error extracting opening balance: {str(e)}")
-        return None
-
-def extract_opening_balance_ofx(content: str) -> Optional[float]:
-    """
-    Extract opening balance from OFX/QFX file.
-    
-    Args:
-        content: File content as string
-        
-    Returns:
-        Opening balance as float if found, None otherwise
-    """
-    # Look for opening balance in OFX format
-    # Modern OFX (XML-like)
-    match = re.search(r'<LEDGERBAL>.*?<BALAMT>([-+]?\d*\.?\d+)</BALAMT>', content, re.DOTALL)
-    if match:
-        try:
-            return float(match.group(1))
-        except (ValueError, TypeError):
-            pass
-    
-    # SGML format OFX
-    match = re.search(r'LEDGERBAL\s+BALAMT:([-+]?\d*\.?\d+)', content)
-    if match:
-        try:
-            return float(match.group(1))
-        except (ValueError, TypeError):
-            pass
-    
-    # Some files have AVAILBAL (available balance) which can be used as a fallback
-    match = re.search(r'<AVAILBAL>.*?<BALAMT>([-+]?\d*\.?\d+)</BALAMT>', content, re.DOTALL)
-    if match:
-        try:
-            return float(match.group(1))
-        except (ValueError, TypeError):
-            pass
-    
-    return None
-
-def extract_opening_balance_csv(content: str) -> Optional[float]:
-    """
-    Extract opening balance from CSV file.
-    This is more heuristic as CSV formats vary widely by institution.
-    
-    Args:
-        content: File content as string
-        
-    Returns:
-        Opening balance as float if found, None otherwise
-    """
-    # Common patterns for opening balance in CSVs
-    patterns = [
-        r'opening\s+balance[^,]*,\s*([-+]?\d*\.?\d+)',  # "Opening Balance, 1000.00"
-        r'beginning\s+balance[^,]*,\s*([-+]?\d*\.?\d+)', # "Beginning Balance, 1000.00"
-        r'balance\s+forward[^,]*,\s*([-+]?\d*\.?\d+)',   # "Balance Forward, 1000.00"
-        r'previous\s+balance[^,]*,\s*([-+]?\d*\.?\d+)'   # "Previous Balance, 1000.00"
-    ]
-    
-    for pattern in patterns:
-        match = re.search(pattern, content, re.IGNORECASE)
-        if match:
-            try:
-                return float(match.group(1))
-            except (ValueError, TypeError):
-                continue
-    
-    # Look for potential header and first transaction
-    lines = content.split('\n')
-    if len(lines) >= 2:
-        # Some institutions put the opening balance as the first transaction
-        # Heuristic: Look for a row that contains words like "opening", "balance", "beginning"
-        for i, line in enumerate(lines[:min(10, len(lines))]):
-            if re.search(r'open|balanc|begin', line, re.IGNORECASE):
-                # Try to extract any numbers from this line
-                numbers = re.findall(r'([-+]?\d*\.?\d+)', line)
-                for num in numbers:
-                    try:
-                        return float(num)
-                    except (ValueError, TypeError):
-                        continue
-                        
-    return None
-
-def find_file_records_by_s3_key(s3_key: str) -> List[Dict[str, Any]]:
-    """
-    Find file records in DynamoDB that match the given S3 key.
-    
-    Args:
-        s3_key: The S3 key to search for
-        
-    Returns:
-        List of matching file records
-    """
-    try:
-        # Query DynamoDB using the S3Key index
-        response = file_table.query(
-            IndexName='S3KeyIndex',
-            KeyConditionExpression=boto3.dynamodb.conditions.Key('s3Key').eq(s3_key)
-        )
-        
-        files = response.get('Items', [])
-        logger.info(f"Found {len(files)} file records for S3 key: {s3_key}")
-        return files
-    except Exception as e:
-        logger.error(f"Error finding file records by S3 key: {str(e)}")
-        return [] 
+        } 

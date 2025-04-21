@@ -10,6 +10,12 @@ from models.transaction_file import FileFormat, ProcessingStatus
 from models.transaction import Transaction
 from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_file_metadata, get_account, list_file_transactions, delete_transactions_for_file, get_field_maps_table, get_field_map
 from utils.transaction_parser import parse_transactions
+from utils.s3_dao import (
+    get_presigned_url,
+    delete_object,
+    get_object_content,
+    put_object
+)
 from handlers.file_processor import process_file_with_account
 
 # Configure logging
@@ -517,16 +523,11 @@ def delete_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str
             account_id = file.get('accountId')
             logger.info(f"File {file_id} is associated with account {account_id}. This association will be removed during deletion.")
             
-        # Delete file from S3
-        try:
-            s3_client.delete_object(
-                Bucket=FILE_STORAGE_BUCKET,
-                Key=file.get('s3Key')
-            )
-            logger.info(f"Successfully deleted file {file_id} from S3 bucket {FILE_STORAGE_BUCKET}")
-        except Exception as s3_error:
-            logger.error(f"Error deleting file from S3: {str(s3_error)}")
+        # Delete file from S3 using S3 DAO
+        if not delete_object(file.get('s3Key')):
             return create_response(500, {"message": "Error deleting file from S3"})
+            
+        logger.info(f"Successfully deleted file {file_id} from S3 bucket")
         
         # Delete metadata from DynamoDB
         try:
@@ -1028,23 +1029,17 @@ def get_file_content_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dic
         if file.get('userId') != user['id']:
             return create_response(403, {"message": "Access denied"})
         
-        # Get the file content from S3
-        try:
-            s3_response = s3_client.get_object(
-                Bucket=FILE_STORAGE_BUCKET,
-                Key=file.get('s3Key')
-            )
-            content = s3_response['Body'].read().decode('utf-8')
-            
-            return create_response(200, {
-                'fileId': file_id,
-                'content': content,
-                'contentType': file.get('contentType'),
-                'fileName': file.get('fileName')
-            })
-        except Exception as s3_error:
-            logger.error(f"Error reading file from S3: {str(s3_error)}")
+        # Get the file content from S3 using S3 DAO
+        content = get_object_content(file.get('s3Key'))
+        if content is None:
             return create_response(500, {"message": "Error reading file content"})
+            
+        return create_response(200, {
+            'fileId': file_id,
+            'content': content.decode('utf-8'),
+            'contentType': file.get('contentType'),
+            'fileName': file.get('fileName')
+        })
             
     except Exception as e:
         logger.error(f"Error getting file content: {str(e)}")
