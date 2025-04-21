@@ -36,6 +36,21 @@ resource "aws_dynamodb_table" "transactions" {
     type = "N"
   }
   
+  attribute {
+    name = "transactionHash"
+    type = "N"
+  }
+  
+  attribute {
+    name = "amount"
+    type = "N"
+  }
+  
+  attribute {
+    name = "balance"
+    type = "N"
+  }
+  
   # GSI to query transactions by file ID
   global_secondary_index {
     name               = "FileIdIndex"
@@ -57,10 +72,19 @@ resource "aws_dynamodb_table" "transactions" {
     projection_type    = "ALL"
   }
   
-  # GSI to query transactions by account ID
+  # GSI to query transactions by account ID with amount
   global_secondary_index {
-    name               = "AccountIdIndex"
+    name               = "AccountAmountIndex"
     hash_key           = "accountId"
+    range_key          = "amount"
+    projection_type    = "ALL"
+  }
+  
+  # GSI to query transactions by account ID with balance
+  global_secondary_index {
+    name               = "AccountBalanceIndex"
+    hash_key           = "accountId"
+    range_key          = "balance"
     projection_type    = "ALL"
   }
   
@@ -69,6 +93,22 @@ resource "aws_dynamodb_table" "transactions" {
     name               = "ImportOrderIndex"
     hash_key           = "fileId"
     range_key          = "importOrder"
+    projection_type    = "ALL"
+  }
+  
+  # GSI to sort transactions by account and import order
+  global_secondary_index {
+    name               = "AccountImportIndex"
+    hash_key           = "accountId"
+    range_key          = "importOrder"
+    projection_type    = "ALL"
+  }
+  
+  # GSI for efficient duplicate detection using numeric hash
+  global_secondary_index {
+    name               = "TransactionHashIndex"
+    hash_key           = "accountId"
+    range_key          = "transactionHash"
     projection_type    = "ALL"
   }
   

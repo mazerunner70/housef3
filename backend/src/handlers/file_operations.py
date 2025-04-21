@@ -498,51 +498,80 @@ def get_download_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dic
         return create_response(500, {"message": "Error generating download URL"})
 
 def delete_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
-    """Delete a file."""
+    """Delete a file and all its associated data.
+    
+    This handler performs the following operations in sequence:
+    1. Validates the request and file ownership
+    2. Deletes all associated transactions from DynamoDB
+    3. Deletes the file content from S3
+    4. Deletes the file metadata from DynamoDB
+    5. Verifies the deletion was successful
+    
+    Args:
+        event: API Gateway event containing the file ID in pathParameters
+        user: Dictionary containing authenticated user information
+        
+    Returns:
+        API Gateway response with status code and message
+    """
     try:
-        # Get file ID from path parameters
+        # Step 1: Request validation and authorization
+        # Extract file ID from the request path parameters
         file_id = event.get('pathParameters', {}).get('id')
         
         if not file_id:
             return create_response(400, {"message": "File ID is required"})
             
-        # Get file metadata from DynamoDB
+        # Retrieve file metadata to verify existence and ownership
         response = file_table.get_item(Key={'fileId': file_id})
         file = response.get('Item')
         
         if not file:
             return create_response(404, {"message": "File not found"})
             
-        # Check if the file belongs to the user
+        # Ensure the file belongs to the requesting user
         if file.get('userId') != user['id']:
             return create_response(403, {"message": "Access denied"})
         
-        # Check if file is associated with an account
+        # Step 2: Handle account association cleanup
+        # Check and log if file is associated with an account for audit purposes
         account_id = None
         if 'accountId' in file:
             account_id = file.get('accountId')
             logger.info(f"File {file_id} is associated with account {account_id}. This association will be removed during deletion.")
             
-        # Delete file from S3 using S3 DAO
+        # Step 3: Delete associated transactions
+        # Remove all transactions linked to this file from DynamoDB
+        try:
+            transactions_deleted = delete_transactions_for_file(file_id)
+            logger.info(f"Deleted {transactions_deleted} transactions for file {file_id}")
+        except Exception as tx_error:
+            logger.error(f"Error deleting transactions: {str(tx_error)}")
+            return create_response(500, {"message": "Error deleting associated transactions"})
+            
+        # Step 4: Delete file content from S3
+        # Remove the actual file content from the S3 bucket
         if not delete_object(file.get('s3Key')):
             return create_response(500, {"message": "Error deleting file from S3"})
             
         logger.info(f"Successfully deleted file {file_id} from S3 bucket")
         
-        # Delete metadata from DynamoDB
+        # Step 5: Delete file metadata and verify deletion
         try:
+            # Remove the file metadata from DynamoDB
             file_table.delete_item(Key={'fileId': file_id})
             logger.info(f"Successfully deleted file {file_id} from DynamoDB table")
             
-            # Verify the file is deleted
+            # Step 6: Verification checks
+            # Verify the file metadata was actually deleted
             verification = file_table.get_item(Key={'fileId': file_id})
             if 'Item' in verification:
                 logger.error(f"File {file_id} was not deleted from DynamoDB")
                 return create_response(500, {"message": "Error verifying file deletion"})
                 
-            # If file was associated with an account, verify it's removed from the index
+            # If file was associated with an account, verify it's removed from the account index
             if account_id:
-                # Check if the file still appears in the account's files
+                # Check the AccountIdIndex to ensure the file is no longer associated
                 verification_query = file_table.query(
                     IndexName='AccountIdIndex',
                     KeyConditionExpression=boto3.dynamodb.conditions.Key('accountId').eq(account_id)
@@ -559,9 +588,13 @@ def delete_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str
             logger.error(f"Error deleting file from DynamoDB: {str(dynamo_error)}")
             return create_response(500, {"message": "Error deleting file metadata from database"})
         
+        # Step 7: Return success response with metadata
         return create_response(200, {
             'message': 'File deleted successfully',
-            'fileId': file_id
+            'fileId': file_id,
+            'metadata': {
+                'transactionsDeleted': transactions_deleted
+            }
         })
     except Exception as e:
         logger.error(f"Error deleting file: {str(e)}")

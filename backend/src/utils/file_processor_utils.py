@@ -4,6 +4,7 @@ Utility functions for processing transaction files.
 import logging
 import os
 import re
+from models.transaction import Transaction
 import boto3
 from typing import Dict, Any, List, Optional
 from decimal import Decimal
@@ -37,37 +38,50 @@ FILES_TABLE = os.environ.get('FILES_TABLE', 'transaction-files')
 transaction_table = dynamodb.Table(TRANSACTIONS_TABLE)
 file_table = dynamodb.Table(FILES_TABLE)
 
-def check_duplicate_transaction(transaction: Dict[str, Any], account_id: str, 
-                              table: Any = None) -> bool:
-    """
-    Check if a transaction is a duplicate of an existing transaction in the account.
+def check_duplicate_transaction(transaction: Dict[str, Any], account_id: str) -> bool:
+    """Check if a transaction already exists for the given account using numeric hash.
     
     Args:
-        transaction: The transaction to check
-        account_id: The account ID to check against
-        table: Optional DynamoDB table for testing
+        transaction: Dictionary containing transaction details
+        account_id: ID of the account to check for duplicates
         
     Returns:
-        True if the transaction is a duplicate, False otherwise
+        bool: True if duplicate found, False otherwise
     """
     try:
-        # Use provided table or default to transaction_table
-        table = table or transaction_table
-        
-        # Query transactions table for potential duplicates
-        response = table.query(
-            IndexName='AccountIdIndex',
-            KeyConditionExpression=boto3.dynamodb.conditions.Key('accountId').eq(account_id),
-            FilterExpression=boto3.dynamodb.conditions.Attr('date').eq(transaction['date']) &
-                           boto3.dynamodb.conditions.Attr('description').eq(transaction['description']) &
-                           boto3.dynamodb.conditions.Attr('amount').eq(str(transaction['amount']))
+        # Generate the same hash that would be stored with the transaction
+        transaction_hash = Transaction.generate_transaction_hash(
+            account_id,
+            transaction['date'],
+            Decimal(str(transaction['amount'])),  # Ensure amount is Decimal
+            transaction['description']
         )
         
-        # If we found any matches, it's a duplicate
+        # Query DynamoDB using the account ID and hash
+        response = transaction_table.query(
+            IndexName='TransactionHashIndex',
+            KeyConditionExpression=boto3.dynamodb.conditions.Key('accountId').eq(account_id) & 
+                                 boto3.dynamodb.conditions.Key('transactionHash').eq(transaction_hash)
+        )
+        
         return len(response.get('Items', [])) > 0
     except Exception as e:
         logger.error(f"Error checking for duplicate transaction: {str(e)}")
+        # If there's an error checking for duplicates, return False to allow the transaction
         return False
+
+def create_composite_key(user_id: str, transaction: Dict[str, Any]) -> str:
+    """Create a composite key for a transaction.
+    
+    Args:
+        user_id: The user ID
+        transaction: The transaction dictionary
+        
+    Returns:
+        str: The composite key
+    """
+    amount = Decimal(str(transaction['amount']))
+    return f"{user_id}#{transaction['date']}#{amount}#{transaction['description']}"
 
 def get_file_content(file_id: str, s3_client: Any = None) -> Optional[bytes]:
     """

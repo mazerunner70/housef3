@@ -166,8 +166,9 @@ def process_file_with_account(file_id: str, content_bytes: bytes, file_format: F
         
         # Delete existing transactions if any
         delete_transactions_for_file(file_id)
+        #
         
-        # Save new transactions to the database
+        # Save transactions to the database
         transaction_count = 0
         duplicate_count = 0
         for transaction_data in transactions:

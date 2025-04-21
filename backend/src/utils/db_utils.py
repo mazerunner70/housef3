@@ -744,13 +744,29 @@ def list_account_field_maps(account_id: str) -> List[FieldMap]:
 
 
 def list_account_transactions(account_id: str, limit: int = 50, last_evaluated_key: Optional[Dict] = None) -> List[Transaction]:
-    """List transactions for an account with pagination."""
+    """List transactions for an account with pagination, sorted by import order and file ID.
+    
+    Note: This function requires a GSI named 'AccountImportIndex' with:
+        - Partition key: accountId
+        - Sort key: importOrder
+        - Additional attributes: fileId
+    
+    Args:
+        account_id: The account ID to list transactions for
+        limit: Maximum number of transactions to return
+        last_evaluated_key: Key to start from for pagination
+        
+    Returns:
+        List of Transaction objects sorted by import order (ascending) and file ID
+    """
     try:
-        # Query transactions table using AccountIdIndex
+        # Query transactions table using AccountImportIndex
+        # This will return transactions sorted by import order and file ID
         query_params = {
-            'IndexName': 'AccountIdIndex',
+            'IndexName': 'AccountImportIndex',
             'KeyConditionExpression': Key('accountId').eq(account_id),
-            'Limit': limit
+            'Limit': limit,
+            'ScanIndexForward': True  # Sort in ascending order (oldest imports first)
         }
         
         if last_evaluated_key:

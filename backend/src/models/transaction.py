@@ -4,6 +4,8 @@ from datetime import datetime
 import os
 import boto3
 import logging
+import hashlib
+from decimal import Decimal
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -12,133 +14,150 @@ class Transaction:
     """
     Represents a single financial transaction parsed from a transaction file.
     """
+    @staticmethod
+    def generate_transaction_hash(account_id: str, date: str, amount: Decimal, description: str) -> int:
+        """
+        Generate a numeric hash for transaction deduplication.
+        
+        Args:
+            account_id: The account ID
+            date: Transaction date
+            amount: Transaction amount as Decimal
+            description: Transaction description
+            
+        Returns:
+            int: A 64-bit hash of the transaction details
+        """
+        # Create a string with all the components
+        # Use str() on Decimal for consistent string representation
+        content = f"{account_id}|{date}|{str(amount)}|{description}"
+        # Generate SHA-256 hash
+        hash_obj = hashlib.sha256(content.encode('utf-8'))
+        # Take first 16 characters of hex digest and convert to int
+        # This gives us a 64-bit number which is plenty for deduplication
+        return int(hash_obj.hexdigest()[:16], 16)
+    
     def __init__(
         self,
         transaction_id: str,
+        account_id: str,
         file_id: str,
         user_id: str,
         date: str,
         description: str,
-        amount: float,
-        balance: float,
+        amount: Decimal,
+        balance: Optional[Decimal] = None,
+        import_order: Optional[int] = None,
         transaction_type: Optional[str] = None,
-        category: Optional[str] = None,
-        payee: Optional[str] = None,
         memo: Optional[str] = None,
         check_number: Optional[str] = None,
-        reference: Optional[str] = None,
-        account_id: Optional[str] = None,
+        fit_id: Optional[str] = None,
         status: Optional[str] = None,
-        import_order: Optional[int] = None
+        created_at: Optional[str] = None,
+        updated_at: Optional[str] = None,
     ):
         self.transaction_id = transaction_id
+        self.account_id = account_id
         self.file_id = file_id
         self.user_id = user_id
         self.date = date
         self.description = description
         self.amount = amount
         self.balance = balance
+        self.import_order = import_order
         self.transaction_type = transaction_type
-        self.category = category
-        self.payee = payee
         self.memo = memo
         self.check_number = check_number
-        self.reference = reference
-        self.account_id = account_id
+        self.fit_id = fit_id
         self.status = status
-        self.import_order = import_order
+        self.created_at = created_at or datetime.now().isoformat()
+        self.updated_at = updated_at or self.created_at
         
     @classmethod
     def create(
         cls,
+        account_id: str,
         file_id: str,
         user_id: str,
         date: str,
         description: str,
-        amount: float,
-        balance: float,
-        **kwargs
-    ) -> 'Transaction':
-        """
-        Factory method to create a new transaction with a generated ID.
-        """
+        amount: Decimal,
+        balance: Optional[Decimal] = None,
+        import_order: Optional[int] = None,
+        transaction_type: Optional[str] = None,
+        memo: Optional[str] = None,
+        check_number: Optional[str] = None,
+        fit_id: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> "Transaction":
+        """Create a new Transaction with a generated ID."""
+        transaction_id = str(uuid.uuid4())
         return cls(
-            transaction_id=str(uuid.uuid4()),
+            transaction_id=transaction_id,
+            account_id=account_id,
             file_id=file_id,
             user_id=user_id,
             date=date,
             description=description,
             amount=amount,
             balance=balance,
-            **kwargs
+            import_order=import_order,
+            transaction_type=transaction_type,
+            memo=memo,
+            check_number=check_number,
+            fit_id=fit_id,
+            status=status,
         )
     
     def to_dict(self) -> Dict[str, Any]:
-        """
-        Convert the transaction object to a dictionary suitable for storage.
-        """
-        result = {
+        """Convert Transaction to dictionary format for DynamoDB."""
+        transaction_dict = {
             "transactionId": self.transaction_id,
+            "accountId": self.account_id,
             "fileId": self.file_id,
             "userId": self.user_id,
             "date": self.date,
             "description": self.description,
-            "amount": str(self.amount),  # Convert to string for DynamoDB
-            "balance": str(self.balance)  # Convert to string for DynamoDB
+            "amount": self.amount,  # Store as Decimal (number)
+            "balance": self.balance,  # Store as Decimal (number)
+            "importOrder": self.import_order,
+            "status": self.status,
+            "createdAt": self.created_at,
+            "updatedAt": self.updated_at,
         }
-        
+
         # Add optional fields if they exist
         if self.transaction_type:
-            result["transactionType"] = self.transaction_type
-            
-        if self.category:
-            result["category"] = self.category
-            
-        if self.payee:
-            result["payee"] = self.payee
-            
+            transaction_dict["transactionType"] = self.transaction_type
         if self.memo:
-            result["memo"] = self.memo
-            
+            transaction_dict["memo"] = self.memo
         if self.check_number:
-            result["checkNumber"] = self.check_number
-            
-        if self.reference:
-            result["reference"] = self.reference
-            
-        if self.account_id:
-            result["accountId"] = self.account_id
-            
-        if self.status:
-            result["status"] = self.status
-            
-        if self.import_order is not None:
-            result["importOrder"] = self.import_order
-            
-        return result
+            transaction_dict["checkNumber"] = self.check_number
+        if self.fit_id:
+            transaction_dict["fitId"] = self.fit_id
+
+        return transaction_dict
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Transaction':
-        """
-        Create a transaction object from a dictionary (e.g. from DynamoDB).
-        """
+    def from_dict(cls, data: Dict[str, Any]) -> "Transaction":
+        """Create Transaction from dictionary data."""
         return cls(
             transaction_id=data["transactionId"],
+            account_id=data["accountId"],
             file_id=data["fileId"],
             user_id=data["userId"],
             date=data["date"],
             description=data["description"],
-            amount=float(data["amount"]),
-            balance=float(data["balance"]),
+            amount=Decimal(data["amount"]),
+            balance=Decimal(data["balance"]) if data.get("balance") else None,
+            import_order=data.get("importOrder"),
             transaction_type=data.get("transactionType"),
-            category=data.get("category"),
-            payee=data.get("payee"),
             memo=data.get("memo"),
             check_number=data.get("checkNumber"),
-            reference=data.get("reference"),
-            account_id=data.get("accountId"),
+            fit_id=data.get("fitId"),
             status=data.get("status"),
-            import_order=data.get("importOrder")
+            created_at=data.get("createdAt"),
+            updated_at=data.get("updatedAt"),
         )
 
 def validate_transaction_data(data: Dict[str, Any]) -> bool:

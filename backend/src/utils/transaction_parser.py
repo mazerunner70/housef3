@@ -212,13 +212,13 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
         
         # Validate required columns
         if date_col is None or desc_col is None or amount_col is None:
-            logger.warning("Missing required columns in CSV")
-            return []
-            
-        # Read all rows first to detect date order
+            raise ValueError("Missing required columns: Date, Description, or Amount")
+        
+        # Read all rows
         rows = list(reader)
-        dates = [row[date_col] for row in rows if len(row) > date_col]
-        date_order = detect_date_order(dates)
+        
+        # Detect date order
+        date_order = detect_date_order([row[date_col] for row in rows if len(row) > date_col])
         
         # Reverse rows if dates are in descending order
         if date_order == 'desc':
@@ -246,28 +246,24 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
             logger.info(f"Row: {row}")
             logger.info(f"Row data: {row_data}")    
 
-            # Apply field mapping if provided
-            # if field_map:
-            #     mapped_data = apply_field_mapping(row_data, field_map)
-            # else:
-            #     mapped_data = row_data
-                
             # Process the amount
             raw_amount = Decimal(row_data['amount'].replace('$', '').replace(',', ''))
             processed_amount = process_amount(raw_amount, row_data.get('debitOrCredit'))
+            
+            # Update balance with processed amount
+            balance += processed_amount
             
             # Create transaction dictionary
             transaction = {
                 'date': parse_date(row_data['date']),
                 'description': row_data['description'].strip(),
-                'amount': str(processed_amount),
-                'balance': str(balance + processed_amount),
+                'amount': processed_amount,  # Keep as Decimal
+                'balance': balance,  # Keep as Decimal
                 'import_order': i + 1,  # Add 1-based import order
                 'transaction_type': row_data.get('debitOrCredit')  # Use debitOrCredit value for transaction_type
             }
             
-            # Update balance with processed amount
-            balance += processed_amount
+            logger.info(f"Transaction: {transaction}")
             
             # Add optional fields
             if row_data.get('category'):
@@ -344,8 +340,8 @@ def parse_ofx_xml(text_content: str, opening_balance: float) -> List[Dict[str, A
         transaction = {
             'date': parse_date(date),
             'description': name.strip(),
-            'amount': str(amount),
-            'balance': str(balance + amount),
+            'amount': amount,  # Keep as Decimal
+            'balance': balance + amount,  # Keep as Decimal
             'transaction_type': trntype.strip().upper(),
             'memo': memo.strip(),
             'import_order': i + 1  # Add 1-based import order
@@ -377,8 +373,8 @@ def parse_ofx_colon_separated(text_content: str, opening_balance: float) -> List
                 transaction = {
                     'date': parse_date(current_transaction.get('DTPOSTED', '')),
                     'description': current_transaction.get('NAME', '').strip(),
-                    'amount': str(Decimal(current_transaction.get('TRNAMT', '0'))),
-                    'balance': str(balance + Decimal(current_transaction.get('TRNAMT', '0'))),
+                    'amount': Decimal(current_transaction.get('TRNAMT', '0')),  # Keep as Decimal
+                    'balance': balance + Decimal(current_transaction.get('TRNAMT', '0')),  # Keep as Decimal
                     'transaction_type': current_transaction.get('TRNTYPE', 'DEBIT').strip().upper(),
                     'memo': current_transaction.get('MEMO', '').strip(),
                     'import_order': import_order  # Add import order
@@ -397,8 +393,8 @@ def parse_ofx_colon_separated(text_content: str, opening_balance: float) -> List
         transaction = {
             'date': parse_date(current_transaction.get('DTPOSTED', '')),
             'description': current_transaction.get('NAME', '').strip(),
-            'amount': str(Decimal(current_transaction.get('TRNAMT', '0'))),
-            'balance': str(balance + Decimal(current_transaction.get('TRNAMT', '0'))),
+            'amount': Decimal(current_transaction.get('TRNAMT', '0')),  # Keep as Decimal
+            'balance': balance + Decimal(current_transaction.get('TRNAMT', '0')),  # Keep as Decimal
             'transaction_type': current_transaction.get('TRNTYPE', 'DEBIT').strip().upper(),
             'memo': current_transaction.get('MEMO', '').strip(),
             'import_order': import_order  # Add import order
