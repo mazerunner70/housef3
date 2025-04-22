@@ -8,7 +8,7 @@ export interface Transaction {
   transactionId: string;
   fileId: string;
   userId: string;
-  date: string;
+  date: number;  // milliseconds since epoch
   description: string;
   amount: number;
   balance: number;

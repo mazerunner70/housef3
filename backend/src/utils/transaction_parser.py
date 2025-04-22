@@ -130,8 +130,8 @@ def find_column_index(header: List[str], possible_names: List[str]) -> Optional[
     
     return None
 
-def parse_date(date_str: str) -> Optional[str]:
-    """Try to parse date string in various formats."""
+def parse_date(date_str: str) -> Optional[int]:
+    """Try to parse date string in various formats and return milliseconds since epoch."""
     date_formats = [
         "%Y-%m-%d",
         "%m/%d/%Y",
@@ -143,7 +143,9 @@ def parse_date(date_str: str) -> Optional[str]:
     
     for fmt in date_formats:
         try:
-            return datetime.strptime(date_str, fmt).strftime("%Y-%m-%d")
+            dt = datetime.strptime(date_str, fmt)
+            # Convert to milliseconds since epoch
+            return int(dt.timestamp() * 1000)
         except ValueError:
             continue
     

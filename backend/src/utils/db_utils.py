@@ -23,6 +23,7 @@ from models import (
 from models.transaction import Transaction
 from boto3.dynamodb.conditions import Key
 from models.field_map import FieldMap
+from utils.transaction_utils import generate_transaction_hash, check_duplicate_transaction
 
 # Configure logging
 logger = logging.getLogger()
@@ -520,6 +521,25 @@ def create_transaction(transaction_data: Dict[str, Any]) -> Transaction:
         The created Transaction object
     """
     try:
+        # Check for duplicates first
+        is_duplicate = check_duplicate_transaction(transaction_data, transaction_data['account_id'])
+        if is_duplicate:
+            logger.info(f"Duplicate transaction found, skipping creation")
+            transaction_data['status'] = 'duplicate'
+        else:
+            transaction_data['status'] = 'new'
+
+        # Generate transaction hash
+        transaction_hash = generate_transaction_hash(
+            transaction_data['account_id'],
+            transaction_data['date'],
+            Decimal(str(transaction_data['amount'])),
+            transaction_data['description']
+        )
+        
+        # Add hash to transaction data
+        transaction_data['transaction_hash'] = transaction_hash
+        
         # Create a Transaction object
         transaction = Transaction.create(**transaction_data)
         
@@ -744,12 +764,12 @@ def list_account_field_maps(account_id: str) -> List[FieldMap]:
 
 
 def list_account_transactions(account_id: str, limit: int = 50, last_evaluated_key: Optional[Dict] = None) -> List[Transaction]:
-    """List transactions for an account with pagination, sorted by import order and file ID.
+    """List transactions for an account with pagination, sorted by date.
     
-    Note: This function requires a GSI named 'AccountImportIndex' with:
+    Note: This function requires a GSI named 'AccountDateIndex' with:
         - Partition key: accountId
-        - Sort key: importOrder
-        - Additional attributes: fileId
+        - Sort key: date
+        - Additional attributes: importOrder
     
     Args:
         account_id: The account ID to list transactions for
@@ -757,16 +777,16 @@ def list_account_transactions(account_id: str, limit: int = 50, last_evaluated_k
         last_evaluated_key: Key to start from for pagination
         
     Returns:
-        List of Transaction objects sorted by import order (ascending) and file ID
+        List of Transaction objects sorted by date (ascending)
     """
     try:
-        # Query transactions table using AccountImportIndex
-        # This will return transactions sorted by import order and file ID
+        # Query transactions table using AccountDateIndex
+        # This will return transactions sorted by date
         query_params = {
-            'IndexName': 'AccountImportIndex',
+            'IndexName': 'AccountDateIndex',
             'KeyConditionExpression': Key('accountId').eq(account_id),
             'Limit': limit,
-            'ScanIndexForward': True  # Sort in ascending order (oldest imports first)
+            'ScanIndexForward': True  # Sort in ascending order (oldest first)
         }
         
         if last_evaluated_key:
@@ -774,15 +794,16 @@ def list_account_transactions(account_id: str, limit: int = 50, last_evaluated_k
             
         response = get_transactions_table().query(**query_params)
         
-        # Convert DynamoDB items to Transaction objects
-        transactions = []
-        for item in response.get('Items', []):
-            transaction = Transaction.from_dict(item)
-            transactions.append(transaction)
-            
+        # Convert items to Transaction objects
+        transactions = [Transaction.from_dict(item) for item in response.get('Items', [])]
+        
+        # Sort by import order within each date
+        transactions.sort(key=lambda x: (x.date, x.import_order or 0))
+        
         return transactions
+        
     except Exception as e:
-        logger.error(f"Error listing account transactions: {str(e)}")
+        logger.error(f"Error listing transactions for account {account_id}: {str(e)}")
         raise
 
 

@@ -43,7 +43,7 @@ class Transaction:
         account_id: str,
         file_id: str,
         user_id: str,
-        date: str,
+        date: int,  # milliseconds since epoch
         description: str,
         amount: Decimal,
         balance: Optional[Decimal] = None,
@@ -55,6 +55,7 @@ class Transaction:
         status: Optional[str] = None,
         created_at: Optional[str] = None,
         updated_at: Optional[str] = None,
+        transaction_hash: Optional[int] = None
     ):
         self.transaction_id = transaction_id
         self.account_id = account_id
@@ -72,6 +73,7 @@ class Transaction:
         self.status = status
         self.created_at = created_at or datetime.now().isoformat()
         self.updated_at = updated_at or self.created_at
+        self.transaction_hash = transaction_hash
         
     @classmethod
     def create(
@@ -89,6 +91,7 @@ class Transaction:
         check_number: Optional[str] = None,
         fit_id: Optional[str] = None,
         status: Optional[str] = None,
+        transaction_hash: Optional[int] = None
     ) -> "Transaction":
         """Create a new Transaction with a generated ID."""
         transaction_id = str(uuid.uuid4())
@@ -107,49 +110,43 @@ class Transaction:
             check_number=check_number,
             fit_id=fit_id,
             status=status,
+            transaction_hash=transaction_hash
         )
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert Transaction to dictionary format for DynamoDB."""
-        transaction_dict = {
+        """Convert to dictionary for storage"""
+        return {
             "transactionId": self.transaction_id,
             "accountId": self.account_id,
             "fileId": self.file_id,
             "userId": self.user_id,
-            "date": self.date,
+            "date": self.date,  # Already a number
             "description": self.description,
-            "amount": self.amount,  # Store as Decimal (number)
-            "balance": self.balance,  # Store as Decimal (number)
+            "amount": self.amount,  # Keep as Decimal
+            "balance": self.balance,  # Keep as Decimal
             "importOrder": self.import_order,
+            "transactionType": self.transaction_type,
+            "memo": self.memo,
+            "checkNumber": self.check_number,
+            "fitId": self.fit_id,
             "status": self.status,
             "createdAt": self.created_at,
             "updatedAt": self.updated_at,
+            "transactionHash": self.transaction_hash
         }
-
-        # Add optional fields if they exist
-        if self.transaction_type:
-            transaction_dict["transactionType"] = self.transaction_type
-        if self.memo:
-            transaction_dict["memo"] = self.memo
-        if self.check_number:
-            transaction_dict["checkNumber"] = self.check_number
-        if self.fit_id:
-            transaction_dict["fitId"] = self.fit_id
-
-        return transaction_dict
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Transaction":
-        """Create Transaction from dictionary data."""
+    def from_dict(cls, data: Dict[str, Any]) -> 'Transaction':
+        """Create from dictionary"""
         return cls(
             transaction_id=data["transactionId"],
             account_id=data["accountId"],
             file_id=data["fileId"],
             user_id=data["userId"],
-            date=data["date"],
+            date=data["date"],  # Already a number
             description=data["description"],
-            amount=Decimal(data["amount"]),
-            balance=Decimal(data["balance"]) if data.get("balance") else None,
+            amount=Decimal(str(data["amount"])),  # Convert to Decimal
+            balance=Decimal(str(data["balance"])) if "balance" in data else None,  # Convert to Decimal
             import_order=data.get("importOrder"),
             transaction_type=data.get("transactionType"),
             memo=data.get("memo"),
@@ -158,6 +155,7 @@ class Transaction:
             status=data.get("status"),
             created_at=data.get("createdAt"),
             updated_at=data.get("updatedAt"),
+            transaction_hash=data.get("transactionHash")
         )
 
 def validate_transaction_data(data: Dict[str, Any]) -> bool:

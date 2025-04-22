@@ -37,6 +37,11 @@ resource "aws_dynamodb_table" "transactions" {
   }
   
   attribute {
+    name = "date"
+    type = "N"
+  }
+  
+  attribute {
     name = "transactionHash"
     type = "N"
   }
@@ -96,11 +101,11 @@ resource "aws_dynamodb_table" "transactions" {
     projection_type    = "ALL"
   }
   
-  # GSI to sort transactions by account and import order
+  # GSI to sort transactions by account and date
   global_secondary_index {
-    name               = "AccountImportIndex"
+    name               = "AccountDateIndex"
     hash_key           = "accountId"
-    range_key          = "importOrder"
+    range_key          = "date"
     projection_type    = "ALL"
   }
   

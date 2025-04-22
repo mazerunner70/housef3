@@ -33,6 +33,7 @@ resource "aws_lambda_function" "file_operations" {
       ACCOUNTS_TABLE      = aws_dynamodb_table.accounts.name
       TRANSACTIONS_TABLE  = aws_dynamodb_table.transactions.name
       FIELD_MAPS_TABLE    = aws_dynamodb_table.field_maps.name
+      DEPLOYMENT_VERSION  = "v4"
     }
   }
   
@@ -163,7 +164,7 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
 }
 
 resource "aws_iam_role_policy" "lambda_dynamodb_access" {
-  name = "dynamodb-access"
+  name = "dynamodb-access-v2"
   role = aws_iam_role.lambda_exec.id
 
   policy = jsonencode({

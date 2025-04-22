@@ -52,8 +52,8 @@ const TransactionList: React.FC<TransactionListProps> = ({
   };
 
   // Format date
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+  const formatDate = (timestamp: number) => {
+    return new Date(timestamp).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
@@ -82,17 +82,21 @@ const TransactionList: React.FC<TransactionListProps> = ({
   const getSortedTransactions = () => {
     if (!isCustomSorted) {
       // Use importOrder when no custom sorting is applied
-      return [...transactions].sort((a, b) => a.importOrder - b.importOrder);
+      return [...transactions].sort((a, b) => {
+        const aOrder = a.importOrder ?? 0;
+        const bOrder = b.importOrder ?? 0;
+        return aOrder - bOrder;
+      });
     }
 
     return [...transactions].sort((a, b) => {
       let aValue = a[sortField];
       let bValue = b[sortField];
       
-      // Handle date comparison
+      // Handle date comparison - already in milliseconds
       if (sortField === 'date') {
-        aValue = new Date(a.date).getTime();
-        bValue = new Date(b.date).getTime();
+        aValue = a.date;
+        bValue = b.date;
       }
       
       // Handle numeric comparison
