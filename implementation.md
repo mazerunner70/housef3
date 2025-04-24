@@ -1,149 +1,49 @@
-# Accounts Functionality Implementation Plan
+# Implementation Notes
 
-## Overview
-This document outlines the implementation plan for the accounts functionality, including CRUD operations for account metadata, transaction deduplication, and UI components.
+## UI Improvements - Accounts Summary Page
 
-## Backend Implementation
+### Layout and Spacing Improvements
+- Relocate "New Account" button to top-right, aligned with "Account Management" heading
+- Reduce vertical spacing between elements
+- Implement grid layout for multiple accounts display
+- Optimize use of white space
 
-### 1. Account CRUD Operations
-- Create new Lambda handler `account_operations.py` with the following endpoints:
-  - `POST /accounts` - Create new account
-  - `GET /accounts` - List all accounts
-  - `GET /accounts/{id}` - Get account details
-  - `GET /accounts/{id}/transactions` - Get paginated account transactions (ignoring records marked as duplicate)
-  - `PUT /accounts/{id}` - Update account metadata
-  - `DELETE /accounts/{id}` - Delete account
+### Account Card Design Enhancements
+1. Compact Information Display:
+   - Move balance to right side of card
+   - Combine institution name and account type on single line
+   - Add account type icons (credit card, checking, savings, etc.)
+   - Use smaller, subtle text for timestamps
+   - Implement subtle background color or border instead of full box outline
 
-### 2. Account Metadata Schema
-```typescript
-interface Account {
-  accountId: string;
-  name: string;
-  description?: string;
-  type: 'checking' | 'savings' | 'credit' | 'investment';
-  currency: string;
-  createdAt: string;
-  updatedAt: string;
-}
-```
+2. Visual Hierarchy:
+   - Emphasize account name and balance
+   - Use varied font weights for better information hierarchy
+   - Add subtle dividers between sections
+   - Implement color coding for different account types/statuses
 
-### 3. Transaction Deduplication Logic
-When a file is associated with an account:
-1. Fetch all transactions for the account
-2. For each new transaction:
-   - Compare with existing transactions using precise matching on:
-     - Date 
-     - Amount
-     - Description 
-   - If match found:
-     - update a 'duplication' field in the associating file transaction as true
+### Associated Files Integration
+- Create expandable section within account card for files
+- Add file count badge/counter
+- Design compact file list with type icons
+- Show recent files by default with "Show More" option
+- Integrate download/delete actions into icon menu
 
+### Action Button Optimization
+- Group actions into compact menu or icon buttons
+- Implement tooltips instead of full text labels
+- Add hover states for interactive elements
+- Ensure consistent button styling
 
-When a file is unassociated:
-1. update all transactions from the file with duplicated status to not duplicated
+### Responsive Design Implementation
+- Adapt layout for different screen sizes
+- Create list view for mobile devices
+- Implement collapsible sections for smaller screens
+- Ensure touch-friendly interaction areas
 
-
-### 4. API Gateway Configuration
-Add new routes in `api_gateway.tf`:
-```hcl
-resource "aws_apigatewayv2_route" "create_account" {
-  api_id    = aws_apigatewayv2_api.main.id
-  route_key = "POST /accounts"
-  target    = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Similar routes for other operations
-```
-
-## Frontend Implementation
-
-### 1. Account Service
-Create `AccountService.ts`:
-```typescript
-class AccountService {
-  static async createAccount(data: AccountCreateData): Promise<Account>;
-  static async getAccounts(): Promise<Account[]>;
-  static async getAccount(id: string): Promise<Account>;
-  static async updateAccount(id: string, data: AccountUpdateData): Promise<Account>;
-  static async deleteAccount(id: string): Promise<void>;
-}
-```
-
-### 2. Account List Component
-Create `AccountList.tsx`:
-- Display list of accounts with basic metadata
-- Search/filter functionality
-- Link to account details
-
-### 3. Account Details Component
-Create `AccountDetails.tsx`:
-- Display account metadata
-- Edit account information
-- List of associated files
-- Paginated transaction view with:
-  - Transaction details
-  - Duplicate status indicators
-  - Filtering options
-
-### 4. Transaction List Component
-Create `TransactionList.tsx`:
-- Paginated view of transactions (ignoring duplicates)
-- Filter by date range, amount, status
-
-## Database Schema Updates
-
-### 1. Accounts Table
-```hcl
-resource "aws_dynamodb_table" "accounts" {
-  name           = "${var.project_name}-${var.environment}-accounts"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "accountId"
-
-  attribute {
-    name = "accountId"
-    type = "S"
-  }
-}
-```
-
-### 2. Transactions Table Updates
-Add new attributes:
-- `duplicateStatus`: 'unique' | 'duplicated'
-- `duplicateOf`: reference to duplicate transaction ID
-
-## Testing Plan
-
-### 1. Backend Tests
-- Account CRUD operations
-- Transaction deduplication logic
-- File association/unassociation effects
-
-### 2. Frontend Tests
-- Account list rendering
-- Account details view
-- Transaction list with duplicates
-- Pagination and filtering
-
-### 3. Integration Tests
-- End-to-end account creation
-- File association with deduplication
-- Transaction status updates
-
-## Deployment Steps
-
-1. Create DynamoDB tables
-2. Deploy Lambda functions
-3. Update API Gateway configuration
-4. Deploy frontend components
-5. Run database migrations
-6. Verify functionality
-
-## Future Enhancements
-
-1. Batch processing for large transaction sets
-2. Machine learning for improved duplicate detection
-3. Account reconciliation features
-4. Export functionality for account data
-5. Account analytics and reporting
+### Technical Considerations
+- Use CSS Grid/Flexbox for responsive layouts
+- Implement lazy loading for file lists
+- Add smooth transitions for expandable sections
+- Ensure accessibility compliance
+- Maintain consistent spacing using CSS variables

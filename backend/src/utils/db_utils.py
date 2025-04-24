@@ -21,7 +21,7 @@ from models import (
     ProcessingStatus
 )
 from models.transaction import Transaction
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Key, Attr
 from models.field_map import FieldMap
 from utils.transaction_utils import generate_transaction_hash, check_duplicate_transaction
 
@@ -785,6 +785,7 @@ def list_account_transactions(account_id: str, limit: int = 50, last_evaluated_k
         query_params = {
             'IndexName': 'AccountDateIndex',
             'KeyConditionExpression': Key('accountId').eq(account_id),
+            'FilterExpression': Attr('status').ne('duplicate'),
             'Limit': limit,
             'ScanIndexForward': True  # Sort in ascending order (oldest first)
         }
