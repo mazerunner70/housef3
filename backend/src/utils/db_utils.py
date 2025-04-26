@@ -800,7 +800,7 @@ def list_account_transactions(account_id: str, limit: int = 50, last_evaluated_k
         
         # Sort by import order within each date
         transactions.sort(key=lambda x: (x.date, x.import_order or 0))
-        
+            
         return transactions
         
     except Exception as e:

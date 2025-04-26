@@ -269,6 +269,15 @@ resource "aws_apigatewayv2_route" "get_account_transactions" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# Account timeline route
+resource "aws_apigatewayv2_route" "account_file_timeline" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /accounts/{id}/timeline"
+  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 # Transaction operations integration
 resource "aws_apigatewayv2_integration" "transaction_operations" {
   api_id                 = aws_apigatewayv2_api.main.id

@@ -1,0 +1,12 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+All Terraform code for this project is located in the infrastructure directory. Apply Terraform best practices to files matching this pattern.
+
+globs: infrastructure/**/*.tf
+
+- All Terraform code is organized under the infrastructure directory.
+- When editing or generating infrastructure code, reference files from infrastructure/.
+- Follow project-specific conventions for Terraform in this directory.

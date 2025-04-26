@@ -19,6 +19,9 @@ export interface FileMetadata {
     name: string;
     description?: string;
   };
+  startDate: number;  // Unix timestamp
+  endDate: number;    // Unix timestamp
+  transactionCount: number;
 }
 
 export interface FileListResponse {

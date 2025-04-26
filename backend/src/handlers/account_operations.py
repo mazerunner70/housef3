@@ -17,7 +17,8 @@ from utils.db_utils import (
     list_account_files,
     delete_file_metadata,
     delete_transactions_for_file,
-    list_account_transactions
+    list_account_transactions,
+    list_file_transactions
 )
 from utils.auth import get_user_from_event
 
@@ -516,6 +517,61 @@ def get_account_transactions_handler(event: Dict[str, Any], user: Dict[str, Any]
         logger.error(f"Full error details: {json.dumps(e.__dict__) if hasattr(e, '__dict__') else 'No additional error details'}")
         return create_response(500, {"message": "Error retrieving account transactions"})
 
+def account_file_timeline_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    """Return timeline data for all files in an account (fileId, fileName, startDate, endDate, transactionCount, transactionDates)."""
+    try:
+        account_id = event.get('pathParameters', {}).get('id')
+        if not account_id:
+            return create_response(400, {"message": "Account ID is required"})
+
+        # Verify the account exists and belongs to the user
+        account = get_account(account_id)
+        if not account:
+            return create_response(404, {"message": f"Account not found: {account_id}"})
+        if account.user_id != user['id']:
+            return create_response(403, {"message": "Access denied"})
+
+        files = list_account_files(account_id)
+        timeline = []
+        for file in files:
+            # Always fetch transactions for transactionDates
+            transactions = []
+            try:
+                transactions = list_file_transactions(file.file_id)
+            except Exception as e:
+                logger.error(f"Error listing transactions for file {file.file_id}: {str(e)}")
+            tx_dates = []
+            if transactions:
+                dates = [t['date'] for t in transactions if 'date' in t and t['date']]
+                tx_dates = []
+                for d in dates:
+                    try:
+                        # Try ms since epoch
+                        iso = datetime.utcfromtimestamp(int(d)/1000).strftime('%Y-%m-%d')
+                        tx_dates.append(iso)
+                    except Exception:
+                        # Fallback: use as string (first 10 chars)
+                        tx_dates.append(str(d)[:10])
+            # Prefer date_range_start/end if present, else compute from tx_dates
+            start = file.date_range_start
+            end = file.date_range_end
+            if not (start and end) and tx_dates:
+                start = min(tx_dates)
+                end = max(tx_dates)
+            tx_count = file.record_count if file.record_count is not None else (len(tx_dates) if tx_dates else None)
+            timeline.append({
+                'fileId': file.file_id,
+                'fileName': file.file_name,
+                'startDate': start,
+                'endDate': end,
+                'transactionCount': tx_count,
+                'transactionDates': tx_dates
+            })
+        return create_response(200, {'timeline': timeline, 'accountId': account_id})
+    except Exception as e:
+        logger.error(f"Error building file timeline: {str(e)}")
+        return create_response(500, {"message": "Error building file timeline"})
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main handler for account operations."""
     try:
@@ -555,6 +611,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return delete_account_files_handler(event, user)
         elif route == "GET /accounts/{id}/transactions":
             return get_account_transactions_handler(event, user)
+        elif route == "GET /accounts/{id}/timeline":
+            return account_file_timeline_handler(event, user)
         else:
             return create_response(400, {"message": f"Unsupported route: {route}"})
     except Exception as e:

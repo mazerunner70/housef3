@@ -107,9 +107,6 @@ const AccountList: React.FC<AccountListProps> = ({
       <div className="account-list">
         <div className="account-list-header">
           <h3>Your Accounts</h3>
-          <button className="create-account-btn" onClick={() => setIsCreating(true)}>
-            + New Account
-          </button>
         </div>
         <div className="account-list-empty">No accounts found.</div>
       </div>
@@ -120,9 +117,6 @@ const AccountList: React.FC<AccountListProps> = ({
     <div className="account-list">
       <div className="account-list-header">
         <h3>Your Accounts</h3>
-        <button className="create-account-btn" onClick={() => setIsCreating(true)}>
-          + New Account
-        </button>
       </div>
       <div className="account-list-container">
         {accounts.map(account => (

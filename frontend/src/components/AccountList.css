@@ -1,44 +1,28 @@
 .account-list {
-  padding: 1rem;
+  padding: 0.75rem;
   background: #fff;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .account-list-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   margin-bottom: 1rem;
 }
 
 .account-list-header h3 {
   margin: 0;
   color: #333;
-}
-
-.create-account-btn {
-  padding: 0.5rem 1rem;
-  background: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-
-.create-account-btn:hover {
-  background: #0056b3;
+  font-size: 1.2rem;
 }
 
 .account-list-container {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.75rem;
 }
 
 .account-card {
-  padding: 1rem;
+  padding: 0.75rem;
   background: #fff;
   border: 1px solid #ddd;
   border-radius: 8px;
@@ -133,32 +117,21 @@
 .account-list-error,
 .account-list-empty {
   text-align: center;
-  padding: 2rem;
+  padding: 1.5rem;
   color: #666;
+  background: #f8f9fa;
+  border-radius: 6px;
+  margin-top: 0.5rem;
 }
 
 .account-list-error {
   color: #dc3545;
-}
-
-.cancel-button {
-  padding: 0.5rem 1rem;
-  background: #6c757d;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: background-color 0.2s ease;
-}
-
-.cancel-button:hover {
-  background: #5a6268;
+  background: #fff3f3;
 }
 
 @media (max-width: 768px) {
   .account-list-container {
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
   
   .account-card {

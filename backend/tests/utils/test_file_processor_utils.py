@@ -11,7 +11,8 @@ from utils.file_processor_utils import (
     find_file_records_by_s3_key,
     extract_opening_balance,
     extract_opening_balance_ofx,
-    extract_opening_balance_csv
+    extract_opening_balance_csv,
+    calculate_opening_balance_from_duplicates
 )
 
 class TestFileProcessorUtils(unittest.TestCase):
@@ -177,6 +178,57 @@ class TestFileProcessorUtils(unittest.TestCase):
         # Test decoding error
         content = b'\xff\xfe'  # Invalid UTF-8
         result = extract_opening_balance(content, FileFormat.CSV)
+        self.assertIsNone(result)
+
+    @patch('utils.file_processor_utils.check_duplicate_transaction')
+    def test_calculate_opening_balance_first_duplicate(self, mock_check_dup):
+        """Test opening balance calculation when first transaction is duplicate."""
+        transactions = [
+            {'amount': '100.00', 'balance': '1100.00', 'date': '2024-01-01', 'description': 'A'},
+            {'amount': '200.00', 'balance': '1300.00', 'date': '2024-01-02', 'description': 'B'}
+        ]
+        # First is duplicate
+        mock_check_dup.side_effect = [True, False]
+        result = calculate_opening_balance_from_duplicates(transactions, 'acc-1')
+        self.assertEqual(result, Decimal('1100.00'))
+
+    @patch('utils.file_processor_utils.check_duplicate_transaction')
+    def test_calculate_opening_balance_last_duplicate(self, mock_check_dup):
+        """Test opening balance calculation when last transaction is duplicate."""
+        transactions = [
+            {'amount': '100.00', 'balance': '1100.00', 'date': '2024-01-01', 'description': 'A'},
+            {'amount': '200.00', 'balance': '1300.00', 'date': '2024-01-02', 'description': 'B'}
+        ]
+        # First is not, last is duplicate
+        mock_check_dup.side_effect = [False, True]
+        # total_amount = 100 + 200 = 300, opening = 1300 - 300 = 1000
+        result = calculate_opening_balance_from_duplicates(transactions, 'acc-1')
+        self.assertEqual(result, Decimal('1000.00'))
+
+    @patch('utils.file_processor_utils.check_duplicate_transaction')
+    def test_calculate_opening_balance_no_duplicates(self, mock_check_dup):
+        """Test opening balance calculation when no transaction is duplicate."""
+        transactions = [
+            {'amount': '100.00', 'balance': '1100.00', 'date': '2024-01-01', 'description': 'A'},
+            {'amount': '200.00', 'balance': '1300.00', 'date': '2024-01-02', 'description': 'B'}
+        ]
+        mock_check_dup.side_effect = [False, False]
+        result = calculate_opening_balance_from_duplicates(transactions, 'acc-1')
+        self.assertIsNone(result)
+
+    def test_calculate_opening_balance_empty(self):
+        """Test opening balance calculation with empty transactions list."""
+        result = calculate_opening_balance_from_duplicates([], 'acc-1')
+        self.assertIsNone(result)
+
+    @patch('utils.file_processor_utils.check_duplicate_transaction')
+    def test_calculate_opening_balance_error(self, mock_check_dup):
+        """Test error handling in opening balance calculation."""
+        transactions = [
+            {'amount': 'bad', 'balance': 'bad', 'date': '2024-01-01', 'description': 'A'}
+        ]
+        mock_check_dup.side_effect = Exception('fail')
+        result = calculate_opening_balance_from_duplicates(transactions, 'acc-1')
         self.assertIsNone(result)
 
 if __name__ == '__main__':

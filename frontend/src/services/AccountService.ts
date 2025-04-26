@@ -237,6 +237,18 @@ export const createAccount = async (accountData: Partial<Account>): Promise<{ ac
   }
 };
 
+// Get file timeline (overlaps) for an account
+export const getFileTimeline = async (accountId: string): Promise<FileMetadata[]> => {
+  try {
+    const response = await authenticatedRequest(`${API_ENDPOINT}/${accountId}/timeline`);
+    const data: FileMetadata[] = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching file timeline:', error);
+    throw error;
+  }
+};
+
 export default {
   listAccounts,
   getAccount,

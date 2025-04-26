@@ -6,7 +6,8 @@ import {
   unassociateFileFromAccount,
   associateFileWithAccount,
   updateFileBalance,
-  FileMetadata 
+  FileMetadata,
+  UpdateBalanceResponse
 } from '../services/FileService';
 import {
   listAccounts,
@@ -20,6 +21,7 @@ import { FieldMapForm } from './FieldMapForm';
 import FileService, { File } from '../services/FileService';
 import FieldMapService, { FieldMap } from '../services/FieldMapService';
 import { downloadFile } from '../utils/downloadUtils';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 interface FileListProps {
   onRefreshNeeded: boolean;
@@ -50,6 +52,60 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
   const [showFieldMapForm, setShowFieldMapForm] = useState(false);
   const [selectedFileForMap, setSelectedFileForMap] = useState<string | null>(null);
   const [selectedFieldMap, setSelectedFieldMap] = useState<FieldMap | null>(null);
+
+  const queryClient = useQueryClient();
+
+  const updateBalanceMutation = useMutation<UpdateBalanceResponse, Error, { fileId: string, balanceValue: number }>({
+    mutationFn: ({ fileId, balanceValue }: { fileId: string, balanceValue: number }) => updateFileBalance(fileId, balanceValue),
+    onSuccess: (data) => {
+      console.log('[onSuccess] API responded with:', data);
+      setFiles(prevFiles =>
+        prevFiles.map(file =>
+          file.fileId === data.fileId
+            ? { ...file, ...data }
+            : file
+        )
+      );
+      setEditingBalanceFileId(null);
+      setBalanceInput('');
+      if (data.transactionCount !== undefined) {
+        setSuccess(`Opening balance updated and ${data.transactionCount} transactions processed`);
+      } else {
+        setSuccess('Opening balance updated successfully');
+      }
+    },
+    onMutate: async ({ fileId, balanceValue }: { fileId: string, balanceValue: number }) => {
+      console.log('[onMutate] Optimistically updating file', fileId, 'with balance', balanceValue);
+      await queryClient.cancelQueries({ queryKey: ['file', fileId] });
+      const previousFile = queryClient.getQueryData(['file', fileId]);
+      setEditingBalanceFileId(null);
+      setBalanceInput('');
+      queryClient.setQueryData(['file', fileId], (old: FileMetadata) => ({
+        ...old,
+        openingBalance: balanceValue,
+      }));
+      setFiles(prevFiles =>
+        prevFiles.map(file =>
+          file.fileId === fileId
+            ? { ...file, openingBalance: balanceValue }
+            : file
+        )
+      );
+      return { previousFile };
+    },
+    onError: (err, variables, context) => {
+      console.error('[onError] Mutation failed:', err, 'Variables:', variables, 'Context:', context);
+      if (context?.previousFile) {
+        queryClient.setQueryData(['file', variables.fileId], context.previousFile);
+      }
+      setSavingBalanceFileId(null);
+    },
+    onSettled: (data, error, variables, context) => {
+      console.log('[onSettled] Mutation settled. Data:', data, 'Error:', error, 'Variables:', variables, 'Context:', context);
+      queryClient.invalidateQueries({ queryKey: ['file', variables.fileId] });
+      setSavingBalanceFileId(null);
+    }
+  });
 
   // Load files from API
   const loadFiles = async () => {
@@ -285,43 +341,20 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
 
   // Handle saving the balance
   const handleSaveBalance = async (fileId: string) => {
-    // Validate the input is a valid number
+    console.log('[handleSaveBalance] called for fileId:', fileId, 'input:', balanceInput);
     const balanceValue = parseFloat(balanceInput);
     if (isNaN(balanceValue)) {
       setError('Please enter a valid number for the opening balance');
+      console.log('[handleSaveBalance] Invalid input:', balanceInput);
       return;
     }
-    
     setSavingBalanceFileId(fileId);
     setError(null);
-    
     try {
-      // Call the API to update the file's opening balance
-      const response = await updateFileBalance(fileId, balanceValue);
-      
-      // Update the file in our local state, including transaction count if returned
-      const updatedFiles = files.map(file => {
-        if (file.fileId === fileId) {
-          return {
-            ...file,
-            openingBalance: balanceValue,
-          };
-        }
-        return file;
-      });
-      
-      setFiles(updatedFiles);
-      setEditingBalanceFileId(null);
-      setBalanceInput('');
-      
-      // If transactions were processed, show a success message
-      if (response.transactionCount !== undefined) {
-        setSuccess(`Opening balance updated and ${response.transactionCount} transactions processed`);
-      } else {
-        setSuccess('Opening balance updated successfully');
-      }
+      console.log('[handleSaveBalance] Triggering mutation with:', { fileId, balanceValue });
+      updateBalanceMutation.mutate({ fileId, balanceValue });
     } catch (error) {
-      console.error('Error saving balance:', error);
+      console.error('[handleSaveBalance] Error:', error);
       setError(error instanceof Error ? error.message : 'Failed to save opening balance');
     } finally {
       setSavingBalanceFileId(null);

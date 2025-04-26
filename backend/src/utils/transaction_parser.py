@@ -234,8 +234,8 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
         transactions = []
         for i, row in enumerate(rows):
             if len(row) <= max(date_col, desc_col, amount_col):
-                continue
-                
+                        continue
+                        
             # Create raw row data dictionary
             row_data = {
                 'date': row[date_col],
@@ -254,9 +254,9 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
             
             # Update balance with processed amount
             balance += processed_amount
-            
+                    
             # Create transaction dictionary
-            transaction = {
+                    transaction = {
                 'date': parse_date(row_data['date']),
                 'description': row_data['description'].strip(),
                 'amount': processed_amount,  # Keep as Decimal
@@ -266,15 +266,15 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
             }
             
             logger.info(f"Transaction: {transaction}")
-            
+                    
             # Add optional fields
             if row_data.get('category'):
                 transaction['category'] = row_data['category'].strip()
             if row_data.get('memo'):
                 transaction['memo'] = row_data['memo'].strip()
                 
-            transactions.append(transaction)
-            
+                transactions.append(transaction)
+        
         return transactions
         
     except Exception as e:
@@ -295,7 +295,7 @@ def parse_ofx_transactions(content: bytes, opening_balance: float, field_map: Op
     """
     try:
         # Decode the content
-        text_content = content.decode('utf-8')
+            text_content = content.decode('utf-8')
         
         # Strip OFX header if present
         if text_content.startswith('OFXHEADER:'):
@@ -323,9 +323,9 @@ def parse_ofx_transactions(content: bytes, opening_balance: float, field_map: Op
 def parse_ofx_xml(text_content: str, opening_balance: float) -> List[Dict[str, Any]]:
     """Parse OFX content in XML format."""
     root = ET.fromstring(text_content)
-    transactions = []
+        transactions = []
     balance = Decimal(str(opening_balance))
-    
+        
     for i, stmttrn in enumerate(root.findall('.//STMTTRN')):
         # Extract transaction details
         date = stmttrn.find('DTPOSTED').text
@@ -402,5 +402,5 @@ def parse_ofx_colon_separated(text_content: str, opening_balance: float) -> List
             'import_order': import_order  # Add import order
         }
         transactions.append(transaction)
-    
-    return transactions 
+                
+        return transactions

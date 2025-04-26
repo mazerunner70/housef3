@@ -93,11 +93,11 @@ DATA:OFXSGML
     def test_parse_date(self):
         """Test date parsing with various formats."""
         test_cases = [
-            ('2024-03-15', '2024-03-15'),
-            ('03/15/2024', '2024-03-15'),
-            ('15/03/2024', '2024-03-15'),
-            ('20240315', '2024-03-15'),
-            ('03-15-2024', '2024-03-15'),
+            ('2024-03-15', 1710460800000),
+            ('03/15/2024', 1710460800000),
+            ('15/03/2024', 1710460800000),
+            ('20240315', 1710460800000),
+            ('03-15-2024', 1710460800000),
             ('invalid date', None)
         ]
         
@@ -129,10 +129,10 @@ DATA:OFXSGML
         self.assertEqual(len(transactions), 6)
         
         # Check first transaction
-        self.assertEqual(transactions[0]['date'], '2024-03-15')
+        self.assertEqual(transactions[0]['date'], 1710460800000)
         self.assertEqual(transactions[0]['description'], 'Grocery Store')
-        self.assertEqual(transactions[0]['amount'], '-50.25')
-        self.assertEqual(transactions[0]['balance'], '49.75')
+        self.assertEqual(transactions[0]['amount'], Decimal('-50.25'))
+        self.assertEqual(transactions[0]['balance'], Decimal('49.75'))
         self.assertEqual(transactions[0]['transaction_type'], 'DEBIT')
         self.assertEqual(transactions[0]['category'], 'Food')
         self.assertEqual(transactions[0]['memo'], 'Weekly groceries')
@@ -141,7 +141,7 @@ DATA:OFXSGML
         expected_total = Decimal('100.0')  # Opening balance
         for t in transactions:
             expected_total += Decimal(t['amount'])
-            self.assertEqual(t['balance'], str(expected_total))
+            self.assertEqual(t['balance'], expected_total)
 
     def test_parse_csv_with_field_map(self):
         """Test parsing CSV transactions with field mapping."""
@@ -151,10 +151,10 @@ DATA:OFXSGML
         
         # Check first transaction
         first_tx = transactions[0]
-        self.assertEqual(first_tx["date"], "2024-01-01")
+        self.assertEqual(first_tx["date"], 1704067200000)
         self.assertEqual(first_tx["description"], "Grocery Store")
-        self.assertEqual(first_tx["amount"], str(Decimal("123.45")))
-        self.assertEqual(first_tx["balance"], str(Decimal("1123.45")))
+        self.assertEqual(first_tx["amount"], Decimal("123.45"))
+        self.assertEqual(first_tx["balance"], Decimal("1123.45"))
 
     def test_parse_ofx_from_file(self):
         """Test parsing OFX transactions from file."""
@@ -164,10 +164,10 @@ DATA:OFXSGML
         self.assertEqual(len(transactions), 4)
         
         # Check first transaction
-        self.assertEqual(transactions[0]['date'], '2024-03-15')
+        self.assertEqual(transactions[0]['date'], 1710460800000)
         self.assertEqual(transactions[0]['description'], 'Grocery Store')
-        self.assertEqual(transactions[0]['amount'], '-50.25')
-        self.assertEqual(transactions[0]['balance'], '49.75')
+        self.assertEqual(transactions[0]['amount'], Decimal('-50.25'))
+        self.assertEqual(transactions[0]['balance'], Decimal('49.75'))
         self.assertEqual(transactions[0]['transaction_type'], 'DEBIT')
         self.assertEqual(transactions[0]['memo'], 'Weekly groceries')
         
@@ -175,7 +175,7 @@ DATA:OFXSGML
         expected_total = Decimal('100.0')  # Opening balance
         for t in transactions:
             expected_total += Decimal(t['amount'])
-            self.assertEqual(t['balance'], str(expected_total))
+            self.assertEqual(t['balance'], expected_total)
 
     def test_parse_qfx_from_file(self):
         """Test parsing QFX transactions from file."""
@@ -185,10 +185,10 @@ DATA:OFXSGML
         self.assertEqual(len(transactions), 4)
         
         # Check first transaction
-        self.assertEqual(transactions[0]['date'], '2024-03-15')
+        self.assertEqual(transactions[0]['date'], 1710460800000)
         self.assertEqual(transactions[0]['description'], 'Grocery Store')
-        self.assertEqual(transactions[0]['amount'], '-50.25')
-        self.assertEqual(transactions[0]['balance'], '49.75')
+        self.assertEqual(transactions[0]['amount'], Decimal('-50.25'))
+        self.assertEqual(transactions[0]['balance'], Decimal('49.75'))
         self.assertEqual(transactions[0]['transaction_type'], 'DEBIT')
         self.assertEqual(transactions[0]['memo'], 'Weekly groceries')
         
@@ -196,7 +196,7 @@ DATA:OFXSGML
         expected_total = Decimal('100.0')  # Opening balance
         for t in transactions:
             expected_total += Decimal(t['amount'])
-            self.assertEqual(t['balance'], str(expected_total))
+            self.assertEqual(t['balance'], expected_total)
 
     def test_parse_ofx_inline(self):
         """Test parsing OFX transactions from inline content."""
@@ -206,10 +206,10 @@ DATA:OFXSGML
         
         # Check first transaction
         first_tx = transactions[0]
-        self.assertEqual(first_tx["date"], "2024-01-01")
+        self.assertEqual(first_tx["date"], 1704067200000)
         self.assertEqual(first_tx["description"], "Grocery Store")
-        self.assertEqual(first_tx["amount"], str(Decimal("-123.45")))
-        self.assertEqual(first_tx["balance"], str(Decimal("876.55")))  # 1000 - 123.45
+        self.assertEqual(first_tx["amount"], Decimal("-123.45"))
+        self.assertEqual(first_tx["balance"], Decimal("876.55"))  # 1000 - 123.45
         self.assertEqual(first_tx.get("memo"), "Purchase at Store")
         self.assertEqual(first_tx.get("transaction_type"), "DEBIT")
 

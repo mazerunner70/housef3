@@ -21,8 +21,13 @@ const AccountManager: React.FC = () => {
   return (
     <div className="account-manager">
       <div className="account-manager-header">
+        <div className="account-manager-header-text">
         <h2>Account Management</h2>
         <p>View your accounts and their associated files</p>
+        </div>
+        <button className="create-account-btn" onClick={() => setSelectedAccountId('')}>
+          + New Account
+        </button>
       </div>
       
       <div className="account-manager-content">

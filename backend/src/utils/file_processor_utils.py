@@ -255,3 +255,37 @@ def extract_opening_balance_csv(content: str) -> Optional[float]:
                         continue
                         
     return None 
+
+def calculate_opening_balance_from_duplicates(transactions: List[Dict[str, Any]], account_id: str) -> Optional[Decimal]:
+    """
+    Calculate opening balance by checking if first or last transaction is a duplicate.
+    
+    Args:
+        transactions: List of parsed transactions
+        account_id: ID of the account to check for duplicates
+        
+    Returns:
+        Decimal: Calculated opening balance if found, None otherwise
+    """
+    if not transactions:
+        return None
+        
+    try:
+        # Check first transaction
+        first_tx = transactions[0]
+        if check_duplicate_transaction(first_tx, account_id):
+            # If first transaction is duplicate, use its balance
+            return Decimal(str(first_tx['balance']))
+            
+        # Check last transaction
+        last_tx = transactions[-1]
+        if check_duplicate_transaction(last_tx, account_id):
+            # If last transaction is duplicate, calculate opening balance
+            # by subtracting all transaction amounts from the matched balance
+            total_amount = sum(Decimal(str(tx['amount'])) for tx in transactions)
+            return Decimal(str(last_tx['balance'])) - total_amount
+            
+        return None
+    except Exception as e:
+        logger.error(f"Error calculating opening balance from duplicates: {str(e)}")
+        return None 

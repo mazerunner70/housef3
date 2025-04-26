@@ -553,7 +553,7 @@ def delete_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str
         # Remove the actual file content from the S3 bucket
         if not delete_object(file.get('s3Key')):
             return create_response(500, {"message": "Error deleting file from S3"})
-            
+        
         logger.info(f"Successfully deleted file {file_id} from S3 bucket")
         
         # Step 5: Delete file metadata and verify deletion
@@ -1067,12 +1067,12 @@ def get_file_content_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dic
         if content is None:
             return create_response(500, {"message": "Error reading file content"})
             
-        return create_response(200, {
-            'fileId': file_id,
+            return create_response(200, {
+                'fileId': file_id,
             'content': content.decode('utf-8'),
-            'contentType': file.get('contentType'),
-            'fileName': file.get('fileName')
-        })
+                'contentType': file.get('contentType'),
+                'fileName': file.get('fileName')
+            })
             
     except Exception as e:
         logger.error(f"Error getting file content: {str(e)}")

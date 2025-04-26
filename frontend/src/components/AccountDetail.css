@@ -7,7 +7,7 @@
 }
 
 .account-detail-header {
-  margin-bottom: 1.5rem;
+  margin-bottom: 10px;
   padding-bottom: 1rem;
   border-bottom: 1px solid #eee;
 }
@@ -51,7 +51,7 @@
 }
 
 .account-files-section {
-  margin-top: 1rem;
+  margin-top: 10px;
   margin-bottom: 2rem;
 }
 
@@ -179,6 +179,14 @@
   .file-actions {
     width: 100%;
     justify-content: flex-end;
+  }
+  
+  .timeline-section {
+    padding: 0 10px;
+  }
+  
+  .timeline-container {
+    height: auto;
   }
 }
 
@@ -437,4 +445,27 @@
 .cancel-delete-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Timeline section */
+.timeline-section {
+  margin: 20px 0;
+  padding: 0 20px;
+}
+
+/* Adjust spacing between sections */
+.account-files-section {
+  margin-top: 10px;
+}
+
+/* Make the timeline responsive */
+@media (max-width: 768px) {
+  .timeline-section {
+    padding: 0 10px;
+  }
+  
+  /* Switch to vertical layout on mobile */
+  .timeline-container {
+    height: auto;
+  }
 } 

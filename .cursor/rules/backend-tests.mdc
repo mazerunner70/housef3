@@ -1,0 +1,6 @@
+---
+description: run backend tests
+globs: 
+alwaysApply: false
+---
+run backend tests by going to the backend folder and run_tests.sh

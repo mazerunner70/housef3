@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Account, getAccount, listAccountFiles, deleteAccount } from '../services/AccountService';
+import { Account, getAccount, getFileTimeline, deleteAccount } from '../services/AccountService';
 import { FileMetadata, deleteFile, getDownloadUrl } from '../services/FileService';
 import { Transaction, getAccountTransactions } from '../services/TransactionService';
+import TimelineView from './TimelineView';
 import './AccountDetail.css';
 
 interface AccountDetailProps {
@@ -40,8 +41,24 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
       const accountData = await getAccount(id);
       setAccount(accountData.account);
       
-      const filesData = await listAccountFiles(id);
-      setFiles(filesData.files || []);
+      // Use getFileTimeline for timeline data
+      const timelineFiles = await getFileTimeline(id);
+      console.log('[Timeline Diagnostics] Timeline files:', timelineFiles);
+      // Extract the timeline array if present
+      const filesArray = Array.isArray(timelineFiles.timeline)
+        ? timelineFiles.timeline
+        : Array.isArray(timelineFiles)
+          ? timelineFiles
+          : [];
+      const safeFiles = filesArray
+        .filter(f => f.startDate && f.endDate)
+        .map(f => ({
+          ...f,
+          startDate: typeof f.startDate === 'string' ? new Date(f.startDate).getTime() : f.startDate,
+          endDate: typeof f.endDate === 'string' ? new Date(f.endDate).getTime() : f.endDate,
+        }));
+      console.log('[Timeline Diagnostics] Safe files:', safeFiles);
+      setFiles(safeFiles);
 
       const transactionsData = await getAccountTransactions(id);
       setTransactions(transactionsData.transactions || []);
@@ -79,8 +96,20 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
       await deleteFile(fileId);
       // Refresh the files list
       if (accountId) {
-        const filesData = await listAccountFiles(accountId);
-        setFiles(filesData.files || []);
+        const filesData = await getFileTimeline(accountId);
+        const filesArray = Array.isArray(filesData.timeline)
+          ? filesData.timeline
+          : Array.isArray(filesData)
+            ? filesData
+            : [];
+        const safeFiles = filesArray
+          .filter(f => f.startDate && f.endDate)
+          .map(f => ({
+            ...f,
+            startDate: typeof f.startDate === 'string' ? new Date(f.startDate).getTime() : f.startDate,
+            endDate: typeof f.endDate === 'string' ? new Date(f.endDate).getTime() : f.endDate,
+          }));
+        setFiles(safeFiles);
       }
     } catch (err) {
       console.error('Error deleting file:', err);
@@ -138,13 +167,34 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
     }).format(amount);
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | number) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
-      month: 'short',
-      day: 'numeric'
+      month: '2-digit',
+      day: '2-digit'
     });
   };
+
+  const handleFileTimelineClick = (fileId: string) => {
+    // Filter transactions to show only those from the selected file
+    const file = files.find(f => f.fileId === fileId);
+    if (file) {
+      // TODO: Implement transaction filtering by file
+      console.log(`Showing transactions for file: ${file.fileName}`);
+    }
+  };
+
+  const handleGapTimelineClick = (startDate: number, endDate: number) => {
+    // TODO: Implement export dialog with pre-filled dates
+    console.log(`Suggest export for date range: ${new Date(startDate).toLocaleDateString()} to ${new Date(endDate).toLocaleDateString()}`);
+  };
+
+  // Diagnostics: log files before rendering TimelineView
+  useEffect(() => {
+    if (files) {
+      console.log('[Timeline Diagnostics] Files passed to TimelineView:', files);
+    }
+  }, [files]);
 
   if (loading || !account) {
     return (
@@ -158,6 +208,12 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
 
   return (
     <div className="account-detail">
+      {/* Diagnostics: show a warning if no files are available for the timeline */}
+      {files.length === 0 && (
+        <div style={{ color: 'orange', marginBottom: '1rem' }}>
+          [Diagnostics] No files available for timeline. Check backend response and filtering logic.
+        </div>
+      )}
       <div className="account-detail-header">
         <h3>{account.accountName}</h3>
         <div className="account-detail-info">
@@ -210,6 +266,12 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
         </div>
       </div>
 
+      <TimelineView 
+        files={files}
+        onFileClick={handleFileTimelineClick}
+        onGapClick={handleGapTimelineClick}
+      />
+
       <div className="account-files-section">
         <h4>Associated Files</h4>
         {files.length === 0 ? (
@@ -221,7 +283,7 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
                 <div className="file-info">
                   <div className="file-name">{file.fileName}</div>
                   <div className="file-date">
-                    Uploaded: {new Date(file.uploadDate).toLocaleDateString()}
+                    Uploaded: {formatDate(file.uploadDate)}
                   </div>
                 </div>
                 <div className="file-actions">

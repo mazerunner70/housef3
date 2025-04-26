@@ -29,7 +29,8 @@ from utils.file_processor_utils import (
     extract_opening_balance_ofx,
     extract_opening_balance_csv,
     find_file_records_by_s3_key,
-    get_file_content
+    get_file_content,
+    calculate_opening_balance_from_duplicates
 )
 from datetime import datetime
 
@@ -82,7 +83,7 @@ FIELD_MAPS_TABLE = os.environ.get('FIELD_MAPS_TABLE', 'field-maps')
 transaction_table = dynamodb.Table(TRANSACTIONS_TABLE)
 field_maps_table = dynamodb.Table(FIELD_MAPS_TABLE)
 
-def process_file_with_account(file_id: str, content_bytes: bytes, file_format: FileFormat, opening_balance: float, user_id: str) -> int:
+def process_file_with_account(file_id: str, content_bytes: bytes, file_format: FileFormat, opening_balance: float, user_id: str) -> Dict[str, Any]:
     """
     Process a file and its transactions with account-specific logic.
     This includes:
@@ -90,6 +91,7 @@ def process_file_with_account(file_id: str, content_bytes: bytes, file_format: F
     - Duplicate transaction detection
     - Account association
     - Transaction status tracking
+    - Opening balance calculation from duplicates
     
     Args:
         file_id: ID of the file to process
@@ -99,14 +101,16 @@ def process_file_with_account(file_id: str, content_bytes: bytes, file_format: F
         user_id: ID of the user who owns the file
         
     Returns:
-        Number of transactions processed
+        Dict[str, Any]: Response containing success status and message
     """
     try:
         # Get the file record to check for field map
         file_record = get_transaction_file(file_id)
         if not file_record:
-            logger.error(f"File record not found for ID: {file_id}")
-            return 0
+            return {
+                'statusCode': 404,
+                'body': json.dumps({'message': 'File not found'})
+            }
             
         # Get field map if specified
         field_map = None
@@ -118,12 +122,10 @@ def process_file_with_account(file_id: str, content_bytes: bytes, file_format: F
             # Use specified field map
             field_map = get_field_map(field_map_id)
             if not field_map:
-                logger.error(f"Specified field map not found: {field_map_id}")
-                update_transaction_file(file_id, {
-                    'processingStatus': ProcessingStatus.ERROR,
-                    'errorMessage': 'Specified field map not found'
-                })
-                return 0
+                return {
+                    'statusCode': 404,
+                    'body': json.dumps({'message': 'Field map not found'})
+                }
         elif account_id:
             # Try to use account's default field map
             field_map = get_account_default_field_map(account_id)
@@ -131,12 +133,10 @@ def process_file_with_account(file_id: str, content_bytes: bytes, file_format: F
                 logger.info(f"Using account default field map for file {file_id}")
                 
         if not field_map and file_format == FileFormat.CSV:
-            logger.warning(f"No field map found for CSV file {file_id}")
-            update_transaction_file(file_id, {
-                'processingStatus': ProcessingStatus.ERROR,
-                'errorMessage': 'Field map required for CSV files'
-            })
-            return 0
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'message': 'Field map required for CSV files'})
+            }
             
         # Parse transactions using the utility
         try:
@@ -148,25 +148,34 @@ def process_file_with_account(file_id: str, content_bytes: bytes, file_format: F
             )
         except Exception as parse_error:
             logger.error(f"Error parsing transactions: {str(parse_error)}")
-            logger.error(f"Error type: {type(parse_error).__name__}")
-            logger.error(f"Error args: {parse_error.args}")
-            update_transaction_file(file_id, {
-                'processingStatus': ProcessingStatus.ERROR,
-                'errorMessage': f'Error parsing transactions: {str(parse_error)}'
-            })
-            return 0
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'message': f'Error parsing transactions: {str(parse_error)}'})
+            }
         
         if not transactions:
-            logger.error(f"No transactions parsed from file {file_id}")
-            update_transaction_file(file_id, {
-                'processingStatus': ProcessingStatus.ERROR,
-                'errorMessage': 'No transactions could be parsed from file'
-            })
-            return 0
-        
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'message': 'No transactions could be parsed from file'})
+            }
+            
+        # Calculate opening balance from duplicates if possible
+        if account_id:
+            calculated_opening_balance = calculate_opening_balance_from_duplicates(transactions, account_id)
+            if calculated_opening_balance is not None:
+                opening_balance = calculated_opening_balance  # Already a Decimal from calculate_opening_balance_from_duplicates
+                logger.info(f"Calculated opening balance from duplicates: {opening_balance}")
+                update_transaction_file(file_id, {'openingBalance': str(opening_balance)})
+                
+                # Recalculate running balances with new opening balance
+                current_balance = opening_balance
+                for tx in transactions:
+                    current_balance += Decimal(str(tx['amount']))
+                    tx['balance'] = str(current_balance)
+                logger.info("Recalculated running balances with new opening balance")
+            
         # Delete existing transactions if any
         delete_transactions_for_file(file_id)
-        #
         
         # Save transactions to the database
         transaction_count = 0
@@ -211,7 +220,13 @@ def process_file_with_account(file_id: str, content_bytes: bytes, file_format: F
             
         update_transaction_file(file_id, update_data)
         
-        return transaction_count
+        return {
+            'statusCode': 200,
+            'body': json.dumps({
+                'message': f'Successfully processed {transaction_count} transactions',
+                'transactionCount': transaction_count
+            })
+        }
     except Exception as e:
         logger.error(f"Error processing transactions: {str(e)}")
         logger.error(f"Error type: {type(e).__name__}")
@@ -220,7 +235,10 @@ def process_file_with_account(file_id: str, content_bytes: bytes, file_format: F
             'processingStatus': ProcessingStatus.ERROR,
             'errorMessage': f'Error processing transactions: {str(e)}'
         })
-        return 0
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'message': f'Error processing transactions: {str(e)}'})
+        }
 
 def lambda_handler(event, context):
     """
@@ -249,25 +267,15 @@ def lambda_handler(event, context):
             raise ValueError(f"Could not retrieve file content for ID: {file_id}")
             
         # Process the file
-        transaction_count = process_file_with_account(
+        response = process_file_with_account(
             file_id=file_id,
             content_bytes=content_bytes,
-            file_format=file_record.get('fileFormat', FileFormat.CSV),
-            opening_balance=float(file_record.get('openingBalance', 0)),
-            user_id=user_id,
-            account_id=account_id
+            file_format=file_record['file_format'],
+            opening_balance=float(file_record['opening_balance']) if file_record['opening_balance'] else 0,
+            user_id=user_id
         )
         
-        return {
-            'statusCode': 200,
-            'headers': {
-                'Content-Type': 'application/json'
-            },
-            'body': json.dumps({
-                'message': f'Successfully processed {transaction_count} transactions',
-                'transactionCount': transaction_count
-            })
-        }
+        return response
         
     except Exception as e:
         logger.error(f"Error in file processor lambda: {str(e)}")

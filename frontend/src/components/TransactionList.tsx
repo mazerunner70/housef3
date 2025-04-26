@@ -135,7 +135,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
               Reset Order
             </button>
           )}
-          <button className="close-button" onClick={onClose}>×</button>
+        <button className="close-button" onClick={onClose}>×</button>
         </div>
       </div>
 
