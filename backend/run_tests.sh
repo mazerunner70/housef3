@@ -3,6 +3,19 @@
 # Exit on any error
 set -e
 
+# Help message function
+show_help() {
+    echo "Usage: $0 [test_name]"
+    echo "  test_name: Optional. The specific test file to run (e.g., tests/utils/test_transaction_parser.py)"
+    echo "  If no test name is provided, all tests will be run."
+    exit 1
+}
+
+# Show help if -h or --help is passed
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    show_help
+fi
+
 # Check if virtualenv exists, if not create it
 if [ ! -d "venv" ]; then
     echo "Creating virtual environment..."
@@ -24,12 +37,22 @@ if [ -f "requirements-test.txt" ]; then
     pip install -r requirements-test.txt
 fi
 
-# Run tests
-echo "Running tests..."
+# Set up Python path
 cd src
 SRC_PATH=$(pwd)
 cd ..
-PYTHONPATH=$SRC_PATH python3 -m unittest tests/test_getcolors.py tests/utils/test_transaction_parser.py -v
+
+# Run tests with logging configuration
+echo "Running tests..."
+if [ -n "$1" ]; then
+    # Run specific test if provided
+    echo "Running specific test: $1"
+    PYTHONPATH=$SRC_PATH LOG_LEVEL=DEBUG LOGGING_CONFIG=tests/logging.conf python3 -m unittest "$1" -v 2>&1 | tee test.log
+else
+    # Run all tests if no specific test provided
+    echo "Running all tests..."
+    PYTHONPATH=$SRC_PATH LOG_LEVEL=DEBUG LOGGING_CONFIG=tests/logging.conf python3 -m unittest tests/test_getcolors.py tests/utils/test_transaction_parser.py -v 2>&1 | tee test.log
+fi
 
 # Store the exit code
 exit_code=$?

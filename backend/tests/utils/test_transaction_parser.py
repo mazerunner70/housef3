@@ -129,13 +129,16 @@ DATA:OFXSGML
         self.assertEqual(len(transactions), 6)
         
         # Check first transaction
-        self.assertEqual(transactions[0]['date'], 1710460800000)
-        self.assertEqual(transactions[0]['description'], 'Grocery Store')
-        self.assertEqual(transactions[0]['amount'], Decimal('-50.25'))
-        self.assertEqual(transactions[0]['balance'], Decimal('49.75'))
-        self.assertEqual(transactions[0]['transaction_type'], 'DEBIT')
-        self.assertEqual(transactions[0]['category'], 'Food')
-        self.assertEqual(transactions[0]['memo'], 'Weekly groceries')
+        expected = {
+            'date': 1710460800000,
+            'description': 'Grocery Store',
+            'amount': Decimal('-50.25'),
+            'balance': Decimal('49.75'),
+            'transaction_type': 'DEBIT',
+            'category': 'Food',
+            'memo': 'Weekly groceries',
+        }
+        self.assert_transaction_fields(transactions[0], expected)
         
         # Check running total calculation
         expected_total = Decimal('100.0')  # Opening balance
@@ -164,12 +167,15 @@ DATA:OFXSGML
         self.assertEqual(len(transactions), 4)
         
         # Check first transaction
-        self.assertEqual(transactions[0]['date'], 1710460800000)
-        self.assertEqual(transactions[0]['description'], 'Grocery Store')
-        self.assertEqual(transactions[0]['amount'], Decimal('-50.25'))
-        self.assertEqual(transactions[0]['balance'], Decimal('49.75'))
-        self.assertEqual(transactions[0]['transaction_type'], 'DEBIT')
-        self.assertEqual(transactions[0]['memo'], 'Weekly groceries')
+        expected = {
+            'date': 1710460800000,
+            'description': 'Grocery Store',
+            'amount': Decimal('-50.25'),
+            'balance': Decimal('49.75'),
+            'transaction_type': 'DEBIT',
+            'memo': 'Weekly groceries',
+        }
+        self.assert_transaction_fields(transactions[0], expected)
         
         # Check running total calculation
         expected_total = Decimal('100.0')  # Opening balance
@@ -185,12 +191,15 @@ DATA:OFXSGML
         self.assertEqual(len(transactions), 4)
         
         # Check first transaction
-        self.assertEqual(transactions[0]['date'], 1710460800000)
-        self.assertEqual(transactions[0]['description'], 'Grocery Store')
-        self.assertEqual(transactions[0]['amount'], Decimal('-50.25'))
-        self.assertEqual(transactions[0]['balance'], Decimal('49.75'))
-        self.assertEqual(transactions[0]['transaction_type'], 'DEBIT')
-        self.assertEqual(transactions[0]['memo'], 'Weekly groceries')
+        expected = {
+            'date': 1710460800000,
+            'description': 'Grocery Store',
+            'amount': Decimal('-50.25'),
+            'balance': Decimal('49.75'),
+            'transaction_type': 'DEBIT',
+            'memo': 'Weekly groceries',
+        }
+        self.assert_transaction_fields(transactions[0], expected)
         
         # Check running total calculation
         expected_total = Decimal('100.0')  # Opening balance
@@ -356,6 +365,10 @@ bad,data,here'''.encode('utf-8')
         date1 = datetime.strptime("2024-12-01", "%Y-%m-%d")
         date2 = datetime.strptime("2024-12-01", "%Y-%m-%d")
         self.assertEqual(date1, date2)
+
+    def assert_transaction_fields(self, transaction, expected):
+        for key, value in expected.items():
+            self.assertEqual(transaction[key], value)
 
 
 if __name__ == '__main__':

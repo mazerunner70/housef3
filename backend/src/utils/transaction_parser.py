@@ -2,6 +2,8 @@ import csv
 import io
 import re
 import logging
+import logging.config
+import os
 import xml.etree.ElementTree as ET
 from decimal import Decimal
 from typing import List, Dict, Any, Optional, Tuple
@@ -11,8 +13,17 @@ from models.field_map import FieldMap, FieldMapping
 import decimal
 
 # Configure logging
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+if os.environ.get('LOGGING_CONFIG'):
+    logging.config.fileConfig(os.environ.get('LOGGING_CONFIG'))
+else:
+    logging.basicConfig(
+        level=os.environ.get('LOG_LEVEL', 'INFO'),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 __all__ = [
     'parse_transactions',
@@ -60,30 +71,38 @@ def apply_field_mapping(row_data: Dict[str, Any], field_map: FieldMap) -> Dict[s
     Returns:
         Dictionary with mapped fields
     """
+    logger.info(f"Applying field mapping to row data: {row_data}")
+    logger.info(f"Field map: {field_map.mappings}")
     result = {}
     
     for mapping in field_map.mappings:
         source = mapping.source_field
         target = mapping.target_field
         
+        logger.info(f"Processing mapping: {source} -> {target}")
+        
         if source not in row_data:
             logger.warning(f"Source field '{source}' not found in row data")
             continue
             
         value = row_data[source]
+        logger.info(f"Raw value for {source}: {value}")
         
         # Apply transformation if specified
         if mapping.transformation:
             try:
+                logger.info(f"Applying transformation: {mapping.transformation}")
                 # For now, we only support basic Python expressions
                 # In the future, this could be expanded to more complex transformations
                 value = eval(mapping.transformation, {"value": value})
+                logger.info(f"Transformed value: {value}")
             except Exception as e:
                 logger.error(f"Error applying transformation {mapping.transformation}: {str(e)}")
                 continue
         
         result[target] = value
     
+    logger.info(f"Final mapped result: {result}")
     return result
 
 def parse_transactions(content: bytes, 
@@ -105,7 +124,7 @@ def parse_transactions(content: bytes,
     if file_format == FileFormat.CSV:
         return parse_csv_transactions(content, opening_balance, field_map)
     elif file_format in [FileFormat.OFX, FileFormat.QFX]:
-        return parse_ofx_transactions(content, opening_balance, field_map)
+        return parse_ofx_transactions(content, opening_balance)
     else:
         logger.warning(f"Unsupported file format for transaction parsing: {file_format}")
         return []
@@ -168,7 +187,6 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
         if debit_credit and debit_credit.upper() == 'DBIT':
             return -abs(amount)
         return amount
-
     try:
         # Decode the content
         text_content = content.decode('utf-8')
@@ -218,7 +236,7 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
         
         # Read all rows
         rows = list(reader)
-        
+        print(f"Rows: {rows}")
         # Detect date order
         date_order = detect_date_order([row[date_col] for row in rows if len(row) > date_col])
         
@@ -229,7 +247,7 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
             
         # Initialize balance
         balance = Decimal(str(opening_balance)) if opening_balance is not None else Decimal('0.00')
-        
+
         # Process each row
         transactions = []
         for i, row in enumerate(rows):
@@ -237,26 +255,44 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
                         continue
                         
             # Create raw row data dictionary
-            row_data = {
-                'date': row[date_col],
-                'description': row[desc_col],
-                'amount': row[amount_col],
-                'debitOrCredit': row[debitOrCredit_col] if debitOrCredit_col is not None and len(row) > debitOrCredit_col else None,
-                'category': row[category_col] if category_col is not None and len(row) > category_col else None,
-                'memo': row[memo_col] if memo_col is not None and len(row) > memo_col else None
-            }
+            if field_map:
+                row_dict = dict(zip(header, row))
+                logger.info(f"Header: {header}")
+                logger.info(f"Row: {row}")
+                logger.info(f"Created row dict: {row_dict}")
+                row_data = apply_field_mapping(row_dict, field_map)
+                logger.info(f"After field mapping: {row_data}")
+                if not row_data:
+                    logger.warning("Field mapping returned empty result")
+                    continue
+            else:
+                row_data = {
+                    'date': row[date_col],
+                    'description': row[desc_col],
+                    'amount': row[amount_col],
+                    'debitOrCredit': row[debitOrCredit_col] if debitOrCredit_col is not None and len(row) > debitOrCredit_col else None,
+                    'category': row[category_col] if category_col is not None and len(row) > category_col else None,
+                    'memo': row[memo_col] if memo_col is not None and len(row) > memo_col else None
+                }
             logger.info(f"Row: {row}")
             logger.info(f"Row data: {row_data}")    
 
             # Process the amount
-            raw_amount = Decimal(row_data['amount'].replace('$', '').replace(',', ''))
-            processed_amount = process_amount(raw_amount, row_data.get('debitOrCredit'))
+            try:
+                logger.info(f"Processing amount: {row_data['amount']}")
+                raw_amount = Decimal(str(row_data['amount']))
+                logger.info(f"Raw amount: {raw_amount}")
+                processed_amount = process_amount(raw_amount, row_data.get('debitOrCredit'))
+                logger.info(f"Processed amount: {processed_amount}")
+            except (decimal.InvalidOperation, KeyError) as e:
+                logger.error(f"Error processing amount: {str(e)}")
+                continue
             
             # Update balance with processed amount
             balance += processed_amount
                     
             # Create transaction dictionary
-                    transaction = {
+            transaction = {
                 'date': parse_date(row_data['date']),
                 'description': row_data['description'].strip(),
                 'amount': processed_amount,  # Keep as Decimal
@@ -273,7 +309,7 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
             if row_data.get('memo'):
                 transaction['memo'] = row_data['memo'].strip()
                 
-                transactions.append(transaction)
+            transactions.append(transaction)
         
         return transactions
         
@@ -281,126 +317,154 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
         logger.error(f"Error parsing CSV transactions: {str(e)}")
         return []
 
-def parse_ofx_transactions(content: bytes, opening_balance: float, field_map: Optional[FieldMap] = None) -> List[Dict[str, Any]]:
-    """
-    Parse transactions from OFX/QFX file content.
-    
-    Args:
-        content: The raw OFX/QFX file content
-        opening_balance: Opening balance to use for running total calculation
-        field_map: Optional field mapping configuration
-        
-    Returns:
-        List of transaction dictionaries
-    """
-    try:
-        # Decode the content
-            text_content = content.decode('utf-8')
-        
-        # Strip OFX header if present
-        if text_content.startswith('OFXHEADER:'):
-            # Find the start of the XML content
-            xml_start = text_content.find('<OFX>')
-            if xml_start != -1:
-                # XML format
-                text_content = text_content[xml_start:]
-                return parse_ofx_xml(text_content, opening_balance)
-            else:
-                # Colon-separated format
-                return parse_ofx_colon_separated(text_content, opening_balance)
-        else:
-            # Try parsing as XML
-            try:
-                return parse_ofx_xml(text_content, opening_balance)
-            except ET.ParseError:
-                # Try parsing as colon-separated
-                return parse_ofx_colon_separated(text_content, opening_balance)
-        
-    except Exception as e:
-        logger.error(f"Error parsing OFX transactions: {str(e)}")
-        return []
-
-def parse_ofx_xml(text_content: str, opening_balance: float) -> List[Dict[str, Any]]:
-    """Parse OFX content in XML format."""
-    root = ET.fromstring(text_content)
-        transactions = []
-    balance = Decimal(str(opening_balance))
-        
-    for i, stmttrn in enumerate(root.findall('.//STMTTRN')):
-        # Extract transaction details
-        date = stmttrn.find('DTPOSTED').text
-        amount = Decimal(stmttrn.find('TRNAMT').text)
-        # Try both NAME and n elements for description
-        name = stmttrn.find('NAME')
-        if name is None:
-            name = stmttrn.find('n')
-        name = name.text if name is not None else ''
-        memo = stmttrn.find('MEMO').text if stmttrn.find('MEMO') is not None else ''
-        trntype = stmttrn.find('TRNTYPE').text if stmttrn.find('TRNTYPE') is not None else 'DEBIT'
-        
-        # Create transaction dictionary
-        transaction = {
-            'date': parse_date(date),
-            'description': name.strip(),
-            'amount': amount,  # Keep as Decimal
-            'balance': balance + amount,  # Keep as Decimal
-            'transaction_type': trntype.strip().upper(),
-            'memo': memo.strip(),
-            'import_order': i + 1  # Add 1-based import order
-        }
-        
-        # Update balance
-        balance += amount
-        
-        transactions.append(transaction)
-    
-    return transactions
-
 def parse_ofx_colon_separated(text_content: str, opening_balance: float) -> List[Dict[str, Any]]:
     """Parse OFX content in colon-separated format."""
     transactions = []
     balance = Decimal(str(opening_balance))
     current_transaction = {}
     in_transaction = False
-    import_order = 1  # Initialize import order counter
+    import_order = 1
+    
+    logger.info("Parsing colon-separated OFX/QFX")
     
     for line in text_content.splitlines():
         line = line.strip()
         if not line:
             continue
             
-        if line == 'STMTTRN':
+        # Handle both XML-style and pure colon format transaction markers
+        if line == '<STMTTRN>' or line == 'STMTTRN':
             if in_transaction and current_transaction:
-                # Add the previous transaction
-                transaction = {
-                    'date': parse_date(current_transaction.get('DTPOSTED', '')),
-                    'description': current_transaction.get('NAME', '').strip(),
-                    'amount': Decimal(current_transaction.get('TRNAMT', '0')),  # Keep as Decimal
-                    'balance': balance + Decimal(current_transaction.get('TRNAMT', '0')),  # Keep as Decimal
-                    'transaction_type': current_transaction.get('TRNTYPE', 'DEBIT').strip().upper(),
-                    'memo': current_transaction.get('MEMO', '').strip(),
-                    'import_order': import_order  # Add import order
-                }
-                transactions.append(transaction)
-                balance += Decimal(current_transaction.get('TRNAMT', '0'))
-                current_transaction = {}
-                import_order += 1  # Increment import order counter
+                # Process the previous transaction
+                try:
+                    transaction = create_transaction_from_ofx(current_transaction, balance, import_order)
+                    if transaction:
+                        transactions.append(transaction)
+                        balance += transaction['amount']
+                        import_order += 1
+                except Exception as e:
+                    logger.error(f"Error processing transaction: {str(e)}")
+            current_transaction = {}
             in_transaction = True
+        elif line == '</STMTTRN>' or (in_transaction and line.startswith('STMTTRN') and line != 'STMTTRN'):
+            if in_transaction and current_transaction:
+                try:
+                    transaction = create_transaction_from_ofx(current_transaction, balance, import_order)
+                    if transaction:
+                        transactions.append(transaction)
+                        balance += transaction['amount']
+                        import_order += 1
+                except Exception as e:
+                    logger.error(f"Error processing transaction: {str(e)}")
+            current_transaction = {}
+            in_transaction = False
+        elif in_transaction and '>' in line and '</' in line:
+            # XML-style tag with value
+            tag = line[1:line.index('>')]
+            value = line[line.index('>')+1:line.rindex('<')]
+            current_transaction[tag] = value
         elif in_transaction and ':' in line:
+            # Colon-separated style
             key, value = line.split(':', 1)
             current_transaction[key] = value.strip()
     
-    # Add the last transaction if we have one
+    # Process any remaining transaction
     if in_transaction and current_transaction:
+        try:
+            transaction = create_transaction_from_ofx(current_transaction, balance, import_order)
+            if transaction:
+                transactions.append(transaction)
+        except Exception as e:
+            logger.error(f"Error processing final transaction: {str(e)}")
+    
+    logger.info(f"Found {len(transactions)} transactions")
+    return transactions
+
+def create_transaction_from_ofx(data: Dict[str, str], balance: Decimal, import_order: int) -> Optional[Dict[str, Any]]:
+    """Create a transaction dictionary from OFX data."""
+    try:
+        # Get required fields
+        date_str = data.get('DTPOSTED', '')[:8]  # Take first 8 chars for YYYYMMDD
+        date_ms = parse_date(date_str)
+        if not date_ms:
+            logger.warning(f"Invalid date format: {date_str}")
+            return None
+            
+        # Get amount
+        amount_str = data.get('TRNAMT', '0').replace(',', '')
+        amount = Decimal(amount_str)
+        
+        # Get description from n tag, NAME, or MEMO
+        description = data.get('n') or data.get('NAME') or data.get('MEMO', '')
+        
+        # Create transaction
         transaction = {
-            'date': parse_date(current_transaction.get('DTPOSTED', '')),
-            'description': current_transaction.get('NAME', '').strip(),
-            'amount': Decimal(current_transaction.get('TRNAMT', '0')),  # Keep as Decimal
-            'balance': balance + Decimal(current_transaction.get('TRNAMT', '0')),  # Keep as Decimal
-            'transaction_type': current_transaction.get('TRNTYPE', 'DEBIT').strip().upper(),
-            'memo': current_transaction.get('MEMO', '').strip(),
-            'import_order': import_order  # Add import order
+            'date': date_ms,
+            'description': description.strip(),
+            'amount': amount,
+            'balance': balance + amount,
+            'import_order': import_order,
+            'transaction_type': data.get('TRNTYPE', '').strip().upper() if data.get('TRNTYPE') else None
         }
-        transactions.append(transaction)
-                
-        return transactions
+        
+        # Add memo if available and different from description
+        memo = data.get('MEMO')
+        if memo and memo.strip() != description.strip():
+            transaction['memo'] = memo.strip()
+            
+        return transaction
+    except Exception as e:
+        logger.error(f"Error creating transaction: {str(e)}")
+        return None
+
+def parse_ofx_transactions(content: bytes, opening_balance: float) -> List[Dict[str, Any]]:
+    """Parse transactions from OFX/QFX file content."""
+    try:
+        # Decode the content
+        text_content = content.decode('utf-8')
+        logger.info("Parsing OFX/QFX content")
+        
+        # Check if this is a colon-separated format
+        if any(marker in text_content for marker in ['OFXHEADER:', 'DATA:OFXSGML', 'STMTTRN']):
+            logger.info("Detected colon-separated OFX/QFX format")
+            return parse_ofx_colon_separated(text_content, opening_balance)
+            
+        # Try parsing as XML
+        try:
+            logger.info("Attempting to parse as XML")
+            root = ET.fromstring(text_content)
+            transactions = []
+            balance = Decimal(str(opening_balance))
+            
+            # Find all transaction elements
+            for i, stmttrn in enumerate(root.findall('.//STMTTRN'), 1):
+                try:
+                    # Extract transaction data
+                    data = {
+                        'DTPOSTED': stmttrn.findtext('DTPOSTED', ''),
+                        'TRNAMT': stmttrn.findtext('TRNAMT', '0'),
+                        'n': stmttrn.findtext('n'),
+                        'NAME': stmttrn.findtext('NAME'),
+                        'MEMO': stmttrn.findtext('MEMO'),
+                        'TRNTYPE': stmttrn.findtext('TRNTYPE')
+                    }
+                    
+                    transaction = create_transaction_from_ofx(data, balance, i)
+                    if transaction:
+                        transactions.append(transaction)
+                        balance += transaction['amount']
+                        
+                except Exception as e:
+                    logger.error(f"Error processing XML transaction: {str(e)}")
+                    continue
+                    
+            logger.info(f"Found {len(transactions)} transactions in XML format")
+            return transactions
+            
+        except ET.ParseError:
+            logger.error("Failed to parse as XML")
+            return []
+            
+    except Exception as e:
+        logger.error(f"Error parsing OFX/QFX content: {str(e)}")
+        return []
