@@ -271,7 +271,7 @@ def lambda_handler(event, context):
             file_id=file_id,
             content_bytes=content_bytes,
             file_format=file_record['file_format'],
-            opening_balance=float(file_record['opening_balance']) if file_record['opening_balance'] else 0,
+            opening_balance=float(file_record['openingBalance']) if file_record.get('openingBalance') else 0,
             user_id=user_id
         )
         
@@ -292,4 +292,46 @@ def lambda_handler(event, context):
             'body': json.dumps({
                 'message': f'Error processing file: {str(e)}'
             })
-        } 
+        }
+
+def update_transaction_file(file_id: str, updates: Dict[str, Any]) -> None:
+    """Update a transaction file record in DynamoDB."""
+    try:
+        # Convert snake_case keys to camelCase for DynamoDB
+        update_expr_parts = []
+        expr_attr_names = {}
+        expr_attr_values = {}
+        
+        key_mapping = {
+            'processing_status': 'processingStatus',
+            'record_count': 'recordCount',
+            'date_range_start': 'dateRangeStart',
+            'date_range_end': 'dateRangeEnd',
+            'error_message': 'errorMessage',
+            'opening_balance': 'openingBalance',
+            'account_id': 'accountId'
+        }
+        
+        for key, value in updates.items():
+            # Convert snake_case to camelCase if needed
+            dynamo_key = key_mapping.get(key, key)
+            
+            # Build update expression
+            attr_name = f"#{key.replace('_', '')}"
+            attr_value = f":{key.replace('_', '')}"
+            update_expr_parts.append(f"{attr_name} = {attr_value}")
+            expr_attr_names[attr_name] = dynamo_key
+            expr_attr_values[attr_value] = value
+            
+        update_expression = "SET " + ", ".join(update_expr_parts)
+        
+        transaction_table.update_item(
+            Key={'fileId': file_id},
+            UpdateExpression=update_expression,
+            ExpressionAttributeNames=expr_attr_names,
+            ExpressionAttributeValues=expr_attr_values
+        )
+        logger.info(f"Updated transaction file {file_id} with {updates}")
+    except Exception as e:
+        logger.error(f"Error updating transaction file {file_id}: {str(e)}")
+        raise 

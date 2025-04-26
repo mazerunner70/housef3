@@ -70,6 +70,7 @@ class TransactionFile:
     date_range_start: Optional[str] = None
     date_range_end: Optional[str] = None
     error_message: Optional[str] = None
+    opening_balance: Optional[float] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -104,6 +105,9 @@ class TransactionFile:
         if self.error_message:
             result["errorMessage"] = self.error_message
             
+        if self.opening_balance is not None:
+            result["openingBalance"] = str(self.opening_balance)  # Convert to string for DynamoDB
+            
         return result
 
     @classmethod
@@ -112,6 +116,7 @@ class TransactionFile:
         Create a transaction file object from a dictionary (e.g. from DynamoDB).
         """
         account_id = data.get("accountId")  # Use get() to handle optional field
+        opening_balance = float(data.get("openingBalance")) if data.get("openingBalance") else None
         
         file = cls(
             file_id=data["fileId"],
@@ -124,10 +129,11 @@ class TransactionFile:
             processing_status=ProcessingStatus(data["processingStatus"]),
             account_id=account_id,
             field_map_id=data.get("fieldMapId"),
-            record_count=data.get("recordCount"),
+            record_count=int(data.get("recordCount")) if data.get("recordCount") else None,
             date_range_start=data.get("dateRangeStart"),
             date_range_end=data.get("dateRangeEnd"),
-            error_message=data.get("errorMessage")
+            error_message=data.get("errorMessage"),
+            opening_balance=opening_balance
         )
         
         return file
@@ -153,6 +159,9 @@ class TransactionFile:
             
         if error_message is not None:
             self.error_message = error_message
+            
+        if opening_balance is not None:
+            self.opening_balance = opening_balance
 
 
 def validate_transaction_file_data(data: Dict[str, Any]) -> bool:
