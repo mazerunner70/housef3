@@ -170,6 +170,44 @@ def parse_date(date_str: str) -> Optional[int]:
     
     return None
 
+def preprocess_csv_text(text_content: str) -> str:
+    """
+    Preprocess CSV text to fix rows with more columns than headers due to unquoted commas in fields.
+    Merges columns where a likely description field contains unquoted commas, quoting the merged field.
+    Uses the number of trailing commas in the header to guide processing.
+    """
+    lines = text_content.splitlines()
+    if not lines:
+        return text_content
+    header_line = lines[0]
+    # Count trailing commas in the header
+    trailing_commas = len(header_line) - len(header_line.rstrip(','))
+    if trailing_commas == 0:
+        return text_content
+    logger.info(f"Malformed CSV found, attempting correction with {trailing_commas} trailing commas in header")
+    headers = header_line.rstrip(',').split(',')
+    num_headers = len(headers)
+    # Find the index of the likely description field that holds the commas
+    desc_col = find_column_index(headers, ['description', 'payee', 'merchant', 'transaction'])
+    if desc_col is None:
+        logger.warning("No description column found, cannot fix malformed CSV")
+        return text_content
+    fixed_lines = [','.join(headers)]
+    for line in lines[1:]:
+        row = line.rstrip(',').split(',')
+        # If row already matches header, keep as is
+        if len(row) == num_headers:
+            fixed_lines.append(','.join(row))
+            continue
+        excess_cols = len(row) - num_headers
+        # Merge the excess columns into the description field and quote it
+        merged_desc = ','.join(row[desc_col:desc_col+excess_cols+1])
+        row[desc_col] = f'"{merged_desc}"'
+        # Remove the merged columns from the row
+        row = row[:desc_col+1] + row[desc_col+excess_cols+1:]
+        fixed_lines.append(','.join(row))
+    return '\n'.join(fixed_lines)
+
 def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = None, field_map: Optional[FieldMap] = None) -> List[Dict[str, Any]]:
     """
     Parse transactions from CSV file content.
@@ -190,19 +228,20 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
     try:
         # Decode the content
         text_content = content.decode('utf-8')
+        # Preprocess CSV text to fix unquoted commas
+        text_content = preprocess_csv_text(text_content)
         
-        # Create a custom dialect for handling unquoted fields with commas
-        class UnquotedDialect(csv.Dialect):
+        # Create a custom dialect for handling quoted fields (after preprocessing)
+        class QuotedDialect(csv.Dialect):
             delimiter = ','
             quotechar = '"'
             doublequote = True
             skipinitialspace = True
             lineterminator = '\n'
             quoting = csv.QUOTE_MINIMAL
-        
-        # Parse CSV using custom dialect
+        # Parse CSV using the updated dialect
         csv_file = io.StringIO(text_content)
-        reader = csv.reader(csv_file, dialect=UnquotedDialect())
+        reader = csv.reader(csv_file, dialect=QuotedDialect())
         
         # Get header row
         header = next(reader, None)

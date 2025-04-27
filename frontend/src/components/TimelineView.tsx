@@ -85,6 +85,27 @@ const TimelineView: React.FC<TimelineViewProps> = ({ files, onFileClick, onGapCl
         rangeBarGroupRows: true
       }
     },
+    dataLabels: {
+      enabled: true,
+      style: {
+        colors: ['#333']
+      },
+      formatter: function(val: any, opts: any) {
+        const item = chartData[opts.dataPointIndex];
+        if (item.isGap) return '';
+        return item.transactionCount !== undefined ? `${item.transactionCount} txns` : '';
+      },
+      background: {
+        enabled: true,
+        borderRadius: 2,
+        padding: 2,
+        opacity: 0.8,
+        borderWidth: 0,
+        dropShadow: {
+          enabled: false
+        }
+      }
+    },
     xaxis: {
       type: 'datetime' as const,
       labels: {

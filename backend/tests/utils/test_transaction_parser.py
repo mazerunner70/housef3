@@ -11,7 +11,8 @@ from utils.transaction_parser import (
     apply_field_mapping,
     find_column_index,
     parse_date,
-    detect_date_order
+    detect_date_order,
+    preprocess_csv_text
 )
 
 class TestTransactionParser(unittest.TestCase):
@@ -366,9 +367,41 @@ bad,data,here'''.encode('utf-8')
         date2 = datetime.strptime("2024-12-01", "%Y-%m-%d")
         self.assertEqual(date1, date2)
 
+    def test_parse_csv_with_commas_in_field(self):
+        """Test parsing CSV where a field contains a comma and is not quoted, causing extra columns."""
+        # Header has an empty field due to extra comma in the data row
+        csv_content = b"Date,Description,Amount,Merchant City,\n2024-08-04,GITHUB,INC.,78.72,SAN FRANCISCO\n2024-08-05,Normal Merchant,12.34,London,\n2024-08-06,Another Merchant,56.78,Paris,\n"
+        # The first row should merge 'GITHUB,INC.' into one field for Description
+        # We'll assume the parser is fixed to handle this, or this test will fail until fixed
+        transactions = parse_csv_transactions(csv_content, 100.0)
+        self.assertEqual(len(transactions), 3)
+        # Check the problematic row
+        self.assertIn('description', transactions[0])
+        self.assertEqual(transactions[0]['description'], 'GITHUB,INC.')
+        self.assertEqual(transactions[0]['amount'], Decimal('78.72'))
+        self.assertEqual(transactions[0]['balance'], Decimal('178.72'))
+        # Check a normal row
+        self.assertEqual(transactions[1]['description'], 'Normal Merchant')
+        self.assertEqual(transactions[1]['amount'], Decimal('12.34'))
+        self.assertEqual(transactions[1]['balance'], Decimal('191.06'))
+
     def assert_transaction_fields(self, transaction, expected):
         for key, value in expected.items():
             self.assertEqual(transaction[key], value)
+
+    def test_preprocess_csv_text_merges_unquoted_commas(self):
+        """Test that preprocess_csv_text merges unquoted commas in description and quotes the field."""
+        csv_text = "Date,Description,Amount,Merchant City,\n2024-08-04,GITHUB,INC.,78.72,SAN FRANCISCO\n2024-08-05,Normal Merchant,12.34,London,\n"
+        expected = (
+            'Date,Description,Amount,Merchant City,\n'
+            '2024-08-04,"GITHUB,INC.",78.72,SAN FRANCISCO,\n'
+            '2024-08-05,Normal Merchant,12.34,London,\n'
+        )
+        # The expected output is that the first data row's description is quoted and merged
+        processed = preprocess_csv_text(csv_text)
+        self.assertIn('"GITHUB,INC."', processed)
+        self.assertEqual(processed.count('"GITHUB,INC."'), 1)
+        self.assertTrue(processed.startswith('Date,Description'))
 
 
 if __name__ == '__main__':

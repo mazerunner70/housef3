@@ -3,10 +3,28 @@ description:
 globs: 
 alwaysApply: true
 ---
-All Terraform code for this project is located in the infrastructure directory. Apply Terraform best practices to files matching this pattern.
 
-globs: infrastructure/**/*.tf
+Backend code
+Located in: backend/src/
 
-- All Terraform code is organized under the infrastructure directory.
-- When editing or generating infrastructure code, reference files from infrastructure/.
-- Follow project-specific conventions for Terraform in this directory.
+The main backend logic, models, and related files are here.
+Frontend code
+Located in: frontend/src/
+All React (or other frontend framework) code and assets are here.
+
+Infrastructure code
+Located in: infrastructure/terraform/
+All Terraform code for infrastructure is here, following project conventions.
+
+Scripts for building frontend and backend
+Frontend build script: scripts/scripts/build_frontend.sh
+Backend build script: scripts/scripts/build_backend.sh
+These scripts handle building and (for frontend) deploying the respective parts.
+
+Script for running frontend tests
+Located in: frontend/fe_unit_tests.sh
+This script installs dependencies if needed and runs frontend unit tests using Jest.
+
+Script for running backend tests
+Located in: backend/run_tests.sh
+This script sets up a Python virtual environment, installs dependencies, and runs backend tests using unittest.
