@@ -51,7 +51,13 @@ if [ -n "$1" ]; then
 else
     # Run all tests if no specific test provided
     echo "Running all tests..."
-    PYTHONPATH=$SRC_PATH LOG_LEVEL=DEBUG LOGGING_CONFIG=tests/logging.conf python3 -m unittest tests/test_getcolors.py tests/utils/test_transaction_parser.py -v 2>&1 | tee test.log
+    # Find all test_*.py files under tests/ recursively
+    TEST_FILES=$(find tests -type f -name 'test_*.py')
+    if [ -z "$TEST_FILES" ]; then
+        echo "No test files found."
+        exit 1
+    fi
+    PYTHONPATH=$SRC_PATH LOG_LEVEL=DEBUG LOGGING_CONFIG=tests/logging.conf python3 -m unittest $TEST_FILES -v 2>&1 | tee test.log
 fi
 
 # Store the exit code

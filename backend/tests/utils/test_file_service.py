@@ -1,9 +1,11 @@
 import unittest
 from unittest.mock import patch, MagicMock
 from services.file_service import get_files_for_user, format_file_metadata
-from src.handlers.file_operations import list_files_handler
+from handlers.file_operations import list_files_handler
 from datetime import datetime
 
+@patch('boto3.resource', MagicMock())
+@patch('utils.db_utils.dynamodb', MagicMock())
 class TestFileService(unittest.TestCase):
     @patch('services.file_service.list_account_files')
     @patch('services.file_service.list_user_files')
@@ -52,6 +54,70 @@ class TestFileService(unittest.TestCase):
         self.assertEqual(formatted['fileId'], 'f2')
         self.assertNotIn('fieldMap', formatted)
 
+@patch('boto3.resource', MagicMock())
+@patch('utils.db_utils.dynamodb', MagicMock())
+class TestFormatFileMetadata(unittest.TestCase):
+    @patch('services.file_service.get_field_map')
+    def test_format_file_metadata_full(self, mock_get_field_map):
+        mock_get_field_map.return_value = MagicMock(field_map_id='fm1', name='Map1', description='desc')
+        file = {
+            'fileId': 'f1',
+            'fileName': 'file.csv',
+            'contentType': 'text/csv',
+            'fileSize': 123,
+            'uploadDate': '2024-01-01',
+            'lastModified': '2024-01-02',
+            'fieldMapId': 'fm1',
+            'openingBalance': '100.0',
+            'accountId': 'acc1',
+            'fileFormat': 'csv',
+            'processingStatus': 'processed',
+            'recordCount': 10,
+            'dateRange': {'start': '2024-01-01', 'end': '2024-01-31'},
+            'errorMessage': None
+        }
+        formatted = format_file_metadata(file)
+        self.assertEqual(formatted['fileId'], 'f1')
+        self.assertEqual(formatted['fieldMap']['fieldMapId'], 'fm1')
+        self.assertEqual(formatted['openingBalance'], 100.0)
+        self.assertEqual(formatted['lastModified'], '2024-01-02')
+        self.assertEqual(formatted['fileFormat'], 'csv')
+        self.assertEqual(formatted['processingStatus'], 'processed')
+        self.assertEqual(formatted['recordCount'], 10)
+        self.assertEqual(formatted['dateRange'], {'start': '2024-01-01', 'end': '2024-01-31'})
+
+    def test_format_file_metadata_minimal(self):
+        file = {
+            'fileId': 'f2',
+            'fileName': 'file2.csv',
+            'contentType': 'text/csv',
+            'fileSize': 456,
+            'uploadDate': '2024-01-02'
+        }
+        formatted = format_file_metadata(file)
+        self.assertEqual(formatted['fileId'], 'f2')
+        self.assertNotIn('fieldMap', formatted)
+        self.assertEqual(formatted['lastModified'], '2024-01-02')
+
+    @patch('services.file_service.get_field_map')
+    def test_format_file_metadata_no_field_map(self, mock_get_field_map):
+        mock_get_field_map.return_value = None
+        file = {
+            'fileId': 'f3',
+            'fileName': 'file3.csv',
+            'contentType': 'text/csv',
+            'fileSize': 789,
+            'uploadDate': '2024-01-03',
+            'fieldMapId': 'fm2',
+            'openingBalance': '200.0'
+        }
+        formatted = format_file_metadata(file)
+        self.assertEqual(formatted['fileId'], 'f3')
+        self.assertNotIn('fieldMap', formatted)
+        self.assertEqual(formatted['openingBalance'], 200.0)
+
+@patch('boto3.resource', MagicMock())
+@patch('utils.db_utils.dynamodb', MagicMock())
 class TestListFilesHandler(unittest.TestCase):
     @patch('services.file_service.get_files_for_user')
     @patch('services.file_service.format_file_metadata')

@@ -4,7 +4,7 @@ Authentication utility functions.
 import logging
 from typing import Dict, Any, Optional
 
-from backend.src.models.account import Account
+from models.account import Account
 from utils.db_utils import get_account, get_transaction_file
 
 # Configure logging

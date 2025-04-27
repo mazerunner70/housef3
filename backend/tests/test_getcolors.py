@@ -7,7 +7,6 @@ from decimal import Decimal
 
 
 from handlers.getcolors import handler
-from utils.http import create_response
 
 
 class TestGetColors(unittest.TestCase):

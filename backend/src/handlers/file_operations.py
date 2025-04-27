@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import uuid
-from backend.src.utils.auth import checked_mandatory_account, checked_optional_account
+from utils.auth import checked_mandatory_account, checked_optional_account
 import boto3
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Union
@@ -19,7 +19,7 @@ from utils.s3_dao import (
 )
 from handlers.file_processor import process_file_with_account
 from services.file_service import get_files_for_user, format_file_metadata, get_files_for_account
-from backend.src.utils.lambda_utils import create_response, mandatory_path_parameter
+from utils.lambda_utils import create_response, mandatory_path_parameter
 
 # Configure logging
 logger = logging.getLogger()

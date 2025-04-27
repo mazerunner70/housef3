@@ -4,7 +4,7 @@ import os
 from typing import Dict, Any, List
 from datetime import datetime
 
-from backend.src.utils.lambda_utils import create_response
+from utils.lambda_utils import create_response
 from utils.auth import get_user_from_event
 
 # Configure logging

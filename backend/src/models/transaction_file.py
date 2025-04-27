@@ -1,6 +1,7 @@
 """
 Transaction file models for the financial account management system.
 """
+from decimal import Decimal
 import enum
 import uuid
 from datetime import datetime
@@ -70,7 +71,7 @@ class TransactionFile:
     date_range_start: Optional[str] = None
     date_range_end: Optional[str] = None
     error_message: Optional[str] = None
-    opening_balance: Optional[float] = None
+    opening_balance: Optional[Decimal] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -106,7 +107,7 @@ class TransactionFile:
             result["errorMessage"] = self.error_message
             
         if self.opening_balance is not None:
-            result["openingBalance"] = str(self.opening_balance)  # Convert to string for DynamoDB
+            result["openingBalance"] = self.opening_balance  # Convert to string for DynamoDB
             
         return result
 
@@ -116,7 +117,7 @@ class TransactionFile:
         Create a transaction file object from a dictionary (e.g. from DynamoDB).
         """
         account_id = data.get("accountId")  # Use get() to handle optional field
-        opening_balance = float(data.get("openingBalance")) if data.get("openingBalance") else None
+        opening_balance = Decimal(str(data.get("openingBalance"))) if data.get("openingBalance") else None
         
         file = cls(
             file_id=data["fileId"],
@@ -144,7 +145,7 @@ class TransactionFile:
         record_count: Optional[int] = None,
         date_range: Optional[Tuple[str, str]] = None,
         error_message: Optional[str] = None,
-        opening_balance: Optional[float] = None
+        opening_balance: Optional[Decimal] = None
     ) -> None:
         """
         Update processing status and related fields.
@@ -209,7 +210,7 @@ def validate_transaction_file_data(data: Dict[str, Any]) -> bool:
     # Validate opening balance if provided
     if "openingBalance" in data:
         try:
-            float(data["openingBalance"])
+            Decimal(str(data["openingBalance"]))
         except (ValueError, TypeError):
             raise ValueError("Opening balance must be a valid number")
     
