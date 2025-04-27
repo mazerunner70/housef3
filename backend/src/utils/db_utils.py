@@ -862,4 +862,46 @@ def update_transaction_statuses_by_status(old_status: str, new_status: str) -> i
         
     except Exception as e:
         logger.error(f"Error updating transaction statuses: {str(e)}")
+        raise
+
+
+def update_file_account_id(file_id: str, account_id: str) -> None:
+    """
+    Update the accountId of a file in the files table.
+    Args:
+        file_id: The unique identifier of the file
+        account_id: The account ID to associate with the file
+    """
+    try:
+        table = get_files_table()
+        update_expression = "SET accountId = :accountId"
+        expression_attribute_values = {":accountId": account_id}
+        table.update_item(
+            Key={'fileId': file_id},
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_attribute_values
+        )
+    except Exception as e:
+        logger.error(f"Error updating accountId for file {file_id}: {str(e)}")
+        raise
+
+
+def update_file_field_map(file_id: str, field_map_id: str) -> None:
+    """
+    Update the fieldMapId of a file in the files table.
+    Args:
+        file_id: The unique identifier of the file
+        field_map_id: The field map ID to associate with the file
+    """
+    try:
+        table = get_files_table()
+        update_expression = "SET fieldMapId = :fieldMapId"
+        expression_attribute_values = {":fieldMapId": field_map_id}
+        table.update_item(
+            Key={'fileId': file_id},
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_attribute_values
+        )
+    except Exception as e:
+        logger.error(f"Error updating fieldMapId for file {file_id}: {str(e)}")
         raise 

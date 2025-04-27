@@ -2,13 +2,14 @@ import json
 import logging
 import os
 import uuid
+from backend.src.utils.auth import checked_account
 import boto3
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Union
 from decimal import Decimal
 from models.transaction_file import FileFormat, ProcessingStatus
 from models.transaction import Transaction
-from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_file_metadata, get_account, list_file_transactions, delete_transactions_for_file, get_field_maps_table, get_field_map
+from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_file_account_id, update_file_field_map, update_transaction_file, delete_file_metadata, get_account, list_file_transactions, delete_transactions_for_file, get_field_maps_table, get_field_map
 from utils.transaction_parser import parse_transactions
 from utils.s3_dao import (
     get_presigned_url,
@@ -17,6 +18,7 @@ from utils.s3_dao import (
     put_object
 )
 from handlers.file_processor import process_file_with_account
+from services.file_service import get_files_for_user, format_file_metadata
 
 # Configure logging
 logger = logging.getLogger()
@@ -145,110 +147,11 @@ def get_presigned_url(bucket: str, key: str, operation: str, expires_in: int = 3
 def list_files_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     """List files for the current user."""
     try:
-        # Log user details for debugging
         logger.info(f"Listing files for user: {user['id']}")
-        
-        # Check if there's an accountId filter
         query_params = event.get('queryStringParameters', {}) or {}
-        account_id = query_params.get('accountId')
-        
-        files = []
-        
-        # If accountId provided, query by accountId
-        if account_id:
-            logger.info(f"Filtering files for account: {account_id}")
-            try:
-                response = file_table.query(
-                    IndexName='AccountIdIndex',
-                    KeyConditionExpression=boto3.dynamodb.conditions.Key('accountId').eq(account_id)
-                )
-                files = response.get('Items', [])
-                logger.info(f"Found {len(files)} files for account {account_id}")
-            except Exception as query_error:
-                logger.error(f"Error querying AccountIdIndex: {str(query_error)}. Exception type: {type(query_error).__name__}")
-        else:
-            # First try using UserIdIndex GSI
-            try:
-                logger.info(f"Attempting to query UserIdIndex GSI for user: {user['id']}")
-                
-                # Query DynamoDB for user's files
-                response = file_table.query(
-                    IndexName='UserIdIndex',
-                    KeyConditionExpression=boto3.dynamodb.conditions.Key('userId').eq(user['id'])
-                )
-                
-                files = response.get('Items', [])
-                logger.info(f"Query successful: Found {len(files)} files for user {user['id']} using GSI")
-                
-            except Exception as query_error:
-                logger.error(f"Error querying UserIdIndex: {str(query_error)}. Exception type: {type(query_error).__name__}")
-            
-            # If GSI query returned no results or failed, fallback to scan
-            if not files:
-                logger.info(f"No files found with GSI or GSI query failed. Trying scan as fallback for user: {user['id']}")
-                
-                try:
-                    # Fallback to scan with filter
-                    scan_response = file_table.scan(
-                        FilterExpression=boto3.dynamodb.conditions.Attr('userId').eq(user['id'])
-                    )
-                    
-                    files = scan_response.get('Items', [])
-                    logger.info(f"Fallback scan found {len(files)} files for user {user['id']}")
-                    
-                    if files:
-                        logger.info(f"First file from scan: {json.dumps(files[0])}")
-                except Exception as scan_error:
-                    logger.error(f"Error in fallback scan: {str(scan_error)}. Exception type: {type(scan_error).__name__}")
-        
-        # Convert DynamoDB response to more user-friendly format
-        formatted_files = []
-        for file in files:
-            print("file", file)
-            formatted_file = {
-                'fileId': file.get('fileId'),
-                'fileName': file.get('fileName'),
-                'contentType': file.get('contentType'),
-                'fileSize': file.get('fileSize'),
-                'uploadDate': file.get('uploadDate'),
-                'lastModified': file.get('lastModified', file.get('uploadDate'))
-            }
-            
-            # Include TransactionFile model specific fields if they exist
-            if 'accountId' in file:
-                formatted_file['accountId'] = file.get('accountId')
-            
-            if 'fileFormat' in file:
-                formatted_file['fileFormat'] = file.get('fileFormat')
-                
-            if 'processingStatus' in file:
-                formatted_file['processingStatus'] = file.get('processingStatus')
-                
-            if 'recordCount' in file:
-                formatted_file['recordCount'] = file.get('recordCount')
-                
-            if 'dateRange' in file:
-                formatted_file['dateRange'] = file.get('dateRange')
-                
-            if 'errorMessage' in file:
-                formatted_file['errorMessage'] = file.get('errorMessage')
-            
-            if 'openingBalance' in file:
-                formatted_file['openingBalance'] = float(file.get('openingBalance'))
-
-            if 'fieldMapId' in file:
-                formatted_file['fieldMapId'] = file.get('fieldMapId')
-                # Get the field map details
-                field_map = get_field_map(file.get('fieldMapId'))
-                if field_map:
-                    formatted_file['fieldMap'] = {
-                        'fieldMapId': field_map.field_map_id,
-                        'name': field_map.name,
-                        'description': field_map.description
-                    }
-            
-            formatted_files.append(formatted_file)
-            
+        account_id = checked_account(query_params.get('accountId'), user['id'])
+        files = get_files_for_user(user['id'], account_id)
+        formatted_files = [format_file_metadata(file) for file in files]
         return create_response(200, {
             'files': formatted_files,
             'user': user,
@@ -699,18 +602,13 @@ def associate_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
         try:
             logger.info(f"Associating file {file_id} with account {account_id}")
             
-            # Create update expression to add accountId
-            update_expression = "SET accountId = :accountId"
-            expression_attribute_values = {
-                ":accountId": account_id
-            }
-            
-            # Update the file
-            file_table.update_item(
-                Key={'fileId': file_id},
-                UpdateExpression=update_expression,
-                ExpressionAttributeValues=expression_attribute_values
-            )
+            update_file_account_id(file_id, account_id)
+
+
+            # read the account metadata from the account table and check if there is a default mapping apply it to this file
+            account_metadata = get_account(account_id)
+            if account_metadata.default_mapping:
+                update_file_field_map(file_id, account_metadata.default_mapping)
             
             # After successfully updating the account association, trigger transaction reprocessing
             try:

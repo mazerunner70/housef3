@@ -4,6 +4,8 @@ Authentication utility functions.
 import logging
 from typing import Dict, Any, Optional
 
+from utils.db_utils import get_account, get_transaction_file
+
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -50,3 +52,15 @@ def get_user_from_event(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Error extracting user from event: {str(e)}")
         return None 
+    
+def checked_file(file_id: str, user_id: str):
+    file = get_transaction_file(file_id)
+    if not file or file.user_id != user_id:
+        raise PermissionError("Not authorized to access this file")
+    return file
+
+def checked_account(account_id: str, user_id: str):
+    account = get_account(account_id)
+    if not account or account.user_id != user_id:
+        raise PermissionError("Not authorized to access this account")
+    return account
