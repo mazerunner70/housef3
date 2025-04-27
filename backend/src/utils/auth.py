@@ -4,6 +4,7 @@ Authentication utility functions.
 import logging
 from typing import Dict, Any, Optional
 
+from backend.src.models.account import Account
 from utils.db_utils import get_account, get_transaction_file
 
 # Configure logging
@@ -55,12 +56,27 @@ def get_user_from_event(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     
 def checked_file(file_id: str, user_id: str):
     file = get_transaction_file(file_id)
-    if not file or file.user_id != user_id:
-        raise PermissionError("Not authorized to access this file")
+    if not file:
+        raise NotFound("File not found")
+    if file.user_id != user_id:
+        raise NotAuthorized("Not authorized to access this file")
     return file
 
-def checked_account(account_id: str, user_id: str):
+class NotFound(Exception): pass
+class NotAuthorized(Exception): pass
+
+def checked_mandatory_account(account_id: str, user_id: str) -> 'Account':
+    account = checked_optional_account(account_id, user_id)
+    if not account:
+        raise NotFound("Account not found")
+    return account
+
+def checked_optional_account(account_id: str, user_id: str) -> Optional['Account']:
+    if not account_id:
+        return None
     account = get_account(account_id)
-    if not account or account.user_id != user_id:
-        raise PermissionError("Not authorized to access this account")
+    if not account:
+        return None
+    if account.user_id != user_id:
+        raise NotAuthorized("Not authorized to access this account")
     return account

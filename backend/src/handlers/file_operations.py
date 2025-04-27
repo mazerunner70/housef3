@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import uuid
-from backend.src.utils.auth import checked_account
+from backend.src.utils.auth import checked_mandatory_account, checked_optional_account
 import boto3
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Union
@@ -18,7 +18,8 @@ from utils.s3_dao import (
     put_object
 )
 from handlers.file_processor import process_file_with_account
-from services.file_service import get_files_for_user, format_file_metadata
+from services.file_service import get_files_for_user, format_file_metadata, get_files_for_account
+from backend.src.utils.lambda_utils import create_response, mandatory_path_parameter
 
 # Configure logging
 logger = logging.getLogger()
@@ -57,13 +58,6 @@ except ImportError as e:
         logger.error(f"Final import attempt failed: {str(e2)}")
         raise
 
-# Custom JSON encoder to handle Decimal values
-class DecimalEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, Decimal):
-            return float(obj) if obj % 1 else int(obj)
-        return super(DecimalEncoder, self).default(obj)
-
 # Initialize AWS clients
 s3_client = boto3.client('s3')
 dynamodb = boto3.resource('dynamodb')
@@ -79,19 +73,6 @@ if not FILE_STORAGE_BUCKET:
 
 # Initialize table resource
 file_table = dynamodb.Table(FILES_TABLE)
-
-def create_response(status_code: int, body: Any) -> Dict[str, Any]:
-    """Create an API Gateway response object."""
-    return {
-        "statusCode": status_code,
-        "headers": {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "Content-Type,Authorization",
-            "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS"
-        },
-        "body": json.dumps(body, cls=DecimalEncoder)
-    }
 
 def get_user_from_event(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Extract user information from the event."""
@@ -149,8 +130,8 @@ def list_files_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str,
     try:
         logger.info(f"Listing files for user: {user['id']}")
         query_params = event.get('queryStringParameters', {}) or {}
-        account_id = checked_account(query_params.get('accountId'), user['id'])
-        files = get_files_for_user(user['id'], account_id)
+        account = checked_optional_account(query_params.get('accountId'), user['id'])
+        files = get_files_for_user(user['id'], account.account_id if account else None)
         formatted_files = [format_file_metadata(file) for file in files]
         return create_response(200, {
             'files': formatted_files,
@@ -165,82 +146,30 @@ def list_files_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str,
         return create_response(500, {"message": "Error listing files"})
 
 def get_files_by_account_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
-    """List files for a specific account."""
+    """List files for a specific account, with authorization and formatting."""
     try:
-        # Get account ID from path parameters
-        account_id = event.get('pathParameters', {}).get('accountId')
-        
-        if not account_id:
-            return create_response(400, {"message": "Account ID is required"})
-        
-        # Verify the account exists and belongs to the user
-        account = get_account(account_id)
-        if not account:
-            return create_response(404, {"message": f"Account not found: {account_id}"})
-        
-        if account.user_id != user['id']:
-            return create_response(403, {"message": "Access denied. You do not own this account"})
-            
-        logger.info(f"Listing files for account: {account_id}")
-        
-        # Query DynamoDB for account's files
-        try:
-            response = file_table.query(
-                IndexName='AccountIdIndex',
-                KeyConditionExpression=boto3.dynamodb.conditions.Key('accountId').eq(account_id)
-            )
-            
-            files = response.get('Items', [])
-            logger.info(f"Found {len(files)} files for account {account_id}")
-            
-            # Convert DynamoDB response to more user-friendly format
-            formatted_files = []
-            for file in files:
-                formatted_file = {
-                    'fileId': file.get('fileId'),
-                    'fileName': file.get('fileName'),
-                    'contentType': file.get('contentType'),
-                    'fileSize': file.get('fileSize'),
-                    'uploadDate': file.get('uploadDate'),
-                    'lastModified': file.get('lastModified', file.get('uploadDate')),
-                    'accountId': file.get('accountId')
-                }
-                
-                # Include TransactionFile model specific fields if they exist
-                if 'fileFormat' in file:
-                    formatted_file['fileFormat'] = file.get('fileFormat')
-                    
-                if 'processingStatus' in file:
-                    formatted_file['processingStatus'] = file.get('processingStatus')
-                    
-                if 'recordCount' in file:
-                    formatted_file['recordCount'] = file.get('recordCount')
-                    
-                if 'dateRange' in file:
-                    formatted_file['dateRange'] = file.get('dateRange')
-                    
-                if 'errorMessage' in file:
-                    formatted_file['errorMessage'] = file.get('errorMessage')
-                
-                if 'openingBalance' in file:
-                    formatted_file['openingBalance'] = float(file.get('openingBalance'))
-                
-                formatted_files.append(formatted_file)
-                
-            return create_response(200, {
-                'files': formatted_files,
-                'user': user,
-                'metadata': {
-                    'totalFiles': len(formatted_files),
-                    'timestamp': datetime.utcnow().isoformat(),
-                    'accountId': account_id
-                }
-            })
-                
-        except Exception as query_error:
-            logger.error(f"Error querying AccountIdIndex: {str(query_error)}. Exception type: {type(query_error).__name__}")
-            return create_response(500, {"message": "Error listing files for account"})
-            
+        account_id = mandatory_path_parameter(event, 'accountId')
+
+        # Authorization: will raise PermissionError if not allowed
+        checked_mandatory_account(account_id, user['id'])
+
+        # Service: get files for this account
+        files = get_files_for_account(account_id)
+        formatted_files = [format_file_metadata(file) for file in files]
+
+        return create_response(200, {
+            'files': formatted_files,
+            'user': user,
+            'metadata': {
+                'totalFiles': len(formatted_files),
+                'timestamp': datetime.utcnow().isoformat(),
+                'accountId': account_id
+            }
+        })
+    except PermissionError:
+        return create_response(403, {"message": "Access denied. You do not own this account"})
+    except ValueError as e:
+        return create_response(400, {"message": str(e)})
     except Exception as e:
         logger.error(f"Error listing files for account: {str(e)}, Exception type: {type(e).__name__}")
         return create_response(500, {"message": "Error listing files for account"})

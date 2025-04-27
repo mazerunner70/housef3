@@ -12,6 +12,11 @@ def get_files_for_user(user_id: str, account_id: Optional[str] = None) -> List[d
     else:
         return list_user_files(user_id)
 
+def get_files_for_account(account_id: str) -> list:
+    """
+    Retrieve files for an account.
+    """
+    return list_account_files(account_id) 
 
 def format_file_metadata(file: dict) -> dict:
     """
@@ -41,3 +46,4 @@ def format_file_metadata(file: dict) -> dict:
                 'description': field_map.description
             }
     return formatted 
+
