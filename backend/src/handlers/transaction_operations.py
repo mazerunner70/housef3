@@ -5,7 +5,7 @@ from typing import Dict, Any
 from models.transaction import Transaction
 from utils.auth import get_user_from_event
 from utils.db_utils import list_user_transactions, get_transactions_table
-from utils.http import create_response
+from backend.src.utils.lambda_utils import create_response
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
