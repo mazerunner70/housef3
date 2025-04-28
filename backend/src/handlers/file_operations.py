@@ -19,7 +19,7 @@ from utils.s3_dao import (
 )
 from handlers.file_processor import process_file_with_account
 from services.file_service import get_files_for_user, format_file_metadata, get_files_for_account
-from utils.lambda_utils import create_response, mandatory_path_parameter
+from utils.lambda_utils import create_response, mandatory_body_parameter, mandatory_path_parameter, handle_error, optional_body_parameter, optional_query_parameter 
 
 # Configure logging
 logger = logging.getLogger()
@@ -65,7 +65,7 @@ dynamodb = boto3.resource('dynamodb')
 # Get environment variables
 ENVIRONMENT = os.environ.get('ENVIRONMENT', 'dev')
 FILE_STORAGE_BUCKET = os.environ.get('FILE_STORAGE_BUCKET', 'housef3-dev-file-storage')
-FILES_TABLE = os.environ.get('FILES_TABLE')
+FILES_TABLE = os.environ.get('FILES_TABLE', 'transaction-files')
 
 if not FILE_STORAGE_BUCKET:
     logger.error("FILE_STORAGE_BUCKET environment variable not set")
@@ -129,8 +129,7 @@ def list_files_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str,
     """List files for the current user."""
     try:
         logger.info(f"Listing files for user: {user['id']}")
-        query_params = event.get('queryStringParameters', {}) or {}
-        account = checked_optional_account(query_params.get('accountId'), user['id'])
+        account = checked_optional_account(optional_query_parameter(event, 'accountId'), user['id'])
         files = get_files_for_user(user['id'], account.account_id if account else None)
         formatted_files = [format_file_metadata(file) for file in files]
         return create_response(200, {
@@ -149,14 +148,9 @@ def get_files_by_account_handler(event: Dict[str, Any], user: Dict[str, Any]) ->
     """List files for a specific account, with authorization and formatting."""
     try:
         account_id = mandatory_path_parameter(event, 'accountId')
-
-        # Authorization: will raise PermissionError if not allowed
         checked_mandatory_account(account_id, user['id'])
-
-        # Service: get files for this account
         files = get_files_for_account(account_id)
         formatted_files = [format_file_metadata(file) for file in files]
-
         return create_response(200, {
             'files': formatted_files,
             'user': user,
@@ -178,29 +172,17 @@ def get_upload_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
     """Generate a presigned URL for file upload."""
     try:
         # Parse request body
-        body = json.loads(event.get('body', '{}'))
-        file_name = body.get('fileName')
-        content_type = body.get('contentType', 'text/plain')
-        file_size = body.get('fileSize', 0)
-        account_id = body.get('accountId')
-        
-        if not file_name:
-            return create_response(400, {"message": "fileName is required"})
-        
+        try:
+            file_name = mandatory_body_parameter(event, 'fileName')
+            content_type = mandatory_body_parameter(event, 'contentType')
+            file_size = mandatory_body_parameter(event, 'fileSize')
+        except ValueError as ve:
+            return handle_error(400, str(ve))
+        account = checked_optional_account(optional_body_parameter(event, 'accountId'), user['id'])
+           
         # Validate account_id if it's provided (for account-file association)
-        if account_id:
-            if not account_id.strip():
-                return create_response(400, {"message": "accountId cannot be empty if provided"})
-            
-            # Verify the account exists and belongs to the user
-            account = get_account(account_id)
-            if not account:
-                return create_response(404, {"message": f"Account not found: {account_id}"})
-            
-            if account.user_id != user['id']:
-                return create_response(403, {"message": "Access denied. You do not own this account"})
-            
-            logger.info(f"Associating file with account: {account_id}")
+        if account:
+            logger.info(f"Associating file with account: {account.account_id}")
         else:
             # If not associated with an account, it's a standalone file
             logger.info("Creating a standalone file (no account association)")
@@ -235,13 +217,13 @@ def get_upload_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
         }
         
         # Add accountId if provided (for transaction files)
-        if account_id:
-            item['accountId'] = account_id
+        if account:
+            item['accountId'] = account.account_id
         
         logger.info(f"Saving file metadata to DynamoDB: {json.dumps(item)}")
         logger.info(f"User ID for index: {user['id']}")
         
-        file_table.put_item(Item=item)
+        create_transaction_file(item)
         
         # Create response with basic fields
         response = {
@@ -255,13 +237,13 @@ def get_upload_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
         }
         
         # Include accountId in response if it was provided
-        if account_id:
-            response['accountId'] = account_id
+        if account:
+            response['accountId'] = account.account_id
             
         return create_response(200, response)
     except Exception as e:
         logger.error(f"Error generating upload URL: {str(e)}, Exception type: {type(e).__name__}")
-        return create_response(500, {"message": "Error generating upload URL"})
+        return handle_error(500, "Error generating upload URL")
 
 def determine_file_format(file_name: str, content_type: str) -> FileFormat:
     """Determine the file format based on file name and content type."""

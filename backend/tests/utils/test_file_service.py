@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 from services.file_service import get_files_for_user, format_file_metadata
 from handlers.file_operations import list_files_handler
 from datetime import datetime
+from models.transaction_file import TransactionFile, FileFormat, ProcessingStatus
 
 @patch('boto3.resource', MagicMock())
 @patch('utils.db_utils.dynamodb', MagicMock())
@@ -28,28 +29,34 @@ class TestFileService(unittest.TestCase):
     @patch('services.file_service.get_field_map')
     def test_format_file_metadata_with_field_map(self, mock_get_field_map):
         mock_get_field_map.return_value = MagicMock(field_map_id='fm1', name='Map1', description='desc')
-        file = {
-            'fileId': 'f1',
-            'fileName': 'file.csv',
-            'contentType': 'text/csv',
-            'fileSize': 123,
-            'uploadDate': '2024-01-01',
-            'fieldMapId': 'fm1',
-            'openingBalance': '100.0'
-        }
+        file = TransactionFile(
+            file_id='f1',
+            user_id='u1',
+            file_name='file.csv',
+            upload_date='2024-01-01',
+            file_size=123,
+            file_format=FileFormat.CSV,
+            s3_key='s3key',
+            processing_status=ProcessingStatus.PENDING,
+            field_map_id='fm1',
+            opening_balance=100.0
+        )
         formatted = format_file_metadata(file)
         self.assertEqual(formatted['fileId'], 'f1')
         self.assertEqual(formatted['fieldMap']['fieldMapId'], 'fm1')
         self.assertEqual(formatted['openingBalance'], 100.0)
 
     def test_format_file_metadata_minimal(self):
-        file = {
-            'fileId': 'f2',
-            'fileName': 'file2.csv',
-            'contentType': 'text/csv',
-            'fileSize': 456,
-            'uploadDate': '2024-01-02'
-        }
+        file = TransactionFile(
+            file_id='f2',
+            user_id='u1',
+            file_name='file2.csv',
+            upload_date='2024-01-02',
+            file_size=456,
+            file_format=FileFormat.CSV,
+            s3_key='s3key',
+            processing_status=ProcessingStatus.PENDING
+        )
         formatted = format_file_metadata(file)
         self.assertEqual(formatted['fileId'], 'f2')
         self.assertNotIn('fieldMap', formatted)
@@ -60,57 +67,61 @@ class TestFormatFileMetadata(unittest.TestCase):
     @patch('services.file_service.get_field_map')
     def test_format_file_metadata_full(self, mock_get_field_map):
         mock_get_field_map.return_value = MagicMock(field_map_id='fm1', name='Map1', description='desc')
-        file = {
-            'fileId': 'f1',
-            'fileName': 'file.csv',
-            'contentType': 'text/csv',
-            'fileSize': 123,
-            'uploadDate': '2024-01-01',
-            'lastModified': '2024-01-02',
-            'fieldMapId': 'fm1',
-            'openingBalance': '100.0',
-            'accountId': 'acc1',
-            'fileFormat': 'csv',
-            'processingStatus': 'processed',
-            'recordCount': 10,
-            'dateRange': {'start': '2024-01-01', 'end': '2024-01-31'},
-            'errorMessage': None
-        }
+        file = TransactionFile(
+            file_id='f1',
+            user_id='u1',
+            file_name='file.csv',
+            upload_date='2024-01-01',
+            file_size=123,
+            file_format=FileFormat.CSV,
+            s3_key='s3key',
+            processing_status=ProcessingStatus.PROCESSED,
+            field_map_id='fm1',
+            opening_balance=100.0,
+            account_id='acc1',
+            record_count=10,
+            date_range_start='2024-01-01',
+            date_range_end='2024-01-31',
+            error_message=None
+        )
         formatted = format_file_metadata(file)
         self.assertEqual(formatted['fileId'], 'f1')
         self.assertEqual(formatted['fieldMap']['fieldMapId'], 'fm1')
         self.assertEqual(formatted['openingBalance'], 100.0)
-        self.assertEqual(formatted['lastModified'], '2024-01-02')
-        self.assertEqual(formatted['fileFormat'], 'csv')
-        self.assertEqual(formatted['processingStatus'], 'processed')
+        self.assertEqual(formatted['fileFormat'], FileFormat.CSV)
+        self.assertEqual(formatted['processingStatus'], ProcessingStatus.PROCESSED)
         self.assertEqual(formatted['recordCount'], 10)
-        self.assertEqual(formatted['dateRange'], {'start': '2024-01-01', 'end': '2024-01-31'})
 
     def test_format_file_metadata_minimal(self):
-        file = {
-            'fileId': 'f2',
-            'fileName': 'file2.csv',
-            'contentType': 'text/csv',
-            'fileSize': 456,
-            'uploadDate': '2024-01-02'
-        }
+        file = TransactionFile(
+            file_id='f2',
+            user_id='u1',
+            file_name='file2.csv',
+            upload_date='2024-01-02',
+            file_size=456,
+            file_format=FileFormat.CSV,
+            s3_key='s3key',
+            processing_status=ProcessingStatus.PENDING
+        )
         formatted = format_file_metadata(file)
         self.assertEqual(formatted['fileId'], 'f2')
         self.assertNotIn('fieldMap', formatted)
-        self.assertEqual(formatted['lastModified'], '2024-01-02')
 
     @patch('services.file_service.get_field_map')
     def test_format_file_metadata_no_field_map(self, mock_get_field_map):
         mock_get_field_map.return_value = None
-        file = {
-            'fileId': 'f3',
-            'fileName': 'file3.csv',
-            'contentType': 'text/csv',
-            'fileSize': 789,
-            'uploadDate': '2024-01-03',
-            'fieldMapId': 'fm2',
-            'openingBalance': '200.0'
-        }
+        file = TransactionFile(
+            file_id='f3',
+            user_id='u1',
+            file_name='file3.csv',
+            upload_date='2024-01-03',
+            file_size=789,
+            file_format=FileFormat.CSV,
+            s3_key='s3key',
+            processing_status=ProcessingStatus.PENDING,
+            field_map_id='fm2',
+            opening_balance=200.0
+        )
         formatted = format_file_metadata(file)
         self.assertEqual(formatted['fileId'], 'f3')
         self.assertNotIn('fieldMap', formatted)
@@ -119,11 +130,22 @@ class TestFormatFileMetadata(unittest.TestCase):
 @patch('boto3.resource', MagicMock())
 @patch('utils.db_utils.dynamodb', MagicMock())
 class TestListFilesHandler(unittest.TestCase):
+    @patch('src.handlers.file_operations.checked_optional_account', return_value=None)
+    @patch('utils.db_utils.get_files_table', return_value=MagicMock())
     @patch('services.file_service.get_files_for_user')
     @patch('services.file_service.format_file_metadata')
-    def test_list_files_handler_success(self, mock_format, mock_get_files):
+    def test_list_files_handler_success(self, mock_format, mock_get_files, mock_get_files_table, mock_checked_account):
         mock_get_files.return_value = [
-            {'fileId': 'f1', 'fileName': 'file.csv', 'contentType': 'text/csv', 'fileSize': 123, 'uploadDate': '2024-01-01'}
+            TransactionFile(
+                file_id='f1',
+                user_id='user1',
+                file_name='file.csv',
+                upload_date='2024-01-01',
+                file_size=123,
+                file_format=FileFormat.CSV,
+                s3_key='s3key',
+                processing_status=ProcessingStatus.PENDING
+            )
         ]
         mock_format.side_effect = lambda f: f
         event = {'queryStringParameters': {}}

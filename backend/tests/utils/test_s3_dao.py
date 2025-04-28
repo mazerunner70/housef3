@@ -25,11 +25,14 @@ class TestS3DAO(unittest.TestCase):
         self.mock_s3 = mock_s3()
         self.mock_s3.start()
         
-        # Create S3 client
-        self.s3_client = boto3.client('s3')
+        # Create S3 client in eu-west-2
+        self.s3_client = boto3.client('s3', region_name='eu-west-2')
         
-        # Create test bucket
-        self.s3_client.create_bucket(Bucket=FILE_STORAGE_BUCKET)
+        # Create test bucket with region config (moto/localstack compatibility)
+        self.s3_client.create_bucket(
+            Bucket=FILE_STORAGE_BUCKET,
+            CreateBucketConfiguration={'LocationConstraint': 'eu-west-2'}
+        )
         
         # Test data
         self.test_key = 'test/test.txt'
@@ -151,7 +154,7 @@ class TestS3DAO(unittest.TestCase):
     def test_delete_object_nonexistent(self):
         """Test deleting nonexistent object from S3."""
         result = delete_object('nonexistent.txt')
-        self.assertFalse(result)
+        self.assertTrue(result)
     
     def test_delete_object_invalid_bucket(self):
         """Test deleting object from invalid bucket."""

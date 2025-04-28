@@ -11,8 +11,8 @@ from botocore.exceptions import ClientError
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Initialize S3 client
-s3_client = boto3.client('s3')
+def get_s3_client():
+    return boto3.client('s3', region_name=os.environ.get('AWS_REGION', 'eu-west-2'))
 
 # Get bucket name from environment
 FILE_STORAGE_BUCKET = os.environ.get('FILE_STORAGE_BUCKET', 'housef3-dev-file-storage')
@@ -38,13 +38,13 @@ def get_presigned_url(bucket: str, key: str, operation: str, expires_in: int = 3
             raise ValueError("Key must be a non-empty string")
             
         if operation.lower() == 'put':
-            return s3_client.generate_presigned_url(
+            return get_s3_client().generate_presigned_url(
                 'put_object',
                 Params={'Bucket': bucket, 'Key': key},
                 ExpiresIn=expires_in
             )
         elif operation.lower() == 'get':
-            return s3_client.generate_presigned_url(
+            return get_s3_client().generate_presigned_url(
                 'get_object',
                 Params={'Bucket': bucket, 'Key': key},
                 ExpiresIn=expires_in
@@ -68,7 +68,7 @@ def delete_object(key: str, bucket: Optional[str] = None) -> bool:
     """
     try:
         bucket = bucket or FILE_STORAGE_BUCKET
-        s3_client.delete_object(Bucket=bucket, Key=key)
+        get_s3_client().delete_object(Bucket=bucket, Key=key)
         return True
     except ClientError as e:
         logger.error(f"Error deleting object from S3: {str(e)}")
@@ -87,7 +87,7 @@ def get_object(key: str, bucket: Optional[str] = None) -> Optional[Dict[str, Any
     """
     try:
         bucket = bucket or FILE_STORAGE_BUCKET
-        response = s3_client.get_object(Bucket=bucket, Key=key)
+        response = get_s3_client().get_object(Bucket=bucket, Key=key)
         return response
     except ClientError as e:
         logger.error(f"Error getting object from S3: {str(e)}")
@@ -108,7 +108,7 @@ def put_object(key: str, body: bytes, content_type: str, bucket: Optional[str] =
     """
     try:
         bucket = bucket or FILE_STORAGE_BUCKET
-        s3_client.put_object(
+        get_s3_client().put_object(
             Bucket=bucket,
             Key=key,
             Body=body,

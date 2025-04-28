@@ -62,26 +62,26 @@ class TestFileProcessorUtils(unittest.TestCase):
         mock_get_file.return_value = self.sample_file_record
         mock_s3.get_object.return_value = {'Body': MagicMock(read=lambda: b'test content')}
         
-        result = get_file_content('test-file-1')
+        result = get_file_content('test-file-1', s3_client=mock_s3)
         self.assertEqual(result, b'test content')
         mock_s3.get_object.assert_called_once()
         
         # Test missing file record
         mock_get_file.return_value = None
-        result = get_file_content('test-file-1')
+        result = get_file_content('test-file-1', s3_client=mock_s3)
         self.assertIsNone(result)
         
         # Test missing S3 key
         self.sample_file_record.s3_key = None
         mock_get_file.return_value = self.sample_file_record
-        result = get_file_content('test-file-1')
+        result = get_file_content('test-file-1', s3_client=mock_s3)
         self.assertIsNone(result)
         
         # Test S3 error
         self.sample_file_record.s3_key = 'test-key'
         mock_get_file.return_value = self.sample_file_record
         mock_s3.get_object.side_effect = Exception('S3 error')
-        result = get_file_content('test-file-1')
+        result = get_file_content('test-file-1', s3_client=mock_s3)
         self.assertIsNone(result)
         
     @patch('utils.file_processor_utils.file_table')
