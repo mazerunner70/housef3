@@ -3,11 +3,10 @@ import logging
 import os
 import uuid
 from utils.auth import NotFound, checked_mandatory_account, checked_mandatory_file, checked_optional_account
-import boto3
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Union
 from decimal import Decimal
-from models.transaction_file import FileFormat, ProcessingStatus
+from models.transaction_file import FileFormat, ProcessingStatus, DateRange, validate_transaction_file_data, transaction_file_to_json
 from models.transaction import Transaction
 from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_file_field_map, update_transaction_file, delete_file_metadata, get_account, list_file_transactions, delete_transactions_for_file, get_field_maps_table, get_field_map
 from utils.transaction_parser import file_type_selector, parse_transactions
@@ -212,10 +211,7 @@ def get_download_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dic
     """Generate a presigned URL for file download."""
     try:
         # Get file ID from path parameters
-        file_id = event.get('pathParameters', {}).get('id')
-        
-        if not file_id:
-            return create_response(400, {"message": "File ID is required"})
+        file_id = mandatory_path_parameter(event, 'id')
             
         # Get file metadata from DynamoDB
         file = checked_mandatory_file(file_id, user['id'])
@@ -224,10 +220,10 @@ def get_download_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dic
         download_url = get_presigned_url(FILE_STORAGE_BUCKET, file.s3_key, 'get')
         
         return create_response(200, {
-            'fileId': file_id,
+            'fileId': file.file_id,
             'downloadUrl': download_url,
-            'fileName': file.fileName,
-            'contentType': file.contentType,
+            'fileName': file.file_name,
+            'contentType': file.content_type,
             'expires': 3600  # URL expires in 1 hour
         })
     except ValueError as ve:        
@@ -265,14 +261,14 @@ def delete_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str
         file = checked_mandatory_file(file_id, user['id'])
             
         # Ensure the file belongs to the requesting user
-        if file.userId != user['id']:
+        if file.user_id != user['id']:
             return create_response(403, {"message": "Access denied"})
         
         # Step 2: Handle account association cleanup
         # Check and log if file is associated with an account for audit purposes
         account_id = None
-        if file.accountId:
-            account_id = file.accountId
+        if file.account_id:
+            account_id = file.account_id
             logger.info(f"File {file_id} is associated with account {account_id}. This association will be removed during deletion.")
             
         # Step 3: Delete associated transactions
@@ -286,8 +282,8 @@ def delete_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str
             
         # Step 4: Delete file content from S3
         # Remove the actual file content from the S3 bucket
-        if not delete_object(file.s3Key):
-            return create_response(500, {"message": f"Error deleting file from S3 with key {file.s3Key}"})
+        if not delete_object(file.s3_key):
+            return create_response(500, {"message": f"Error deleting file from S3 with key {file.s3_key}"})
         
         logger.info(f"Successfully deleted file {file_id} from S3 bucket")
         
@@ -328,12 +324,13 @@ def delete_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str
             }
         })
     except ValueError as e:
-        logger.error(f"Error deleting file: {str(e)}")
+        logger.error(f"Error deleting file: {str(e)}", exc_info=True)
         return handle_error(400, str(e))
     except NotFound as e:
+        logger.error(f"File not found: {str(e)}", exc_info=True)
         return handle_error(404, str(e))
     except Exception as e:
-        logger.error(f"Error deleting file: {str(e)}")
+        logger.error(f"Error deleting file: {str(e)}", exc_info=True)
         return create_response(500, {"message": "Error deleting file"})
 
 def unassociate_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
@@ -347,7 +344,7 @@ def unassociate_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dic
         file = checked_mandatory_file(file_id, user['id'])
         
         # Check if file is associated with an account
-        if not file.accountId:
+        if not file.account_id:
             raise ValueError("File is not associated with any account")
         
         account_id = file.accountId
@@ -383,12 +380,12 @@ def associate_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
         file = checked_mandatory_file(file_id, user['id'])
                 
         # Check if the file already belongs to the user
-        if file.userId != user['id']:
+        if file.user_id != user['id']:
             raise ValueError("Access denied to the specified file")
                 
             # Check if the file is already associated with an account
-        if file.accountId:
-            logger.info(f"File {file_id} is already associated with account {file.accountId}")
+        if file.account_id:
+            logger.info(f"File {file_id} is already associated with account {file.account_id}")
             raise ValueError("File is already associated with an account")   
         
         # Verify that the account exists and belongs to the user
@@ -396,18 +393,18 @@ def associate_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
             
         # Update the file to add account association
         logger.info(f"Associating file {file_id} with account {account_id}")
-        update_transaction_file(file_id, {'accountId': account_id})
+        update_transaction_file(file_id, {'account_id': account_id})
         
         # Update the file to add account association
         try:
             logger.info(f"Associating file {file_id} with account {account_id}")      
-            update_transaction_file(file_id, {'accountId': account_id})
+            update_transaction_file(file_id, {'account_id': account_id})
             # read the account metadata from the account table and check if there is a default mapping apply it to this file
 
             if account.default_mapping:
                 update_file_field_map(file_id, account.default_mapping)
             #next update the openingbalance if there is overlap between this file and the others associated with this account
-            process_file_with_account(file_id, file.content, file.file_format, file.openingBalance, user['id'])      
+            process_file_with_account(file_id, file.content, file.file_format, file.opening_balance, user['id'])      
         except Exception as update_error:
             logger.error(f"Error updating file: {str(update_error)}")
             return create_response(500, {"message": "Error associating file with account"})
@@ -492,43 +489,20 @@ def get_file_metadata_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Di
         # Get file metadata from DynamoDB
         file = checked_mandatory_file(file_id, user['id'])
         
-        # Convert DynamoDB response to user-friendly format
-        formatted_file = {
-            'fileId': file.fileId,
-            'fileName': file.fileName,
-            'contentType': file.contentType,
-            'fileSize': file.fileSize,
-            'uploadDate': file.uploadDate,
-            'lastModified': file.lastModified
-        }
+        # Convert to JSON-friendly format with proper type handling
+        file_json = json.loads(transaction_file_to_json(file))
         
-        # Tidy up attribute copying
-        attrs = [
-            ('accountId', 'accountId'),
-            ('fileFormat', 'fileFormat'),
-            ('processingStatus', 'processingStatus'),
-            ('recordCount', 'recordCount'),
-            ('dateRange', 'dateRange'),
-            ('errorMessage', 'errorMessage'),
-        ]
-        for attr, key in attrs:
-            value = getattr(file, attr, None)
-            if value is not None:
-                formatted_file[key] = value
-        if getattr(file, 'openingBalance', None) is not None:
-            formatted_file['openingBalance'] = float(file.openingBalance)
-        
-        # Include TransactionFile model specific fields if they exist
-        if file.fieldMapId:
-            field_map = get_field_map(file.fieldMapId)
+        # Add field map information if it exists
+        if 'fieldMapId' in file_json:
+            field_map = get_field_map(file_json['fieldMapId'])
             if field_map:
-                formatted_file['fieldMap'] = {
+                file_json['fieldMap'] = {
                     'fieldMapId': field_map.field_map_id,
                     'name': field_map.name,
                     'description': field_map.description
                 }
         
-        return create_response(200, formatted_file)
+        return create_response(200, file_json)
     except Exception as e:
         logger.error(f"Error getting file metadata: {str(e)}")
         return create_response(500, {"message": "Error getting file metadata"})
@@ -608,9 +582,9 @@ def get_file_content_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dic
             
         return create_response(200, {
             'fileId': file_id,
-        'content': content.decode('utf-8'),
-            'contentType': file.contentType,
-            'fileName': file.fileName
+            'content': content.decode('utf-8'),
+            'contentType': file.content_type,
+            'fileName': file.file_name
         })
             
     except Exception as e:
@@ -658,10 +632,10 @@ def update_file_field_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -
                 return create_response(500, {"message": "Error reading file content"})
             
             # Get file format
-            file_format = FileFormat(file.fileFormat)
+            file_format = FileFormat(file.file_format)
             
             # Get opening balance if exists
-            opening_balance = float(file.openingBalance) if file.openingBalance else None
+            opening_balance = float(file.opening_balance) if file.opening_balance else None
             
             # Process transactions with new field map
             result = process_file_with_account(

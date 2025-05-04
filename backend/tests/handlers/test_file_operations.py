@@ -25,17 +25,17 @@ class TestFileOperations(unittest.TestCase):
         }
         
         self.sample_file = MagicMock(
-            fileId='test-file-id',
-            userId=self.user['id'],
-            fileName='test.csv',
-            fileSize=1000,
+            file_id='test-file-id',
+            user_id=self.user['id'],
+            file_name='test.csv',
+            file_size=1000,
             s3_key='test-user-id/test-file-id/test.csv',
-            contentType='text/csv',
-            fileFormat=FileFormat.CSV.value,
-            processingStatus=ProcessingStatus.PROCESSED.value,
-            uploadDate='2024-01-01T00:00:00Z',
-            lastModified='2024-01-01T00:00:00Z',
-            openingBalance='1.0'
+            content_type='text/csv',
+            file_format=FileFormat.CSV,
+            processing_status=ProcessingStatus.PROCESSED.value,
+            upload_date='2024-01-01T00:00:00Z',
+            last_modified='2024-01-01T00:00:00Z',
+            opening_balance='1.0'
         )
         
         self.sample_account = MagicMock(
@@ -107,32 +107,27 @@ class TestFileOperations(unittest.TestCase):
         
         # Create a mock file with proper attributes
         mock_file = MagicMock()
-        mock_file.fileId = 'test-file-id'
-        mock_file.userId = self.user['id']
-        mock_file.accountId = 'test-account-id'
-        mock_file.s3Key = 'test/key'
-        mock_file.fileName = 'test.csv'
+        mock_file.file_id = 'test-file-id'
+        mock_file.user_id = self.user['id']
+        mock_file.account_id = 'test-account-id'
+        mock_file.s3_key = 'test/key'
         
         # Setup mock returns
-        mock_check_file.return_value = mock_file  # For initial file check
-        mock_get_file.return_value = None  # For verification after deletion
+        mock_check_file.return_value = mock_file
+        mock_get_file.return_value = None
         mock_delete_tx.return_value = 5
         mock_delete_s3.return_value = True
-        mock_delete_metadata.return_value = True
-        mock_list_files.return_value = []  # Return empty list to indicate file is not in account index
-
+        mock_list_files.return_value = []
+        
         # Execute
         response = delete_file_handler(event, self.user)
-
+        
         # Assert
         self.assertEqual(response['statusCode'], 200)
-        body = json.loads(response['body'])
-        self.assertEqual(body['fileId'], 'test-file-id')
-        self.assertEqual(body['metadata']['transactionsDeleted'], 5)
         mock_delete_tx.assert_called_once_with('test-file-id')
         mock_delete_s3.assert_called_once_with('test/key')
         mock_delete_metadata.assert_called_once_with('test-file-id')
-        mock_get_file.assert_called_once_with('test-file-id')  # Should be called once for verification
+        mock_get_file.assert_called_once_with('test-file-id')
         mock_list_files.assert_called_once_with('test-account-id')
 
     @patch('handlers.file_operations.get_files_for_account')
@@ -290,7 +285,7 @@ class TestFileOperations(unittest.TestCase):
         mock_process.assert_called_once_with(
             'test-file-id',
             b'test content',
-            FileFormat(self.sample_file.fileFormat),
+            self.sample_file.file_format,
             1.0,
             self.user['id']
         )

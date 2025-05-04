@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any, Tuple
 from dataclasses import dataclass
+import json
 
 
 class FileFormat(str, enum.Enum):
@@ -238,3 +239,24 @@ def validate_transaction_file_data(data: Dict[str, Any]) -> bool:
         raise ValueError("Error message must be 1000 characters or less")
     
     return True 
+
+def type_default(obj):
+    if isinstance(obj, Decimal):
+        return float(obj)  # Convert Decimal to float for JSON
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError
+
+def transaction_file_to_json(file):
+    """Convert a TransactionFile object to a JSON string with proper type handling."""
+    # If already a TransactionFile object, use to_dict; else, from_dict
+    if isinstance(file, TransactionFile):
+        d = file.to_dict()
+    else:
+        d = TransactionFile.from_dict(file).to_dict()
+    
+    # Handle date range formatting if both start and end exist
+    if 'dateRangeStart' in d and 'dateRangeEnd' in d:
+        d['dateRange'] = f"{d.pop('dateRangeStart')} to {d.pop('dateRangeEnd')}"
+    
+    return json.dumps(d, default=type_default) 

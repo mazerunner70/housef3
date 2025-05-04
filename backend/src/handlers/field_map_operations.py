@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional
 from botocore.exceptions import ClientError
 
 from models import FieldMap, validate_field_map_data
-from backend.src.utils.lambda_utils import create_response, handle_error
+from utils.lambda_utils import create_response, handle_error
 from utils.auth import get_user_from_event
 from utils.db_utils import get_field_maps_table
 
