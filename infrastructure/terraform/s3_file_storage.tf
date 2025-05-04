@@ -39,10 +39,19 @@ resource "aws_s3_bucket_cors_configuration" "file_storage" {
   bucket = aws_s3_bucket.file_storage.id
 
   cors_rule {
-    allowed_headers = ["*"]
+    allowed_headers = [
+      "*",
+      "Content-Type",
+      "x-amz-meta-accountid",
+      "x-amz-date",
+      "x-amz-algorithm",
+      "x-amz-credential",
+      "x-amz-security-token",
+      "authorization"
+    ]
     allowed_methods = ["GET", "PUT", "POST", "DELETE", "HEAD"]
     allowed_origins = ["https://${aws_cloudfront_distribution.frontend.domain_name}", "http://localhost:5173"]
-    expose_headers  = ["ETag", "Content-Type", "Content-Length", "Content-Disposition"]
+    expose_headers  = ["ETag", "Content-Type", "Content-Length", "Content-Disposition", "x-amz-request-id"]
     max_age_seconds = 3600
   }
 }
@@ -118,21 +127,17 @@ data "aws_iam_policy_document" "file_storage_policy" {
     effect = "Allow"
     principals {
       type        = "AWS"
-      identifiers = ["*"]
+      identifiers = ["arn:aws:iam::661792079381:user/terraform-housef2", aws_iam_role.lambda_exec.arn]
     }
     actions = [
       "s3:PutObject",
       "s3:GetObject",
-      "s3:DeleteObject"
+      "s3:DeleteObject",
+      "s3:PutObjectAcl"
     ]
     resources = [
       "${aws_s3_bucket.file_storage.arn}/*"
     ]
-    condition {
-      test     = "StringLike"
-      variable = "aws:userId"
-      values   = ["${aws_cognito_user_pool.main.id}:*"]
-    }
   }
 }
 
@@ -147,7 +152,7 @@ resource "aws_s3_bucket_public_access_block" "file_storage" {
   bucket = aws_s3_bucket.file_storage.id
 
   block_public_acls       = true
-  block_public_policy     = true
+  block_public_policy     = false  # Allow bucket policies
   ignore_public_acls      = true
   restrict_public_buckets = true
 }

@@ -138,73 +138,69 @@ def get_files_by_account_handler(event: Dict[str, Any], user: Dict[str, Any]) ->
         return create_response(500, {"message": "Error listing files for account"})
 
 def get_upload_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate a presigned URL for file upload."""
+    """Generate a presigned URL for direct S3 upload without creating metadata."""
     try:
         # Parse request body
-        file_name = mandatory_body_parameter(event, 'fileName')
-        file_size = mandatory_body_parameter(event, 'fileSize')
-
-        account = checked_optional_account(optional_body_parameter(event, 'accountId'), user['id'])
-           
-        # Validate account_id if it's provided (for account-file association)
-        if account:
-            logger.info(f"Associating file with account: {account.account_id}")
-        else:
-            # If not associated with an account, it's a standalone file
-            logger.info("Creating a standalone file (no account association)")
+        key = mandatory_body_parameter(event, 'key')
+        content_type = mandatory_body_parameter(event, 'contentType')
+        account_id = optional_body_parameter(event, 'accountId')
+        
+        # Validate the key starts with the user's ID for security
+        if not key.startswith(f"{user['id']}/"):
+            return create_response(403, {'message': 'Invalid key prefix'})
             
-        # Generate a unique file ID
-        file_id = generate_file_id()
-        
-        # Use user ID as part of the key for organization
-        file_key = f"{user['id']}/{file_id}/{file_name}"
-        
-        # Generate presigned URL for upload
-        upload_url = get_presigned_url(FILE_STORAGE_BUCKET, file_key, 'put')
-     
-        # Store file metadata in DynamoDB
-        current_time = datetime.utcnow().isoformat()
-        
-        # Create basic item with required fields
-        item = {
-            'fileId': file_id,
-            'userId': user['id'],
-            'fileName': file_name,
-            'fileSize': file_size,
-            'uploadDate': current_time,
-            'lastModified': current_time,
-            's3Key': file_key,
-            'processingStatus': ProcessingStatus.PENDING.value,
-        }
-        
-        # Add accountId if provided (for transaction files)
-        if account:
-            item['accountId'] = account.account_id
-        
-        logger.info(f"Saving file metadata to DynamoDB: {json.dumps(item)}")
-        logger.info(f"User ID for index: {user['id']}")
-        
-        create_transaction_file(item)
-        
-        # Create response with basic fields
-        response = {
-            'fileId': file_id,
-            'uploadUrl': upload_url,
-            'fileName': file_name,
-            'expires': 3600,  # URL expires in 1 hour
-            'processingStatus': ProcessingStatus.PENDING.value,
-        }
-        
-        # Include accountId in response if it was provided
-        if account:
-            response['accountId'] = account.account_id
+        # If account_id is provided, verify user has access to it
+        if account_id:
+            try:
+                checked_mandatory_account(account_id, user['id'])
+            except ValueError as e:
+                return create_response(403, {'message': str(e)})
             
-        return create_response(200, response)
+        # Generate presigned URL for upload with metadata headers allowed
+        # Use a starts-with condition for Content-Type to be more flexible
+        conditions = [
+            ['starts-with', '$Content-Type', '']
+        ]
+        
+        # Prepare fields for presigned URL
+        fields = {}
+        
+        # If account_id is provided, explicitly allow it in the policy
+        if account_id:
+            # Add the x-amz-meta-accountid field to allowed fields
+            conditions.append({'x-amz-meta-accountid': account_id})
+            # Also add it to the fields so it gets included in the form
+            fields['x-amz-meta-accountid'] = account_id
+            
+        # Get presigned post data with all fields pre-populated
+        presigned_data = get_presigned_url(
+            FILE_STORAGE_BUCKET, 
+            key, 
+            'post', 
+            conditions=conditions,
+            fields=fields
+        )
+        
+        # Add content type to fields to ensure it's sent correctly
+        if 'fields' in presigned_data:
+            presigned_data['fields']['Content-Type'] = content_type
+        
+        # Extract file ID from key (format: userId/fileId/filename)
+        file_id = key.split('/')[1]
+        
+        logger.info(f"Generated presigned URL data: {json.dumps(presigned_data)}")
+        
+        return create_response(200, {
+            'url': presigned_data['url'],
+            'fields': presigned_data['fields'],
+            'fileId': file_id,
+            'expires': 3600  # URL expires in 1 hour
+        })
     except ValueError as ve:
         return handle_error(400, str(ve))
     except Exception as e:
-        logger.error(f"Error generating upload URL: {str(e)}, Exception type: {type(e).__name__}")
-        return handle_error(500, "Error generating upload URL")
+        logger.error(f"Error generating S3 upload URL: {str(e)}")
+        return handle_error(500, "Error generating S3 upload URL")
 
 
 def get_download_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
@@ -404,7 +400,7 @@ def associate_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
             if account.default_mapping:
                 update_file_field_map(file_id, account.default_mapping)
             #next update the openingbalance if there is overlap between this file and the others associated with this account
-            process_file_with_account(file_id, file.content, file.file_format, file.opening_balance, user['id'])      
+            process_file_with_account(file_id, file.content, file.opening_balance if file.opening_balance else Decimal('0'), user['id'])      
         except Exception as update_error:
             logger.error(f"Error updating file: {str(update_error)}")
             return create_response(500, {"message": "Error associating file with account"})
@@ -446,14 +442,10 @@ def update_file_balance_handler(event: Dict[str, Any], user: Dict[str, Any]) -> 
                 # Get file content from S3
                 content_bytes = get_object_content(s3_key)
                 
-                # Get file format
-                file_format = FileFormat(file.file_format)
-                
                 # Process transactions with new opening balance
                 transaction_count = process_file_with_account(
                     file_id, 
                     content_bytes, 
-                    file_format, 
                     opening_balance,
                     user['id']
                 )
@@ -631,17 +623,13 @@ def update_file_field_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -
             if content_bytes is None:
                 return create_response(500, {"message": "Error reading file content"})
             
-            # Get file format
-            file_format = FileFormat(file.file_format)
-            
             # Get opening balance if exists
-            opening_balance = float(file.opening_balance) if file.opening_balance else None
+            opening_balance = file.opening_balance if file.opening_balance else Decimal('0')
             
             # Process transactions with new field map
             result = process_file_with_account(
                 file_id, 
                 content_bytes, 
-                file_format, 
                 opening_balance,
                 user['id']
             )
@@ -675,51 +663,48 @@ def update_file_field_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main Lambda handler for file operations."""
-    logger.info(f"Processing request with event: {json.dumps(event)}")
-    
-    # Handle preflight OPTIONS request
-    if event.get("requestContext", {}).get("http", {}).get("method") == "OPTIONS":
-        return create_response(200, {"message": "OK"})
-    
-    # Extract user information
-    user = get_user_from_event(event)
-    if not user:
-        logger.error("No user found in token")
-        return create_response(401, {"message": "Unauthorized"})
-    
-    # Get the HTTP method and route
-    method = event.get("requestContext", {}).get("http", {}).get("method", "").upper()
-    route = event.get("routeKey", "")
-    
-    # Log request details
-    logger.info(f"Request: {method} {route}")
-    
-    # Handle based on route
-    if route == "GET /files":
-        return list_files_handler(event, user)
-    elif route == "GET /files/account/{accountId}":
-        return get_files_by_account_handler(event, user)
-    elif route == "POST /files/upload":
-        return get_upload_url_handler(event, user)
-    elif route == "GET /files/{id}/metadata":
-        return get_file_metadata_handler(event, user)
-    elif route == "GET /files/{id}/content":
-        return get_file_content_handler(event, user)
-    elif route == "GET /files/{id}/download":
-        return get_download_url_handler(event, user)
-    elif route == "GET /files/{id}/transactions":
-        return get_file_transactions_handler(event, user)
-    elif route == "DELETE /files/{id}/transactions":
-        return delete_file_transactions_handler(event, user)
-    elif route == "DELETE /files/{id}":
-        return delete_file_handler(event, user)
-    elif route == "POST /files/{id}/unassociate":
-        return unassociate_file_handler(event, user)
-    elif route == "POST /files/{id}/associate":
-        return associate_file_handler(event, user)
-    elif route == "POST /files/{id}/balance":
-        return update_file_balance_handler(event, user)
-    elif route == "PUT /files/{id}/field-map":
-        return update_file_field_map_handler(event, user)
-    else:
-        return create_response(400, {"message": f"Unsupported route: {route}"}) 
+    try:
+        # Get route from event
+        route = event.get('routeKey')
+        if not route:
+            return create_response(400, {"message": "Missing route key"})
+            
+        # Get user from event
+        user = get_user_from_event(event)
+        if not user:
+            return create_response(401, {"message": "Unauthorized"})
+            
+        logger.info(f"Processing {route} request for user {user.get('id')}")
+        
+        # Handle based on route
+        if route == "GET /files":
+            return list_files_handler(event, user)
+        elif route == "GET /files/account/{accountId}":
+            return get_files_by_account_handler(event, user)
+        elif route == "GET /files/{id}/metadata":
+            return get_file_metadata_handler(event, user)
+        elif route == "GET /files/{id}/content":
+            return get_file_content_handler(event, user)
+        elif route == "GET /files/{id}/download":
+            return get_download_url_handler(event, user)
+        elif route == "GET /files/{id}/transactions":
+            return get_file_transactions_handler(event, user)
+        elif route == "DELETE /files/{id}/transactions":
+            return delete_file_transactions_handler(event, user)
+        elif route == "DELETE /files/{id}":
+            return delete_file_handler(event, user)
+        elif route == "POST /files/{id}/unassociate":
+            return unassociate_file_handler(event, user)
+        elif route == "POST /files/{id}/associate":
+            return associate_file_handler(event, user)
+        elif route == "POST /files/{id}/balance":
+            return update_file_balance_handler(event, user)
+        elif route == "PUT /files/{id}/field-map":
+            return update_file_field_map_handler(event, user)
+        elif route == "POST /files/upload":
+            return get_upload_url_handler(event, user)
+        else:
+            return create_response(400, {"message": f"Unsupported route: {route}"})
+    except Exception as e:
+        logger.error(f"Error in handler: {str(e)}")
+        return create_response(500, {"message": "Internal server error"}) 

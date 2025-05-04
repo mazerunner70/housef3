@@ -362,17 +362,17 @@ def create_transaction_file(file_data: Dict[str, Any]) -> TransactionFile:
         file_id = file_data.get('fileId', str(uuid.uuid4()))
         
         # Create transaction file object
-        file = TransactionFile(
-            file_id=file_id,
-            account_id=file_data['accountId'],
-            user_id=file_data['userId'],
-            file_name=file_data['fileName'],
-            upload_date=datetime.utcnow().isoformat(),
-            file_size=int(file_data['fileSize']),
-            file_format=file_data['fileFormat'],
-            s3_key=file_data['s3Key'],
-            processing_status=file_data.get('processingStatus', ProcessingStatus.PENDING)
-        )
+        file = TransactionFile.from_dict({
+            'fileId': file_id,
+            'accountId': file_data.get('accountId'),
+            'userId': file_data['userId'],
+            'fileName': file_data['fileName'],
+            'uploadDate': datetime.utcnow().isoformat(),
+            'fileSize': int(file_data['fileSize']),
+            'fileFormat': file_data.get('fileFormat'),
+            's3Key': file_data['s3Key'],
+            'processingStatus': file_data.get('processingStatus', ProcessingStatus.PENDING)
+        })
         
         # Save to DynamoDB
         get_files_table().put_item(Item=file.to_dict())

@@ -97,8 +97,8 @@ resource "aws_apigatewayv2_route" "list_files_by_account" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
-# File upload URL route
-resource "aws_apigatewayv2_route" "get_upload_url" {
+# S3 direct upload URL route
+resource "aws_apigatewayv2_route" "get_s3_upload_url" {
   api_id             = aws_apigatewayv2_api.main.id
   route_key          = "POST /files/upload"
   target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
@@ -405,6 +405,15 @@ resource "aws_lambda_permission" "api_gateway_files" {
   function_name = aws_lambda_function.file_operations.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/files*"
+}
+
+# Lambda permission for upload endpoint
+resource "aws_lambda_permission" "api_gateway_upload" {
+  statement_id  = "AllowAPIGatewayInvokeUpload"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.file_operations.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/files/upload"
 }
 
 # Lambda permission for account operations

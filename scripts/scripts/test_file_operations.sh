@@ -78,45 +78,60 @@ else
   echo "Using real account ID: $TEST_ACCOUNT_ID (name: $ACCOUNT_NAME)"
 fi
 
-# Step 2: Get upload URL
-echo -e "\n2. Testing POST /files/upload"
-UPLOAD_ENDPOINT="${API_ENDPOINT%/files}/files/upload"
-UPLOAD_PAYLOAD="{\"fileName\":\"test_file.txt\", \"contentType\":\"text/plain\", \"fileSize\": $FILE_SIZE, \"fileFormat\": \"other\"}"
+# Step 2: Test file upload
+echo -e "\n2. Testing POST /upload"
+UPLOAD_ENDPOINT="${API_ENDPOINT}/upload"
 
-echo "Upload endpoint: $UPLOAD_ENDPOINT"
-echo "Upload payload: $UPLOAD_PAYLOAD"
-echo "Authorization header: Authorization: ${TOKEN:0:20}..."
+# Generate a unique file ID
+FILE_ID=$(uuidgen)
+FILE_NAME="test_${FILE_ID}.csv"
+CONTENT_TYPE="text/csv"
+FILE_SIZE=1024
 
+# Create the S3 key using the user ID and file ID
+S3_KEY="${USER_ID}/${FILE_ID}/${FILE_NAME}"
+
+# Get presigned URL
+echo "Getting presigned URL..."
 UPLOAD_RESPONSE=$(curl -s -X POST "$UPLOAD_ENDPOINT" \
-  -H "Authorization: $TOKEN" \
+  -H "Authorization: Bearer $ID_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "$UPLOAD_PAYLOAD")
+  -d "{
+    \"key\": \"$S3_KEY\",
+    \"contentType\": \"$CONTENT_TYPE\"
+  }")
 
-echo "Upload response:"
-echo "$UPLOAD_RESPONSE" | jq .
+echo "Upload response: $UPLOAD_RESPONSE"
 
-FILE_ID=$(echo "$UPLOAD_RESPONSE" | jq -r '.fileId')
-UPLOAD_URL=$(echo "$UPLOAD_RESPONSE" | jq -r '.uploadUrl')
-PROCESSING_STATUS=$(echo "$UPLOAD_RESPONSE" | jq -r '.processingStatus')
-FILE_FORMAT=$(echo "$UPLOAD_RESPONSE" | jq -r '.fileFormat')
+# Extract URL and fields from response
+UPLOAD_URL=$(echo $UPLOAD_RESPONSE | jq -r '.url')
+FIELDS=$(echo $UPLOAD_RESPONSE | jq -r '.fields')
 
-if [ "$FILE_ID" == "null" ] || [ -z "$FILE_ID" ]; then
-  handle_error "Failed to get file ID"
+if [ -z "$UPLOAD_URL" ] || [ "$UPLOAD_URL" = "null" ]; then
+  echo "Error: Failed to get upload URL"
+  exit 1
 fi
 
-echo "Received file ID: $FILE_ID"
-echo "Processing status: $PROCESSING_STATUS"
-echo "File format: $FILE_FORMAT"
+echo "Upload URL: $UPLOAD_URL"
+echo "Fields: $FIELDS"
 
-# Step 3: Upload file
-echo -e "\n3. Testing file upload using pre-signed URL"
-curl -s -X PUT "$UPLOAD_URL" \
-  -H "Content-Type: text/plain" \
-  --data-binary @"$TEST_FILE"
+# Create a test file
+echo "Creating test file..."
+echo "test,data,123" > "$FILE_NAME"
 
-echo "File uploaded successfully"
+# Upload file using curl with form data
+echo "Uploading file..."
+curl -s -X POST "$UPLOAD_URL" \
+  -F "key=$S3_KEY" \
+  -F "Content-Type=$CONTENT_TYPE" \
+  -F "file=@$FILE_NAME"
 
-# Step 4: List files (after upload)
+# Clean up test file
+rm "$FILE_NAME"
+
+echo "File upload test complete"
+
+# Step 3: List files (after upload)
 echo -e "\n4. Testing GET /files (after upload)"
 LIST_RESPONSE=$(curl -s "$API_ENDPOINT" -H "Authorization: $TOKEN")
 echo "$LIST_RESPONSE" | jq .
@@ -124,7 +139,7 @@ echo "$LIST_RESPONSE" | jq .
 FILE_COUNT=$(echo "$LIST_RESPONSE" | jq -r '.metadata.totalFiles // "0"')
 echo "Found $FILE_COUNT files"
 
-# Step 5: Query files by account ID 
+# Step 4: Query files by account ID 
 echo -e "\n5. Testing GET /files?accountId=$TEST_ACCOUNT_ID"
 ACCOUNT_LIST_RESPONSE=$(curl -s "$API_ENDPOINT?accountId=$TEST_ACCOUNT_ID" -H "Authorization: $TOKEN")
 echo "$ACCOUNT_LIST_RESPONSE" | jq .

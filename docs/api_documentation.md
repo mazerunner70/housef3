@@ -66,31 +66,40 @@ Returns a list of all files for the authenticated user.
 }
 ```
 
-#### POST /files/upload
+### File Operations
 
-Generates a pre-signed URL for file upload.
+#### POST /upload
+Generate a presigned URL for direct S3 file upload.
 
 **Request Body:**
 ```json
 {
-  "fileName": "example.csv",
-  "contentType": "text/csv",
-  "fileSize": 1024
+  "key": "string",         // S3 key in format: userId/fileId/fileName
+  "contentType": "string", // File content type
+  "accountId": "string"    // Optional: Account ID to associate the file with
 }
 ```
 
-**Example Response:**
+**Response:**
 ```json
 {
-  "fileId": "c2920fef-23ce-400c-926e-76a6884aabd9",
-  "uploadUrl": "https://housef3-dev-file-storage.s3.amazonaws.com/...",
-  "fileName": "example.csv",
-  "contentType": "text/csv",
-  "expires": 3600,
-  "processingStatus": "pending",
-  "fileFormat": "csv"
+  "url": "string",         // S3 presigned POST URL
+  "fields": {             // Form fields required for the POST request
+    "key": "string",
+    "Content-Type": "string",
+    ...additional AWS fields
+  },
+  "fileId": "string",     // Extracted from the key
+  "expires": number       // URL expiration time in seconds
 }
 ```
+
+**Notes:**
+- The presigned URL is valid for 1 hour
+- The key must start with the authenticated user's ID
+- If accountId is provided, it must belong to the authenticated user
+- Use multipart form upload with the provided fields and URL
+- Add x-amz-meta-accountid field to form data if associating with an account
 
 #### GET /files/{id}/download
 

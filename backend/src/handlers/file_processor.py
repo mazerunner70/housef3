@@ -16,6 +16,7 @@ from utils.transaction_parser import parse_transactions, file_type_selector
 from models.transaction import Transaction
 from utils.file_analyzer import analyze_file_format
 from utils.db_utils import (
+    create_transaction_file,
     get_transaction_file,
     update_transaction_file,
     create_transaction,
@@ -33,6 +34,7 @@ from utils.file_processor_utils import (
     calculate_opening_balance_from_duplicates
 )
 from datetime import datetime
+import time
 
 # Configure logging
 logger = logging.getLogger()
@@ -83,7 +85,7 @@ FIELD_MAPS_TABLE = os.environ.get('FIELD_MAPS_TABLE', 'field-maps')
 transaction_table = dynamodb.Table(TRANSACTIONS_TABLE)
 field_maps_table = dynamodb.Table(FIELD_MAPS_TABLE)
 
-def process_file_with_account(file_id: str, content_bytes: bytes, file_format: FileFormat, opening_balance: float, user_id: str) -> Dict[str, Any]:
+def process_file_with_account(file_id: str, content_bytes: bytes, opening_balance: Decimal, user_id: str) -> Dict[str, Any]:
     """
     Process a file and its transactions with account-specific logic.
     This includes:
@@ -92,12 +94,12 @@ def process_file_with_account(file_id: str, content_bytes: bytes, file_format: F
     - Account association
     - Transaction status tracking
     - Opening balance calculation from duplicates
+    - File format determination
     
     Args:
         file_id: ID of the file to process
         content_bytes: File content as bytes
-        file_format: Format of the file
-        opening_balance: Opening balance to use for running totals
+        opening_balance: Opening balance to use for running totals (as Decimal)
         user_id: ID of the user who owns the file
         
     Returns:
@@ -111,6 +113,20 @@ def process_file_with_account(file_id: str, content_bytes: bytes, file_format: F
                 'statusCode': 404,
                 'body': json.dumps({'message': 'File not found'})
             }
+
+        # Determine file format if not already set
+        file_format = None
+        if hasattr(file_record, 'file_format') and file_record.file_format:
+            try:
+                file_format = FileFormat(file_record.file_format)
+            except ValueError:
+                logger.warning(f"Invalid file format stored: {file_record.file_format}, will re-detect")
+                
+        if not file_format:
+            file_format = file_type_selector(content_bytes)
+            logger.info(f"Detected file format: {file_format}")
+            # Update file record with detected format
+            update_transaction_file(file_id, {"file_format": file_format.value})
             
         # Get field map if specified
         field_map = None
@@ -240,7 +256,7 @@ def process_file_with_account(file_id: str, content_bytes: bytes, file_format: F
             'body': json.dumps({'message': f'Error processing transactions: {str(e)}'})
         }
 
-def lambda_handler(event, context):
+def handler(event, context):
     """
     Lambda handler for processing transaction files via S3 upload events only.
     Handles only S3 event triggers.
@@ -252,45 +268,83 @@ def lambda_handler(event, context):
             record = event["Records"][0]
             bucket = record["s3"]["bucket"]["name"]
             key = record["s3"]["object"]["key"]
+            size = record["s3"]["object"].get("size", 0)
             logger.info(f"Processing S3 event for bucket: {bucket}, key: {key}")
 
-            # Download file from S3
-            content_bytes = s3_client.get_object(Bucket=bucket, Key=key)["Body"].read()
+            # Extract user_id and file_id from the key path (format: user_id/file_id/filename)
+            key_parts = key.split('/')
+            if len(key_parts) != 3:
+                logger.error(f"Invalid S3 key format: {key}")
+                return {
+                    'statusCode': 400,
+                    'body': json.dumps({'message': 'Invalid S3 key format'})
+                }
+            
+            user_id = key_parts[0]
+            file_id = key_parts[1]
+            file_name = key_parts[2]
 
-            # Detect file type
-            file_format = file_type_selector(content_bytes)
-            logger.info(f"Detected file format: {file_format}")
+            try:
+                # Get object metadata first to check for account ID
+                object_metadata = s3_client.head_object(Bucket=bucket, Key=key)
+                logger.info(f"S3 object metadata: {json.dumps(object_metadata.get('Metadata', {}))}")
+                account_id = object_metadata.get('Metadata', {}).get('accountid')
+                logger.info(f"Found account ID in metadata: {account_id}")
 
-            # Find the file record by S3 key
-            file_records = find_file_records_by_s3_key(key)
-            if not file_records:
-                logger.error(f"No file record found for S3 key: {key}")
+                # Download file from S3
+                logger.info(f"Attempting to download file from S3: {bucket}/{key}")
+                content_bytes = s3_client.get_object(Bucket=bucket, Key=key)["Body"].read()
+                logger.info(f"Successfully downloaded file from S3, size: {len(content_bytes)} bytes")
+
+                # Detect file type
+                file_format = file_type_selector(content_bytes)
+                logger.info(f"Detected file format: {file_format}")
+
+                # Create or update file metadata in DynamoDB
+                current_time = datetime.utcnow().isoformat()
+                file_data = {
+                    'fileId': file_id,
+                    'userId': user_id,
+                    'fileName': file_name,
+                    'fileSize': size,
+                    'uploadDate': current_time,
+                    'lastModified': current_time,
+                    's3Key': key,
+                    'fileFormat': file_format.value,
+                    'processingStatus': ProcessingStatus.PENDING.value
+                }
+
+                # Add account ID if it was found in metadata
+                if account_id:
+                    file_data['accountId'] = account_id
+                    logger.info(f"Adding account ID to file metadata: {account_id}")
+
+                # Create the file record
+                create_transaction_file(file_data)
+                logger.info(f"Created file metadata in DynamoDB: {json.dumps(file_data)}")
+
+                process_file_with_account(file_id, content_bytes, Decimal('0'), user_id)
+                return {
+                    'statusCode': 200,
+                    'body': json.dumps({
+                        'message': 'File processed and metadata created.',
+                        'fileId': file_id,
+                        'fileFormat': file_format.value
+                    })
+                }
+
+            except s3_client.exceptions.NoSuchKey:
+                logger.error(f"File not found in S3: {bucket}/{key}")
                 return {
                     'statusCode': 404,
-                    'body': json.dumps({'message': f'No file record found for S3 key: {key}'})
+                    'body': json.dumps({'message': 'File not found in S3 bucket'})
                 }
-            file_record = file_records[0]
-            file_id = file_record["fileId"]
-
-            # Update file record with detected file format
-            update_transaction_file(file_id, {"file_format": file_format.value})
-
-            # Optionally, process the file (uncomment if you want auto-processing)
-            # user_id = file_record.get('userId')
-            # opening_balance = float(file_record.get('openingBalance', 0))
-            # response = process_file_with_account(
-            #     file_id=file_id,
-            #     content_bytes=content_bytes,
-            #     file_format=file_format,
-            #     opening_balance=opening_balance,
-            #     user_id=user_id
-            # )
-            # return response
-
-            return {
-                'statusCode': 200,
-                'body': json.dumps({'message': 'File type detected and record updated.', 'fileId': file_id, 'fileFormat': file_format.value})
-            }
+            except Exception as s3_error:
+                logger.error(f"Error processing file: {str(s3_error)}")
+                return {
+                    'statusCode': 500,
+                    'body': json.dumps({'message': f'Error processing file: {str(s3_error)}'})
+                }
         else:
             logger.error("Lambda invoked with unsupported event structure (not an S3 event)")
             return {
@@ -299,11 +353,6 @@ def lambda_handler(event, context):
             }
     except Exception as e:
         logger.error(f"Error in file processor lambda: {str(e)}")
-        if 'file_id' in locals():
-            update_transaction_file(file_id, {
-                'processingStatus': ProcessingStatus.ERROR,
-                'errorMessage': str(e)
-            })
         return {
             'statusCode': 500,
             'headers': {

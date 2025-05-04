@@ -1,7 +1,11 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { getUploadUrl, uploadFileToS3 } from '../services/FileService';
 import { Account, listAccounts } from '../services/AccountService';
+import { getCurrentUser } from '../services/AuthService';
 import './FileUpload.css';
+
+// Import parseJwt function
+import { parseJwt } from '../services/AuthService';
 
 // Maximum file size (5MB)
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -111,16 +115,30 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
       setUploading(true);
       setSuccess(false);
       
-      // Step 1: Get presigned URL (now with optional accountId)
+      // Get current user ID
+      const currentUser = getCurrentUser();
+      console.log('Current user state:', currentUser); // Debug log
+      
+      if (!currentUser) {
+        throw new Error('No user found - please log in');
+      }
+      
+      if (!currentUser.id) {
+        console.log('Token payload:', parseJwt(currentUser.token)); // Debug log
+        throw new Error('User ID not found - please log out and log in again');
+      }
+      
+      // Step 1: Get presigned URL with correct parameters
       const uploadUrlData = await getUploadUrl(
         selectedFile.name,
         selectedFile.type,
         selectedFile.size,
-        selectedAccountId ?? undefined // Convert null to undefined
+        currentUser.id,
+        selectedAccountId || undefined // Pass account ID as fifth parameter
       );
       
-      // Step 2: Upload file to S3
-      await uploadFileToS3(uploadUrlData.uploadUrl, selectedFile);
+      // Step 2: Upload file to S3 with account ID
+      await uploadFileToS3(uploadUrlData, selectedFile, selectedAccountId || undefined);
       
       // Upload complete
       setUploadProgress(100);

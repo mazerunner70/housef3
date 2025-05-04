@@ -21,6 +21,7 @@ export interface AuthUser {
   token: string;
   refreshToken: string;
   tokenExpiry: number;
+  id: string;  // User ID from Cognito sub claim
 }
 
 // Current authenticated user state
@@ -52,10 +53,28 @@ export const getCurrentUser = (): AuthUser | null => {
     if (userStr) {
       try {
         currentUser = JSON.parse(userStr);
+        
+        // If we have a token but no ID, try to extract ID from token
+        if (currentUser && currentUser.token && !currentUser.id) {
+          const payload = parseJwt(currentUser.token);
+          if (payload.sub) {
+            currentUser.id = payload.sub;
+            // Update storage with ID
+            storeUser(currentUser);
+          }
+        }
       } catch (error) {
         console.error('Error parsing auth user:', error);
         return null;
       }
+    }
+  } else if (currentUser.token && !currentUser.id) {
+    // Also check current memory user for missing ID
+    const payload = parseJwt(currentUser.token);
+    if (payload.sub) {
+      currentUser.id = payload.sub;
+      // Update storage with ID
+      storeUser(currentUser);
     }
   }
   return currentUser;
@@ -135,7 +154,8 @@ export const signIn = async (username: string, password: string): Promise<AuthUs
       email: payload.email,
       token: IdToken,
       refreshToken: RefreshToken,
-      tokenExpiry: Date.now() + (ExpiresIn || 3600) * 1000 // Convert to milliseconds
+      tokenExpiry: Date.now() + (ExpiresIn || 3600) * 1000, // Convert to milliseconds
+      id: payload.sub // Extract sub claim as user ID
     };
     
     // Store user in local storage and update current user
@@ -189,7 +209,8 @@ export const refreshToken = async (refreshToken: string): Promise<AuthUser> => {
       username: payload['cognito:username'] || currentUser.username,
       email: payload.email || currentUser.email,
       token: IdToken,
-      tokenExpiry: Date.now() + (ExpiresIn || 3600) * 1000 // Convert to milliseconds
+      tokenExpiry: Date.now() + (ExpiresIn || 3600) * 1000, // Convert to milliseconds
+      id: payload.sub || currentUser.id // Maintain the user ID, fallback to existing
     };
     
     // Store updated user in local storage and update current user
@@ -203,7 +224,7 @@ export const refreshToken = async (refreshToken: string): Promise<AuthUser> => {
 };
 
 // Helper function to parse JWT
-function parseJwt(token: string) {
+export function parseJwt(token: string) {
   try {
     const base64Url = token.split('.')[1];
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
@@ -222,5 +243,6 @@ export default {
   signIn,
   signOut,
   getCurrentUser,
-  isAuthenticated
+  isAuthenticated,
+  parseJwt
 }; 

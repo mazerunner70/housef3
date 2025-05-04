@@ -4,7 +4,7 @@ S3 Data Access Object for handling S3 operations.
 import logging
 import os
 import boto3
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 from botocore.exceptions import ClientError
 
 # Configure logging
@@ -17,18 +17,21 @@ def get_s3_client():
 # Get bucket name from environment
 FILE_STORAGE_BUCKET = os.environ.get('FILE_STORAGE_BUCKET', 'housef3-dev-file-storage')
 
-def get_presigned_url(bucket: str, key: str, operation: str, expires_in: int = 3600) -> str:
+def get_presigned_url(bucket: str, key: str, operation: str, expires_in: int = 3600, conditions: Optional[list] = None, fields: Optional[Dict[str, str]] = None) -> Union[str, Dict[str, Any]]:
     """
     Generate a presigned URL for S3 operations.
     
     Args:
         bucket: The S3 bucket name
         key: The S3 key
-        operation: The operation ('put' or 'get')
+        operation: The operation ('put', 'post', or 'get')
         expires_in: URL expiration time in seconds
+        conditions: Optional list of conditions for the presigned URL policy
+        fields: Optional fields to include in the presigned POST URL
         
     Returns:
-        The presigned URL
+        For PUT/GET: The presigned URL as string
+        For POST with conditions: Dict containing 'url' and 'fields' for the form
     """
     try:
         if not isinstance(bucket, str) or not bucket:
@@ -37,14 +40,77 @@ def get_presigned_url(bucket: str, key: str, operation: str, expires_in: int = 3
         if not isinstance(key, str) or not key:
             raise ValueError("Key must be a non-empty string")
             
-        if operation.lower() == 'put':
-            return get_s3_client().generate_presigned_url(
+        client = get_s3_client()
+        
+        if operation.lower() == 'post':
+            # Generate a presigned POST URL with fields for browser-based uploads
+            post_fields = {}
+            if fields:
+                post_fields.update(fields)
+                
+            # Always include the key in the fields
+            if 'key' not in post_fields:
+                post_fields['key'] = key
+                
+            post_conditions = [
+                {'bucket': bucket}
+            ]
+            
+            # If the key is not in fields, add a condition for it
+            if 'key' not in post_fields:
+                post_conditions.append({'key': key})
+            
+            # Add additional conditions if provided
+            if conditions:
+                post_conditions.extend(conditions)
+                
+            logger.info(f"Generating presigned POST URL with conditions: {post_conditions}")
+            logger.info(f"Fields: {post_fields}")
+                
+            response = client.generate_presigned_post(
+                Bucket=bucket,
+                Key=key,
+                Fields=post_fields,
+                Conditions=post_conditions,
+                ExpiresIn=expires_in
+            )
+            logger.info(f"Generated presigned POST URL for {bucket}/{key}")
+            return response  # Return both URL and fields
+        elif operation.lower() == 'put':
+            params = {
+                'Bucket': bucket,
+                'Key': key
+            }
+            
+            # If conditions are provided, use post_presigned_url
+            if conditions:
+                post_fields = {}
+                if fields:
+                    post_fields.update(fields)
+                
+                post_conditions = [
+                    {'bucket': bucket},
+                    {'key': key}
+                ]
+                post_conditions.extend(conditions)
+                
+                response = client.generate_presigned_post(
+                    Bucket=bucket,
+                    Key=key,
+                    Fields=post_fields,
+                    Conditions=post_conditions,
+                    ExpiresIn=expires_in
+                )
+                return response  # Return both URL and fields
+            
+            # Otherwise use standard presigned URL
+            return client.generate_presigned_url(
                 'put_object',
-                Params={'Bucket': bucket, 'Key': key},
+                Params=params,
                 ExpiresIn=expires_in
             )
         elif operation.lower() == 'get':
-            return get_s3_client().generate_presigned_url(
+            return client.generate_presigned_url(
                 'get_object',
                 Params={'Bucket': bucket, 'Key': key},
                 ExpiresIn=expires_in

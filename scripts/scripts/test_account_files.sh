@@ -319,4 +319,58 @@ else
   echo "✅ File association was properly removed when account was deleted"
 fi
 
+# Test file upload with account association
+echo -e "\n3c. Testing POST /upload with account association"
+
+# Generate a unique file ID
+FILE_ID=$(uuidgen)
+FILE_NAME="test_${FILE_ID}.csv"
+CONTENT_TYPE="text/csv"
+FILE_SIZE=1024
+
+# Create the S3 key using the user ID and file ID
+S3_KEY="${USER_ID}/${FILE_ID}/${FILE_NAME}"
+
+# Get presigned URL with account association
+echo "Getting presigned URL..."
+UPLOAD_RESPONSE=$(curl -s -X POST "${API_ENDPOINT}/upload" \
+  -H "Authorization: Bearer $ID_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"key\": \"$S3_KEY\",
+    \"contentType\": \"$CONTENT_TYPE\",
+    \"accountId\": \"$ACCOUNT_ID\"
+  }")
+
+echo "Upload response: $UPLOAD_RESPONSE"
+
+# Extract URL and fields from response
+UPLOAD_URL=$(echo $UPLOAD_RESPONSE | jq -r '.url')
+FIELDS=$(echo $UPLOAD_RESPONSE | jq -r '.fields')
+
+if [ -z "$UPLOAD_URL" ] || [ "$UPLOAD_URL" = "null" ]; then
+  echo "Error: Failed to get upload URL"
+  exit 1
+fi
+
+echo "Upload URL: $UPLOAD_URL"
+echo "Fields: $FIELDS"
+
+# Create a test file
+echo "Creating test file..."
+echo "test,data,123" > "$FILE_NAME"
+
+# Upload file using curl with form data
+echo "Uploading file..."
+curl -s -X POST "$UPLOAD_URL" \
+  -F "key=$S3_KEY" \
+  -F "Content-Type=$CONTENT_TYPE" \
+  -F "x-amz-meta-accountid=$ACCOUNT_ID" \
+  -F "file=@$FILE_NAME"
+
+# Clean up test file
+rm "$FILE_NAME"
+
+echo "File upload with account association test complete"
+
 echo -e "\nAll account-file association tests completed successfully! ✅" 

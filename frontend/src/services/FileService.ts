@@ -1,5 +1,6 @@
 import { getCurrentUser, refreshToken, isAuthenticated } from './AuthService';
 import { FieldMap } from './FieldMapService';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface FileMetadata {
   fileId: string;
@@ -84,6 +85,11 @@ export interface FileResponse {
     name: string;
     description?: string;
   };
+}
+
+interface PresignedPostData {
+  url: string;
+  fields: Record<string, string>;
 }
 
 // Get API endpoint from environment variables
@@ -181,26 +187,38 @@ export const getUploadUrl = async (
   fileName: string, 
   contentType: string, 
   fileSize: number, 
+  userId: string,
   accountId?: string
-): Promise<UploadUrlResponse> => {
+): Promise<PresignedPostData> => {
   try {
-    const requestBody: any = {
+    // Generate a unique file ID
+    const fileId = uuidv4();
+    
+    // Create the S3 key using the user ID, file ID, and filename
+    const s3Key = `${userId}/${fileId}/${fileName}`;
+    
+    console.log('Getting presigned URL with:', {
       fileName,
       contentType,
-      fileSize
-    };
-    
-    // Add accountId to request if provided
-    if (accountId) {
-      requestBody.accountId = accountId;
-    }
-    
-    const response = await authenticatedRequest(`${API_ENDPOINT}/upload`, {
-      method: 'POST',
-      body: JSON.stringify(requestBody)
+      fileSize,
+      userId,
+      accountId,
+      s3Key
     });
     
-    const data: UploadUrlResponse = await response.json();
+    // Get presigned URL for S3 upload
+    const response = await authenticatedRequest(`${API_ENDPOINT}/upload`, {
+      method: 'POST',
+      body: JSON.stringify({
+        key: s3Key,
+        contentType,
+        accountId
+      })
+    });
+    
+    const data = await response.json();
+    console.log('Received presigned URL data:', data);
+    
     return data;
   } catch (error) {
     console.error('Error getting upload URL:', error);
@@ -209,19 +227,63 @@ export const getUploadUrl = async (
 };
 
 // Upload file to S3 using presigned URL
-export const uploadFileToS3 = async (uploadUrl: string, file: File): Promise<void> => {
+export const uploadFileToS3 = async (presignedData: PresignedPostData, file: Blob, accountId?: string): Promise<void> => {
   try {
-    const response = await fetch(uploadUrl, {
-      method: 'PUT',
-      body: file,
-      headers: {
-        'Content-Type': file.type
-      }
+    // For logging, safely get file properties
+    const fileName = file instanceof File ? file.name : 'unnamed-blob';
+    const fileType = file.type || 'application/octet-stream';
+    const fileSize = file.size;
+    
+    console.log('Starting S3 upload with:', {
+      url: presignedData.url,
+      fields: presignedData.fields,
+      accountId,
+      fileName,
+      fileType,
+      fileSize
+    });
+
+    const formData = new FormData();
+    
+    // Add all fields from presigned URL - these MUST come before the file
+    Object.entries(presignedData.fields).forEach(([key, value]) => {
+      formData.append(key, value);
+      console.log(`Adding presigned field: ${key} = ${value}`);
     });
     
-    if (!response.ok) {
-      throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+    // Add the file - MUST be the last field and named 'file'
+    formData.append('file', file);
+    
+    console.log('FormData contents:');
+    for (const [key, value] of formData.entries()) {
+      console.log(`${key}: ${value instanceof Blob ? 'File data' : value}`);
     }
+    
+    // Set proper options for S3 direct upload
+    const uploadOptions = {
+      method: 'POST',
+      body: formData,
+      // IMPORTANT: Do not set Content-Type header - the browser will set it with boundary
+      headers: {}
+    };
+    
+    const response = await fetch(presignedData.url, uploadOptions);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Upload failed with response:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+        body: errorText
+      });
+      throw new Error(`Upload failed: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    console.log('Upload successful:', {
+      status: response.status,
+      headers: Object.fromEntries(response.headers.entries())
+    });
   } catch (error) {
     console.error('Error uploading file to S3:', error);
     throw error;

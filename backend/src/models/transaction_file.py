@@ -63,9 +63,9 @@ class TransactionFile:
     file_name: str
     upload_date: str
     file_size: int
-    file_format: FileFormat
     s3_key: str
     processing_status: ProcessingStatus
+    file_format: Optional[FileFormat] = None
     account_id: Optional[str] = None
     field_map_id: Optional[str] = None
     record_count: Optional[int] = None
@@ -84,10 +84,12 @@ class TransactionFile:
             "fileName": self.file_name,
             "uploadDate": self.upload_date,
             "fileSize": str(self.file_size),  # Convert to string for DynamoDB
-            "fileFormat": self.file_format.value,
             "s3Key": self.s3_key,
             "processingStatus": self.processing_status.value
         }
+        
+        if self.file_format:
+            result["fileFormat"] = self.file_format.value
         
         # Add account_id only if it exists
         if self.account_id:
@@ -126,9 +128,9 @@ class TransactionFile:
             file_name=data["fileName"],
             upload_date=data["uploadDate"],
             file_size=int(data["fileSize"]),
-            file_format=FileFormat(data["fileFormat"]),
             s3_key=data["s3Key"],
             processing_status=ProcessingStatus(data["processingStatus"]),
+            file_format=FileFormat(data.get("fileFormat")) if data.get("fileFormat") else None,
             account_id=account_id,
             field_map_id=data.get("fieldMapId"),
             record_count=int(data.get("recordCount")) if data.get("recordCount") else None,
@@ -172,16 +174,17 @@ def validate_transaction_file_data(data: Dict[str, Any]) -> bool:
     
     Returns True if valid, raises ValueError with details if invalid.
     """
-    required_fields = ["userId", "fileName", "fileSize", "fileFormat", "s3Key"]
+    required_fields = ["userId", "fileName", "fileSize", "s3Key"]
     
     # Check required fields
     for field in required_fields:
         if field not in data or not data[field]:
             raise ValueError(f"Missing required field: {field}")
     
-    # Validate file format
-    if "fileFormat" in data and data["fileFormat"] not in [f.value for f in FileFormat]:
-        raise ValueError(f"Invalid file format: {data['fileFormat']}")
+    # Validate file format if provided
+    if "fileFormat" in data and data["fileFormat"]:
+        if data["fileFormat"] not in [f.value for f in FileFormat]:
+            raise ValueError(f"Invalid file format: {data['fileFormat']}")
     
     # Validate processing status if provided
     if "processingStatus" in data and data["processingStatus"] not in [s.value for s in ProcessingStatus]:
