@@ -23,7 +23,7 @@ from models import (
 from models.transaction import Transaction
 from boto3.dynamodb.conditions import Key, Attr
 from models.field_map import FieldMap
-from utils.transaction_utils import generate_transaction_hash, check_duplicate_transaction
+from utils.transaction_utils import generate_transaction_hash
 
 # Configure logging
 logger = logging.getLogger()
@@ -459,7 +459,7 @@ def delete_transaction_file(file_id: str) -> bool:
         raise
 
 
-def list_file_transactions(file_id: str) -> List[Dict[str, Any]]:
+def list_file_transactions(file_id: str) -> List[Transaction]:
     """
     List all transactions for a specific file.
     
@@ -467,14 +467,14 @@ def list_file_transactions(file_id: str) -> List[Dict[str, Any]]:
         file_id: The unique identifier of the file
         
     Returns:
-        List of transaction dictionaries
+        List of TransactionFile objects
     """
     try:
         response = get_transactions_table().query(
             IndexName='FileIdIndex',
             KeyConditionExpression=Key('fileId').eq(file_id)
         )
-        return response.get('Items', [])
+        return [Transaction.from_dict(item) for item in response.get('Items', [])]
     except ClientError as e:
         logger.error(f"Error listing transactions for file {file_id}: {str(e)}")
         raise
@@ -904,4 +904,52 @@ def update_file_field_map(file_id: str, field_map_id: str) -> None:
         )
     except Exception as e:
         logger.error(f"Error updating fieldMapId for file {file_id}: {str(e)}")
-        raise 
+        raise
+
+
+def get_transaction_by_account_and_hash(account_id: str, transaction_hash: int) -> Optional[Transaction]:
+    """
+    Retrieve a transaction by accountId and transactionHash using the TransactionHashIndex.
+    Args:
+        account_id: The account ID
+        transaction_hash: The transaction hash
+    Returns:
+        Transaction object if found, None otherwise
+    """
+    try:
+        response = get_transactions_table().query(
+            IndexName='TransactionHashIndex',
+            KeyConditionExpression=Key('accountId').eq(account_id) & Key('transactionHash').eq(transaction_hash)
+        )
+        items = response.get('Items', [])
+        if items:
+            return Transaction.from_dict(items[0])
+        return None
+    except Exception as e:
+        logger.error(f"Error retrieving transaction by account and hash: {str(e)}")
+        return None 
+    
+def check_duplicate_transaction(transaction: Dict[str, Any], account_id: str) -> bool:
+    """
+    Check if a transaction already exists for the given account using numeric hash.
+    
+    Args:
+        transaction: Dictionary containing transaction details
+        account_id: ID of the account to check for duplicates
+        
+    Returns:
+        bool: True if duplicate found, False otherwise
+    """
+    try:
+        logger.info(f"Entering check_duplicate_transaction for account_id: {account_id}")
+        transaction_hash = generate_transaction_hash(
+            account_id,
+            transaction['date'],
+            Decimal(str(transaction['amount'])),
+            transaction['description']
+        )
+        existing = get_transaction_by_account_and_hash(account_id, transaction_hash)
+        return existing is not None
+    except Exception as e:
+        logger.error(f"Error checking for duplicate transaction: {str(e)}")
+        return False 

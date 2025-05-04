@@ -19,7 +19,8 @@ from utils.db_utils import (
     create_transaction,
     delete_transactions_for_file,
     get_field_map,
-    get_account_default_field_map
+    get_account_default_field_map,
+    get_transaction_by_account_and_hash
 )
 
 # Configure logging
@@ -49,25 +50,16 @@ def check_duplicate_transaction(transaction: Dict[str, Any], account_id: str) ->
         bool: True if duplicate found, False otherwise
     """
     try:
-        # Generate the same hash that would be stored with the transaction
         transaction_hash = Transaction.generate_transaction_hash(
             account_id,
             transaction['date'],
-            Decimal(str(transaction['amount'])),  # Ensure amount is Decimal
+            Decimal(str(transaction['amount'])),
             transaction['description']
         )
-        
-        # Query DynamoDB using the account ID and hash
-        response = transaction_table.query(
-            IndexName='TransactionHashIndex',
-            KeyConditionExpression=boto3.dynamodb.conditions.Key('accountId').eq(account_id) & 
-                                 boto3.dynamodb.conditions.Key('transactionHash').eq(transaction_hash)
-        )
-        
-        return len(response.get('Items', [])) > 0
+        existing = get_transaction_by_account_and_hash(account_id, transaction_hash)
+        return existing is not None
     except Exception as e:
         logger.error(f"Error checking for duplicate transaction: {str(e)}")
-        # If there's an error checking for duplicates, return False to allow the transaction
         return False
 
 def create_composite_key(user_id: str, transaction: Dict[str, Any]) -> str:

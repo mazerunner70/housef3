@@ -29,28 +29,29 @@ class TestFileProcessorUtils(unittest.TestCase):
             file_id='test-file-1'
         )
         
-    @patch('utils.file_processor_utils.transaction_table')
-    def test_check_duplicate_transaction(self, mock_table):
+    @patch('utils.file_processor_utils.get_transaction_by_account_and_hash')
+    def test_check_duplicate_transaction(self, mock_get_tx):
         """Test duplicate transaction checking."""
         # Test exact match
-        mock_table.query.return_value = {'Items': [self.sample_transaction]}
+        mock_get_tx.return_value = self.sample_transaction
         result = check_duplicate_transaction(self.sample_transaction, 'test-account')
         self.assertTrue(result)
-        mock_table.query.assert_called_once()
-        
+        mock_get_tx.assert_called_once()
+
         # Test no match
-        mock_table.query.return_value = {'Items': []}
+        mock_get_tx.reset_mock()
+        mock_get_tx.return_value = None
         result = check_duplicate_transaction(self.sample_transaction, 'test-account')
         self.assertFalse(result)
-        
+
         # Test different amount
         different_transaction = self.sample_transaction.copy()
         different_transaction['amount'] = '200.00'
         result = check_duplicate_transaction(different_transaction, 'test-account')
         self.assertFalse(result)
-        
+
         # Test error handling
-        mock_table.query.side_effect = Exception('Test error')
+        mock_get_tx.side_effect = Exception('Test error')
         result = check_duplicate_transaction(self.sample_transaction, 'test-account')
         self.assertFalse(result)
         

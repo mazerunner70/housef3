@@ -32,7 +32,8 @@ __all__ = [
     'apply_field_mapping',
     'find_column_index',
     'parse_date',
-    'detect_date_order'
+    'detect_date_order',
+    'file_type_selector',
 ]
 
 def detect_date_order(dates: List[str]) -> str:
@@ -507,3 +508,32 @@ def parse_ofx_transactions(content: bytes, opening_balance: float) -> List[Dict[
     except Exception as e:
         logger.error(f"Error parsing OFX/QFX content: {str(e)}")
         return []
+
+def file_type_selector(content: bytes) -> Optional[FileFormat]:
+    """
+    Detect the file format (CSV, OFX, QFX) from the raw content bytes.
+    Returns a FileFormat enum value if positively determined, otherwise None.
+    """
+    try:
+        text = content.decode('utf-8', errors='ignore').strip()
+    except Exception:
+        return None  # Could not decode
+
+    # Check for OFX/QFX markers
+    if text.startswith('<OFX') or 'OFXHEADER:' in text or 'DATA:OFXSGML' in text:
+        return FileFormat.OFX
+    if text.startswith('<QFX'):
+        return FileFormat.QFX
+    # Check for XML root tag
+    if text.startswith('<?xml') or text.startswith('<'):
+        # Heuristic: if it contains <OFX> or <QFX> tags, treat as OFX/QFX
+        if '<OFX>' in text or '<OFX ' in text:
+            return FileFormat.OFX
+        if '<QFX>' in text or '<QFX ' in text:
+            return FileFormat.QFX
+    # Heuristic for CSV: must have at least one comma in the first line and no XML/OFX/QFX markers
+    first_line = text.splitlines()[0] if text else ''
+    if ',' in first_line and not any(marker in text for marker in ['<OFX', '<QFX', 'OFXHEADER:', 'DATA:OFXSGML', '<?xml']):
+        return FileFormat.CSV
+    # Could not positively determine
+    return FileFormat.OTHER

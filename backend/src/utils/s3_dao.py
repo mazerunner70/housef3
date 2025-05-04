@@ -64,13 +64,15 @@ def delete_object(key: str, bucket: Optional[str] = None) -> bool:
         bucket: Optional bucket name (defaults to FILE_STORAGE_BUCKET)
         
     Returns:
-        True if successful, False otherwise
+        True if successful or file not found, False otherwise
     """
     try:
         bucket = bucket or FILE_STORAGE_BUCKET
         get_s3_client().delete_object(Bucket=bucket, Key=key)
         return True
     except ClientError as e:
+        if e.response['Error']['Code'] == 'NoSuchKey':
+            return True
         logger.error(f"Error deleting object from S3: {str(e)}")
         return False
 
@@ -137,4 +139,30 @@ def get_object_content(key: str, bucket: Optional[str] = None) -> Optional[bytes
         return None
     except Exception as e:
         logger.error(f"Error reading object content from S3: {str(e)}")
+        return None
+
+def get_object_metadata(key: str, bucket: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """
+    Get the metadata of an S3 object without downloading its content.
+    
+    Args:
+        key: The S3 key of the object
+        bucket: Optional bucket name (defaults to FILE_STORAGE_BUCKET)
+        
+    Returns:
+        Dictionary containing object metadata if successful, None otherwise
+        Includes: ContentType, ContentLength, LastModified, etc.
+    """
+    try:
+        bucket = bucket or FILE_STORAGE_BUCKET
+        response = get_s3_client().head_object(Bucket=bucket, Key=key)
+        return {
+            'content_type': response.get('ContentType'),
+            'content_length': response.get('ContentLength'),
+            'last_modified': response.get('LastModified'),
+            'e_tag': response.get('ETag'),
+            'metadata': response.get('Metadata', {})
+        }
+    except ClientError as e:
+        logger.error(f"Error getting object metadata from S3: {str(e)}")
         return None 

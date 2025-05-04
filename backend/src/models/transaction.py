@@ -1,3 +1,4 @@
+import json
 import uuid
 from typing import Dict, Any, Optional, List
 from datetime import datetime
@@ -208,4 +209,20 @@ def validate_transaction_data(data: Dict[str, Any]) -> bool:
     if "reference" in data and data["reference"] and len(data["reference"]) > 100:
         raise ValueError("Reference must be 100 characters or less")
     
-    return True 
+    return True
+
+def type_default(obj):
+    if isinstance(obj, Decimal):
+        return str(obj)
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError
+
+def transaction_to_json(tx):
+    # If already a Transaction object, use to_dict; else, from_dict
+    if isinstance(tx, Transaction):
+        d = tx.to_dict()
+    else:
+        d = Transaction.from_dict(tx).to_dict()
+    
+    return json.dumps(d, default=type_default)

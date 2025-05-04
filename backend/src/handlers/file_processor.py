@@ -12,7 +12,7 @@ from typing import Dict, Any, List, Tuple, Optional
 from decimal import Decimal
 from models.transaction_file import FileFormat, ProcessingStatus
 from models.field_map import FieldMap
-from utils.transaction_parser import parse_transactions
+from utils.transaction_parser import parse_transactions, file_type_selector
 from models.transaction import Transaction
 from utils.file_analyzer import analyze_file_format
 from utils.db_utils import (
@@ -242,44 +242,64 @@ def process_file_with_account(file_id: str, content_bytes: bytes, file_format: F
 
 def lambda_handler(event, context):
     """
-    Lambda handler for processing transaction files.
+    Lambda handler for processing transaction files via S3 upload events only.
+    Handles only S3 event triggers.
     """
     try:
-        # Extract file ID from the event
-        file_id = event.get('fileId')
-        if not file_id:
-            raise ValueError("No fileId provided in event")
-            
-        # Get the file record
-        file_record = get_transaction_file(file_id)
-        if not file_record:
-            raise ValueError(f"File record not found for ID: {file_id}")
-            
-        # Get user ID and account ID
-        user_id = file_record.get('userId')
-        account_id = file_record.get('accountId')
-        if not user_id:
-            raise ValueError(f"No userId found for file: {file_id}")
-            
-        # Get file content from S3
-        content_bytes = get_file_content(file_id)
-        if not content_bytes:
-            raise ValueError(f"Could not retrieve file content for ID: {file_id}")
-            
-        # Process the file
-        response = process_file_with_account(
-            file_id=file_id,
-            content_bytes=content_bytes,
-            file_format=file_record['file_format'],
-            opening_balance=float(file_record['openingBalance']) if file_record.get('openingBalance') else 0,
-            user_id=user_id
-        )
-        
-        return response
-        
+        logger.info(f"Lambda invoked with event: {json.dumps(event)[:1000]}")
+        # S3 event trigger path only
+        if "Records" in event and "s3" in event["Records"][0]:
+            record = event["Records"][0]
+            bucket = record["s3"]["bucket"]["name"]
+            key = record["s3"]["object"]["key"]
+            logger.info(f"Processing S3 event for bucket: {bucket}, key: {key}")
+
+            # Download file from S3
+            content_bytes = s3_client.get_object(Bucket=bucket, Key=key)["Body"].read()
+
+            # Detect file type
+            file_format = file_type_selector(content_bytes)
+            logger.info(f"Detected file format: {file_format}")
+
+            # Find the file record by S3 key
+            file_records = find_file_records_by_s3_key(key)
+            if not file_records:
+                logger.error(f"No file record found for S3 key: {key}")
+                return {
+                    'statusCode': 404,
+                    'body': json.dumps({'message': f'No file record found for S3 key: {key}'})
+                }
+            file_record = file_records[0]
+            file_id = file_record["fileId"]
+
+            # Update file record with detected file format
+            update_transaction_file(file_id, {"file_format": file_format.value})
+
+            # Optionally, process the file (uncomment if you want auto-processing)
+            # user_id = file_record.get('userId')
+            # opening_balance = float(file_record.get('openingBalance', 0))
+            # response = process_file_with_account(
+            #     file_id=file_id,
+            #     content_bytes=content_bytes,
+            #     file_format=file_format,
+            #     opening_balance=opening_balance,
+            #     user_id=user_id
+            # )
+            # return response
+
+            return {
+                'statusCode': 200,
+                'body': json.dumps({'message': 'File type detected and record updated.', 'fileId': file_id, 'fileFormat': file_format.value})
+            }
+        else:
+            logger.error("Lambda invoked with unsupported event structure (not an S3 event)")
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'message': 'Unsupported event structure: expected S3 event'})
+            }
     except Exception as e:
         logger.error(f"Error in file processor lambda: {str(e)}")
-        if file_id:
+        if 'file_id' in locals():
             update_transaction_file(file_id, {
                 'processingStatus': ProcessingStatus.ERROR,
                 'errorMessage': str(e)
