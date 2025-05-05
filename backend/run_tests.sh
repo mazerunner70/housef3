@@ -47,6 +47,7 @@ echo "Running tests..."
 if [ -n "$1" ]; then
     # Run specific test if provided
     echo "Running specific test: $1"
+    echo "--------------------------------------------------------------------------------"
     PYTHONPATH=$SRC_PATH LOG_LEVEL=DEBUG LOGGING_CONFIG=tests/logging.conf python3 -m unittest "$1" -v 2>&1 | tee test.log
 else
     # Run all tests if no specific test provided
@@ -57,6 +58,17 @@ else
         echo "No test files found."
         exit 1
     fi
+    
+    # Display the test modules that will be run
+    echo "Found the following test modules:"
+    echo "--------------------------------------------------------------------------------"
+    for test_file in $TEST_FILES; do
+        echo "- $test_file"
+    done
+    echo "--------------------------------------------------------------------------------"
+    echo "Total: $(echo "$TEST_FILES" | wc -w) test modules"
+    echo "--------------------------------------------------------------------------------"
+    
     PYTHONPATH=$SRC_PATH LOG_LEVEL=DEBUG LOGGING_CONFIG=tests/logging.conf python3 -m unittest $TEST_FILES -v 2>&1 | tee test.log
 fi
 

@@ -222,17 +222,45 @@ class TestFileOperations(unittest.TestCase):
     @patch('handlers.file_operations.update_file_field_map')
     @patch('handlers.file_operations.get_object_content')
     @patch('handlers.file_operations.process_file_with_account')
-    def test_update_file_field_map_handler(self, mock_process, mock_get_content, 
-                                         mock_update_map, mock_get_map, mock_get_file):
+    @patch('utils.db_utils.get_field_maps_table')
+    @patch('utils.db_utils.get_accounts_table')
+    @patch('handlers.file_operations.checked_mandatory_account')
+    @patch('handlers.file_operations.list_account_files')
+    def test_update_file_field_map_handler(self, mock_list_account_files, mock_checked_mandatory_account, mock_get_accounts_table, 
+                                         mock_get_field_maps_table, mock_process, mock_get_content, mock_update_map, 
+                                         mock_get_map, mock_get_file):
         """Test updating file field map."""
+        # Setup mock DynamoDB tables
+        mock_field_maps_table = MagicMock()
+        mock_get_field_maps_table.return_value = mock_field_maps_table
+        
+        mock_accounts_table = MagicMock()
+        mock_get_accounts_table.return_value = mock_accounts_table
+        
+        # Mock the account validation
+        mock_account = MagicMock()
+        mock_account.user_id = self.user['id']
+        mock_account.account_id = 'test-account-id'
+        mock_checked_mandatory_account.return_value = mock_account
+        
+        # Mock list_account_files to return a list with multiple files
+        mock_file1 = MagicMock()
+        mock_file1.file_id = 'test-file-id'
+        mock_file2 = MagicMock()
+        mock_file2.file_id = 'test-file-id-2'
+        mock_list_account_files.return_value = [mock_file1, mock_file2]
+        
         # Setup
         mock_get_file.return_value = self.sample_file
-        mock_get_map.return_value = {
-            'userId': self.user['id'],
-            'name': 'Test Map',
-            'id': 'test-map-id',
-            'mappings': {'date': 'Date', 'amount': 'Amount'}
-        }
+        
+        # Create a proper FieldMap object with a name attribute
+        field_map = MagicMock()
+        field_map.field_map_id = 'test-map-id'
+        field_map.user_id = self.user['id']
+        field_map.name = 'Test Map'
+        field_map.mappings = [{'sourceField': 'date', 'targetField': 'Date'}, {'sourceField': 'amount', 'targetField': 'Amount'}]
+        mock_get_map.return_value = field_map
+        
         mock_get_content.return_value = b'test content'
         mock_process.return_value = {
             'statusCode': 200,
@@ -261,8 +289,34 @@ class TestFileOperations(unittest.TestCase):
     @patch('handlers.file_operations.checked_mandatory_file')
     @patch('handlers.file_operations.get_field_map')
     @patch('handlers.file_operations.update_file_field_map')
-    def test_update_file_field_map_handler_no_s3_key(self, mock_update_map, mock_get_map, mock_get_file):
+    @patch('utils.db_utils.get_field_maps_table')
+    @patch('utils.db_utils.get_accounts_table')
+    @patch('handlers.file_operations.checked_mandatory_account')
+    @patch('handlers.file_operations.list_account_files')
+    def test_update_file_field_map_handler_no_s3_key(self, mock_list_account_files, mock_checked_mandatory_account, 
+                                                  mock_get_accounts_table, mock_get_field_maps_table, 
+                                                  mock_update_map, mock_get_map, mock_get_file):
         """Test updating file field map when file has no S3 key."""
+        # Setup mock DynamoDB tables
+        mock_field_maps_table = MagicMock()
+        mock_get_field_maps_table.return_value = mock_field_maps_table
+        
+        mock_accounts_table = MagicMock()
+        mock_get_accounts_table.return_value = mock_accounts_table
+        
+        # Mock the account validation
+        mock_account = MagicMock()
+        mock_account.user_id = self.user['id']
+        mock_account.account_id = 'test-account-id'
+        mock_checked_mandatory_account.return_value = mock_account
+        
+        # Mock list_account_files to return a list with multiple files
+        mock_file1 = MagicMock()
+        mock_file1.file_id = 'test-file-id'
+        mock_file2 = MagicMock()
+        mock_file2.file_id = 'test-file-id-2'
+        mock_list_account_files.return_value = [mock_file1, mock_file2]
+        
         # Setup
         file_without_s3 = MagicMock(
             fileId='test-file-id',
@@ -270,7 +324,14 @@ class TestFileOperations(unittest.TestCase):
             s3_key=None
         )
         mock_get_file.return_value = file_without_s3
-        mock_get_map.return_value = {'userId': self.user['id'], 'name': 'Test Map'}
+        
+        # Create a proper FieldMap object with a name attribute
+        field_map = MagicMock()
+        field_map.field_map_id = 'test-map-id'
+        field_map.user_id = self.user['id']
+        field_map.name = 'Test Map'
+        field_map.mappings = [{'sourceField': 'date', 'targetField': 'Date'}, {'sourceField': 'amount', 'targetField': 'Amount'}]
+        mock_get_map.return_value = field_map
         
         event = {
             'pathParameters': {'id': 'test-file-id'},
@@ -289,8 +350,34 @@ class TestFileOperations(unittest.TestCase):
 
     @patch('handlers.file_operations.checked_mandatory_file')
     @patch('handlers.file_operations.get_field_map')
-    def test_update_file_field_map_handler_invalid_field_map(self, mock_get_map, mock_get_file):
+    @patch('utils.db_utils.get_field_maps_table')
+    @patch('utils.db_utils.get_accounts_table')
+    @patch('handlers.file_operations.checked_mandatory_account')
+    @patch('handlers.file_operations.list_account_files')
+    def test_update_file_field_map_handler_invalid_field_map(self, mock_list_account_files, mock_checked_mandatory_account, 
+                                                          mock_get_accounts_table, mock_get_field_maps_table, 
+                                                          mock_get_map, mock_get_file):
         """Test updating file field map with invalid field map ID."""
+        # Setup mock DynamoDB tables
+        mock_field_maps_table = MagicMock()
+        mock_get_field_maps_table.return_value = mock_field_maps_table
+        
+        mock_accounts_table = MagicMock()
+        mock_get_accounts_table.return_value = mock_accounts_table
+        
+        # Mock the account validation
+        mock_account = MagicMock()
+        mock_account.user_id = self.user['id']
+        mock_account.account_id = 'test-account-id'
+        mock_checked_mandatory_account.return_value = mock_account
+        
+        # Mock list_account_files to return a list with multiple files
+        mock_file1 = MagicMock()
+        mock_file1.file_id = 'test-file-id'
+        mock_file2 = MagicMock()
+        mock_file2.file_id = 'test-file-id-2'
+        mock_list_account_files.return_value = [mock_file1, mock_file2]
+        
         # Setup
         mock_get_file.return_value = self.sample_file
         mock_get_map.return_value = None

@@ -1,0 +1,6 @@
+{
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/backend/src"
+    ],
+    "python.linting.enabled": true
+} 

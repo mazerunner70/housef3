@@ -396,8 +396,8 @@ def associate_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
             update_transaction_file(file_id, {'account_id': account_id})
             # read the account metadata from the account table and check if there is a default mapping apply it to this file
 
-            if account.default_mapping:
-                update_file_field_map(file_id, account.default_mapping)
+            if account.default_field_map_id:
+                update_file_field_map(file_id, account.default_field_map_id)
             #next update the openingbalance if there is overlap between this file and the others associated with this account
             process_file_with_account(file_id, file.content, file.opening_balance if file.opening_balance else Decimal('0'), user['id'])      
         except Exception as update_error:
@@ -662,13 +662,14 @@ def update_file_field_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -
             })
             
         except Exception as e:
-            logger.error(f"Error updating file: {str(e)}")
+            logger.error(f"Error updating file: {str(e)}", exc_info=True)
             return create_response(500, {"message": "Error updating file"})
             
     except ValueError as e:
+        logger.error(f"Validation error in update_file_field_map_handler: {str(e)}", exc_info=True)
         return create_response(400, {"message": str(e)})
     except Exception as e:
-        logger.error(f"Error updating file field map: {str(e)}")
+        logger.error(f"Error updating file field map: {str(e)}", exc_info=True)
         return create_response(500, {"message": "Error updating file field map"})
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:

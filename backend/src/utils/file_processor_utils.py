@@ -87,8 +87,8 @@ def get_file_content(file_id: str, s3_client: Any = None) -> Optional[bytes]:
         File content as bytes if found, None otherwise
     """
     try:
-        # Use provided client or default to s3_client
-        s3_client = s3_client or s3_client
+        # Use provided client or default to boto3 s3_client
+        s3 = s3_client or boto3.client('s3')
         
         # Get the file record to find the S3 key
         file_record = get_transaction_file(file_id)
@@ -97,7 +97,7 @@ def get_file_content(file_id: str, s3_client: Any = None) -> Optional[bytes]:
             return None
             
         # Get the file content from S3
-        response = s3_client.get_object(
+        response = s3.get_object(
             Bucket=os.environ.get('FILE_STORAGE_BUCKET'),
             Key=file_record.s3_key
         )
@@ -267,6 +267,7 @@ def calculate_opening_balance_from_duplicates(transactions: List[Dict[str, Any]]
         first_tx = transactions[0]
         if check_duplicate_transaction(first_tx, account_id):
             # If first transaction is duplicate, use its balance
+            logger.info(f"First transaction is duplicate, using balance: {first_tx['balance']}")
             return Decimal(str(first_tx['balance']))
             
         # Check last transaction
@@ -275,8 +276,9 @@ def calculate_opening_balance_from_duplicates(transactions: List[Dict[str, Any]]
             # If last transaction is duplicate, calculate opening balance
             # by subtracting all transaction amounts from the matched balance
             total_amount = sum(Decimal(str(tx['amount'])) for tx in transactions)
-            return Decimal(str(last_tx['balance'])) - total_amount
-            
+            res = Decimal(str(last_tx['balance'])) - total_amount
+            logger.info(f"Last transaction is duplicate, calculated opening balance: {res}")
+            return res
         return None
     except Exception as e:
         logger.error(f"Error calculating opening balance from duplicates: {str(e)}")
