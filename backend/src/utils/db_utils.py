@@ -926,6 +926,7 @@ def get_transaction_by_account_and_hash(account_id: str, transaction_hash: int) 
         )
         items = response.get('Items', [])
         if items:
+            
             return Transaction.from_dict(items[0])
         return None
     except Exception as e:

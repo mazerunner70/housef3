@@ -367,7 +367,7 @@ bad,data,here'''.encode('utf-8')
         date2 = datetime.strptime("2024-12-01", "%Y-%m-%d")
         self.assertEqual(date1, date2)
 
-    def test_parse_csv_with_commas_in_field(self):
+    def test_parse_csv_with_commas_in_field_with_trailing_comma(self):
         """Test parsing CSV where a field contains a comma and is not quoted, causing extra columns."""
         # Header has an empty field due to extra comma in the data row
         csv_content = b"Date,Description,Amount,Merchant City,\n2024-08-04,GITHUB,INC.,78.72,SAN FRANCISCO\n2024-08-05,Normal Merchant,12.34,London,\n2024-08-06,Another Merchant,56.78,Paris,\n"
@@ -378,6 +378,24 @@ bad,data,here'''.encode('utf-8')
         # Check the problematic row
         self.assertIn('description', transactions[0])
         self.assertEqual(transactions[0]['description'], 'GITHUB,INC.')
+        self.assertEqual(transactions[0]['amount'], Decimal('78.72'))
+        self.assertEqual(transactions[0]['balance'], Decimal('178.72'))
+        # Check a normal row
+        self.assertEqual(transactions[1]['description'], 'Normal Merchant')
+        self.assertEqual(transactions[1]['amount'], Decimal('12.34'))
+        self.assertEqual(transactions[1]['balance'], Decimal('191.06'))
+
+    def test_parse_csv_with_commas_in_field(self):
+        """Test parsing CSV where a field contains a comma and is not quoted, causing extra columns in those rows alone"""
+ 
+        csv_content = b"Date,Description,Amount,Merchant City\n2024-08-04,GITHUB,INC.,78.72,SAN FRANCISCO\n2024-08-05,Normal Merchant,12.34,London\n2024-08-06,Another Merchant,56.78,Paris\n"
+        # The first row should merge 'GITHUB,INC.' into one field for Description
+        # We'll assume the parser is fixed to handle this, or this test will fail until fixed
+        transactions = parse_csv_transactions(csv_content, 100.0)
+        self.assertEqual(len(transactions), 3)
+        # Check the problematic row
+        self.assertIn('description', transactions[0])
+        self.assertEqual(transactions[0]['description'], '"GITHUB,INC."')
         self.assertEqual(transactions[0]['amount'], Decimal('78.72'))
         self.assertEqual(transactions[0]['balance'], Decimal('178.72'))
         # Check a normal row

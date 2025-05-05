@@ -175,7 +175,7 @@ def process_file_with_account(file_id: str, content_bytes: bytes, opening_balanc
                 'statusCode': 400,
                 'body': json.dumps({'message': 'No transactions could be parsed from file'})
             }
-            
+        logger.info(f"Entering calculate_opening_balance_from_duplicates for account: {account_id}")
         # Calculate opening balance from duplicates if possible
         if account_id:
             calculated_opening_balance = calculate_opening_balance_from_duplicates(transactions, account_id)
@@ -190,7 +190,7 @@ def process_file_with_account(file_id: str, content_bytes: bytes, opening_balanc
                     current_balance += Decimal(str(tx['amount']))
                     tx['balance'] = str(current_balance)
                 logger.info("Recalculated running balances with new opening balance")
-            
+        logger.info("Exiting calculate_opening_balance_from_duplicates")
         # Delete existing transactions if any
         delete_transactions_for_file(file_id)
         

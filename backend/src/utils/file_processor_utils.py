@@ -57,6 +57,7 @@ def check_duplicate_transaction(transaction: Dict[str, Any], account_id: str) ->
             transaction['description']
         )
         existing = get_transaction_by_account_and_hash(account_id, transaction_hash)
+        logger.info(f"Checking for duplicate transaction {transaction_hash}:{existing}")
         return existing is not None
     except Exception as e:
         logger.error(f"Error checking for duplicate transaction: {str(e)}")
@@ -265,6 +266,7 @@ def calculate_opening_balance_from_duplicates(transactions: List[Dict[str, Any]]
     try:
         # Check first transaction
         first_tx = transactions[0]
+        logger.info(f"Checking first transaction: {first_tx}")
         if check_duplicate_transaction(first_tx, account_id):
             # If first transaction is duplicate, use its balance
             logger.info(f"First transaction is duplicate, using balance: {first_tx['balance']}")
@@ -272,6 +274,7 @@ def calculate_opening_balance_from_duplicates(transactions: List[Dict[str, Any]]
             
         # Check last transaction
         last_tx = transactions[-1]
+        logger.info(f"Checking last transaction: {last_tx}")
         if check_duplicate_transaction(last_tx, account_id):
             # If last transaction is duplicate, calculate opening balance
             # by subtracting all transaction amounts from the matched balance

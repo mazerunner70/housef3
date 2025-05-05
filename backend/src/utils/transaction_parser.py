@@ -173,40 +173,84 @@ def parse_date(date_str: str) -> Optional[int]:
 
 def preprocess_csv_text(text_content: str) -> str:
     """
-    Preprocess CSV text to fix rows with more columns than headers due to unquoted commas in fields.
+    Preprocess CSV text to fix rows with more columns than the other rows, due to the description having unquoted commas.
     Merges columns where a likely description field contains unquoted commas, quoting the merged field.
-    Uses the number of trailing commas in the header to guide processing.
     """
+    # Split the text into lines
     lines = text_content.splitlines()
     if not lines:
         return text_content
+        
+    # Parse the header to determine the expected number of fields
     header_line = lines[0]
-    # Count trailing commas in the header
-    trailing_commas = len(header_line) - len(header_line.rstrip(','))
-    if trailing_commas == 0:
-        return text_content
-    logger.info(f"Malformed CSV found, attempting correction with {trailing_commas} trailing commas in header")
-    headers = header_line.rstrip(',').split(',')
-    num_headers = len(headers)
-    # Find the index of the likely description field that holds the commas
-    desc_col = find_column_index(headers, ['description', 'payee', 'merchant', 'transaction'])
-    if desc_col is None:
-        logger.warning("No description column found, cannot fix malformed CSV")
-        return text_content
-    fixed_lines = [','.join(headers)]
-    for line in lines[1:]:
-        row = line.rstrip(',').split(',')
-        # If row already matches header, keep as is
-        if len(row) == num_headers:
-            fixed_lines.append(','.join(row))
+    # Use csv module to correctly parse the header
+    reader = csv.reader([header_line])
+    header_fields = next(reader)
+    expected_fields = len(header_fields)
+    
+    # Function to safely parse a line with the csv module
+    def parse_csv_line(line):
+        reader = csv.reader([line])
+        try:
+            return next(reader)
+        except StopIteration:
+            return []
+    
+    # Find the description column index
+    desc_col = -1
+    for i, field in enumerate(header_fields):
+        field_lower = field.lower()
+        if any(name in field_lower for name in ['description', 'payee', 'merchant', 'transaction']):
+            desc_col = i
+            break
+            
+    if desc_col == -1:
+        desc_col = 1  # Default to second column if no description column found
+        
+    # Process each line
+    fixed_lines = [header_line]  # Keep header as is
+    
+    for i in range(1, len(lines)):
+        line = lines[i]
+        if not line.strip():
+            continue  # Skip empty lines
+            
+        # Parse the line
+        fields = parse_csv_line(line)
+        
+        # If field count matches expected, keep it as is
+        if len(fields) == expected_fields:
+            fixed_lines.append(line)
             continue
-        excess_cols = len(row) - num_headers
-        # Merge the excess columns into the description field and quote it
-        merged_desc = ','.join(row[desc_col:desc_col+excess_cols+1])
-        row[desc_col] = f'"{merged_desc}"'
-        # Remove the merged columns from the row
-        row = row[:desc_col+1] + row[desc_col+excess_cols+1:]
-        fixed_lines.append(','.join(row))
+            
+        # If we have more fields than expected, we need to merge excess fields into the description
+        if len(fields) > expected_fields:
+            excess = len(fields) - expected_fields
+            
+            # Merge the description field with the excess fields
+            before_desc = fields[:desc_col]
+            desc_with_excess = fields[desc_col:desc_col+excess+1]
+            merged_desc = ','.join(desc_with_excess)
+            
+            # Quote the merged field
+            if ',' in merged_desc and not (merged_desc.startswith('"') and merged_desc.endswith('"')):
+                merged_desc = f'"{merged_desc}"'
+                
+            after_desc = fields[desc_col+excess+1:] if desc_col+excess+1 < len(fields) else []
+            
+            # Create a new row with the fixed fields
+            new_fields = before_desc + [merged_desc] + after_desc
+            
+            # We need to format the line for CSV properly, so use a writer
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(new_fields)
+            fixed_line = output.getvalue().strip()
+            fixed_lines.append(fixed_line)
+        else:
+            # If fewer fields than expected (shouldn't happen), just keep as is
+            fixed_lines.append(line)
+            
     return '\n'.join(fixed_lines)
 
 def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = None, field_map: Optional[FieldMap] = None) -> List[Dict[str, Any]]:
