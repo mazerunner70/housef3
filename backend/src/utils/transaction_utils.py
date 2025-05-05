@@ -3,8 +3,7 @@ Utility functions for transaction operations.
 """
 import hashlib
 from decimal import Decimal
-from typing import Dict, Any
-import boto3
+from typing import Dict, Any, Union
 import logging
 import os
 
@@ -14,7 +13,7 @@ logger.setLevel(logging.INFO)
 
 def generate_transaction_hash(account_id: str, date: int, amount: Decimal, description: str) -> int:
     """
-    Generate a numeric hash for transaction deduplication.
+    Generate a numeric hash for transaction deduplication
     
     Args:
         account_id: The account ID

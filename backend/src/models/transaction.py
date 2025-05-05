@@ -15,28 +15,6 @@ class Transaction:
     """
     Represents a single financial transaction parsed from a transaction file.
     """
-    @staticmethod
-    def generate_transaction_hash(account_id: str, date: str, amount: Decimal, description: str) -> int:
-        """
-        Generate a numeric hash for transaction deduplication.
-        
-        Args:
-            account_id: The account ID
-            date: Transaction date
-            amount: Transaction amount as Decimal
-            description: Transaction description
-            
-        Returns:
-            int: A 64-bit hash of the transaction details
-        """
-        # Create a string with all the components
-        # Use str() on Decimal for consistent string representation
-        content = f"{account_id}|{date}|{str(amount)}|{description}"
-        # Generate SHA-256 hash
-        hash_obj = hashlib.sha256(content.encode('utf-8'))
-        # Take first 16 characters of hex digest and convert to int
-        # This gives us a 64-bit number which is plenty for deduplication
-        return int(hash_obj.hexdigest()[:16], 16)
     
     def __init__(
         self,
@@ -75,7 +53,7 @@ class Transaction:
         self.created_at = created_at or datetime.now().isoformat()
         self.updated_at = updated_at or self.created_at
         self.transaction_hash = transaction_hash
-        
+    
     @classmethod
     def create(
         cls,

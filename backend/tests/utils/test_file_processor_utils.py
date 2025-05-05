@@ -27,8 +27,8 @@ from models.transaction import Transaction
 class TestFileProcessorUtils(unittest.TestCase):
     """Test cases for file_processor_utils module."""
 
-    @patch('utils.file_processor_utils.get_transaction_by_account_and_hash')
-    @patch('utils.file_processor_utils.Transaction.generate_transaction_hash')
+    @patch('utils.db_utils.get_transaction_by_account_and_hash')
+    @patch('utils.db_utils.generate_transaction_hash')
     def test_check_duplicate_transaction_found(self, mock_generate_hash, mock_get_tx):
         """Test check_duplicate_transaction when a duplicate is found."""
         # Setup
@@ -36,8 +36,8 @@ class TestFileProcessorUtils(unittest.TestCase):
         mock_get_tx.return_value = {'transactionId': 'tx123'}
         
         transaction = {
-            'date': '2023-01-01',
-            'amount': '100.00',
+            'date': 1716076800000,
+            'amount': Decimal('100.00'),
             'description': 'Test Transaction'
         }
         account_id = 'account123'
@@ -50,13 +50,13 @@ class TestFileProcessorUtils(unittest.TestCase):
         mock_generate_hash.assert_called_once_with(
             account_id, 
             transaction['date'],
-            Decimal('100.00'),
+            transaction['amount'],
             transaction['description']
         )
         mock_get_tx.assert_called_once_with(account_id, 12345)
 
-    @patch('utils.file_processor_utils.get_transaction_by_account_and_hash')
-    @patch('utils.file_processor_utils.Transaction.generate_transaction_hash')
+    @patch('utils.db_utils.get_transaction_by_account_and_hash')
+    @patch('utils.transaction_utils.generate_transaction_hash')
     def test_check_duplicate_transaction_not_found(self, mock_generate_hash, mock_get_tx):
         """Test check_duplicate_transaction when no duplicate is found."""
         # Setup
@@ -64,7 +64,7 @@ class TestFileProcessorUtils(unittest.TestCase):
         mock_get_tx.return_value = None
         
         transaction = {
-            'date': '2023-01-01',
+            'date': 1716076800000,
             'amount': '100.00',
             'description': 'Test Transaction'
         }
@@ -76,15 +76,14 @@ class TestFileProcessorUtils(unittest.TestCase):
         # Verify
         self.assertFalse(result)
 
-    @patch('utils.file_processor_utils.get_transaction_by_account_and_hash')
-    @patch('utils.file_processor_utils.Transaction.generate_transaction_hash')
-    def test_check_duplicate_transaction_exception(self, mock_generate_hash, mock_get_tx):
+    @patch('utils.transaction_utils.generate_transaction_hash')
+    def test_check_duplicate_transaction_exception(self, mock_generate_hash):
         """Test check_duplicate_transaction handles exceptions gracefully."""
         # Setup
         mock_generate_hash.side_effect = Exception("Error generating hash")
         
         transaction = {
-            'date': '2023-01-01',
+            'date': 1716076800000,
             'amount': '100.00',
             'description': 'Test Transaction'
         }

@@ -931,8 +931,9 @@ def get_transaction_by_account_and_hash(account_id: str, transaction_hash: int) 
         return None
     except Exception as e:
         logger.error(f"Error retrieving transaction by account and hash: {str(e)}")
-        return None 
-    
+        return None
+
+
 def check_duplicate_transaction(transaction: Dict[str, Any], account_id: str) -> bool:
     """
     Check if a transaction already exists for the given account using numeric hash.
@@ -946,6 +947,7 @@ def check_duplicate_transaction(transaction: Dict[str, Any], account_id: str) ->
     """
     try:
         logger.info(f"Entering check_duplicate_transaction for account_id: {account_id}")
+            
         transaction_hash = generate_transaction_hash(
             account_id,
             transaction['date'],
@@ -953,6 +955,7 @@ def check_duplicate_transaction(transaction: Dict[str, Any], account_id: str) ->
             transaction['description']
         )
         existing = get_transaction_by_account_and_hash(account_id, transaction_hash)
+        logger.info(f"Existing transaction: {existing}")
         return existing is not None
     except Exception as e:
         logger.error(f"Error checking for duplicate transaction: {str(e)}")

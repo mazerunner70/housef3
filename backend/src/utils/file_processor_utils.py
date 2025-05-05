@@ -20,7 +20,8 @@ from utils.db_utils import (
     delete_transactions_for_file,
     get_field_map,
     get_account_default_field_map,
-    get_transaction_by_account_and_hash
+    get_transaction_by_account_and_hash,
+    check_duplicate_transaction
 )
 
 # Configure logging
@@ -38,30 +39,6 @@ FILES_TABLE = os.environ.get('FILES_TABLE', 'transaction-files')
 # Initialize DynamoDB tables
 transaction_table = dynamodb.Table(TRANSACTIONS_TABLE)
 file_table = dynamodb.Table(FILES_TABLE)
-
-def check_duplicate_transaction(transaction: Dict[str, Any], account_id: str) -> bool:
-    """Check if a transaction already exists for the given account using numeric hash.
-    
-    Args:
-        transaction: Dictionary containing transaction details
-        account_id: ID of the account to check for duplicates
-        
-    Returns:
-        bool: True if duplicate found, False otherwise
-    """
-    try:
-        transaction_hash = Transaction.generate_transaction_hash(
-            account_id,
-            transaction['date'],
-            Decimal(str(transaction['amount'])),
-            transaction['description']
-        )
-        existing = get_transaction_by_account_and_hash(account_id, transaction_hash)
-        logger.info(f"Checking for duplicate transaction {transaction_hash}:{existing}")
-        return existing is not None
-    except Exception as e:
-        logger.error(f"Error checking for duplicate transaction: {str(e)}")
-        return False
 
 def create_composite_key(user_id: str, transaction: Dict[str, Any]) -> str:
     """Create a composite key for a transaction.
