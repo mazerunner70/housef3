@@ -17,6 +17,7 @@ from models.transaction import Transaction
 from utils.file_analyzer import analyze_file_format
 from utils.db_utils import (
     create_transaction_file,
+    get_account,
     get_transaction_file,
     update_transaction_file,
     create_transaction,
@@ -318,6 +319,12 @@ def handler(event, context):
                 if account_id:
                     file_data['accountId'] = account_id
                     logger.info(f"Adding account ID to file metadata: {account_id}")
+                # If account has a default field map, add it to the file metadata
+                if account_id:
+                    account = get_account(account_id)
+                    if account and account.default_field_map_id:
+                        file_data['fieldMapId'] = account.default_field_map_id
+                        logger.info(f"Adding default field map ID to file metadata: {account.default_field_map_id}")
 
                 # Create the file record
                 create_transaction_file(file_data)
@@ -394,7 +401,8 @@ def update_transaction_file(file_id: str, updates: Dict[str, Any]) -> None:
             
         update_expression = "SET " + ", ".join(update_expr_parts)
         
-        transaction_table.update_item(
+        # Use the correct file_table instead of transaction_table
+        file_table.update_item(
             Key={'fileId': file_id},
             UpdateExpression=update_expression,
             ExpressionAttributeNames=expr_attr_names,

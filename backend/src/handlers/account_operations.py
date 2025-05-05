@@ -542,7 +542,7 @@ def account_file_timeline_handler(event: Dict[str, Any], user: Dict[str, Any]) -
                 logger.error(f"Error listing transactions for file {file.file_id}: {str(e)}")
             tx_dates = []
             if transactions:
-                dates = [t['date'] for t in transactions if 'date' in t and t['date']]
+                dates = [t.date for t in transactions if t.date]
                 tx_dates = []
                 for d in dates:
                     try:

@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional, Union
 from decimal import Decimal
 from models.transaction_file import FileFormat, ProcessingStatus, DateRange, validate_transaction_file_data, transaction_file_to_json
 from models.transaction import Transaction
-from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_file_field_map, update_transaction_file, delete_file_metadata, get_account, list_file_transactions, delete_transactions_for_file, get_field_maps_table, get_field_map
+from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_account, update_file_field_map, update_transaction_file, delete_file_metadata, get_account, list_file_transactions, delete_transactions_for_file, get_field_maps_table, get_field_map
 from utils.transaction_parser import file_type_selector, parse_transactions
 from utils.s3_dao import (
     get_presigned_url,
@@ -219,7 +219,6 @@ def get_download_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dic
             'fileId': file.file_id,
             'downloadUrl': download_url,
             'fileName': file.file_name,
-            'contentType': file.content_type,
             'expires': 3600  # URL expires in 1 hour
         })
     except ValueError as ve:        
@@ -604,6 +603,17 @@ def update_file_field_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -
             
             # Update the file with the field map
             update_file_field_map(file_id, field_map_id)
+
+            # if there is only one file associated with the account, update the default mapping with this mapping id
+            if file.account_id:
+                checked_mandatory_account(file.account_id, user['id'])
+                # check if there is only one file associated with the account
+                files = list_account_files(file.account_id)
+                if len(files) == 1:
+                    update_account(file.account_id, {'defaultFieldMapId': field_map_id})
+                    logger.info(f"Updated default field map for account {file.account_id} to {field_map_id}")
+                else:
+                    logger.info(f"There are {len(files)} files associated with account {file.account_id}, not updating default field map")
             
             # After successfully updating the field map, trigger transaction processing
             logger.info(f"Triggering transaction processing for file {file_id}")
@@ -615,7 +625,7 @@ def update_file_field_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -
                     "message": "File successfully associated with field map",
                     "fileId": file_id,
                     "fieldMapId": field_map_id,
-                    "fieldMapName": field_map.get('name')
+                    "fieldMapName": field_map.name
                 })
             
             # Get file content from S3
@@ -647,7 +657,7 @@ def update_file_field_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -
                 "message": "File successfully associated with field map and transactions processed",
                 "fileId": file_id,
                 "fieldMapId": field_map_id,
-                "fieldMapName": field_map.get('name'),
+                "fieldMapName": field_map.name,
                 "transactionCount": transaction_count
             })
             

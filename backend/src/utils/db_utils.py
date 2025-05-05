@@ -201,12 +201,15 @@ def update_account(account_id: str, update_data: Dict[str, Any]) -> Account:
             'balance': 'balance',
             'currency': 'currency',
             'notes': 'notes',
-            'isActive': 'is_active'
+            'isActive': 'is_active',
+            'defaultFieldMapId': 'default_field_map_id'
         }
         
         for key, value in update_data.items():
             if key in field_mapping:
                 update_data_snake_case[field_mapping[key]] = value
+            else:
+                raise ValueError(f"Skipping update for field {key}")
         
         account.update(**update_data_snake_case)
         
@@ -572,7 +575,7 @@ def delete_transactions_for_file(file_id: str) -> int:
             table = get_transactions_table()
             with table.batch_writer() as batch:
                 for transaction in transactions:
-                    batch.delete_item(Key={'transactionId': transaction['transactionId']})
+                    batch.delete_item(Key={'transactionId': transaction.transaction_id})
             
             logger.info(f"Deleted {count} transactions for file {file_id}")
         
