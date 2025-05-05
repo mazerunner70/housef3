@@ -377,7 +377,7 @@ bad,data,here'''.encode('utf-8')
         self.assertEqual(len(transactions), 3)
         # Check the problematic row
         self.assertIn('description', transactions[0])
-        self.assertEqual(transactions[0]['description'], 'GITHUB,INC.')
+        self.assertEqual(transactions[0]['description'], '"GITHUB,INC."')
         self.assertEqual(transactions[0]['amount'], Decimal('78.72'))
         self.assertEqual(transactions[0]['balance'], Decimal('178.72'))
         # Check a normal row

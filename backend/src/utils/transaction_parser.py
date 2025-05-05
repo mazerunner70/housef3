@@ -184,8 +184,9 @@ def preprocess_csv_text(text_content: str) -> str:
     # Parse the header to determine the expected number of fields
     header_line = lines[0]
     # Use csv module to correctly parse the header
-    reader = csv.reader([header_line])
+    reader = csv.reader([header_line.rstrip(",")])
     header_fields = next(reader)
+    # count header fields excluding empty ones at the end
     expected_fields = len(header_fields)
     
     # Function to safely parse a line with the csv module
@@ -211,7 +212,7 @@ def preprocess_csv_text(text_content: str) -> str:
     fixed_lines = [header_line]  # Keep header as is
     
     for i in range(1, len(lines)):
-        line = lines[i]
+        line = lines[i].rstrip(",")
         if not line.strip():
             continue  # Skip empty lines
             
