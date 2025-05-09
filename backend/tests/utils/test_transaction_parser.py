@@ -421,6 +421,26 @@ bad,data,here'''.encode('utf-8')
         self.assertEqual(processed.count('"GITHUB,INC."'), 1)
         self.assertTrue(processed.startswith('Date,Description'))
 
+    def test_preprocess_csv_text_merges_unquoted_commas_with_trailing_comma2(self):
+        """Test that preprocess_csv_text merges unquoted commas in description and quotes the field."""
+        csv_text = "Transaction Date,Posting Date,Billing Amount,Merchant,Merchant City,Merchant State,Merchant Postcode,Reference Number,Debit or Credit,SICMCC Code,Status,Transaction Currency,Additional Card Holder,Card Used,\n2024-08-05,2024-08-05,2.35,NON-STERLING TRANS FEE,,,,82117554217000005527406,DBIT,FE,BILLED,GBP,FALSE,2183,\n2024-08-04,2024-08-05,78.72,GITHUB,INC.,SAN FRANCISCO,USA,94107,82117554217000005527406,DBIT,PR,BILLED,GBP,FALSE,2183\n"
+        
+        processed = preprocess_csv_text(csv_text)
+        
+        # Verify the header is preserved
+        self.assertTrue(processed.startswith('Transaction Date,Posting Date,Billing Amount,Merchant'))
+        
+        # Verify the GITHUB,INC. description is properly quoted
+        self.assertIn('"GITHUB,INC."', processed)
+        self.assertEqual(processed.count('"GITHUB,INC."'), 1)
+        
+        # Verify both transactions are present
+        self.assertIn('NON-STERLING TRANS FEE', processed)
+        self.assertIn('"GITHUB,INC."', processed)
+        
+        # Verify the amounts are preserved
+        self.assertIn('2.35', processed)
+        self.assertIn('78.72', processed)
 
 if __name__ == '__main__':
     unittest.main() 

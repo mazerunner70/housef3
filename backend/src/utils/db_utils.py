@@ -955,7 +955,10 @@ def check_duplicate_transaction(transaction: Dict[str, Any], account_id: str) ->
             transaction['description']
         )
         existing = get_transaction_by_account_and_hash(account_id, transaction_hash)
-        logger.info(f"Existing transaction: {existing}")
+        if existing:
+            logger.info(f"Found existing transaction: hash={existing.transaction_hash} date={existing.date} amount={existing.amount} description={existing.description}")
+        else:
+            logger.info(f"No existing transaction found for hash={transaction_hash}")
         return existing is not None
     except Exception as e:
         logger.error(f"Error checking for duplicate transaction: {str(e)}")

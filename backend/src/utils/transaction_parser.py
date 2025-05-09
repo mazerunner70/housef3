@@ -201,6 +201,10 @@ def preprocess_csv_text(text_content: str) -> str:
     desc_col = -1
     for i, field in enumerate(header_fields):
         field_lower = field.lower()
+        # Exclude date-related fields from description matching
+        if 'date' in field_lower:
+            continue
+        # Look for description-related fields
         if any(name in field_lower for name in ['description', 'payee', 'merchant', 'transaction']):
             desc_col = i
             break
@@ -273,10 +277,11 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
         return amount
     try:
         # Decode the content
-        text_content = content.decode('utf-8')
+        raw_content = content.decode('utf-8')
         # Preprocess CSV text to fix unquoted commas
-        text_content = preprocess_csv_text(text_content)
-        
+        text_content = preprocess_csv_text(raw_content)
+        if len(text_content.splitlines()) != len(raw_content.splitlines()):
+            raise ValueError("Preprocessing CSV text resulted in a different number of lines")
         # Create a custom dialect for handling quoted fields (after preprocessing)
         class QuotedDialect(csv.Dialect):
             delimiter = ','
@@ -321,7 +326,9 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
         
         # Read all rows
         rows = list(reader)
-        print(f"Rows: {rows}")
+        logger.info(f"Rows count: {len(rows)}")
+        if len(rows) != len(raw_content.splitlines())-1:
+            raise ValueError(f"Number of rows in CSV file ({len(rows)}) does not match the number of lines in the raw content ({len(raw_content.splitlines())-1})")
         # Detect date order
         date_order = detect_date_order([row[date_col] for row in rows if len(row) > date_col])
         

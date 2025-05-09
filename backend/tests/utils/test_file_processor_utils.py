@@ -33,7 +33,18 @@ class TestFileProcessorUtils(unittest.TestCase):
         """Test check_duplicate_transaction when a duplicate is found."""
         # Setup
         mock_generate_hash.return_value = 12345
-        mock_get_tx.return_value = {'transactionId': 'tx123'}
+        mock_transaction = Transaction(
+            transaction_id='tx123',
+            account_id='account123',
+            file_id='file123',
+            user_id='user123',
+            date=1716076800000,
+            amount=Decimal('100.00'),
+            description='Test Transaction',
+            transaction_hash=12345,
+            status='new'
+        )
+        mock_get_tx.return_value = mock_transaction
         
         transaction = {
             'date': 1716076800000,
