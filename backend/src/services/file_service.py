@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from models.transaction_file import TransactionFile
-from utils.db_utils import list_account_files, list_user_files, get_field_map
+from utils.db_utils import list_account_files, list_user_files, get_field_mapping
 
 FIELD_MAP = {
     'accountId': 'account_id',
@@ -46,7 +46,7 @@ def format_file_metadata(file: TransactionFile) -> dict:
     if file.opening_balance:
         formatted['openingBalance'] = file.opening_balance
     if file.field_map_id:
-        field_map = get_field_map(file.field_map_id)
+        field_map = get_field_mapping(file.field_map_id)
         if field_map:
             formatted['fieldMap'] = {
                 'fieldMapId': field_map.field_map_id,

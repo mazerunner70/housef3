@@ -18,7 +18,7 @@ from utils.db_utils import (
     update_transaction_file,
     create_transaction,
     delete_transactions_for_file,
-    get_field_map,
+    get_field_mapping,
     get_account_default_field_map,
     get_transaction_by_account_and_hash,
     check_duplicate_transaction

@@ -106,7 +106,8 @@ def apply_field_mapping(row_data: Dict[str, Any], field_map: FieldMap) -> Dict[s
     logger.info(f"Final mapped result: {result}")
     return result
 
-def parse_transactions(content: bytes, 
+def parse_transactions(account_id: str,
+                      content: bytes, 
                       file_format: FileFormat, 
                       opening_balance: float,
                       field_map: Optional[FieldMap] = None) -> List[Dict[str, Any]]:

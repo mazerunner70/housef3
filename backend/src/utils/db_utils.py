@@ -22,7 +22,7 @@ from models import (
 )
 from models.transaction import Transaction
 from boto3.dynamodb.conditions import Key, Attr
-from models.field_map import FieldMap
+from models.field_mapping import FieldMapping
 from utils.transaction_utils import generate_transaction_hash
 
 # Configure logging
@@ -389,46 +389,22 @@ def create_transaction_file(file_data: Dict[str, Any]) -> TransactionFile:
         raise
 
 
-def update_transaction_file(file_id: str, update_data: Dict[str, Any]) -> TransactionFile:
+def update_transaction_file(transaction_file: TransactionFile):
     """
     Update an existing transaction file.
     
     Args:
-        file_id: The unique identifier of the file to update
-        update_data: Dictionary containing fields to update
+        transaction_file: The TransactionFile object to update
         
     Returns:
         Updated TransactionFile object
     """
-    try:
-        # Retrieve the existing file
-        file = get_transaction_file(file_id)
-        if not file:
-            raise ValueError(f"File {file_id} not found")
-        
-        # Get the current file data as a dictionary
-        file_dict = file.to_dict()
-        
-        # Update with new data
-        for key, value in update_data.items():
-            if value is None:
-                # If value is None, remove the field
-                file_dict.pop(key, None)
-            else:
-                file_dict[key] = value
-        
-        # Create a new TransactionFile object with updated data
-        updated_file = TransactionFile.from_dict(file_dict)
-        
+    try:        
         # Save updates to DynamoDB
-        get_files_table().put_item(Item=file_dict)
-        
-        return updated_file
-    except ValueError as e:
-        logger.error(f"Validation error updating file {file_id}: {str(e)}")
-        raise
+        get_files_table().put_item(Item=transaction_file.to_dict())
+
     except ClientError as e:
-        logger.error(f"Error updating file {file_id}: {str(e)}")
+        logger.error(f"Error updating file {transaction_file.file_id}: {str(e)}")
         raise
 
 
@@ -513,39 +489,15 @@ def list_user_transactions(user_id: str) -> List[Transaction]:
         raise
 
 
-def create_transaction(transaction_data: Dict[str, Any]) -> Transaction:
+def create_transaction(transaction: Transaction):
     """
     Create a new transaction.
     
     Args:
-        transaction_data: Dictionary containing transaction data
+        transaction: Transaction object
         
-    Returns:
-        The created Transaction object
     """
     try:
-        # Check for duplicates first
-        is_duplicate = check_duplicate_transaction(transaction_data, transaction_data['account_id'])
-        if is_duplicate:
-            logger.info(f"Duplicate transaction found, skipping creation")
-            transaction_data['status'] = 'duplicate'
-        else:
-            transaction_data['status'] = 'new'
-
-        # Generate transaction hash
-        transaction_hash = generate_transaction_hash(
-            transaction_data['account_id'],
-            transaction_data['date'],
-            Decimal(str(transaction_data['amount'])),
-            transaction_data['description']
-        )
-        
-        # Add hash to transaction data
-        transaction_data['transaction_hash'] = transaction_hash
-        
-        # Create a Transaction object
-        transaction = Transaction.create(**transaction_data)
-        
         # Save to DynamoDB
         get_transactions_table().put_item(Item=transaction.to_dict())
         
@@ -604,7 +556,7 @@ def delete_file_metadata(file_id: str) -> bool:
         raise
 
 
-def get_field_map(field_map_id: str) -> Optional[FieldMap]:
+def get_field_mapping(field_map_id: Optional[str] = None) -> Optional[FieldMapping]:
     """
     Get a field map by ID.
     
@@ -615,12 +567,13 @@ def get_field_map(field_map_id: str) -> Optional[FieldMap]:
         FieldMap instance if found, None otherwise
     """
     try:
-        response = get_field_maps_table().get_item(
-            Key={'fieldMapId': field_map_id}
-        )
+        if field_map_id:
+            response = get_field_maps_table().get_item(
+                Key={'fieldMapId': field_map_id}
+            )
         
         if 'Item' in response:
-            return FieldMap.from_dict(response['Item'])
+            return FieldMapping.from_dict(response['Item'])
         return None
     except Exception as e:
         logger.error(f"Error getting field map {field_map_id}: {str(e)}")
@@ -652,7 +605,7 @@ def get_account_default_field_map(account_id: str) -> Optional[FieldMap]:
             return None
             
         # Get the field map
-        return get_field_map(default_field_map_id)
+        return get_field_mapping(default_field_map_id)
     except Exception as e:
         logger.error(f"Error getting default field map for account {account_id}: {str(e)}")
         return None
@@ -934,27 +887,19 @@ def get_transaction_by_account_and_hash(account_id: str, transaction_hash: int) 
         return None
 
 
-def check_duplicate_transaction(transaction: Dict[str, Any], account_id: str) -> bool:
+def check_duplicate_transaction(transaction: Transaction) -> bool:
     """
     Check if a transaction already exists for the given account using numeric hash.
     
     Args:
-        transaction: Dictionary containing transaction details
-        account_id: ID of the account to check for duplicates
+        transaction: Transaction object
         
     Returns:
         bool: True if duplicate found, False otherwise
     """
     try:
-        logger.info(f"Entering check_duplicate_transaction for account_id: {account_id}")
-            
-        transaction_hash = generate_transaction_hash(
-            account_id,
-            transaction['date'],
-            Decimal(str(transaction['amount'])),
-            transaction['description']
-        )
-        existing = get_transaction_by_account_and_hash(account_id, transaction_hash)
+        logger.info(f"Entering check_duplicate_transaction for transaction: {transaction}")
+        existing = get_transaction_by_account_and_hash(transaction.account_id, transaction.transaction_hash)
         if existing:
             logger.info(f"Found existing transaction: hash={existing.transaction_hash} date={existing.date} amount={existing.amount} description={existing.description}")
         else:

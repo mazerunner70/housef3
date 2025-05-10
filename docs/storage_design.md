@@ -221,7 +221,7 @@ Primary Key: `fieldMapId` (String)
 
 ### Notes
 1. All timestamps are stored in ISO 8601 format
-2. Monetary values are stored as Decimal numbers to maintain precision
+2. Monetary values are stored as Money objects to maintain precision
 3. The `transactionHash` is a 64-bit numeric hash used for duplicate detection
 4. The `date` field in transactions is stored as milliseconds since epoch for efficient sorting
 5. All tables use on-demand capacity mode (PAY_PER_REQUEST)

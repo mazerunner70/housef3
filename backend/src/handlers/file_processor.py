@@ -22,7 +22,7 @@ from utils.db_utils import (
     update_transaction_file,
     create_transaction,
     delete_transactions_for_file,
-    get_field_map,
+    get_field_mapping,
     get_account_default_field_map
 )
 from utils.file_processor_utils import (
@@ -137,7 +137,7 @@ def process_file_with_account(file_id: str, content_bytes: bytes, opening_balanc
         logger.info(f"Account ID: {account_id}")
         if field_map_id:
             # Use specified field map
-            field_map = get_field_map(field_map_id)
+            field_map = get_field_mapping(field_map_id)
             if not field_map:
                 return {
                     'statusCode': 404,

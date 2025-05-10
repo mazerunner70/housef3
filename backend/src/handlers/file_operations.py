@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional, Union
 from decimal import Decimal
 from models.transaction_file import FileFormat, ProcessingStatus, DateRange, validate_transaction_file_data, transaction_file_to_json
 from models.transaction import Transaction
-from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_account, update_file_field_map, update_transaction_file, delete_file_metadata, get_account, list_file_transactions, delete_transactions_for_file, get_field_maps_table, get_field_map
+from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_account, update_file_field_map, update_transaction_file, delete_file_metadata, get_account, list_file_transactions, delete_transactions_for_file, get_field_maps_table, get_field_mapping
 from utils.transaction_parser import file_type_selector, parse_transactions
 from utils.s3_dao import (
     get_presigned_url,
@@ -485,7 +485,7 @@ def get_file_metadata_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Di
         
         # Add field map information if it exists
         if 'fieldMapId' in file_json:
-            field_map = get_field_map(file_json['fieldMapId'])
+            field_map = get_field_mapping(file_json['fieldMapId'])
             if field_map:
                 file_json['fieldMap'] = {
                     'fieldMapId': field_map.field_map_id,
@@ -593,7 +593,7 @@ def update_file_field_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -
         file = checked_mandatory_file(file_id, user['id'])
         
         # Get field map
-        field_map = get_field_map(field_map_id)
+        field_map = get_field_mapping(field_map_id)
         if not field_map:
             return create_response(404, {"message": "Field map not found"})
         

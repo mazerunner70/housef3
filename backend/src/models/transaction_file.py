@@ -9,6 +9,8 @@ from typing import Optional, Dict, Any, Tuple
 from dataclasses import dataclass
 import json
 
+from models.money import Money
+
 
 class FileFormat(str, enum.Enum):
     """Enum for transaction file formats"""
@@ -61,18 +63,19 @@ class TransactionFile:
     file_id: str
     user_id: str
     file_name: str
-    upload_date: str
+    upload_date: int # milliseconds since epoch
     file_size: int
     s3_key: str
     processing_status: ProcessingStatus
+    processed_date: Optional[int] = None
     file_format: Optional[FileFormat] = None
     account_id: Optional[str] = None
     field_map_id: Optional[str] = None
     record_count: Optional[int] = None
-    date_range_start: Optional[str] = None
-    date_range_end: Optional[str] = None
+    date_range_start: Optional[int] = None
+    date_range_end: Optional[int] = None
     error_message: Optional[str] = None
-    opening_balance: Optional[Decimal] = None
+    opening_balance: Optional[Money] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -85,7 +88,8 @@ class TransactionFile:
             "uploadDate": self.upload_date,
             "fileSize": str(self.file_size),  # Convert to string for DynamoDB
             "s3Key": self.s3_key,
-            "processingStatus": self.processing_status.value
+            "processingStatus": self.processing_status.value,
+            "processedDate": self.processed_date
         }
         
         if self.file_format:

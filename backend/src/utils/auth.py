@@ -4,9 +4,10 @@ Authentication utility functions.
 import logging
 from typing import Dict, Any, Optional
 
+from models.field_map import FieldMapping
 from models.transaction_file import TransactionFile
 from models.account import Account
-from utils.db_utils import get_account, get_transaction_file
+from utils.db_utils import get_account, get_field_mapping, get_transaction_file
 
 # Configure logging
 logger = logging.getLogger()
@@ -87,3 +88,19 @@ def checked_optional_account(account_id: str, user_id: str) -> Optional['Account
     if account.user_id != user_id:
         raise NotAuthorized("Not authorized to access this account")
     return account
+
+def checked_optional_field_mapping(field_mapping_id: str, user_id: str) -> Optional['FieldMapping']:
+    if not field_mapping_id:
+        return None
+    field_mapping = get_field_mapping(field_mapping_id)
+    if not field_mapping:
+        return None
+    if field_mapping.user_id != user_id:
+        raise NotAuthorized("Not authorized to access this field mapping")
+    return field_mapping
+
+def checked_mandatory_field_mapping(field_mapping_id: str, user_id: str) -> 'FieldMapping':
+    field_mapping = checked_optional_field_mapping(field_mapping_id, user_id)
+    if not field_mapping:
+        raise NotFound("Field mapping not found")
+    return field_mapping
