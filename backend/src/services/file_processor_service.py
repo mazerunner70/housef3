@@ -440,31 +440,31 @@ def update_file_mapping(transaction_file: TransactionFile) -> List[Transaction]:
                 field_map
             )
             
-        if transactions:
-            update_transaction_duplicates(transactions)
+            if transactions:
+                update_transaction_duplicates(transactions)
 
-            # Determine opening balance from transaction overlap
-            opening_balance = determine_opening_balances_from_transaction_overlap(transactions)
-            transaction_file.opening_balance = opening_balance if opening_balance else transaction_file.opening_balance
-            # Calculate running balances
-            calculate_running_balances(transactions, transaction_file.opening_balance)
-            
-            # Save transactions
-            transaction_count, duplicate_count = save_transactions(
-                transactions,
-                transaction_file,
-                transaction_file.user_id,
-                transaction_file.account
-            )
-            
-            # Update file status
-            update_file_status(transaction_file, transactions)
-            
-            return create_response(200, {
-                "message": "File remapped successfully",
-                "transactionCount": transaction_count,
-                "duplicateCount": duplicate_count
-            })
+                # Determine opening balance from transaction overlap
+                opening_balance = determine_opening_balances_from_transaction_overlap(transactions)
+                transaction_file.opening_balance = opening_balance if opening_balance else transaction_file.opening_balance
+                # Calculate running balances
+                calculate_running_balances(transactions, transaction_file.opening_balance)
+                
+                # Save transactions
+                transaction_count, duplicate_count = save_transactions(
+                    transactions,
+                    transaction_file,
+                    transaction_file.user_id,
+                    transaction_file.account
+                )
+                
+                # Update file status
+                update_file_status(transaction_file, transactions)
+                
+                return create_response(200, {
+                    "message": "File remapped successfully",
+                    "transactionCount": transaction_count,
+                    "duplicateCount": duplicate_count
+                })
         else:
             return create_response(200, {
                 "message": "Field map is unchanged, no reprocessing needed"
