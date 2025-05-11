@@ -218,7 +218,7 @@ class TestFileOperations(unittest.TestCase):
         mock_get_content.assert_called_once()
 
     @patch('handlers.file_operations.checked_mandatory_file')
-    @patch('handlers.file_operations.get_field_map')
+    @patch('handlers.file_operations.get_field_mapping')
     @patch('handlers.file_operations.update_file_field_map')
     @patch('handlers.file_operations.get_object_content')
     @patch('handlers.file_operations.process_file_with_account')
@@ -287,7 +287,7 @@ class TestFileOperations(unittest.TestCase):
         mock_process.assert_called_once()  # Just verify it's called, don't check args since file_format is optional
 
     @patch('handlers.file_operations.checked_mandatory_file')
-    @patch('handlers.file_operations.get_field_map')
+    @patch('handlers.file_operations.get_field_mapping')
     @patch('handlers.file_operations.update_file_field_map')
     @patch('utils.db_utils.get_field_maps_table')
     @patch('utils.db_utils.get_accounts_table')
@@ -349,7 +349,7 @@ class TestFileOperations(unittest.TestCase):
         mock_update_map.assert_called_once_with('test-file-id', 'test-map-id')
 
     @patch('handlers.file_operations.checked_mandatory_file')
-    @patch('handlers.file_operations.get_field_map')
+    @patch('handlers.file_operations.get_field_mapping')
     @patch('utils.db_utils.get_field_maps_table')
     @patch('utils.db_utils.get_accounts_table')
     @patch('handlers.file_operations.checked_mandatory_account')

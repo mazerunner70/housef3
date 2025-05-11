@@ -172,80 +172,79 @@ class TransactionFile:
             self.opening_balance = opening_balance
 
 
-def validate_transaction_file_data(data: Dict[str, Any]) -> bool:
+def validate_transaction_file_data(transaction_file: TransactionFile) -> bool:
     """
     Validate transaction file data according to business rules.
     
-    Returns True if valid, raises ValueError with details if invalid.
+    Args:
+        transaction_file: TransactionFile object to validate
+        
+    Returns:
+        bool: True if valid
+        
+    Raises:
+        ValueError: If validation fails, with details about what failed
     """
-    required_fields = ["userId", "fileName", "fileSize", "s3Key"]
-    
     # Check required fields
-    for field in required_fields:
-        if field not in data or not data[field]:
-            raise ValueError(f"Missing required field: {field}")
+    if not transaction_file.user_id:
+        raise ValueError("Missing required field: user_id")
+    if not transaction_file.file_name:
+        raise ValueError("Missing required field: file_name")
+    if not transaction_file.file_size:
+        raise ValueError("Missing required field: file_size")
+    if not transaction_file.s3_key:
+        raise ValueError("Missing required field: s3_key")
     
     # Validate file format if provided
-    if "fileFormat" in data and data["fileFormat"]:
-        if data["fileFormat"] not in [f.value for f in FileFormat]:
-            raise ValueError(f"Invalid file format: {data['fileFormat']}")
+    if transaction_file.file_format and not isinstance(transaction_file.file_format, FileFormat):
+        raise ValueError(f"Invalid file format: {transaction_file.file_format}")
     
     # Validate processing status if provided
-    if "processingStatus" in data and data["processingStatus"] not in [s.value for s in ProcessingStatus]:
-        raise ValueError(f"Invalid processing status: {data['processingStatus']}")
+    if transaction_file.processing_status and not isinstance(transaction_file.processing_status, ProcessingStatus):
+        raise ValueError(f"Invalid processing status: {transaction_file.processing_status}")
     
     # Validate account_id if provided
-    if "accountId" in data and data["accountId"] and not isinstance(data["accountId"], str):
+    if transaction_file.account_id and not isinstance(transaction_file.account_id, str):
         raise ValueError("Account ID must be a string")
     
     # Validate numeric fields
-    if "fileSize" in data:
-        try:
-            size = int(data["fileSize"])
-            if size <= 0:
-                raise ValueError("File size must be positive")
-        except (ValueError, TypeError):
+    if transaction_file.file_size:
+        if not isinstance(transaction_file.file_size, int):
             raise ValueError("File size must be a valid integer")
+        if transaction_file.file_size <= 0:
+            raise ValueError("File size must be positive")
     
-    if "recordCount" in data:
-        try:
-            count = int(data["recordCount"])
-            if count < 0:
-                raise ValueError("Record count must be non-negative")
-        except (ValueError, TypeError):
+    if transaction_file.record_count is not None:
+        if not isinstance(transaction_file.record_count, int):
             raise ValueError("Record count must be a valid integer")
+        if transaction_file.record_count < 0:
+            raise ValueError("Record count must be non-negative")
 
     # Validate opening balance if provided
-    if "openingBalance" in data:
+    if transaction_file.opening_balance:
+        if not isinstance(transaction_file.opening_balance, Money):
+            raise ValueError("Opening balance must be a Money object")
         try:
-            Decimal(str(data["openingBalance"]))
+            Decimal(str(transaction_file.opening_balance.amount))
         except (ValueError, TypeError):
-            raise ValueError("Opening balance must be a valid number")
+            raise ValueError("Opening balance amount must be a valid number")
     
     # Validate date range if provided
-    if "dateRange" in data:
-        date_range = data["dateRange"]
-        if not isinstance(date_range, dict):
-            raise ValueError("Date range must be a dictionary")
+    if transaction_file.date_range_start or transaction_file.date_range_end:
+        if not isinstance(transaction_file.date_range_start, int) or not isinstance(transaction_file.date_range_end, int):
+            raise ValueError("Date range must be timestamps")
         
-        if "startDate" not in date_range or "endDate" not in date_range:
-            raise ValueError("Date range must include startDate and endDate")
-        
-        # Try parsing the dates to validate format
-        try:
-            datetime.fromisoformat(date_range["startDate"].replace('Z', '+00:00'))
-            datetime.fromisoformat(date_range["endDate"].replace('Z', '+00:00'))
-        except ValueError:
-            raise ValueError("Dates must be in ISO format")
+        if transaction_file.date_range_start > transaction_file.date_range_end:
+            raise ValueError("Start date must be before end date")
     
     # Validate string lengths
-    if "fileName" in data and len(data["fileName"]) > 255:
+    if transaction_file.file_name and len(transaction_file.file_name) > 255:
         raise ValueError("File name must be 255 characters or less")
     
-    if "errorMessage" in data and len(data["errorMessage"]) > 1000:
+    if transaction_file.error_message and len(transaction_file.error_message) > 1000:
         raise ValueError("Error message must be 1000 characters or less")
     
-    return True 
+    return True
 
 def type_default(obj):
     if isinstance(obj, Decimal):

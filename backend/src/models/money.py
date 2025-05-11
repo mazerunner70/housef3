@@ -17,7 +17,7 @@ class Money:
         # Ensure amount is a Decimal
         if not isinstance(self.amount, Decimal):
             self.amount = Decimal(str(self.amount))
-        if not self.currency:
+        if not self.currency or not isinstance(self.currency, Currency):
             raise ValueError("Currency is required")
 
 

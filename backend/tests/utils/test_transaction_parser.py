@@ -3,7 +3,7 @@ import unittest
 from decimal import Decimal
 from datetime import datetime
 from models.transaction_file import FileFormat
-from models.field_map import FieldMap, FieldMapping
+from models.file_map import FileMap, FieldMapping
 from utils.transaction_parser import (
     parse_transactions,
     parse_csv_transactions,
@@ -22,7 +22,7 @@ class TestTransactionParser(unittest.TestCase):
         self.test_data_dir = os.path.join(os.path.dirname(__file__), 'test_data')
         
         # Sample field map for testing
-        self.field_map = FieldMap(
+        self.field_map = FileMap(
             field_map_id="test-map-1",
             name="Test Bank Statement",
             description="Test mapping for bank statements",
@@ -125,7 +125,13 @@ DATA:OFXSGML
     def test_parse_csv_from_file(self):
         """Test parsing CSV transactions from file."""
         content = self.read_test_file('sample_transactions.csv')
-        transactions = parse_csv_transactions(content, 100.0)
+        transactions = parse_transactions(
+            account_id='test_account',
+            content=content,
+            file_format=FileFormat.CSV,
+            opening_balance=100.0,
+            field_map=None
+        )
         
         self.assertEqual(len(transactions), 6)
         
@@ -149,7 +155,13 @@ DATA:OFXSGML
 
     def test_parse_csv_with_field_map(self):
         """Test parsing CSV transactions with field mapping."""
-        transactions = parse_csv_transactions(self.csv_content, 1000.0, self.field_map)
+        transactions = parse_transactions(
+            account_id='test_account',
+            content=self.csv_content,
+            file_format=FileFormat.CSV,
+            opening_balance=1000.0,
+            field_map=self.field_map
+        )
         
         self.assertEqual(len(transactions), 3)
         
@@ -163,7 +175,13 @@ DATA:OFXSGML
     def test_parse_ofx_from_file(self):
         """Test parsing OFX transactions from file."""
         content = self.read_test_file('sample_transactions.ofx')
-        transactions = parse_ofx_transactions(content, 100.0)
+        transactions = parse_transactions(
+            account_id='test_account',
+            content=content,
+            file_format=FileFormat.OFX,
+            opening_balance=100.0,
+            field_map=None
+        )
         
         self.assertEqual(len(transactions), 4)
         
@@ -187,7 +205,13 @@ DATA:OFXSGML
     def test_parse_qfx_from_file(self):
         """Test parsing QFX transactions from file."""
         content = self.read_test_file('sample_transactions.qfx')
-        transactions = parse_ofx_transactions(content, 100.0)
+        transactions = parse_transactions(
+            account_id='test_account',
+            content=content,
+            file_format=FileFormat.QFX,
+            opening_balance=100.0,
+            field_map=None
+        )
         
         self.assertEqual(len(transactions), 4)
         
@@ -210,52 +234,45 @@ DATA:OFXSGML
 
     def test_parse_ofx_inline(self):
         """Test parsing OFX transactions from inline content."""
-        transactions = parse_ofx_transactions(self.ofx_content, 1000.0)
+        transactions = parse_transactions(
+            account_id='test_account',
+            content=self.ofx_content,
+            file_format=FileFormat.OFX,
+            opening_balance=1000.0,
+            field_map=None
+        )
         
         self.assertEqual(len(transactions), 2)
         
         # Check first transaction
         first_tx = transactions[0]
-        self.assertEqual(first_tx["date"], 1704067200000)
+        self.assertEqual(first_tx["date"], 1704067200000)  # 2024-01-01
         self.assertEqual(first_tx["description"], "Grocery Store")
         self.assertEqual(first_tx["amount"], Decimal("-123.45"))
-        self.assertEqual(first_tx["balance"], Decimal("876.55"))  # 1000 - 123.45
-        self.assertEqual(first_tx.get("memo"), "Purchase at Store")
-        self.assertEqual(first_tx.get("transaction_type"), "DEBIT")
-
-    def test_parse_transactions_dispatcher(self):
-        """Test the main parse_transactions dispatcher function."""
-        # Test CSV format
-        content = self.read_test_file('sample_transactions.csv')
-        transactions = parse_transactions(content, FileFormat.CSV, 100.0)
-        self.assertEqual(len(transactions), 6)
-        
-        # Test OFX format
-        content = self.read_test_file('sample_transactions.ofx')
-        transactions = parse_transactions(content, FileFormat.OFX, 100.0)
-        self.assertEqual(len(transactions), 4)
-        
-        # Test QFX format
-        content = self.read_test_file('sample_transactions.qfx')
-        transactions = parse_transactions(content, FileFormat.QFX, 100.0)
-        self.assertEqual(len(transactions), 4)
-        
-        # Test unsupported format
-        transactions = parse_transactions(b'', 'UNSUPPORTED', 100.0)
-        self.assertEqual(transactions, [])
+        self.assertEqual(first_tx["balance"], Decimal("876.55"))
+        self.assertEqual(first_tx["transaction_type"], "DEBIT")
+        self.assertEqual(first_tx["memo"], "Purchase at Store")
 
     def test_invalid_csv_content(self):
-        """Test handling of invalid CSV content."""
-        csv_content = '''Invalid,Header,Format
-bad,data,here'''.encode('utf-8')
-        
-        transactions = parse_csv_transactions(csv_content, 100.0)
+        """Test parsing invalid CSV content."""
+        transactions = parse_transactions(
+            account_id='test_account',
+            content=b'invalid,csv,content',
+            file_format=FileFormat.CSV,
+            opening_balance=100.0,
+            field_map=None
+        )
         self.assertEqual(transactions, [])
 
     def test_invalid_ofx_content(self):
-        """Test handling of invalid OFX content."""
-        invalid_ofx = b"invalid OFX content"
-        transactions = parse_ofx_transactions(invalid_ofx, 1000.0)
+        """Test parsing invalid OFX content."""
+        transactions = parse_transactions(
+            account_id='test_account',
+            content=b'invalid ofx content',
+            file_format=FileFormat.OFX,
+            opening_balance=100.0,
+            field_map=None
+        )
         self.assertEqual(transactions, [])
 
     def test_field_mapping_with_missing_fields(self):
@@ -271,7 +288,7 @@ bad,data,here'''.encode('utf-8')
 
     def test_field_mapping_with_invalid_transformation(self):
         """Test field mapping with invalid transformation."""
-        field_map_with_bad_transform = FieldMap(
+        field_map_with_bad_transform = FileMap(
             field_map_id="test-map-2",
             name="Bad Transform",
             description="Map with invalid transformation",

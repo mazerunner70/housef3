@@ -583,7 +583,7 @@ def get_file_content_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dic
         return create_response(500, {"message": "Error getting file content"})
 
 def update_file_field_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
-    """Update a file's field map."""
+    """Update a file's field map.""" 
     try:
         # Get file ID from path parameters
         file_id = mandatory_path_parameter(event, 'id')

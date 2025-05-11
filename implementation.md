@@ -48,13 +48,12 @@ Based on review of the current codebase, the core functionality for transaction 
      def update_transaction_duplicates(transactions: List[Transaction]) -> int:
          """Check for duplicate transactions in a list of transactions."""
      ```
-``
 
 ### Step 2: Create Specialized Handlers (2 days)
 
 1. **Process New File Handler**
    ```python
-   def process_new_file(file_id: str, content_bytes: bytes, opening_balance: Decimal, user_id: str) -> Dict[str, Any]:
+   def process_new_file(file_id: str, content_bytes: bytes, opening_balance: Money, user_id: str) -> Dict[str, Any]:
        """Process a newly uploaded file."""
        # Implementation
    ```
@@ -68,7 +67,7 @@ Based on review of the current codebase, the core functionality for transaction 
 
 3. **Update Opening Balance Handler**
    ```python
-   def update_opening_balance(file_id: str, opening_balance: Decimal, user_id: str) -> Dict[str, Any]:
+   def update_opening_balance(file_id: str, opening_balance: Money, user_id: str) -> Dict[str, Any]:
        """Update a file's opening balance without reprocessing transactions."""
        # Implementation that preserves transactions
    ```
@@ -82,38 +81,116 @@ Based on review of the current codebase, the core functionality for transaction 
 
 ### Step 3: Create Main Entry Function (1/2 day)
 
-```python
-def process_file_with_account_new(file_id: str, content_bytes: bytes, opening_balance: Decimal, user_id: str) -> Dict[str, Any]:
-    """
-    Main entry point that delegates to appropriate specialized handler.
-    This replaces the original monolithic function.
-    """
-    try:
-        file_record = prepare_file_processing(file_id, user_id)
-        if not file_record:
-            return error_response("File not found", 404)
-            
-        # Determine appropriate handler based on context
-        if file_record.processing_status == ProcessingStatus.PENDING.value:
-            # New file processing
-            return process_new_file(file_id, content_bytes, opening_balance, user_id)
-        elif content_bytes and file_record.field_map_id != get_current_field_map_id():
-            # Field mapping change
-            return update_file_mapping(file_id, get_current_field_map_id(), user_id)
-        elif opening_balance != get_current_opening_balance(file_record):
-            # Opening balance change only
-            return update_opening_balance(file_id, opening_balance, user_id)
-        else:
-            # Generic reprocessing
-            return process_new_file(file_id, content_bytes, opening_balance, user_id)
-    except Exception as e:
-        logger.error(f"Error processing file: {str(e)}")
-        update_transaction_file(file_id, {
-            'processingStatus': ProcessingStatus.ERROR.value,
-            'errorMessage': f'Error processing file: {str(e)}'
-        })
-        return error_response(f"Error processing file: {str(e)}", 500)
-```
+1. **Define Main Entry Points**
+   ```python
+   def process_file(file_id: str, content_bytes: bytes, user_id: str) -> Dict[str, Any]:
+       """
+       Main entry point for processing a new file.
+       
+       Args:
+           file_id: ID of the file to process
+           content_bytes: Raw file content
+           user_id: ID of the user who owns the file
+           
+       Returns:
+           API Gateway response with processing results
+       """
+       return process_new_file(file_id, content_bytes, user_id)
+
+   def remap_file(file_id: str, field_map_id: str, user_id: str) -> Dict[str, Any]:
+       """
+       Main entry point for updating a file's field mapping.
+       
+       Args:
+           file_id: ID of the file to remap
+           field_map_id: ID of the new field map to use
+           user_id: ID of the user who owns the file
+           
+       Returns:
+           API Gateway response with remapping results
+       """
+       return update_file_mapping(file_id, field_map_id, user_id)
+
+   def update_balance(file_id: str, opening_balance: Money, user_id: str) -> Dict[str, Any]:
+       """
+       Main entry point for updating a file's opening balance.
+       
+       Args:
+           file_id: ID of the file to update
+           opening_balance: New opening balance
+           user_id: ID of the user who owns the file
+           
+       Returns:
+           API Gateway response with balance update results
+       """
+       return update_opening_balance(file_id, opening_balance, user_id)
+
+   def reassign_file(file_id: str, account_id: str, user_id: str) -> Dict[str, Any]:
+       """
+       Main entry point for changing a file's account.
+       
+       Args:
+           file_id: ID of the file to reassign
+           account_id: ID of the new account
+           user_id: ID of the user who owns the file
+           
+       Returns:
+           API Gateway response with reassignment results
+       """
+       return change_file_account(file_id, account_id, user_id)
+   ```
+
+2. **Update Original Function**
+   ```python
+   def process_file_with_account(file_id: str, account_id: str, user_id: str) -> Dict[str, Any]:
+       """
+       Legacy entry point that routes to appropriate handler based on context.
+       
+       Args:
+           file_id: ID of the file to process
+           account_id: ID of the account to process with
+           user_id: ID of the user who owns the file
+           
+       Returns:
+           API Gateway response with processing results
+       """
+       # Get file record to determine context
+       file_record = prepare_file_processing(file_id, user_id)
+       
+       if not file_record:
+           return handle_error(404, "File not found")
+           
+       # Route to appropriate handler based on context
+       if file_record.account_id != account_id:
+           # Account is changing
+           return reassign_file(file_id, account_id, user_id)
+       elif file_record.processing_status == ProcessingStatus.PENDING:
+           # New file processing
+           content_bytes = get_file_content(file_id)
+           return process_file(file_id, content_bytes, user_id)
+       else:
+           # Existing file - determine if field map or balance update
+           if file_record.field_map_id:
+               return remap_file(file_id, file_record.field_map_id, user_id)
+           else:
+               return update_balance(file_id, file_record.opening_balance, user_id)
+   ```
+
+3. **Implementation Notes**
+   - Each entry point is focused on a specific use case
+   - Entry points handle basic validation and error handling
+   - Legacy function routes to appropriate handler based on context
+   - All responses use standardized format from `lambda_utils`
+   - Logging is consistent across all entry points
+   - Error handling follows established patterns
+
+4. **Testing Strategy**
+   - Test each entry point independently
+   - Verify routing logic in legacy function
+   - Test error cases and edge conditions
+   - Verify response formats match API Gateway requirements
+   - Test with various file types and sizes
+   - Verify logging and monitoring
 
 ### Step 4: Transition Plan (1 day)
 

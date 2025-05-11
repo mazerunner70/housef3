@@ -10,8 +10,9 @@ import re
 import boto3
 from typing import Dict, Any, List, Tuple, Optional
 from decimal import Decimal
-from models.transaction_file import FileFormat, ProcessingStatus
-from models.field_map import FieldMap
+from models.transaction_file import FileFormat, ProcessingStatus, TransactionFile
+from models.file_map import FileMap
+from services.file_processor_service import process_file_with_account
 from utils.transaction_parser import parse_transactions, file_type_selector
 from models.transaction import Transaction
 from utils.file_analyzer import analyze_file_format
@@ -86,7 +87,7 @@ FIELD_MAPS_TABLE = os.environ.get('FIELD_MAPS_TABLE', 'field-maps')
 transaction_table = dynamodb.Table(TRANSACTIONS_TABLE)
 field_maps_table = dynamodb.Table(FIELD_MAPS_TABLE)
 
-def process_file_with_account(file_id: str, content_bytes: bytes, opening_balance: Decimal, user_id: str) -> Dict[str, Any]:
+def legacy_process_file_with_account(file_id: str, content_bytes: bytes, opening_balance: Decimal, user_id: str) -> Dict[str, Any]:
     """
     Process a file and its transactions with account-specific logic.
     This includes:
@@ -303,34 +304,31 @@ def handler(event, context):
 
                 # Create or update file metadata in DynamoDB
                 current_time = datetime.utcnow().isoformat()
-                file_data = {
-                    'fileId': file_id,
-                    'userId': user_id,
-                    'fileName': file_name,
-                    'fileSize': size,
-                    'uploadDate': current_time,
-                    'lastModified': current_time,
-                    's3Key': key,
-                    'fileFormat': file_format.value,
-                    'processingStatus': ProcessingStatus.PENDING.value
-                }
+                transaction_file = TransactionFile(
+                    file_id=file_id,
+                    user_id=user_id,
+                    file_name=file_name,
+                    file_size=size,
+                    upload_date=current_time,
+                    s3_key=key,
+                    file_format=file_format.value,
+                    processing_status=ProcessingStatus.PENDING.value
+                )
 
                 # Add account ID if it was found in metadata
                 if account_id:
-                    file_data['accountId'] = account_id
+                    transaction_file.account_id = account_id
                     logger.info(f"Adding account ID to file metadata: {account_id}")
                 # If account has a default field map, add it to the file metadata
                 if account_id:
                     account = get_account(account_id)
                     if account and account.default_field_map_id:
-                        file_data['fieldMapId'] = account.default_field_map_id
+                        transaction_file.field_map_id = account.default_field_map_id
                         logger.info(f"Adding default field map ID to file metadata: {account.default_field_map_id}")
 
-                # Create the file record
-                create_transaction_file(file_data)
-                logger.info(f"Created file metadata in DynamoDB: {json.dumps(file_data)}")
 
-                process_file_with_account(file_id, content_bytes, Decimal('0'), user_id)
+                logger.info(f"Processing file with account: {transaction_file}")
+                process_file_with_account(transaction_file)
                 return {
                     'statusCode': 200,
                     'body': json.dumps({
@@ -347,7 +345,7 @@ def handler(event, context):
                     'body': json.dumps({'message': 'File not found in S3 bucket'})
                 }
             except Exception as s3_error:
-                logger.error(f"Error processing file: {str(s3_error)}")
+                logger.error(f"Error processing file2: {str(s3_error)}")
                 return {
                     'statusCode': 500,
                     'body': json.dumps({'message': f'Error processing file: {str(s3_error)}'})

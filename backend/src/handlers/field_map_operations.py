@@ -7,7 +7,7 @@ import logging
 from typing import Dict, Any, List, Optional
 from botocore.exceptions import ClientError
 
-from models import FieldMap, validate_field_map_data
+from models import FileMap, validate_field_map_data
 from utils.lambda_utils import create_response, handle_error
 from utils.auth import get_user_from_event
 from utils.db_utils import get_field_maps_table
@@ -41,7 +41,7 @@ def create_field_map_handler(event: Dict[str, Any]) -> Dict[str, Any]:
         validate_field_map_data(body)
         
         # Create field map
-        field_map = FieldMap.create(
+        field_map = FileMap.create(
             user_id=user_id,
             name=body['name'],
             mappings=body['mappings'],
@@ -84,7 +84,7 @@ def get_field_map_handler(event: Dict[str, Any]) -> Dict[str, Any]:
         if 'Item' not in response:
             return handle_error(404, f"Field map {field_map_id} not found")
             
-        field_map = FieldMap.from_dict(response['Item'])
+        field_map = FileMap.from_dict(response['Item'])
         
         # Check ownership
         if field_map.user_id != user_id:
@@ -129,7 +129,7 @@ def list_field_maps_handler(event: Dict[str, Any]) -> Dict[str, Any]:
                 ExpressionAttributeValues={':userId': user_id}
             )
             
-        field_maps = [FieldMap.from_dict(item).to_dict() for item in response.get('Items', [])]
+        field_maps = [FileMap.from_dict(item).to_dict() for item in response.get('Items', [])]
         
         # Filter out field maps not owned by the user (when querying by account)
         if account_id:
@@ -166,7 +166,7 @@ def update_field_map_handler(event: Dict[str, Any]) -> Dict[str, Any]:
         if 'Item' not in response:
             return handle_error(404, f"Field map {field_map_id} not found")
             
-        field_map = FieldMap.from_dict(response['Item'])
+        field_map = FileMap.from_dict(response['Item'])
         
         # Check ownership
         if field_map.user_id != user_id:
@@ -214,7 +214,7 @@ def delete_field_map_handler(event: Dict[str, Any]) -> Dict[str, Any]:
         if 'Item' not in response:
             return handle_error(404, f"Field map {field_map_id} not found")
             
-        field_map = FieldMap.from_dict(response['Item'])
+        field_map = FileMap.from_dict(response['Item'])
         
         # Check ownership
         if field_map.user_id != user_id:

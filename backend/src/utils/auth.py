@@ -4,7 +4,7 @@ Authentication utility functions.
 import logging
 from typing import Dict, Any, Optional
 
-from models.field_map import FieldMapping
+from models.file_map import FieldMapping
 from models.transaction_file import TransactionFile
 from models.account import Account
 from utils.db_utils import get_account, get_field_mapping, get_transaction_file
@@ -63,7 +63,7 @@ def checked_optional_file(file_id: str, user_id: str) -> Optional[TransactionFil
     if not file_id:
         return None
     file = get_transaction_file(file_id)
-    if file.user_id != user_id:
+    if file and file.user_id != user_id:
         raise NotAuthorized("Not authorized to access this file")
     return file
 

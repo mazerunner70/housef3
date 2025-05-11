@@ -3,6 +3,7 @@ Utility functions for database operations.
 """
 import os
 import logging
+import traceback
 import boto3
 import uuid
 from datetime import datetime
@@ -22,7 +23,7 @@ from models import (
 )
 from models.transaction import Transaction
 from boto3.dynamodb.conditions import Key, Attr
-from models.field_mapping import FieldMapping
+from models.file_map import FieldMapping, FileMap
 from utils.transaction_utils import generate_transaction_hash
 
 # Configure logging
@@ -340,52 +341,33 @@ def list_user_files(user_id: str) -> List[TransactionFile]:
         raise
 
 
-def create_transaction_file(file_data: Dict[str, Any]) -> TransactionFile:
+def create_transaction_file(transaction_file: TransactionFile) -> TransactionFile:
     """
     Create a new transaction file record.
     
     Args:
-        file_data: Dictionary containing file data
+        transaction_file: TransactionFile object
         
     Returns:
         Newly created TransactionFile object
     """
     try:
         # Validate the input data
-        validate_transaction_file_data(file_data)
-        
-        # Convert string values to enum types if provided as strings
-        if 'fileFormat' in file_data and isinstance(file_data['fileFormat'], str):
-            file_data['fileFormat'] = FileFormat(file_data['fileFormat'])
-            
-        if 'processingStatus' in file_data and isinstance(file_data['processingStatus'], str):
-            file_data['processingStatus'] = ProcessingStatus(file_data['processingStatus'])
-        
-        # Check if file_id is provided or should be generated
-        file_id = file_data.get('fileId', str(uuid.uuid4()))
-        
-        # Create transaction file object
-        file = TransactionFile.from_dict({
-            'fileId': file_id,
-            'accountId': file_data.get('accountId'),
-            'userId': file_data['userId'],
-            'fileName': file_data['fileName'],
-            'uploadDate': datetime.utcnow().isoformat(),
-            'fileSize': int(file_data['fileSize']),
-            'fileFormat': file_data.get('fileFormat'),
-            's3Key': file_data['s3Key'],
-            'processingStatus': file_data.get('processingStatus', ProcessingStatus.PENDING)
-        })
+        validate_transaction_file_data(transaction_file)
+    
         
         # Save to DynamoDB
-        get_files_table().put_item(Item=file.to_dict())
+        get_files_table().put_item(Item=transaction_file.to_dict())
         
-        return file
+        return transaction_file
     except ValueError as e:
         logger.error(f"Validation error creating file: {str(e)}")
+        #log stack trace
+        logger.error(traceback.format_exc())
         raise
     except ClientError as e:
-        logger.error(f"Error creating file: {str(e)}")
+        logger.error(f"Error creating file: {str(e)}")        
+        logger.error(traceback.format_exc())
         raise
 
 
@@ -580,7 +562,7 @@ def get_field_mapping(field_map_id: Optional[str] = None) -> Optional[FieldMappi
         return None
 
 
-def get_account_default_field_map(account_id: str) -> Optional[FieldMap]:
+def get_account_default_field_map(account_id: str) -> Optional[FileMap]:
     """
     Get the default field map for an account.
     
@@ -611,7 +593,7 @@ def get_account_default_field_map(account_id: str) -> Optional[FieldMap]:
         return None
 
 
-def create_field_map(field_map: FieldMap) -> bool:
+def create_field_map(field_map: FileMap) -> bool:
     """
     Create a new field map.
     
@@ -632,7 +614,7 @@ def create_field_map(field_map: FieldMap) -> bool:
         return False
 
 
-def update_field_map(field_map: FieldMap) -> bool:
+def update_field_map(field_map: FileMap) -> bool:
     """
     Update an existing field map.
     
@@ -673,7 +655,7 @@ def delete_field_map(field_map_id: str) -> bool:
         return False
 
 
-def list_field_maps_by_user(user_id: str) -> List[FieldMap]:
+def list_field_maps_by_user(user_id: str) -> List[FileMap]:
     """
     List all field maps for a user.
     
@@ -690,13 +672,13 @@ def list_field_maps_by_user(user_id: str) -> List[FieldMap]:
             ExpressionAttributeValues={':userId': user_id}
         )
         
-        return [FieldMap.from_dict(item) for item in response.get('Items', [])]
+        return [FileMap.from_dict(item) for item in response.get('Items', [])]
     except Exception as e:
         logger.error(f"Error listing field maps for user {user_id}: {str(e)}")
         return []
 
 
-def list_account_field_maps(account_id: str) -> List[FieldMap]:
+def list_account_field_maps(account_id: str) -> List[FileMap]:
     """
     List all field maps for an account.
     
@@ -713,7 +695,7 @@ def list_account_field_maps(account_id: str) -> List[FieldMap]:
             ExpressionAttributeValues={':accountId': account_id}
         )
         
-        return [FieldMap.from_dict(item) for item in response.get('Items', [])]
+        return [FileMap.from_dict(item) for item in response.get('Items', [])]
     except Exception as e:
         logger.error(f"Error listing field maps for account {account_id}: {str(e)}")
         return []
@@ -887,7 +869,7 @@ def get_transaction_by_account_and_hash(account_id: str, transaction_hash: int) 
         return None
 
 
-def check_duplicate_transaction(transaction: Transaction) -> bool:
+def check_duplicate_transaction(transaction: Transaction) -> bool: 
     """
     Check if a transaction already exists for the given account using numeric hash.
     
@@ -903,7 +885,7 @@ def check_duplicate_transaction(transaction: Transaction) -> bool:
         if existing:
             logger.info(f"Found existing transaction: hash={existing.transaction_hash} date={existing.date} amount={existing.amount} description={existing.description}")
         else:
-            logger.info(f"No existing transaction found for hash={transaction_hash}")
+            logger.info(f"No existing transaction found for hash={transaction.transaction_hash}")
         return existing is not None
     except Exception as e:
         logger.error(f"Error checking for duplicate transaction: {str(e)}")

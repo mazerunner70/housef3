@@ -26,7 +26,7 @@ class TestFileService(unittest.TestCase):
         mock_list_user_files.assert_called_once_with('user1')
         mock_list_account_files.assert_not_called()
 
-    @patch('services.file_service.get_field_map')
+    @patch('services.file_service.get_field_mapping')
     def test_format_file_metadata_with_field_map(self, mock_get_field_map):
         mock_get_field_map.return_value = MagicMock(field_map_id='fm1', name='Map1', description='desc')
         file = TransactionFile(
@@ -64,7 +64,7 @@ class TestFileService(unittest.TestCase):
 @patch('boto3.resource', MagicMock())
 @patch('utils.db_utils.dynamodb', MagicMock())
 class TestFormatFileMetadata(unittest.TestCase):
-    @patch('services.file_service.get_field_map')
+    @patch('services.file_service.get_field_mapping')
     def test_format_file_metadata_full(self, mock_get_field_map):
         mock_get_field_map.return_value = MagicMock(field_map_id='fm1', name='Map1', description='desc')
         file = TransactionFile(
@@ -107,7 +107,7 @@ class TestFormatFileMetadata(unittest.TestCase):
         self.assertEqual(formatted['fileId'], 'f2')
         self.assertNotIn('fieldMap', formatted)
 
-    @patch('services.file_service.get_field_map')
+    @patch('services.file_service.get_field_mapping')
     def test_format_file_metadata_no_field_map(self, mock_get_field_map):
         mock_get_field_map.return_value = None
         file = TransactionFile(

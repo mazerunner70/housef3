@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 from models.transaction_file import FileFormat
-from models.field_map import FieldMap, FieldMapping
+from models.file_map import FileMap, FieldMapping
 import decimal
 
 # Configure logging
@@ -61,7 +61,7 @@ def detect_date_order(dates: List[str]) -> str:
     # If all timestamps are equal, default to ascending
     return 'asc'
 
-def apply_field_mapping(row_data: Dict[str, Any], field_map: FieldMap) -> Dict[str, Any]:
+def apply_field_mapping(row_data: Dict[str, Any], field_map: FileMap) -> Dict[str, Any]:
     """
     Apply field mapping to a row of data.
     
@@ -110,7 +110,7 @@ def parse_transactions(account_id: str,
                       content: bytes, 
                       file_format: FileFormat, 
                       opening_balance: float,
-                      field_map: Optional[FieldMap] = None) -> List[Dict[str, Any]]:
+                      field_map: Optional[FileMap] = None) -> List[Dict[str, Any]]:
     """
     Parse transactions from file content based on the file format.
     
@@ -259,7 +259,7 @@ def preprocess_csv_text(text_content: str) -> str:
             
     return '\n'.join(fixed_lines)
 
-def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = None, field_map: Optional[FieldMap] = None) -> List[Dict[str, Any]]:
+def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = None, field_map: Optional[FileMap] = None) -> List[Dict[str, Any]]:
     """
     Parse transactions from CSV file content.
     

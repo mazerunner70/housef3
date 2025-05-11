@@ -11,7 +11,7 @@ from decimal import Decimal
 from datetime import datetime
 
 from models.transaction_file import FileFormat, ProcessingStatus
-from models.field_map import FieldMap
+from models.file_map import FileMap
 from utils.transaction_parser import parse_transactions
 from utils.db_utils import (
     get_transaction_file,
@@ -50,7 +50,7 @@ def create_composite_key(user_id: str, transaction: Dict[str, Any]) -> str:
     Returns:
         str: The composite key
     """
-    amount = Decimal(str(transaction['amount']))
+    amount = transaction['amount']
     return f"{user_id}#{transaction['date']}#{amount}#{transaction['description']}"
 
 def get_file_content(file_id: str, s3_client: Any = None) -> Optional[bytes]:

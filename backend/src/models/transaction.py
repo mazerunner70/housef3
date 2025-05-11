@@ -1,31 +1,53 @@
 import json
 import uuid
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional, List, Union, TypeVar, Generic, Type
 from datetime import datetime
-import os
-import boto3
 import logging
-import hashlib
 from decimal import Decimal
 from dataclasses import dataclass, field
-
+from utils.transaction_utils import generate_transaction_hash
 from models.money import Money
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+T = TypeVar('T')
+
+class HashRegeneratingField(Generic[T]):
+    """Descriptor that regenerates hash when field value changes."""
+    
+    def __init__(self, field_type: Type[T]):
+        self._field_type = field_type
+    
+    def __set_name__(self, owner, name):
+        self._name = f"_{name}"
+    
+    def __get__(self, obj: Any, objtype: Any = None) -> T:
+        if obj is None:
+            return self
+        return getattr(obj, self._name)
+    
+    def __set__(self, obj: Any, value: T) -> None:
+        if not isinstance(value, self._field_type):
+            raise TypeError(f"Value must be of type {self._field_type.__name__}")
+        setattr(obj, self._name, value)
+        obj._regenerate_hash()
 
 @dataclass
 class Transaction:
     """
     Represents a single financial transaction parsed from a transaction file.
     """
-    transaction_id: str
-    account_id: str
-    file_id: str
+    # Required fields (no defaults)
     user_id: str
-    date: int  # milliseconds since epoch
-    description: str
-    amount: Money
+    file_id: str
+    transaction_id: str
+    account_id: HashRegeneratingField[str] = HashRegeneratingField(str)
+    date: HashRegeneratingField[int] = HashRegeneratingField(int)
+    description: HashRegeneratingField[str] = HashRegeneratingField(str)
+    amount: HashRegeneratingField[Money] = HashRegeneratingField(Money)
+    
+    # Optional fields (with defaults)
     balance: Optional[Money] = None
     import_order: Optional[int] = None
     transaction_type: Optional[str] = None
@@ -38,63 +60,39 @@ class Transaction:
     transaction_hash: Optional[int] = field(default=None, init=False)
 
     def __post_init__(self):
-        """Generate transaction hash if required fields are present."""
+        """Initialize private fields and generate transaction hash."""
         self._regenerate_hash()
 
     def _regenerate_hash(self):
         """Regenerate the transaction hash if required fields are present."""
-        if (self.account_id and self.date and self.amount and self.description):
-            from utils.transaction_utils import generate_transaction_hash
-            self.transaction_hash = generate_transaction_hash(
-                account_id=self.account_id,
-                date=self.date,
-                amount=self.amount.amount,
-                description=self.description
-            )
-            logger.info(f"Regenerated transaction hash: {self}")
+        # Only regenerate if all required fields are set
+        try:
+            if all(hasattr(self, f"_{field}") for field in ['account_id', 'date', 'amount', 'description']) and (self.account_id and self.date and self.amount and self.description):
+                self.transaction_hash = generate_transaction_hash(
+                    account_id=self.account_id,
+                    date=self.date,
+                    amount=self.amount.amount,
+                    description=self.description
+                )
+                logger.info(f"Regenerated transaction hash: {self}")
+        except AttributeError:
+            # Skip hash generation if any required field is not set
+            pass
 
-    @property
-    def account_id(self) -> str:
-        return self._account_id
-
-    @account_id.setter
-    def account_id(self, value: str):
-        self._account_id = value
-        self._regenerate_hash()
-
-    @property
-    def date(self) -> int:
-        return self._date
-
-    @date.setter
-    def date(self, value: int):
-        self._date = value
-        self._regenerate_hash()
-
-    @property
-    def description(self) -> str:
-        return self._description
-
-    @description.setter
-    def description(self, value: str):
-        self._description = value
-        self._regenerate_hash()
-
-    @property
-    def amount(self) -> Money:
-        return self._amount
-
-    @amount.setter
-    def amount(self, value: Money):
-        self._amount = value
-        self._regenerate_hash()
+    def __str__(self):
+        """String representation of the transaction."""
+        return (f"Transaction(account_id={self._account_id}, "
+                f"date={self._date}, "
+                f"amount={self._amount}, "
+                f"description={self._description}, "
+                f"hash={self.transaction_hash})")
 
     @classmethod
     def create(
         cls,
         account_id: str,
-        file_id: str,
         user_id: str,
+        file_id: str,
         date: int,  # milliseconds since epoch
         description: str,
         amount: Money,
@@ -109,10 +107,10 @@ class Transaction:
         """Create a new Transaction with a generated ID."""
         transaction_id = str(uuid.uuid4())
         return cls(
+            user_id=user_id,
+            file_id=file_id,
             transaction_id=transaction_id,
             account_id=account_id,
-            file_id=file_id,
-            user_id=user_id,
             date=date,
             description=description,
             amount=amount,
@@ -129,12 +127,12 @@ class Transaction:
         """Convert to dictionary for storage"""
         return {
             "transactionId": self.transaction_id,
-            "accountId": self.account_id,
+            "accountId": self._account_id,
             "fileId": self.file_id,
             "userId": self.user_id,
-            "date": self.date,  # milliseconds since epoch
-            "description": self.description,
-            "amount": self.amount.to_dict(),
+            "date": self._date,  # milliseconds since epoch
+            "description": self._description,
+            "amount": self._amount.to_dict(),
             "balance": self.balance.to_dict() if self.balance else None,
             "importOrder": self.import_order,
             "transactionType": self.transaction_type,
@@ -151,10 +149,10 @@ class Transaction:
     def from_dict(cls, data: Dict[str, Any]) -> 'Transaction':
         """Create from dictionary"""
         return cls(
+            user_id=data["userId"],
+            file_id=data["fileId"],
             transaction_id=data["transactionId"],
             account_id=data["accountId"],
-            file_id=data["fileId"],
-            user_id=data["userId"],
             date=data["date"],  # milliseconds since epoch
             description=data["description"],
             amount=Money.from_dict(data["amount"]),

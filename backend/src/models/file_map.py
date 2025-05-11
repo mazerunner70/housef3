@@ -33,7 +33,7 @@ class FieldMapping:
         )
 
 @dataclass
-class FieldMap:
+class FileMap:
     """Represents a field mapping configuration for transaction files."""
     field_map_id: str
     user_id: str
@@ -46,7 +46,7 @@ class FieldMap:
 
     @classmethod
     def create(cls, user_id: str, name: str, mappings: List[Dict[str, Any]], 
-               account_id: Optional[str] = None, description: Optional[str] = None) -> 'FieldMap':
+               account_id: Optional[str] = None, description: Optional[str] = None) -> 'FileMap':
         """Create a new FieldMap instance."""
         field_mappings = [FieldMapping.from_dict(m) for m in mappings]
         return cls(
@@ -75,7 +75,7 @@ class FieldMap:
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'FieldMap':
+    def from_dict(cls, data: Dict[str, Any]) -> 'FileMap':
         """Create a FieldMap instance from a dictionary."""
         mappings = [FieldMapping.from_dict(m) for m in data['mappings']]
         return cls(

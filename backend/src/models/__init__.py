@@ -19,8 +19,8 @@ from .transaction_file import (
     validate_transaction_file_data
 )
 
-from .field_map import (
-    FieldMap,
+from .file_map import (
+    FileMap,
     FieldMapping,
     validate_field_map_data
 )
