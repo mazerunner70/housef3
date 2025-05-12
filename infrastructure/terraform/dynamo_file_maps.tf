@@ -1,10 +1,10 @@
-resource "aws_dynamodb_table" "field_maps" {
-  name           = "${var.project_name}-${var.environment}-field-maps"
+resource "aws_dynamodb_table" "file_maps" {
+  name           = "${var.project_name}-${var.environment}-file-maps"
   billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "fieldMapId"
+  hash_key       = "fileMapId"
   
   attribute {
-    name = "fieldMapId"
+    name = "fileMapId"
     type = "S"
   }
 
@@ -37,10 +37,10 @@ resource "aws_dynamodb_table" "field_maps" {
   }
 }
 
-output "field_maps_table_name" {
-  value = aws_dynamodb_table.field_maps.name
+output "file_maps_table_name" {
+  value = aws_dynamodb_table.file_maps.name
 }
 
-output "field_maps_table_arn" {
-  value = aws_dynamodb_table.field_maps.arn
+output "file_maps_table_arn" {
+  value = aws_dynamodb_table.file_maps.arn
 } 

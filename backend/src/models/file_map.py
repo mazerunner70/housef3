@@ -100,9 +100,9 @@ class FileMap:
             self.description = description
         self.updated_at = datetime.utcnow().isoformat()
 
-def validate_field_map_data(data: Dict[str, Any]) -> None:
+def validate_file_map_data(data: Dict[str, Any]) -> None:
     """
-    Validate field map data.
+    Validate file map data.
     
     Args:
         data: Dictionary containing field map data

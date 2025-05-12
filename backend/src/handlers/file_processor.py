@@ -311,8 +311,8 @@ def handler(event, context):
                     file_size=size,
                     upload_date=current_time,
                     s3_key=key,
-                    file_format=file_format.value,
-                    processing_status=ProcessingStatus.PENDING.value
+                    file_format=file_format,
+                    processing_status=ProcessingStatus.PENDING
                 )
 
                 # Add account ID if it was found in metadata

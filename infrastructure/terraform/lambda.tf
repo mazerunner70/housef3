@@ -32,7 +32,7 @@ resource "aws_lambda_function" "file_operations" {
       FILES_TABLE         = aws_dynamodb_table.transaction_files.name
       ACCOUNTS_TABLE      = aws_dynamodb_table.accounts.name
       TRANSACTIONS_TABLE  = aws_dynamodb_table.transactions.name
-      FIELD_MAPS_TABLE    = aws_dynamodb_table.field_maps.name
+      FILE_MAPS_TABLE    = aws_dynamodb_table.file_maps.name
       DEPLOYMENT_VERSION  = "v4"
     }
   }
@@ -62,7 +62,7 @@ resource "aws_lambda_function" "file_processor" {
       TRANSACTIONS_TABLE  = aws_dynamodb_table.transactions.name
       FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.id
       ACCOUNTS_TABLE      = aws_dynamodb_table.accounts.name
-      FIELD_MAPS_TABLE    = aws_dynamodb_table.field_maps.name
+      FILE_MAPS_TABLE    = aws_dynamodb_table.file_maps.name
     }
   }
   
@@ -190,8 +190,8 @@ resource "aws_iam_role_policy" "lambda_dynamodb_access" {
           "${aws_dynamodb_table.accounts.arn}/index/*",
           aws_dynamodb_table.transactions.arn,
           "${aws_dynamodb_table.transactions.arn}/index/*",
-          aws_dynamodb_table.field_maps.arn,
-          "${aws_dynamodb_table.field_maps.arn}/index/*"
+          aws_dynamodb_table.file_maps.arn,
+          "${aws_dynamodb_table.file_maps.arn}/index/*"
         ]
       }
     ]

@@ -1,6 +1,14 @@
 {
-    "python.analysis.extraPaths": [
-        "${workspaceFolder}/backend/src"
-    ],
-    "python.linting.enabled": true
+    "python.analysis.include": ["backend/src/**/*", "backend/tests/**/*"],
+    "python.analysis.exclude": ["**/node_modules", "**/__pycache__", "**/build", ".git", "myenv/**"],
+    "python.linting.enabled": true,
+    "python.languageServer": "Pylance",
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.diagnosticMode": "workspace",
+    "python.analysis.autoImportCompletions": true,
+    "python.linting.pylintEnabled": true,
+    "python.linting.pylintArgs": [
+        "--max-line-length=120",
+        "--disable=C0111"
+    ]
 } 

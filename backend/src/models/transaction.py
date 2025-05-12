@@ -24,7 +24,7 @@ class HashRegeneratingField(Generic[T]):
     
     def __get__(self, obj: Any, objtype: Any = None) -> T:
         if obj is None:
-            return self
+            return self._field_type()
         return getattr(obj, self._name)
     
     def __set__(self, obj: Any, value: T) -> None:
@@ -46,6 +46,12 @@ class Transaction:
     date: HashRegeneratingField[int] = HashRegeneratingField(int)
     description: HashRegeneratingField[str] = HashRegeneratingField(str)
     amount: HashRegeneratingField[Money] = HashRegeneratingField(Money)
+    
+    # Private attributes created by HashRegeneratingField
+    _account_id: str = field(init=False, repr=False)
+    _date: int = field(init=False, repr=False)
+    _description: str = field(init=False, repr=False)
+    _amount: Money = field(init=False, repr=False)
     
     # Optional fields (with defaults)
     balance: Optional[Money] = None

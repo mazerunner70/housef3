@@ -8,6 +8,9 @@ import xml.etree.ElementTree as ET
 from decimal import Decimal
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
+from backend.src.models.account import Currency
+from backend.src.models.money import Money
+from backend.src.models.transaction import Transaction
 from models.transaction_file import FileFormat
 from models.file_map import FileMap, FieldMapping
 import decimal
@@ -109,8 +112,8 @@ def apply_field_mapping(row_data: Dict[str, Any], field_map: FileMap) -> Dict[st
 def parse_transactions(account_id: str,
                       content: bytes, 
                       file_format: FileFormat, 
-                      opening_balance: float,
-                      field_map: Optional[FileMap] = None) -> List[Dict[str, Any]]:
+                      opening_balance: Optional[Money],
+                      field_map: Optional[FileMap] = None) -> List[Transaction]:
     """
     Parse transactions from file content based on the file format.
     
@@ -259,7 +262,7 @@ def preprocess_csv_text(text_content: str) -> str:
             
     return '\n'.join(fixed_lines)
 
-def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = None, field_map: Optional[FileMap] = None) -> List[Dict[str, Any]]:
+def parse_csv_transactions(content: bytes, default_currency: Currency, opening_balance: Optional[Money] = None, field_map: Optional[FileMap] = None) -> List[Transaction]:
     """
     Parse transactions from CSV file content.
     
@@ -269,13 +272,14 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
         field_map: Optional field mapping configuration
         
     Returns:
-        List of transaction dictionaries
+        List of Transaction objects
     """
-    def process_amount(amount: Decimal, debit_credit: Optional[str] = None) -> Decimal:
+    def process_amount(amount: Decimal, currency: Currency, debit_credit: Optional[str] = None) -> Money:
         """Process amount based on debit/credit indicator."""
         if debit_credit and debit_credit.upper() == 'DBIT':
-            return -abs(amount)
-        return amount
+            return Money(-abs(amount), currency)
+        return Money(amount, currency)
+    
     try:
         # Decode the content
         raw_content = content.decode('utf-8')
@@ -312,6 +316,7 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
             debitOrCredit_col = find_column_index(header, [m.source_field for m in field_map.mappings if m.target_field == 'debitOrCredit'])
             category_col = find_column_index(header, [m.source_field for m in field_map.mappings if m.target_field == 'category'])
             memo_col = find_column_index(header, [m.source_field for m in field_map.mappings if m.target_field == 'memo'])
+            currency_col = find_column_index(header, [m.source_field for m in field_map.mappings if m.target_field == 'currency'])
         else:
             # Use default column names
             date_col = find_column_index(header, ['date', 'transaction date', 'posted date'])
@@ -320,10 +325,12 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
             debitOrCredit_col = find_column_index(header, ['type', 'transaction type'])
             category_col = find_column_index(header, ['category', 'transaction category'])
             memo_col = find_column_index(header, ['memo', 'notes', 'reference'])
-        
+            currency_col = find_column_index(header, ['currency'])
         # Validate required columns
-        if date_col is None or desc_col is None or amount_col is None:
-            raise ValueError("Missing required columns: Date, Description, or Amount")
+        if date_col is None or desc_col is None or amount_col is None is None:
+            raise ValueError("Missing required columns: Date, Description or Amount")
+        if currency_col is None and default_currency is None:
+            raise ValueError("Missing required columns: Currency with no default currency")
         
         # Read all rows
         rows = list(reader)
@@ -339,7 +346,7 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
             logger.info("Reversed transaction order to ascending")
             
         # Initialize balance
-        balance = Decimal(str(opening_balance)) if opening_balance is not None else Decimal('0.00')
+        balance = opening_balance if opening_balance is not None else Money(Decimal('0.00'), Currency.USD)
 
         # Process each row
         transactions = []
@@ -365,7 +372,8 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
                     'amount': row[amount_col],
                     'debitOrCredit': row[debitOrCredit_col] if debitOrCredit_col is not None and len(row) > debitOrCredit_col else None,
                     'category': row[category_col] if category_col is not None and len(row) > category_col else None,
-                    'memo': row[memo_col] if memo_col is not None and len(row) > memo_col else None
+                    'memo': row[memo_col] if memo_col is not None and len(row) > memo_col else None,
+                    'currency': row[currency_col] if currency_col is not None and len(row) > currency_col else None
                 }
             logger.info(f"Row: {row}")
             logger.info(f"Row data: {row_data}")    
@@ -375,7 +383,7 @@ def parse_csv_transactions(content: bytes, opening_balance: Optional[float] = No
                 logger.info(f"Processing amount: {row_data['amount']}")
                 raw_amount = Decimal(str(row_data['amount']))
                 logger.info(f"Raw amount: {raw_amount}")
-                processed_amount = process_amount(raw_amount, row_data.get('debitOrCredit'))
+                processed_amount = process_amount(raw_amount, row_data.get('debitOrCredit'), row_data.get('currency'))
                 logger.info(f"Processed amount: {processed_amount}")
             except (decimal.InvalidOperation, KeyError) as e:
                 logger.error(f"Error processing amount: {str(e)}")

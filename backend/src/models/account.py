@@ -1,6 +1,7 @@
 """
 Account models for the financial account management system.
 """
+import decimal
 import enum
 import uuid
 from dataclasses import dataclass

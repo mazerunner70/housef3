@@ -38,41 +38,41 @@ ENVIRONMENT = os.environ.get('ENVIRONMENT', 'dev')
 ACCOUNTS_TABLE = os.environ.get('ACCOUNTS_TABLE')
 FILES_TABLE = os.environ.get('FILES_TABLE')
 TRANSACTIONS_TABLE = os.environ.get('TRANSACTIONS_TABLE')
-FIELD_MAPS_TABLE = os.environ.get('FIELD_MAPS_TABLE')
+FILE_MAPS_TABLE = os.environ.get('FILE_MAPS_TABLE')
 
 # Initialize table resources lazily
 _accounts_table = None
 _files_table = None
 _transactions_table = None
-_field_maps_table = None
+_file_maps_table = None
 
-def get_accounts_table():
+def get_accounts_table() -> Table:
     """Get the accounts table resource, initializing it if needed."""
     global _accounts_table
     if _accounts_table is None and ACCOUNTS_TABLE:
         _accounts_table = dynamodb.Table(ACCOUNTS_TABLE)
     return _accounts_table
 
-def get_files_table():
+def get_files_table() -> Table:
     """Get the files table resource, initializing it if needed."""
     global _files_table
     if _files_table is None and FILES_TABLE:
         _files_table = dynamodb.Table(FILES_TABLE)
     return _files_table
 
-def get_transactions_table():
+def get_transactions_table() -> Table:
     """Get the transactions table resource, initializing it if needed."""
     global _transactions_table
     if _transactions_table is None and TRANSACTIONS_TABLE:
         _transactions_table = dynamodb.Table(TRANSACTIONS_TABLE)
     return _transactions_table
 
-def get_field_maps_table():
-    """Get the field maps table resource, initializing it if needed."""
-    global _field_maps_table
-    if _field_maps_table is None and FIELD_MAPS_TABLE:
-        _field_maps_table = dynamodb.Table(FIELD_MAPS_TABLE)
-    return _field_maps_table
+def get_file_maps_table() -> Table:
+    """Get the file maps table resource, initializing it if needed."""
+    global _file_maps_table
+    if _file_maps_table is None and FILE_MAPS_TABLE:
+        _file_maps_table = dynamodb.Table(FILE_MAPS_TABLE)
+    return _file_maps_table
 
 def get_account(account_id: str) -> Optional[Account]:
     """
@@ -538,39 +538,39 @@ def delete_file_metadata(file_id: str) -> bool:
         raise
 
 
-def get_field_mapping(field_map_id: Optional[str] = None) -> Optional[FieldMapping]:
+def get_file_map(file_map_id: Optional[str] = None) -> Optional[FileMap]:
     """
-    Get a field map by ID.
+    Get a file map by ID.
     
     Args:
-        field_map_id: ID of the field map to retrieve
+        file_map_id: ID of the file map to retrieve
         
     Returns:
-        FieldMap instance if found, None otherwise
+        FileMap instance if found, None otherwise
     """
     try:
-        if field_map_id:
-            response = get_field_maps_table().get_item(
-                Key={'fieldMapId': field_map_id}
+        if file_map_id:
+            response = get_file_maps_table().get_item(
+                Key={'fileMapId': file_map_id}
             )
         
         if 'Item' in response:
-            return FieldMapping.from_dict(response['Item'])
+            return FileMap.from_dict(response['Item'])
         return None
     except Exception as e:
-        logger.error(f"Error getting field map {field_map_id}: {str(e)}")
+        logger.error(f"Error getting file map {file_map_id}: {str(e)}")
         return None
 
 
-def get_account_default_field_map(account_id: str) -> Optional[FileMap]:
+def get_account_default_file_map(account_id: str) -> Optional[FileMap]:
     """
-    Get the default field map for an account.
+    Get the default file map for an account.
     
     Args:
         account_id: ID of the account
         
     Returns:
-        FieldMap instance if found, None otherwise
+        FileMap instance if found, None otherwise
     """
     try:
         # Get the account record
@@ -582,91 +582,91 @@ def get_account_default_field_map(account_id: str) -> Optional[FileMap]:
             return None
             
         # Check for default field map
-        default_field_map_id = response['Item'].get('defaultFieldMapId')
-        if not default_field_map_id:
+        default_file_map_id = response['Item'].get('defaultFileMapId')
+        if not default_file_map_id:
             return None
             
         # Get the field map
-        return get_field_mapping(default_field_map_id)
+        return get_file_map(default_file_map_id)
     except Exception as e:
-        logger.error(f"Error getting default field map for account {account_id}: {str(e)}")
+        logger.error(f"Error getting default file map for account {account_id}: {str(e)}")
         return None
 
 
-def create_field_map(field_map: FileMap) -> bool:
+def create_file_map(file_map: FileMap) -> bool:
     """
-    Create a new field map.
+    Create a new file map.
     
     Args:
-        field_map: FieldMap instance to create
+        file_map: FileMap instance to create
         
     Returns:
         True if successful, False otherwise
     """
     try:
-        get_field_maps_table().put_item(
-            Item=field_map.to_dict(),
-            ConditionExpression='attribute_not_exists(fieldMapId)'
+        get_file_maps_table().put_item(
+            Item=file_map.to_dict(),
+            ConditionExpression='attribute_not_exists(fileMapId)'
         )
         return True
     except Exception as e:
-        logger.error(f"Error creating field map: {str(e)}")
+        logger.error(f"Error creating file map: {str(e)}")
         return False
 
 
-def update_field_map(field_map: FileMap) -> bool:
+def update_file_map(file_map: FileMap) -> bool:
     """
-    Update an existing field map.
+    Update an existing file map.
     
     Args:
-        field_map: FieldMap instance to update
+        file_map: FileMap instance to update
         
     Returns:
         True if successful, False otherwise
     """
     try:
-        get_field_maps_table().put_item(
-            Item=field_map.to_dict(),
-            ConditionExpression='attribute_exists(fieldMapId)'
+        get_file_maps_table().put_item(
+            Item=file_map.to_dict(),
+            ConditionExpression='attribute_exists(fileMapId)'
         )
         return True
     except Exception as e:
-        logger.error(f"Error updating field map: {str(e)}")
+        logger.error(f"Error updating file map: {str(e)}")
         return False
 
 
-def delete_field_map(field_map_id: str) -> bool:
+def delete_file_map(file_map_id: str) -> bool:
     """
-    Delete a field map.
+    Delete a file map.
     
     Args:
-        field_map_id: ID of the field map to delete
+        file_map_id: ID of the file map to delete
         
     Returns:
         True if successful, False otherwise
     """
     try:
-        get_field_maps_table().delete_item(
-            Key={'fieldMapId': field_map_id}
+        get_file_maps_table().delete_item(
+            Key={'fileMapId': file_map_id}
         )
         return True
     except Exception as e:
-        logger.error(f"Error deleting field map: {str(e)}")
+        logger.error(f"Error deleting file map: {str(e)}")
         return False
 
 
-def list_field_maps_by_user(user_id: str) -> List[FileMap]:
+def list_file_maps_by_user(user_id: str) -> List[FileMap]:
     """
-    List all field maps for a user.
+    List all file maps for a user.
     
     Args:
         user_id: ID of the user
         
     Returns:
-        List of FieldMap instances
+        List of FileMap instances
     """
     try:
-        response = get_field_maps_table().query(
+        response = get_file_maps_table().query(
             IndexName='userId-index',
             KeyConditionExpression='userId = :userId',
             ExpressionAttributeValues={':userId': user_id}
@@ -674,22 +674,22 @@ def list_field_maps_by_user(user_id: str) -> List[FileMap]:
         
         return [FileMap.from_dict(item) for item in response.get('Items', [])]
     except Exception as e:
-        logger.error(f"Error listing field maps for user {user_id}: {str(e)}")
+        logger.error(f"Error listing file maps for user {user_id}: {str(e)}")
         return []
 
 
-def list_account_field_maps(account_id: str) -> List[FileMap]:
+def list_account_file_maps(account_id: str) -> List[FileMap]:
     """
-    List all field maps for an account.
+    List all file maps for an account.
     
     Args:
         account_id: ID of the account
         
     Returns:
-        List of FieldMap instances
+        List of FileMap instances
     """
     try:
-        response = get_field_maps_table().query(
+        response = get_file_maps_table().query(
             IndexName='accountId-index',
             KeyConditionExpression='accountId = :accountId',
             ExpressionAttributeValues={':accountId': account_id}
@@ -697,7 +697,7 @@ def list_account_field_maps(account_id: str) -> List[FileMap]:
         
         return [FileMap.from_dict(item) for item in response.get('Items', [])]
     except Exception as e:
-        logger.error(f"Error listing field maps for account {account_id}: {str(e)}")
+        logger.error(f"Error listing file maps for account {account_id}: {str(e)}")
         return []
 
 

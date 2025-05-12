@@ -59,7 +59,7 @@ def get_user_from_event(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 class NotFound(Exception): pass
 class NotAuthorized(Exception): pass
     
-def checked_optional_file(file_id: str, user_id: str) -> Optional[TransactionFile]:
+def checked_optional_file(file_id: Optional[str], user_id: str) -> Optional[TransactionFile]:
     if not file_id:
         return None
     file = get_transaction_file(file_id)
@@ -79,7 +79,7 @@ def checked_mandatory_account(account_id: str, user_id: str) -> 'Account':
         raise NotFound("Account not found")
     return account
 
-def checked_optional_account(account_id: str, user_id: str) -> Optional['Account']:
+def checked_optional_account(account_id: Optional[str], user_id: str) -> Optional['Account']:
     if not account_id:
         return None
     account = get_account(account_id)
@@ -89,7 +89,7 @@ def checked_optional_account(account_id: str, user_id: str) -> Optional['Account
         raise NotAuthorized("Not authorized to access this account")
     return account
 
-def checked_optional_field_mapping(field_mapping_id: str, user_id: str) -> Optional['FieldMapping']:
+def checked_optional_field_mapping(field_mapping_id: Optional[str], user_id: str) -> Optional['FieldMapping']:
     if not field_mapping_id:
         return None
     field_mapping = get_field_mapping(field_mapping_id)

@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any, Tuple
 from dataclasses import dataclass
 import json
 
+from backend.src.models.account import Currency
 from models.money import Money
 
 
@@ -70,13 +71,15 @@ class TransactionFile:
     processed_date: Optional[int] = None
     file_format: Optional[FileFormat] = None
     account_id: Optional[str] = None
-    field_map_id: Optional[str] = None
+    file_map_id: Optional[str] = None
     record_count: Optional[int] = None
     date_range_start: Optional[int] = None
     date_range_end: Optional[int] = None
     error_message: Optional[str] = None
     opening_balance: Optional[Money] = None
-
+    currency: Optional[Currency] = None
+    duplicate_count: Optional[int] = None
+    transaction_count: Optional[int] = None
     def to_dict(self) -> Dict[str, Any]:
         """
         Convert the transaction file object to a dictionary suitable for storage.
@@ -99,8 +102,8 @@ class TransactionFile:
         if self.account_id:
             result["accountId"] = self.account_id
         
-        if self.field_map_id:
-            result["fieldMapId"] = self.field_map_id
+        if self.file_map_id:
+            result["fileMapId"] = self.file_map_id
         
         # Add optional fields if they exist
         if self.record_count is not None:
@@ -114,7 +117,16 @@ class TransactionFile:
             result["errorMessage"] = self.error_message
             
         if self.opening_balance is not None:
-            result["openingBalance"] = self.opening_balance  # Convert to string for DynamoDB
+            result["openingBalance"] = self.opening_balance.to_dict()  # Convert to string for DynamoDB
+
+        if self.currency:
+            result["currency"] = self.currency.value    
+
+        if self.duplicate_count:
+            result["duplicateCount"] = self.duplicate_count
+
+        if self.transaction_count:
+            result["transactionCount"] = self.transaction_count
             
         return result
 
@@ -124,7 +136,11 @@ class TransactionFile:
         Create a transaction file object from a dictionary (e.g. from DynamoDB).
         """
         account_id = data.get("accountId")  # Use get() to handle optional field
-        opening_balance = Decimal(str(data.get("openingBalance"))) if data.get("openingBalance") else None
+        opening_balance_amount = Decimal(str(data.get("openingBalance"))) if data.get("openingBalance") else None
+        currency = Currency(data.get("currency")) if data.get("currency") else None
+        opening_balance = Money(opening_balance_amount, currency) if opening_balance_amount and currency else None
+        record_count_str = data.get("recordCount")
+        record_count = int(record_count_str) if record_count_str else None
         
         file = cls(
             file_id=data["fileId"],
@@ -136,12 +152,15 @@ class TransactionFile:
             processing_status=ProcessingStatus(data["processingStatus"]),
             file_format=FileFormat(data.get("fileFormat")) if data.get("fileFormat") else None,
             account_id=account_id,
-            field_map_id=data.get("fieldMapId"),
-            record_count=int(data.get("recordCount")) if data.get("recordCount") else None,
+            file_map_id=data.get("fileMapId"),
+            record_count=record_count,
             date_range_start=data.get("dateRangeStart"),
             date_range_end=data.get("dateRangeEnd"),
             error_message=data.get("errorMessage"),
-            opening_balance=opening_balance
+            opening_balance=opening_balance,
+            currency=currency,
+            duplicate_count=data.get("duplicateCount") if data.get("duplicateCount") else None,
+            transaction_count=data.get("transactionCount") if data.get("transactionCount") else None
         )
         
         return file
@@ -152,7 +171,7 @@ class TransactionFile:
         record_count: Optional[int] = None,
         date_range: Optional[Tuple[str, str]] = None,
         error_message: Optional[str] = None,
-        opening_balance: Optional[Decimal] = None
+        opening_balance: Optional[Money] = None
     ) -> None:
         """
         Update processing status and related fields.
@@ -163,7 +182,9 @@ class TransactionFile:
             self.record_count = record_count
             
         if date_range is not None:
-            self.date_range_start, self.date_range_end = date_range
+            start_date_str, end_date_str = date_range
+            self.date_range_start = int(start_date_str)
+            self.date_range_end = int(end_date_str)
             
         if error_message is not None:
             self.error_message = error_message

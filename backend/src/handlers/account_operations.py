@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from decimal import Decimal
 
-from models import Account, AccountType, Currency
+from models.account import Account, AccountType, Currency
 from utils.db_utils import (
     get_account,
     list_user_accounts,
