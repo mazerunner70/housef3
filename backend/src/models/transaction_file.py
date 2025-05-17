@@ -191,7 +191,15 @@ class TransactionFile:
             
         if opening_balance is not None:
             self.opening_balance = opening_balance
+    def update(self, **kwargs):
+        """Update the transaction file with the given key-value pairs."""
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+        self.validate()
 
+    def validate(self):
+        """Validate the transaction file according to business rules."""
+        validate_transaction_file_data(self)
 
 def validate_transaction_file_data(transaction_file: TransactionFile) -> bool:
     """

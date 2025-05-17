@@ -1,17 +1,45 @@
-# Run tests before packaging
-resource "null_resource" "run_tests" {
+# Run tests and prepare Lambda package
+resource "null_resource" "prepare_lambda" {
+  triggers = {
+    source_code_hash = "${sha256(file("../../backend/requirements.txt"))}-${sha256(join("", [for f in fileset("../../backend/src", "**"): filesha256("../../backend/src/${f}")])) }"
+  }
+
   provisioner "local-exec" {
     working_dir = "../../backend"
-    command     = "chmod +x run_tests.sh && ./run_tests.sh"
+    command     = <<EOF
+      # Run tests
+      chmod +x run_tests.sh && ./run_tests.sh
+      
+      # Setup build
+      rm -rf build
+      mkdir -p build
+      
+      # Create venv and install dependencies
+      python -m venv .venv_build
+      source .venv_build/bin/activate
+      pip install -r requirements.txt --target build
+      
+      # Copy source code
+      cp -r src/* build/
+      
+      # Create zip
+      cd build
+      zip -r ../lambda.zip ./*
+      
+      # Cleanup
+      cd ..
+      rm -rf build
+      rm -rf .venv_build
+    EOF
   }
 }
 
 # Package Lambda code
 data "archive_file" "lambda_code" {
-  depends_on  = [null_resource.run_tests]
+  depends_on  = [null_resource.prepare_lambda]
   type        = "zip"
-  source_dir  = "../../backend/src"
-  output_path = "../../backend/lambda.zip"
+  source_file = "../../backend/lambda.zip"
+  output_path = "../../backend/lambda_deploy.zip"
 }
 
 # File Operations Lambda

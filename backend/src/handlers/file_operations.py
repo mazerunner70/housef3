@@ -1,22 +1,26 @@
 import json
 import logging
 import os
+import traceback
 import uuid
-from utils.auth import NotFound, checked_mandatory_account, checked_mandatory_file, checked_optional_account
+from models.money import Currency, Money
+from services.file_processor_service import FileProcessorResponse
+from utils.auth import NotFound, checked_mandatory_account, checked_mandatory_transaction_file, checked_optional_account
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Union
 from decimal import Decimal
 from models.transaction_file import FileFormat, ProcessingStatus, DateRange, validate_transaction_file_data, transaction_file_to_json
 from models.transaction import Transaction
-from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_account, update_file_field_map, update_transaction_file, delete_file_metadata, get_account, list_file_transactions, delete_transactions_for_file, get_field_maps_table, get_field_mapping
+from utils.db_utils import get_file_map, get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_account, update_file_field_map, update_transaction_file, delete_file_metadata, get_account, list_file_transactions, delete_transactions_for_file, get_file_maps_table
 from utils.transaction_parser import file_type_selector, parse_transactions
 from utils.s3_dao import (
-    get_presigned_url,
+    get_presigned_post_url,
     delete_object,
     get_object_content,
+    get_presigned_url_simple,
     put_object
 )
-from handlers.file_processor import process_file_with_account
+from handlers.file_processor import process_file
 from services.file_service import get_files_for_user, format_file_metadata, get_files_for_account
 from utils.lambda_utils import create_response, mandatory_body_parameter, mandatory_path_parameter, handle_error, optional_body_parameter, optional_query_parameter 
 
@@ -168,15 +172,15 @@ def get_upload_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
         # If account_id is provided, explicitly allow it in the policy
         if account_id:
             # Add the x-amz-meta-accountid field to allowed fields
-            conditions.append({'x-amz-meta-accountid': account_id})
+            conditions.append(['x-amz-meta-accountid', account_id])
             # Also add it to the fields so it gets included in the form
             fields['x-amz-meta-accountid'] = account_id
             
         # Get presigned post data with all fields pre-populated
-        presigned_data = get_presigned_url(
+        presigned_data = get_presigned_post_url(
             FILE_STORAGE_BUCKET, 
             key, 
-            'post', 
+            3600,
             conditions=conditions,
             fields=fields
         )
@@ -210,10 +214,10 @@ def get_download_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dic
         file_id = mandatory_path_parameter(event, 'id')
             
         # Get file metadata from DynamoDB
-        file = checked_mandatory_file(file_id, user['id'])
+        file = checked_mandatory_transaction_file(file_id, user['id'])
     
         # Generate presigned URL for download
-        download_url = get_presigned_url(FILE_STORAGE_BUCKET, file.s3_key, 'get')
+        download_url = get_presigned_url_simple(FILE_STORAGE_BUCKET, file.s3_key, 'get')
         
         return create_response(200, {
             'fileId': file.file_id,
@@ -253,7 +257,7 @@ def delete_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str
         file_id = mandatory_path_parameter(event, 'id')
             
         # Retrieve file metadata to verify existence and ownership
-        file = checked_mandatory_file(file_id, user['id'])
+        file = checked_mandatory_transaction_file(file_id, user['id'])
             
         # Ensure the file belongs to the requesting user
         if file.user_id != user['id']:
@@ -336,21 +340,21 @@ def unassociate_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dic
         file_id = mandatory_path_parameter(event, 'id')
            
         # Get file metadata from DynamoDB
-        file = checked_mandatory_file(file_id, user['id'])
+        file = checked_mandatory_transaction_file(file_id, user['id'])
         
         # Check if file is associated with an account
         if not file.account_id:
             raise ValueError("File is not associated with any account")
         
-        account_id = file.accountId
+        checked_mandatory_account(file.account_id, user['id'])
         
         # Update the file to remove account association
-        logger.info(f"Removing association between file {file_id} and account {account_id}")
-        update_transaction_file(file_id, {'accountId': None})          
+        logger.info(f"Removing association between file {file_id} and account {file.account_id}")
+        update_transaction_file(file_id, user['id'], {'account_id': None})          
         return create_response(200, {
             "message": "File successfully unassociated from account",
             "fileId": file_id,
-            "previousAccountId": account_id
+            "previousAccountId": file.account_id
         })
 
     except ValueError as e:
@@ -372,37 +376,16 @@ def associate_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
         account_id = mandatory_body_parameter(event, 'accountId')
                 
         # Get the file to verify it exists and belongs to the user
-        file = checked_mandatory_file(file_id, user['id'])
-                
-        # Check if the file already belongs to the user
-        if file.user_id != user['id']:
-            raise ValueError("Access denied to the specified file")
-                
-            # Check if the file is already associated with an account
-        if file.account_id:
-            logger.info(f"File {file_id} is already associated with account {file.account_id}")
-            raise ValueError("File is already associated with an account")   
-        
+        file = checked_mandatory_transaction_file(file_id, user['id'])
+                 
         # Verify that the account exists and belongs to the user
         account = checked_mandatory_account(account_id, user['id'])
             
         # Update the file to add account association
         logger.info(f"Associating file {file_id} with account {account_id}")
-        update_transaction_file(file_id, {'account_id': account_id})
-        
-        # Update the file to add account association
-        try:
-            logger.info(f"Associating file {file_id} with account {account_id}")      
-            update_transaction_file(file_id, {'account_id': account_id})
-            # read the account metadata from the account table and check if there is a default mapping apply it to this file
-
-            if account.default_field_map_id:
-                update_file_field_map(file_id, account.default_field_map_id)
-            #next update the openingbalance if there is overlap between this file and the others associated with this account
-            process_file_with_account(file_id, file.content, file.opening_balance if file.opening_balance else Decimal('0'), user['id'])      
-        except Exception as update_error:
-            logger.error(f"Error updating file: {str(update_error)}")
-            return create_response(500, {"message": "Error associating file with account"})
+        file.account_id = account_id
+        response: FileProcessorResponse = process_file(file)
+        return create_response(200, response.to_dict())
     except Exception as e:
         logger.error(f"Error associating file: {str(e)}")
         return create_response(500, {"message": "Error handling associate request"})
@@ -414,61 +397,28 @@ def update_file_balance_handler(event: Dict[str, Any], user: Dict[str, Any]) -> 
         file_id = mandatory_path_parameter(event, 'id')
             
         # Get file metadata from DynamoDB
-        file = checked_mandatory_file(file_id, user['id'])
+        file = checked_mandatory_transaction_file(file_id, user['id'])
         
         # Parse the request body to get the opening balance
-        opening_balance = Decimal(mandatory_body_parameter(event, 'openingBalance'))
- 
-        # Update the file with the new opening balance
-        try:
-            logger.info(f"Updating opening balance for file {file_id} to {opening_balance}")
-            
-            # Update the file
-            update_transaction_file(file_id, {"openingBalance": str(opening_balance)})
-            
-            # After successfully updating the opening balance, trigger transaction reprocessing
-            try:
-                logger.info(f"Triggering transaction reprocessing for file {file_id}")
-                # Get the file content from S3
-                s3_key = file.s3_key
-                if not s3_key:
-                    logger.error(f"File {file_id} has no S3 key, skipping transaction processing")
-                    return create_response(500, {
-                        "message": "File has no S3 key, skipping transaction processing",
-                        "fileId": file_id,
-                    })
-                
-                # Get file content from S3
-                content_bytes = get_object_content(s3_key)
-                
-                # Process transactions with new opening balance
-                transaction_count = process_file_with_account(
-                    file_id, 
-                    content_bytes, 
-                    opening_balance,
-                    user['id']
-                )
-                
-                # Include transaction count in response
-                return create_response(200, {
-                    "message": "File opening balance updated successfully and transactions reprocessed",
-                    "fileId": file_id,
-                    "openingBalance": opening_balance,
-                    "transactionCount": transaction_count
-                })
-            except Exception as process_error:
-                logger.error(f"Error processing transactions after balance update: {str(process_error)}")
-                # Still return success for the balance update, even if processing failed
-                return create_response(200, {
-                    "message": "File opening balance updated successfully, but error processing transactions",
-                    "fileId": file_id,
-                    "openingBalance": opening_balance
-                })
-        except Exception as update_error:
-            logger.error(f"Error updating file: {str(update_error)}")
-            return create_response(500, {"message": "Error updating file opening balance"})
+        amount = Decimal(mandatory_body_parameter(event, 'amount'))
+        currency = mandatory_body_parameter(event, 'currency')
+        opening_balance = Money(amount, Currency(currency))
+        file.opening_balance = opening_balance
+        response: FileProcessorResponse = process_file(file)
+
+        return create_response(200, response.to_dict())
+
+    except ValueError as e: 
+        logger.error(f"Error updating file balance: {str(e)}")
+        logger.error(traceback.format_exc())
+        return handle_error(400, str(e))
+    except NotFound as e:
+        logger.error(f"File not found: {str(e)}")
+        logger.error(traceback.format_exc())
+        return handle_error(404, str(e))
     except Exception as e:
         logger.error(f"Error updating file balance: {str(e)}")
+        logger.error(traceback.format_exc())
         return create_response(500, {"message": "Error handling update balance request"})
 
 def get_file_metadata_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
@@ -478,17 +428,17 @@ def get_file_metadata_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Di
         file_id = mandatory_path_parameter(event, 'id') 
         
         # Get file metadata from DynamoDB
-        file = checked_mandatory_file(file_id, user['id'])
+        file = checked_mandatory_transaction_file(file_id, user['id'])
         
         # Convert to JSON-friendly format with proper type handling
         file_json = json.loads(transaction_file_to_json(file))
         
         # Add field map information if it exists
         if 'fieldMapId' in file_json:
-            field_map = get_field_mapping(file_json['fieldMapId'])
+            field_map = get_file_map(file_json['fieldMapId'])
             if field_map:
                 file_json['fieldMap'] = {
-                    'fieldMapId': field_map.field_map_id,
+                    'fieldMapId': field_map.file_map_id,
                     'name': field_map.name,
                     'description': field_map.description
                 }
@@ -506,7 +456,7 @@ def get_file_transactions_handler(event: Dict[str, Any], user: Dict[str, Any]) -
 
             
         # Get file metadata to verify ownership
-        file = checked_mandatory_file(file_id, user['id'])
+        file = checked_mandatory_transaction_file(file_id, user['id'])
         
         # Get transactions for the file
         try:
@@ -539,7 +489,7 @@ def delete_file_transactions_handler(event: Dict[str, Any], user: Dict[str, Any]
         file_id = mandatory_path_parameter(event, 'id')
             
         # Get file metadata to verify ownership
-        file = checked_mandatory_file(file_id, user['id'])
+        file = checked_mandatory_transaction_file(file_id, user['id'])
         
         # Delete all transactions for the file
 
@@ -564,7 +514,7 @@ def get_file_content_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dic
         file_id = mandatory_path_parameter(event, 'id')
   
         # Get file metadata from DynamoDB
-        file = checked_mandatory_file(file_id, user['id'])
+        file = checked_mandatory_transaction_file(file_id, user['id'])
         
         # Get the file content from S3 using S3 DAO
         content = get_object_content(file.s3_key)
@@ -574,7 +524,7 @@ def get_file_content_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dic
         return create_response(200, {
             'fileId': file_id,
             'content': content.decode('utf-8'),
-            'contentType': file.content_type,
+            'contentType': file.file_format.value if file.file_format else 'unknown',
             'fileName': file.file_name
         })
             
@@ -590,81 +540,16 @@ def update_file_field_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -
         field_map_id = mandatory_body_parameter(event, 'fieldMapId')
             
         # Get file metadata from DynamoDB
-        file = checked_mandatory_file(file_id, user['id'])
+        file = checked_mandatory_transaction_file(file_id, user['id'])
         
         # Get field map
-        field_map = get_field_mapping(field_map_id)
+        field_map = get_file_map(field_map_id)
         if not field_map:
             return create_response(404, {"message": "Field map not found"})
-        
-        # Update the file to add field map association
-        try:
-            logger.info(f"Associating file {file_id} with field map {field_map_id}")
-            
-            # Update the file with the field map
-            update_file_field_map(file_id, field_map_id)
-
-            # if there is only one file associated with the account, update the default mapping with this mapping id
-            if file.account_id:
-                checked_mandatory_account(file.account_id, user['id'])
-                # check if there is only one file associated with the account
-                files = list_account_files(file.account_id)
-                if len(files) == 1:
-                    update_account(file.account_id, {'defaultFieldMapId': field_map_id})
-                    logger.info(f"Updated default field map for account {file.account_id} to {field_map_id}")
-                else:
-                    logger.info(f"There are {len(files)} files associated with account {file.account_id}, not updating default field map")
-            
-            # After successfully updating the field map, trigger transaction processing
-            logger.info(f"Triggering transaction processing for file {file_id}")
-            # Get the file content from S3
-            s3_key = file.s3_key
-            if not s3_key:
-                logger.warning(f"File {file_id} has no S3 key, skipping transaction processing")
-                return create_response(200, {
-                    "message": "File successfully associated with field map",
-                    "fileId": file_id,
-                    "fieldMapId": field_map_id,
-                    "fieldMapName": field_map.name
-                })
-            
-            # Get file content from S3
-            content_bytes = get_object_content(s3_key)
-            if content_bytes is None:
-                return create_response(500, {"message": "Error reading file content"})
-            
-            # Get opening balance if exists
-            opening_balance = file.opening_balance if file.opening_balance else Decimal('0')
-            
-            # Process transactions with new field map
-            result = process_file_with_account(
-                file_id, 
-                content_bytes, 
-                opening_balance,
-                user['id']
-            )
-            
-            if isinstance(result, dict) and 'body' in result:
-                try:
-                    result_body = json.loads(result['body']) if isinstance(result['body'], str) else result['body']
-                    transaction_count = result_body.get('transactionCount', 0)
-                except (json.JSONDecodeError, AttributeError):
-                    transaction_count = 0
-            else:
-                transaction_count = 0
-
-            return create_response(200, {
-                "message": "File successfully associated with field map and transactions processed",
-                "fileId": file_id,
-                "fieldMapId": field_map_id,
-                "fieldMapName": field_map.name,
-                "transactionCount": transaction_count
-            })
-            
-        except Exception as e:
-            logger.error(f"Error updating file: {str(e)}", exc_info=True)
-            return create_response(500, {"message": "Error updating file"})
-            
+        file.file_map_id = field_map_id
+        response: FileProcessorResponse = process_file(file)
+        return create_response(200, response.to_dict())
+                    
     except ValueError as e:
         logger.error(f"Validation error in update_file_field_map_handler: {str(e)}", exc_info=True)
         return create_response(400, {"message": str(e)})

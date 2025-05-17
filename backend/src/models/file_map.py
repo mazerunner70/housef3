@@ -35,7 +35,7 @@ class FieldMapping:
 @dataclass
 class FileMap:
     """Represents a field mapping configuration for transaction files."""
-    field_map_id: str
+    file_map_id: str
     user_id: str
     name: str
     mappings: List[FieldMapping]
@@ -50,7 +50,7 @@ class FileMap:
         """Create a new FieldMap instance."""
         field_mappings = [FieldMapping.from_dict(m) for m in mappings]
         return cls(
-            field_map_id=str(uuid.uuid4()),
+            file_map_id=str(uuid.uuid4()),
             user_id=user_id,
             name=name,
             mappings=field_mappings,
@@ -61,7 +61,7 @@ class FileMap:
     def to_dict(self) -> Dict[str, Any]:
         """Convert the field map to a dictionary."""
         result = {
-            'fieldMapId': self.field_map_id,
+            'fileMapId': self.file_map_id,
             'userId': self.user_id,
             'name': self.name,
             'mappings': [m.to_dict() for m in self.mappings],
@@ -79,7 +79,7 @@ class FileMap:
         """Create a FieldMap instance from a dictionary."""
         mappings = [FieldMapping.from_dict(m) for m in data['mappings']]
         return cls(
-            field_map_id=data['fieldMapId'],
+            file_map_id=data['fileMapId'],
             user_id=data['userId'],
             name=data['name'],
             mappings=mappings,

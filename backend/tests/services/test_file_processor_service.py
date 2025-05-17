@@ -12,11 +12,11 @@ from services.file_processor_service import (
     update_file_mapping,
     update_opening_balance,
     change_file_account,
-    process_file,
+    process_new_file,
     remap_file,
     update_balance,
-    reassign_file,
-    process_file_with_account
+    reassign_file_account,
+    process_file
 )
 
 class TestFileProcessorService(unittest.TestCase):
@@ -258,7 +258,7 @@ class TestFileProcessorService(unittest.TestCase):
         }
         
         # Call function
-        result = process_file(self.transaction_file)
+        result = process_new_file(self.transaction_file)
         
         # Verify result
         self.assertEqual(result['statusCode'], 200)
@@ -321,7 +321,7 @@ class TestFileProcessorService(unittest.TestCase):
         }
         
         # Call function
-        result = process_file_with_account(self.transaction_file)
+        result = process_file(self.transaction_file)
         
         # Verify result
         self.assertEqual(result['statusCode'], 200)
@@ -355,7 +355,7 @@ class TestFileProcessorService(unittest.TestCase):
         }
         
         # Call function
-        result = process_file_with_account(self.transaction_file)
+        result = process_file(self.transaction_file)
         
         # Verify result
         self.assertEqual(result['statusCode'], 200)

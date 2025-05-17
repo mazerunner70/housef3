@@ -10,13 +10,13 @@ from botocore.exceptions import ClientError
 from models.file_map import FileMap, validate_file_map_data
 from utils.lambda_utils import create_response, handle_error
 from utils.auth import get_user_from_event
-from utils.db_utils import get_file_map_table
+from utils.db_utils import get_file_maps_table
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-def create_file_map_handler(event: Dict[str, Any]) -> Dict[str, Any]:
+def create_file_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     """
     Create a new file map.
     
@@ -27,11 +27,7 @@ def create_file_map_handler(event: Dict[str, Any]) -> Dict[str, Any]:
         API Gateway Lambda proxy response
     """
     try:
-        user_info = get_user_from_event(event)
-        if not user_info:
-            return handle_error(401, "Unauthorized")
-            
-        user_id = user_info['id']
+        user_id = user['id']
         body = json.loads(event['body'])
         
         # Add user_id to the data for validation
@@ -50,7 +46,7 @@ def create_file_map_handler(event: Dict[str, Any]) -> Dict[str, Any]:
         )
         
         # Save to DynamoDB
-        get_field_maps_table().put_item(Item=file_map.to_dict())
+        get_file_maps_table().put_item(Item=file_map.to_dict())
         
         return create_response(201, file_map.to_dict())
         
@@ -60,7 +56,7 @@ def create_file_map_handler(event: Dict[str, Any]) -> Dict[str, Any]:
         logger.error(f"DynamoDB error creating file map: {str(e)}")
         return handle_error(500, "Error creating file map")
 
-def get_file_map_handler(event: Dict[str, Any]) -> Dict[str, Any]:
+def get_file_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     """
     Get a file map by ID.
     
@@ -71,15 +67,11 @@ def get_file_map_handler(event: Dict[str, Any]) -> Dict[str, Any]:
         API Gateway Lambda proxy response
     """
     try:
-        user_info = get_user_from_event(event)
-        if not user_info:
-            return handle_error(401, "Unauthorized")
-            
-        user_id = user_info['id']
+        user_id = user['id']
         file_map_id = event['pathParameters']['id']
         
         # Get the file map
-        response = get_field_maps_table().get_item(Key={'fieldMapId': file_map_id})
+        response = get_file_maps_table().get_item(Key={'fileMapId': file_map_id})
         
         if 'Item' not in response:
             return handle_error(404, f"File map {file_map_id} not found")
@@ -96,7 +88,7 @@ def get_file_map_handler(event: Dict[str, Any]) -> Dict[str, Any]:
         logger.error(f"DynamoDB error getting file map: {str(e)}")
         return handle_error(500, "Error retrieving file map")
 
-def list_file_maps_handler(event: Dict[str, Any]) -> Dict[str, Any]:
+def list_file_maps_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     """
     List file maps for a user, optionally filtered by account.
     
@@ -107,23 +99,19 @@ def list_file_maps_handler(event: Dict[str, Any]) -> Dict[str, Any]:
         API Gateway Lambda proxy response
     """
     try:
-        user_info = get_user_from_event(event)
-        if not user_info:
-            return handle_error(401, "Unauthorized")
-            
-        user_id = user_info['id']
+        user_id = user['id']
         account_id = event.get('queryStringParameters', {}).get('accountId')
         
         if account_id:
             # Query by account using GSI
-            response = get_field_maps_table().query(
+            response = get_file_maps_table().query(
                 IndexName='AccountIdIndex',
                 KeyConditionExpression='accountId = :accountId',
                 ExpressionAttributeValues={':accountId': account_id}
             )
         else:
             # Query by user using GSI
-            response = get_field_maps_table().query(
+            response = get_file_maps_table().query(
                 IndexName='UserIdIndex',
                 KeyConditionExpression='userId = :userId',
                 ExpressionAttributeValues={':userId': user_id}
@@ -141,7 +129,7 @@ def list_file_maps_handler(event: Dict[str, Any]) -> Dict[str, Any]:
         logger.error(f"DynamoDB error listing file maps: {str(e)}")
         return handle_error(500, "Error listing file maps")
 
-def update_file_map_handler(event: Dict[str, Any]) -> Dict[str, Any]:
+def update_file_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     """
     Update a file map.
     
@@ -152,16 +140,12 @@ def update_file_map_handler(event: Dict[str, Any]) -> Dict[str, Any]:
         API Gateway Lambda proxy response
     """
     try:
-        user_info = get_user_from_event(event)
-        if not user_info:
-            return handle_error(401, "Unauthorized")
-            
-        user_id = user_info['id']
+        user_id = user['id']
         file_map_id = event['pathParameters']['id']
         body = json.loads(event['body'])
         
         # Get existing file map
-        response = get_field_maps_table().get_item(Key={'fieldMapId': file_map_id})
+        response = get_file_maps_table().get_item(Key={'fileMapId': file_map_id})
         
         if 'Item' not in response:
             return handle_error(404, f"File map {file_map_id} not found")
@@ -180,7 +164,7 @@ def update_file_map_handler(event: Dict[str, Any]) -> Dict[str, Any]:
         )
         
         # Save updates
-        get_field_maps_table().put_item(Item=file_map.to_dict())
+        get_file_maps_table().put_item(Item=file_map.to_dict())
         
         return create_response(200, file_map.to_dict())
         
@@ -190,7 +174,7 @@ def update_file_map_handler(event: Dict[str, Any]) -> Dict[str, Any]:
         logger.error(f"DynamoDB error updating file map: {str(e)}")
         return handle_error(500, "Error updating file map")
 
-def delete_file_map_handler(event: Dict[str, Any]) -> Dict[str, Any]:
+def delete_file_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     """
     Delete a file map.
     
@@ -201,15 +185,11 @@ def delete_file_map_handler(event: Dict[str, Any]) -> Dict[str, Any]:
         API Gateway Lambda proxy response
     """
     try:
-        user_info = get_user_from_event(event)
-        if not user_info:
-            return handle_error(401, "Unauthorized")
-            
-        user_id = user_info['id']
+        user_id = user['id']
         file_map_id = event['pathParameters']['id']
         
         # Get the file map to check ownership
-        response = get_field_maps_table().get_item(Key={'fieldMapId': file_map_id})
+        response = get_file_maps_table().get_item(Key={'fileMapId': file_map_id})
         
         if 'Item' not in response:
             return handle_error(404, f"File map {file_map_id} not found")
@@ -221,9 +201,9 @@ def delete_file_map_handler(event: Dict[str, Any]) -> Dict[str, Any]:
             return handle_error(403, "Not authorized to delete this file map")
             
         # Delete the file map
-        get_field_maps_table().delete_item(Key={'fieldMapId': file_map_id})
+        get_file_maps_table().delete_item(Key={'fileMapId': file_map_id})
         
-        return create_response(204, None)
+        return create_response(204, {})
         
     except ClientError as e:
         logger.error(f"DynamoDB error deleting file map: {str(e)}")
@@ -240,25 +220,35 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Returns:
         API Gateway Lambda proxy response
     """
-    logger.info(f"Processing event: {json.dumps(event)}")
-    
-    http_method = event['requestContext']['http']['method']
-    route_key = event['routeKey']
-    
     try:
+        # Get user from Cognito
+        user = get_user_from_event(event)
+        if not user:
+            return create_response(401, {"message": "Unauthorized"})
+        
+        # Get route from event
+        route = event.get('routeKey')
+        if not route:
+            return create_response(400, {"message": "Route not specified"})
+        
+            # Log request details
+                # Get the HTTP method and route
+        method = event.get("requestContext", {}).get("http", {}).get("method", "").upper()
+        logger.info(f"Request: {method} {route}")
+
         # Route to appropriate handler
-        if route_key == 'POST /file-maps':
-            return create_file_map_handler(event)
-        elif route_key == 'GET /file-maps/{id}':
-            return get_file_map_handler(event)
-        elif route_key == 'GET /file-maps':
-            return list_file_maps_handler(event)
-        elif route_key == 'PUT /file-maps/{id}':
-            return update_file_map_handler(event)
-        elif route_key == 'DELETE /file-maps/{id}':
-            return delete_file_map_handler(event)
+        if route == 'POST /file-maps':
+            return create_file_map_handler(event, user)
+        elif route == 'GET /file-maps/{id}':
+            return get_file_map_handler(event, user)
+        elif route == 'GET /file-maps':
+            return list_file_maps_handler(event, user)
+        elif route == 'PUT /file-maps/{id}':
+            return update_file_map_handler(event, user)
+        elif route == 'DELETE /file-maps/{id}':
+            return delete_file_map_handler(event, user)
         else:
-            return handle_error(404, f"Route {route_key} not found")
+            return handle_error(404, f"Route {route} not found")
             
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")

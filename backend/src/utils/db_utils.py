@@ -17,13 +17,12 @@ from models import (
     validate_account_data,
     validate_transaction_file_data,
     AccountType,
-    Currency,
-    FileFormat,
-    ProcessingStatus
+    Currency
 )
 from models.transaction import Transaction
 from boto3.dynamodb.conditions import Key, Attr
-from models.file_map import FieldMapping, FileMap
+from models.file_map import FileMap
+from utils.auth import checked_mandatory_account, checked_mandatory_transaction_file
 from utils.transaction_utils import generate_transaction_hash
 
 # Configure logging
@@ -46,28 +45,28 @@ _files_table = None
 _transactions_table = None
 _file_maps_table = None
 
-def get_accounts_table() -> Table:
+def get_accounts_table() -> Any:
     """Get the accounts table resource, initializing it if needed."""
     global _accounts_table
     if _accounts_table is None and ACCOUNTS_TABLE:
         _accounts_table = dynamodb.Table(ACCOUNTS_TABLE)
     return _accounts_table
 
-def get_files_table() -> Table:
+def get_files_table() -> Any:
     """Get the files table resource, initializing it if needed."""
     global _files_table
     if _files_table is None and FILES_TABLE:
         _files_table = dynamodb.Table(FILES_TABLE)
     return _files_table
 
-def get_transactions_table() -> Table:
+def get_transactions_table() -> Any:
     """Get the transactions table resource, initializing it if needed."""
     global _transactions_table
     if _transactions_table is None and TRANSACTIONS_TABLE:
         _transactions_table = dynamodb.Table(TRANSACTIONS_TABLE)
     return _transactions_table
 
-def get_file_maps_table() -> Table:
+def get_file_maps_table() -> Any:
     """Get the file maps table resource, initializing it if needed."""
     global _file_maps_table
     if _file_maps_table is None and FILE_MAPS_TABLE:
@@ -109,7 +108,7 @@ def list_user_accounts(user_id: str) -> List[Account]:
         # Query using GSI for userId
         response = get_accounts_table().query(
             IndexName='UserIdIndex',
-            KeyConditionExpression=boto3.dynamodb.conditions.Key('userId').eq(user_id)
+            KeyConditionExpression=Key('userId').eq(user_id)
         )
         
         accounts = []
@@ -122,54 +121,22 @@ def list_user_accounts(user_id: str) -> List[Account]:
         raise
 
 
-def create_account(account_data: Dict[str, Any]) -> Account:
+def create_account(account: Account):
     """
     Create a new account.
     
     Args:
-        account_data: Dictionary containing account data
+        account: Account object
         
-    Returns:
-        Newly created Account object
     """
-    try:
-        # Validate the input data
-        validate_account_data(account_data)
-        
-        # Ensure account_type and currency are proper enum types
-        account_type = account_data['accountType']
-        if isinstance(account_type, str):
-            account_type = AccountType(account_type)
-            
-        currency = account_data.get('currency', 'USD')
-        if isinstance(currency, str):
-            currency = Currency(currency)
-        
-        # Create account object
-        account = Account.create(
-            user_id=account_data['userId'],
-            account_name=account_data['accountName'],
-            account_type=account_type,
-            institution=account_data['institution'],
-            balance=float(account_data.get('balance', 0)),
-            currency=currency,
-            notes=account_data.get('notes'),
-            is_active=account_data.get('isActive', True)
-        )
-        
-        # Save to DynamoDB
-        get_accounts_table().put_item(Item=account.to_dict())
-        
-        return account
-    except ValueError as e:
-        logger.error(f"Validation error creating account: {str(e)}")
-        raise
-    except ClientError as e:
-        logger.error(f"Error creating account: {str(e)}")
-        raise
+
+    # Save to DynamoDB
+    get_accounts_table().put_item(Item=account.to_dict())
 
 
-def update_account(account_id: str, update_data: Dict[str, Any]) -> Account:
+
+
+def update_account(account_id: str, user_id: str, update_data: Dict[str, Any]) -> Account:
     """
     Update an existing account.
     
@@ -180,50 +147,43 @@ def update_account(account_id: str, update_data: Dict[str, Any]) -> Account:
     Returns:
         Updated Account object
     """
-    try:
-        # Retrieve the existing account
-        account = get_account(account_id)
-        if not account:
-            raise ValueError(f"Account {account_id} not found")
+    # Retrieve the existing account
+    account = checked_mandatory_account(account_id, user_id)
+    
+    # Convert enum string values to actual enum types
+    if 'accountType' in update_data and isinstance(update_data['accountType'], str):
+        update_data['accountType'] = AccountType(update_data['accountType'])
         
-        # Convert enum string values to actual enum types
-        if 'accountType' in update_data and isinstance(update_data['accountType'], str):
-            update_data['accountType'] = AccountType(update_data['accountType'])
-            
-        if 'currency' in update_data and isinstance(update_data['currency'], str):
-            update_data['currency'] = Currency(update_data['currency'])
-        
-        # Update fields
-        update_data_snake_case = {}
-        field_mapping = {
-            'accountName': 'account_name',
-            'accountType': 'account_type',
-            'institution': 'institution',
-            'balance': 'balance',
-            'currency': 'currency',
-            'notes': 'notes',
-            'isActive': 'is_active',
-            'defaultFieldMapId': 'default_field_map_id'
-        }
-        
-        for key, value in update_data.items():
-            if key in field_mapping:
-                update_data_snake_case[field_mapping[key]] = value
-            else:
-                raise ValueError(f"Skipping update for field {key}")
-        
-        account.update(**update_data_snake_case)
-        
-        # Save updates to DynamoDB
-        get_accounts_table().put_item(Item=account.to_dict())
-        
-        return account
-    except ValueError as e:
-        logger.error(f"Validation error updating account {account_id}: {str(e)}")
-        raise
-    except ClientError as e:
-        logger.error(f"Error updating account {account_id}: {str(e)}")
-        raise
+    if 'currency' in update_data and isinstance(update_data['currency'], str):
+        update_data['currency'] = Currency(update_data['currency'])
+    
+    # Update fields
+    update_data_snake_case = {}
+    field_mapping = {
+        'accountName': 'account_name',
+        'accountType': 'account_type',
+        'institution': 'institution',
+        'balance': 'balance',
+        'currency': 'currency',
+        'notes': 'notes',
+        'isActive': 'is_active',
+        'defaultFieldMapId': 'default_field_map_id'
+    }
+    
+    for key, value in update_data.items():
+        if key in field_mapping:
+            update_data_snake_case[field_mapping[key]] = value
+        else:
+            raise ValueError(f"Skipping update for field {key}")
+    
+    account.update(**update_data_snake_case)
+    account.validate()
+    
+    # Save updates to DynamoDB
+    get_accounts_table().put_item(Item=account.to_dict())
+    
+    return account
+
 
 
 def delete_account(account_id: str) -> bool:
@@ -301,7 +261,7 @@ def list_account_files(account_id: str) -> List[TransactionFile]:
         # Query using GSI for accountId
         response = get_files_table().query(
             IndexName='AccountIdIndex',
-            KeyConditionExpression=boto3.dynamodb.conditions.Key('accountId').eq(account_id)
+            KeyConditionExpression=Key('accountId').eq(account_id)
         )
         
         files = []
@@ -328,7 +288,7 @@ def list_user_files(user_id: str) -> List[TransactionFile]:
         # Query using GSI for userId
         response = get_files_table().query(
             IndexName='UserIdIndex',
-            KeyConditionExpression=boto3.dynamodb.conditions.Key('userId').eq(user_id)
+            KeyConditionExpression=Key('userId').eq(user_id)
         )
         
         files = []
@@ -341,15 +301,13 @@ def list_user_files(user_id: str) -> List[TransactionFile]:
         raise
 
 
-def create_transaction_file(transaction_file: TransactionFile) -> TransactionFile:
+def create_transaction_file(transaction_file: TransactionFile):
     """
     Create a new transaction file record.
     
     Args:
         transaction_file: TransactionFile object
         
-    Returns:
-        Newly created TransactionFile object
     """
     try:
         # Validate the input data
@@ -359,7 +317,6 @@ def create_transaction_file(transaction_file: TransactionFile) -> TransactionFil
         # Save to DynamoDB
         get_files_table().put_item(Item=transaction_file.to_dict())
         
-        return transaction_file
     except ValueError as e:
         logger.error(f"Validation error creating file: {str(e)}")
         #log stack trace
@@ -371,24 +328,22 @@ def create_transaction_file(transaction_file: TransactionFile) -> TransactionFil
         raise
 
 
-def update_transaction_file(transaction_file: TransactionFile):
+def update_transaction_file(file_id: str, user_id: str, updates: Dict[str, Any]):
     """
-    Update an existing transaction file.
+    Update a transaction file record in DynamoDB.
     
     Args:
-        transaction_file: The TransactionFile object to update
+        file_id: The unique identifier of the file
+        updates: Dictionary of fields to update with their new values
         
     Returns:
-        Updated TransactionFile object
+        bool: True if successful, False otherwise
     """
-    try:        
-        # Save updates to DynamoDB
-        get_files_table().put_item(Item=transaction_file.to_dict())
 
-    except ClientError as e:
-        logger.error(f"Error updating file {transaction_file.file_id}: {str(e)}")
-        raise
-
+    transaction_file = checked_mandatory_transaction_file(file_id, user_id)
+    transaction_file.update(**updates)
+    transaction_file.validate()
+    get_files_table().put_item(Item=transaction_file.to_dict())
 
 def delete_transaction_file(file_id: str) -> bool:
     """
@@ -881,6 +836,9 @@ def check_duplicate_transaction(transaction: Transaction) -> bool:
     """
     try:
         logger.info(f"Entering check_duplicate_transaction for transaction: {transaction}")
+        if transaction.transaction_hash is None or transaction.account_id is None:
+            logger.error(f"Transaction hash or account ID is None for transaction: {transaction}")
+            raise ValueError("Transaction hash or account ID is None")
         existing = get_transaction_by_account_and_hash(transaction.account_id, transaction.transaction_hash)
         if existing:
             logger.info(f"Found existing transaction: hash={existing.transaction_hash} date={existing.date} amount={existing.amount} description={existing.description}")
@@ -890,3 +848,20 @@ def check_duplicate_transaction(transaction: Transaction) -> bool:
     except Exception as e:
         logger.error(f"Error checking for duplicate transaction: {str(e)}")
         return False 
+
+
+def update_transaction(transaction: Transaction) -> None:
+    """
+    Update an existing transaction in DynamoDB.
+    
+    Args:
+        transaction: Transaction object to update
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        get_transactions_table().put_item(Item=transaction.to_dict())
+    except ClientError as e:
+        logger.error(f"Error updating transaction {transaction.transaction_id}: {str(e)}")
+        raise e

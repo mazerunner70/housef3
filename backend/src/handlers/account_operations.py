@@ -3,11 +3,12 @@ import logging
 import os
 import uuid
 import boto3
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from decimal import Decimal
 
 from models.account import Account, AccountType, Currency
+from models.money import Money
 from utils.db_utils import (
     get_account,
     list_user_accounts,
@@ -20,7 +21,9 @@ from utils.db_utils import (
     list_account_transactions,
     list_file_transactions
 )
-from utils.auth import get_user_from_event
+from utils.auth import checked_mandatory_account, get_user_from_event
+from utils.lambda_utils import mandatory_body_parameter, mandatory_path_parameter, mandatory_query_parameter, optional_body_parameter
+from utils.s3_dao import generate_upload_url
 
 # Configure logging
 logger = logging.getLogger()
@@ -84,21 +87,29 @@ def create_response(status_code: int, body: Any) -> Dict[str, Any]:
 def create_account_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     """Create a new financial account."""
     try:
-        # Parse the request body
-        body = json.loads(event.get('body', '{}'))
+        account_name = mandatory_body_parameter(event, 'accountName')
+        account_type = mandatory_body_parameter(event, 'accountType')
+        currency = mandatory_body_parameter(event, 'currency')
+        institution = mandatory_body_parameter(event, 'institution')
+        balance = mandatory_body_parameter(event, 'balance')
+        notes = optional_body_parameter(event, 'notes')
+        is_active = optional_body_parameter(event, 'isActive')
+
         
-        # Add user ID to the account data
-        body['userId'] = user['id']
-        
-        # Convert string values to enum types
-        if 'accountType' in body and isinstance(body['accountType'], str):
-            body['accountType'] = AccountType(body['accountType'])
-            
-        if 'currency' in body and isinstance(body['currency'], str):
-            body['currency'] = Currency(body['currency'])
-        
+        account = Account(
+            user_id=user['id'],
+            account_id=str(uuid.uuid4()),
+            account_name=account_name,
+            account_type=AccountType(account_type),
+            currency=Currency(currency),
+            institution=institution,
+            balance=Money(Decimal(balance), Currency(currency)),
+            notes=notes,
+            is_active=bool(is_active) if is_active is not None else True
+        )
+
         # Validate and create the account
-        account = create_account(body)
+        create_account(account)
         
         # Return the created account
         account_dict = account.to_dict()
@@ -118,20 +129,10 @@ def get_account_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str
     """Get a specific account by ID."""
     try:
         # Get account ID from path parameters
-        account_id = event.get('pathParameters', {}).get('id')
-        
-        if not account_id:
-            return create_response(400, {"message": "Account ID is required"})
-        
+        account_id = mandatory_path_parameter(event, 'id')
+
         # Get the account
-        account = get_account(account_id)
-        
-        if not account:
-            return create_response(404, {"message": f"Account not found: {account_id}"})
-        
-        # Verify user ownership
-        if account.user_id != user['id']:
-            return create_response(403, {"message": "Access denied"})
+        account = checked_mandatory_account(account_id, user['id'])
         
         # Convert account to dictionary
         account_dict = account.to_dict()
@@ -146,8 +147,6 @@ def get_account_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str
 def list_accounts_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     """List all accounts for the current user."""
     try:
-        # Get query parameters for filtering/sorting (if implemented)
-        query_params = event.get('queryStringParameters', {}) or {}
         
         # Get accounts for the user
         accounts = list_user_accounts(user['id'])
@@ -170,32 +169,25 @@ def update_account_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
     """Update an existing account."""
     try:
         # Get account ID from path parameters
-        account_id = event.get('pathParameters', {}).get('id')
-        
-        if not account_id:
-            return create_response(400, {"message": "Account ID is required"})
-        
-        # Parse the request body
-        body = json.loads(event.get('body', '{}'))
-        
-        # Convert string values to enum types
-        if 'accountType' in body and isinstance(body['accountType'], str):
-            body['accountType'] = AccountType(body['accountType'])
-            
-        if 'currency' in body and isinstance(body['currency'], str):
-            body['currency'] = Currency(body['currency'])
-        
-        # Verify the account exists and belongs to the user
-        existing_account = get_account(account_id)
-        
-        if not existing_account:
-            return create_response(404, {"message": f"Account not found: {account_id}"})
-        
-        if existing_account.user_id != user['id']:
-            return create_response(403, {"message": "Access denied"})
+        account_id = mandatory_path_parameter(event, 'id')
+        account_name = optional_body_parameter(event, 'accountName')
+        account_type = optional_body_parameter(event, 'accountType')
+        currency = optional_body_parameter(event, 'currency')
+        institution = optional_body_parameter(event, 'institution')
+        balance = optional_body_parameter(event, 'balance')
+        notes = optional_body_parameter(event, 'notes')
+        is_active = optional_body_parameter(event, 'isActive')
         
         # Update the account
-        updated_account = update_account(account_id, body)
+        updated_account = update_account(account_id, user['id'], {
+            'account_name': account_name,
+            'account_type': account_type,
+            'currency': currency,
+            'institution': institution,
+            'balance': balance,
+            'notes': notes,
+            'is_active': is_active
+        })
         
         # Return the updated account
         account_dict = updated_account.to_dict()
@@ -215,19 +207,10 @@ def delete_account_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
     """Delete an account."""
     try:
         # Get account ID from path parameters
-        account_id = event.get('pathParameters', {}).get('id')
-        
-        if not account_id:
-            return create_response(400, {"message": "Account ID is required"})
+        account_id = mandatory_path_parameter(event, 'id')
         
         # Verify the account exists and belongs to the user
-        existing_account = get_account(account_id)
-        
-        if not existing_account:
-            return create_response(404, {"message": f"Account not found: {account_id}"})
-        
-        if existing_account.user_id != user['id']:
-            return create_response(403, {"message": "Access denied"})
+        checked_mandatory_account(account_id, user['id'])
         
         # Delete the account
         delete_account(account_id)
@@ -244,19 +227,10 @@ def account_files_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[s
     """List all files associated with an account."""
     try:
         # Get account ID from path parameters
-        account_id = event.get('pathParameters', {}).get('id')
-        
-        if not account_id:
-            return create_response(400, {"message": "Account ID is required"})
+        account_id = mandatory_path_parameter(event, 'id')
         
         # Verify the account exists and belongs to the user
-        existing_account = get_account(account_id)
-        
-        if not existing_account:
-            return create_response(404, {"message": f"Account not found: {account_id}"})
-        
-        if existing_account.user_id != user['id']:
-            return create_response(403, {"message": "Access denied"})
+        existing_account = checked_mandatory_account(account_id, user['id'])
         
         # Get files for the account
         files = list_account_files(account_id)
@@ -281,19 +255,10 @@ def delete_account_files_handler(event: Dict[str, Any], user: Dict[str, Any]) ->
     """Delete all files and their transactions for an account."""
     try:
         # Get account ID from path parameters
-        account_id = event.get('pathParameters', {}).get('id')
-        
-        if not account_id:
-            return create_response(400, {"message": "Account ID is required"})
+        account_id = mandatory_path_parameter(event, 'id')
         
         # Verify the account exists and belongs to the user
-        existing_account = get_account(account_id)
-        
-        if not existing_account:
-            return create_response(404, {"message": f"Account not found: {account_id}"})
-        
-        if existing_account.user_id != user['id']:
-            return create_response(403, {"message": "Access denied"})
+        existing_account = checked_mandatory_account(account_id, user['id'])
         
         # Get all files for the account
         files = list_account_files(account_id)
@@ -329,113 +294,68 @@ def delete_account_files_handler(event: Dict[str, Any], user: Dict[str, Any]) ->
 
 def account_file_upload_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     """Create a pre-signed URL for uploading a file to S3 and associate it with an account."""
-    try:
-        # Get account ID from path parameters
-        account_id = event.get('pathParameters', {}).get('id')
+
+    account_id = mandatory_path_parameter(event, 'id')
+    account = checked_mandatory_account(account_id, user['id'])
+    file_name = mandatory_body_parameter(event, 'fileName')
+    content_type = mandatory_body_parameter(event, 'contentType')
+    file_size = mandatory_body_parameter(event, 'fileSize')
+    file_format_id = optional_body_parameter(event, 'fileFormatId')
+    
+    
+    # Generate a unique file ID
+    file_id = str(uuid.uuid4())
+    
+    # Get bucket name from environment variables
+    bucket_name = os.environ.get('FILE_STORAGE_BUCKET')
+    if not bucket_name:
+        logger.error("FILE_STORAGE_BUCKET environment variable not set")
+        return create_response(500, {"message": "Server configuration error"})
         
-        if not account_id:
-            return create_response(400, {"message": "Account ID is required"})
         
-        # Verify the account exists and belongs to the user
-        existing_account = get_account(account_id)
-        
-        if not existing_account:
-            return create_response(404, {"message": f"Account not found: {account_id}"})
-        
-        if existing_account.user_id != user['id']:
-            return create_response(403, {"message": "Access denied"})
-        
-        # Parse the request body
-        body = json.loads(event.get('body', '{}'))
-        
-        # Validate required fields
-        required_fields = ['fileName', 'contentType', 'fileSize']
-        for field in required_fields:
-            if field not in body:
-                return create_response(400, {"message": f"Missing required field: {field}"})
-        
-        # Generate a unique file ID
-        file_id = str(uuid.uuid4())
-        
-        # Get bucket name from environment variables
-        bucket_name = os.environ.get('FILE_STORAGE_BUCKET')
-        if not bucket_name:
-            logger.error("FILE_STORAGE_BUCKET environment variable not set")
-            return create_response(500, {"message": "Server configuration error"})
-        
-        # Create S3 client
-        s3_client = boto3.client('s3')
-        
-        # Generate a key path based on user ID, account ID and file ID
-        s3_key = f"{user['id']}/{file_id}/{body['fileName']}"
-        
-        # Generate a pre-signed URL for uploading the file
-        expires_in = 3600  # URL expires in 1 hour
-        try:
-            upload_url = s3_client.generate_presigned_url(
-                'put_object',
-                Params={
-                    'Bucket': bucket_name,
-                    'Key': s3_key,
-                    'ContentType': body['contentType']
-                },
-                ExpiresIn=expires_in
-            )
-        except Exception as e:
-            logger.error(f"Error generating pre-signed URL: {str(e)}")
-            return create_response(500, {"message": "Error generating upload URL"})
-        
-        # Determine file format based on filename or content type
-        file_format = FileFormat.OTHER
-        if 'fileFormat' in body:
-            file_format = FileFormat(body['fileFormat'])
-        elif body['fileName'].lower().endswith(('.csv')):
-            file_format = FileFormat.CSV
-        elif body['fileName'].lower().endswith(('.ofx', '.qfx')):
-            file_format = FileFormat.OFX
-        elif body['fileName'].lower().endswith('.pdf'):
-            file_format = FileFormat.PDF
-        elif body['fileName'].lower().endswith('.xlsx'):
-            file_format = FileFormat.XLSX
-        
-        # Create transaction file record in DynamoDB
-        try:
-            file_data = {
-                'fileId': file_id,
-                'userId': user['id'],
-                'accountId': account_id,
-                'fileName': body['fileName'],
-                'contentType': body['contentType'],
-                'fileSize': body['fileSize'],
-                'fileFormat': file_format.value,
-                's3Key': s3_key,
-                'processingStatus': ProcessingStatus.PENDING.value
-            }
-            
-            transaction_file = create_transaction_file(file_data)
-            
-            # Return the response with file information and upload URL
-            response = {
-                'fileId': file_id,
-                'uploadUrl': upload_url,
-                'fileName': body['fileName'],
-                'contentType': body['contentType'],
-                'expires': expires_in,
-                'processingStatus': 'pending',
-                'fileFormat': file_format.value,
-                'accountId': account_id
-            }
-            
-            return create_response(201, response)
-        except ValueError as e:
-            logger.error(f"Validation error: {str(e)}")
-            return create_response(400, {"message": str(e)})
-        except Exception as e:
-            logger.error(f"Error creating file record: {str(e)}")
-            return create_response(500, {"message": "Error creating file record"})
-    except Exception as e:
-        logger.error(f"Error processing file upload: {str(e)}")
-        return create_response(500, {"message": "Error processing file upload request"})
+
+    s3_key = generate_upload_url(
+        user['id'],
+        file_id,
+        file_name,
+        content_type,
+        bucket_name
+    )
+
+    
+    # Determine file format based on filename or content type
+    file_format = FileFormat.OTHER
+    if file_format_id:
+        file_format = FileFormat(file_format_id)
+    elif file_name.lower().endswith(('.csv')):
+        file_format = FileFormat.CSV
+    elif file_name.lower().endswith(('.ofx', '.qfx')):
+        file_format = FileFormat.OFX
+    elif file_name.lower().endswith('.pdf'):
+        file_format = FileFormat.PDF
+    elif file_name.lower().endswith('.xlsx'):
+        file_format = FileFormat.XLSX
+    
+    # Create transaction file record in DynamoDB
+    transaction_file = TransactionFile(
+        account_id=account_id,
+        file_id=file_id,
+        user_id=user['id'],
+        file_name=file_name,
+        file_size=int(file_size),
+        file_format=file_format,
+        s3_key=s3_key,
+        processing_status=ProcessingStatus.PENDING,
+        upload_date=int(datetime.now(timezone.utc).timestamp() * 1000)
+    )
+    
+    create_transaction_file(transaction_file)
+
+    return create_response(201, {
+        'message': 'File uploaded successfully',
+        'file': transaction_file.to_dict()
+        })
+
 
 def delete_all_accounts_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     """Delete all accounts for the current user."""
@@ -445,7 +365,7 @@ def delete_all_accounts_handler(event: Dict[str, Any], user: Dict[str, Any]) -> 
         
         # Delete each account
         for account in accounts:
-            delete_account(account.id)
+            delete_account(account.account_id)
         
         return create_response(200, {
             'message': 'All accounts deleted successfully',
@@ -462,35 +382,21 @@ def get_account_transactions_handler(event: Dict[str, Any], user: Dict[str, Any]
         logger.info(f"User context: {json.dumps(user)}")
         
         # Get account ID from path parameters
-        account_id = event.get('pathParameters', {}).get('id')
+        account_id = mandatory_path_parameter(event, 'id')
         logger.info(f"Account ID from path parameters: {account_id}")
-        
-        if not account_id:
-            logger.error("No account ID provided in path parameters")
-            return create_response(400, {"message": "Account ID is required"})
         
         # Verify the account exists and belongs to the user
         logger.info(f"Fetching account with ID: {account_id}")
-        existing_account = get_account(account_id)
-        
-        if not existing_account:
-            logger.error(f"Account not found: {account_id}")
-            return create_response(404, {"message": f"Account not found: {account_id}"})
-        
-        if existing_account.user_id != user['id']:
-            logger.error(f"Access denied - User {user['id']} does not own account {account_id}")
-            return create_response(403, {"message": "Access denied"})
-        
+        existing_account = checked_mandatory_account(account_id, user['id'])
+
         # Get query parameters for pagination
         query_params = event.get('queryStringParameters', {}) or {}
-        logger.info(f"Query parameters: {json.dumps(query_params)}")
         
-        limit = int(query_params.get('limit', 50))
-        last_evaluated_key = query_params.get('lastEvaluatedKey')
-        logger.info(f"Pagination parameters - limit: {limit}, lastEvaluatedKey: {last_evaluated_key}")
+        
+        limit = int(mandatory_query_parameter(event, 'limit'))
+        last_evaluated_key = event.get('queryStringParameters', {}).get('lastEvaluatedKey')
         
         # Get transactions for the account
-        logger.info(f"Fetching transactions for account {account_id}")
         try:
             transactions = list_account_transactions(account_id, limit, last_evaluated_key)
             logger.info(f"Retrieved {len(transactions)} transactions")
@@ -520,16 +426,11 @@ def get_account_transactions_handler(event: Dict[str, Any], user: Dict[str, Any]
 def account_file_timeline_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     """Return timeline data for all files in an account (fileId, fileName, startDate, endDate, transactionCount, transactionDates)."""
     try:
-        account_id = event.get('pathParameters', {}).get('id')
-        if not account_id:
-            return create_response(400, {"message": "Account ID is required"})
+        account_id = mandatory_path_parameter(event, 'id')
 
         # Verify the account exists and belongs to the user
-        account = get_account(account_id)
-        if not account:
-            return create_response(404, {"message": f"Account not found: {account_id}"})
-        if account.user_id != user['id']:
-            return create_response(403, {"message": "Access denied"})
+        account = checked_mandatory_account(account_id, user['id'])
+
 
         files = list_account_files(account_id)
         timeline = []

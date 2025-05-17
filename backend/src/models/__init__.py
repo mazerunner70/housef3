@@ -21,8 +21,7 @@ from .transaction_file import (
 
 from .file_map import (
     FileMap,
-    FieldMapping,
-    validate_field_map_data
+    FieldMapping
 )
 
 __all__ = [
@@ -37,5 +36,6 @@ __all__ = [
     'validate_account_data',
     'validate_transaction_data',
     'validate_transaction_file_data',
-    'validate_field_map_data'
+    'FieldMapping',
+    'FileMap'
 ] 

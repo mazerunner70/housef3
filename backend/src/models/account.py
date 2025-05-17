@@ -9,6 +9,8 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 from decimal import Decimal
 
+from models.money import Currency, Money
+
 
 class AccountType(str, enum.Enum):
     """Enum for account types"""
@@ -20,17 +22,6 @@ class AccountType(str, enum.Enum):
     OTHER = "other"
 
 
-class Currency(str, enum.Enum):
-    """Enum for currencies"""
-    USD = "USD"
-    EUR = "EUR"
-    GBP = "GBP"
-    CAD = "CAD"
-    JPY = "JPY"
-    AUD = "AUD"
-    CHF = "CHF"
-    CNY = "CNY"
-    OTHER = "other"
 
 
 @dataclass
@@ -43,11 +34,11 @@ class Account:
     account_name: str
     account_type: AccountType
     institution: str
-    balance: Decimal
+    balance: Money
     currency: Currency
     notes: Optional[str] = None
     is_active: bool = True
-    default_field_map_id: Optional[str] = None
+    default_file_map_id: Optional[str] = None
     created_at: str = datetime.utcnow().isoformat()
     updated_at: str = datetime.utcnow().isoformat()
 
@@ -62,7 +53,7 @@ class Account:
         currency: Currency = Currency.USD,
         notes: Optional[str] = None,
         is_active: bool = True,
-        default_field_map_id: Optional[str] = None
+        default_file_map_id: Optional[str] = None
     ) -> 'Account':
         """
         Factory method to create a new account with generated ID and timestamps.
@@ -73,11 +64,11 @@ class Account:
             account_name=account_name,
             account_type=account_type,
             institution=institution,
-            balance=Decimal(str(balance)),
+            balance=Money(Decimal(str(balance)), currency),
             currency=currency,
             notes=notes,
             is_active=is_active,
-            default_field_map_id=default_field_map_id
+            default_file_map_id=default_file_map_id
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -98,8 +89,8 @@ class Account:
         }
         if self.notes:
             result['notes'] = self.notes
-        if self.default_field_map_id:
-            result['defaultFieldMapId'] = self.default_field_map_id
+        if self.default_file_map_id:
+            result['defaultFileMapId'] = self.default_file_map_id
         return result
 
     @classmethod
@@ -113,11 +104,11 @@ class Account:
             account_name=data["accountName"],
             account_type=AccountType(data["accountType"]),
             institution=data["institution"],
-            balance=Decimal(data["balance"]),
+            balance=Money(Decimal(data["balance"]), Currency(data["currency"])),
             currency=Currency(data["currency"]),
             notes=data.get("notes"),
             is_active=data.get("isActive", True),
-            default_field_map_id=data.get("defaultFieldMapId"),
+            default_file_map_id=data.get("defaultFileMapId"),
             created_at=data.get("createdAt", datetime.utcnow().isoformat()),
             updated_at=data.get("updatedAt", datetime.utcnow().isoformat())
         )
@@ -133,6 +124,11 @@ class Account:
         # Always update the updated_at timestamp
         self.updated_at = datetime.utcnow().isoformat()
 
+    def validate(self) -> None:
+        """
+        Validate the account object.
+        """
+        validate_account_data(self.to_dict())
 
 def validate_account_data(data: Dict[str, Any]) -> bool:
     """

@@ -12,19 +12,19 @@ from typing import Dict, Any, List, Tuple, Optional
 from decimal import Decimal
 from models.transaction_file import FileFormat, ProcessingStatus, TransactionFile
 from models.file_map import FileMap
-from services.file_processor_service import process_file_with_account
+from services.file_processor_service import process_file
 from utils.transaction_parser import parse_transactions, file_type_selector
 from models.transaction import Transaction
 from utils.file_analyzer import analyze_file_format
 from utils.db_utils import (
     create_transaction_file,
     get_account,
+    get_account_default_file_map,
+    get_file_map,
     get_transaction_file,
-    update_transaction_file,
     create_transaction,
     delete_transactions_for_file,
-    get_field_mapping,
-    get_account_default_field_map
+
 )
 from utils.file_processor_utils import (
     check_duplicate_transaction,
@@ -57,7 +57,7 @@ try:
     # Import required modules
     from models.transaction_file import FileFormat, ProcessingStatus
     from utils.file_analyzer import analyze_file_format
-    from utils.db_utils import get_transaction_file, update_transaction_file
+    from utils.db_utils import get_transaction_file
     
     logger.info("Successfully imported modules for file processor")
 except ImportError as e:
@@ -66,7 +66,7 @@ except ImportError as e:
     try:
         from ..models.transaction_file import FileFormat, ProcessingStatus
         from ..utils.file_analyzer import analyze_file_format
-        from ..utils.db_utils import get_transaction_file, update_transaction_file
+        from ..utils.db_utils import get_transaction_file
         logger.info("Successfully imported modules using relative imports")
     except ImportError as e2:
         logger.error(f"Final import attempt failed in file processor: {str(e2)}")
@@ -87,176 +87,176 @@ FIELD_MAPS_TABLE = os.environ.get('FIELD_MAPS_TABLE', 'field-maps')
 transaction_table = dynamodb.Table(TRANSACTIONS_TABLE)
 field_maps_table = dynamodb.Table(FIELD_MAPS_TABLE)
 
-def legacy_process_file_with_account(file_id: str, content_bytes: bytes, opening_balance: Decimal, user_id: str) -> Dict[str, Any]:
-    """
-    Process a file and its transactions with account-specific logic.
-    This includes:
-    - Field map handling (account-specific or file-specific)
-    - Duplicate transaction detection
-    - Account association
-    - Transaction status tracking
-    - Opening balance calculation from duplicates
-    - File format determination
+# def legacy_process_file_with_account(file_id: str, content_bytes: bytes, opening_balance: Decimal, user_id: str) -> Dict[str, Any]:
+#     """
+#     Process a file and its transactions with account-specific logic.
+#     This includes:
+#     - Field map handling (account-specific or file-specific)
+#     - Duplicate transaction detection
+#     - Account association
+#     - Transaction status tracking
+#     - Opening balance calculation from duplicates
+#     - File format determination
     
-    Args:
-        file_id: ID of the file to process
-        content_bytes: File content as bytes
-        opening_balance: Opening balance to use for running totals (as Decimal)
-        user_id: ID of the user who owns the file
+#     Args:
+#         file_id: ID of the file to process
+#         content_bytes: File content as bytes
+#         opening_balance: Opening balance to use for running totals (as Decimal)
+#         user_id: ID of the user who owns the file
         
-    Returns:
-        Dict[str, Any]: Response containing success status and message
-    """
-    try:
-        # Get the file record to check for field map
-        file_record = get_transaction_file(file_id)
-        if not file_record:
-            return {
-                'statusCode': 404,
-                'body': json.dumps({'message': 'File not found'})
-            }
+#     Returns:
+#         Dict[str, Any]: Response containing success status and message
+#     """
+#     try:
+#         # Get the file record to check for field map
+#         file_record = get_transaction_file(file_id)
+#         if not file_record:
+#             return {
+#                 'statusCode': 404,
+#                 'body': json.dumps({'message': 'File not found'})
+#             }
 
-        # Determine file format if not already set
-        file_format = None
-        if hasattr(file_record, 'file_format') and file_record.file_format:
-            try:
-                file_format = FileFormat(file_record.file_format)
-            except ValueError:
-                logger.warning(f"Invalid file format stored: {file_record.file_format}, will re-detect")
+#         # Determine file format if not already set
+#         file_format = None
+#         if hasattr(file_record, 'file_format') and file_record.file_format:
+#             try:
+#                 file_format = FileFormat(file_record.file_format)
+#             except ValueError:
+#                 logger.warning(f"Invalid file format stored: {file_record.file_format}, will re-detect")
                 
-        if not file_format:
-            file_format = file_type_selector(content_bytes)
-            logger.info(f"Detected file format: {file_format}")
-            # Update file record with detected format
-            update_transaction_file(file_id, {"file_format": file_format.value})
+#         if not file_format:
+#             file_format = file_type_selector(content_bytes)
+#             logger.info(f"Detected file format: {file_format}")
+#             # Update file record with detected format
+#             update_transaction_file(file_id, user_id, {"file_format": file_format.value if file_format else None})
             
-        # Get field map if specified
-        field_map = None
-        field_map_id = file_record.field_map_id
-        account_id = file_record.account_id
-        logger.info(f"Field map ID: {field_map_id}")
-        logger.info(f"Account ID: {account_id}")
-        if field_map_id:
-            # Use specified field map
-            field_map = get_field_mapping(field_map_id)
-            if not field_map:
-                return {
-                    'statusCode': 404,
-                    'body': json.dumps({'message': 'Field map not found'})
-                }
-        elif account_id:
-            # Try to use account's default field map
-            field_map = get_account_default_field_map(account_id)
-            if field_map:
-                logger.info(f"Using account default field map for file {file_id}")
+#         # Get field map if specified
+#         field_map = None
+#         field_map_id = file_record.file_map_id
+#         account_id = file_record.account_id
+#         logger.info(f"Field map ID: {field_map_id}")
+#         logger.info(f"Account ID: {account_id}")
+#         if field_map_id:
+#             # Use specified field map
+#             field_map = get_file_map(field_map_id)
+#             if not field_map:
+#                 return {
+#                     'statusCode': 404,
+#                     'body': json.dumps({'message': 'Field map not found'})
+#                 }
+#         elif account_id:
+#             # Try to use account's default field map
+#             field_map = get_account_default_file_map(account_id)
+#             if field_map:
+#                 logger.info(f"Using account default field map for file {file_id}")
                 
-        if not field_map and file_format == FileFormat.CSV:
-            return {
-                'statusCode': 400,
-                'body': json.dumps({'message': 'Field map required for CSV files'})
-            }
+#         if not field_map and file_format == FileFormat.CSV:
+#             return {
+#                 'statusCode': 400,
+#                 'body': json.dumps({'message': 'Field map required for CSV files'})
+#             }
             
-        # Parse transactions using the utility
-        try:
-            transactions = parse_transactions(
-                content_bytes, 
-                file_format,
-                opening_balance,
-                field_map
-            )
-        except Exception as parse_error:
-            logger.error(f"Error parsing transactions: {str(parse_error)}")
-            return {
-                'statusCode': 400,
-                'body': json.dumps({'message': f'Error parsing transactions: {str(parse_error)}'})
-            }
+#         # Parse transactions using the utility
+#         try:
+#             transactions = parse_transactions(
+#                 content_bytes, 
+#                 file_format,
+#                 opening_balance,
+#                 field_map
+#             )
+#         except Exception as parse_error:
+#             logger.error(f"Error parsing transactions: {str(parse_error)}")
+#             return {
+#                 'statusCode': 400,
+#                 'body': json.dumps({'message': f'Error parsing transactions: {str(parse_error)}'})
+#             }
         
-        if not transactions:
-            return {
-                'statusCode': 400,
-                'body': json.dumps({'message': 'No transactions could be parsed from file'})
-            }
-        logger.info(f"Entering calculate_opening_balance_from_duplicates for account: {account_id}")
-        # Calculate opening balance from duplicates if possible
-        if account_id:
-            calculated_opening_balance = calculate_opening_balance_from_duplicates(transactions, account_id)
-            if calculated_opening_balance is not None:
-                opening_balance = calculated_opening_balance  # Already a Decimal from calculate_opening_balance_from_duplicates
-                logger.info(f"Calculated opening balance from duplicates: {opening_balance}")
-                update_transaction_file(file_id, {'openingBalance': str(opening_balance)})
+#         if not transactions:
+#             return {
+#                 'statusCode': 400,
+#                 'body': json.dumps({'message': 'No transactions could be parsed from file'})
+#             }
+#         logger.info(f"Entering calculate_opening_balance_from_duplicates for account: {account_id}")
+#         # Calculate opening balance from duplicates if possible
+#         if account_id:
+#             calculated_opening_balance = calculate_opening_balance_from_duplicates(transactions, account_id)
+#             if calculated_opening_balance is not None:
+#                 opening_balance = calculated_opening_balance  # Already a Decimal from calculate_opening_balance_from_duplicates
+#                 logger.info(f"Calculated opening balance from duplicates: {opening_balance}")
+#                 update_transaction_file(file_id, {'openingBalance': str(opening_balance)})
                 
-                # Recalculate running balances with new opening balance
-                current_balance = opening_balance
-                for tx in transactions:
-                    current_balance += Decimal(str(tx['amount']))
-                    tx['balance'] = str(current_balance)
-                logger.info("Recalculated running balances with new opening balance")
-        logger.info("Exiting calculate_opening_balance_from_duplicates")
-        # Delete existing transactions if any
-        delete_transactions_for_file(file_id)
+#                 # Recalculate running balances with new opening balance
+#                 current_balance = opening_balance
+#                 for tx in transactions:
+#                     current_balance += Decimal(str(tx['amount']))
+#                     tx['balance'] = str(current_balance)
+#                 logger.info("Recalculated running balances with new opening balance")
+#         logger.info("Exiting calculate_opening_balance_from_duplicates")
+#         # Delete existing transactions if any
+#         delete_transactions_for_file(file_id)
         
-        # Save transactions to the database
-        transaction_count = 0
-        duplicate_count = 0
-        for transaction_data in transactions:
-            try:
-                # Add the file_id and user_id to each transaction
-                transaction_data['file_id'] = file_id
-                transaction_data['user_id'] = user_id
-                if account_id:
-                    transaction_data['account_id'] = account_id
+#         # Save transactions to the database
+#         transaction_count = 0
+#         duplicate_count = 0
+#         for transaction_data in transactions:
+#             try:
+#                 # Add the file_id and user_id to each transaction
+#                 transaction_data['file_id'] = file_id
+#                 transaction_data['user_id'] = user_id
+#                 if account_id:
+#                     transaction_data['account_id'] = account_id
                 
-                # Check for duplicates if we have an account_id
-                is_duplicate = False
-                if account_id:
-                    is_duplicate = check_duplicate_transaction(transaction_data, account_id)
-                    if is_duplicate:
-                        transaction_data['status'] = 'duplicate'
-                        duplicate_count += 1
-                    else:
-                        transaction_data['status'] = 'new'
-                logger.info(f"Transaction data: {transaction_data}")
-                # Create and save the transaction
-                create_transaction(transaction_data)
-                transaction_count += 1
-            except Exception as tx_error:
-                logger.error(f"Error creating transaction: {str(tx_error)}")
-                logger.error(f"Error type: {type(tx_error).__name__}")
-                logger.error(f"Error args: {tx_error.args}")
-                logger.error(f"Transaction data that caused error: {transaction_data}")
+#                 # Check for duplicates if we have an account_id
+#                 is_duplicate = False
+#                 if account_id:
+#                     is_duplicate = check_duplicate_transaction(transaction_data, account_id)
+#                     if is_duplicate:
+#                         transaction_data['status'] = 'duplicate'
+#                         duplicate_count += 1
+#                     else:
+#                         transaction_data['status'] = 'new'
+#                 logger.info(f"Transaction data: {transaction_data}")
+#                 # Create and save the transaction
+#                 create_transaction(transaction_data)
+#                 transaction_count += 1
+#             except Exception as tx_error:
+#                 logger.error(f"Error creating transaction: {str(tx_error)}")
+#                 logger.error(f"Error type: {type(tx_error).__name__}")
+#                 logger.error(f"Error args: {tx_error.args}")
+#                 logger.error(f"Transaction data that caused error: {transaction_data}")
                 
-        logger.info(f"Saved {transaction_count} transactions for file {file_id} ({duplicate_count} duplicates)")
+#         logger.info(f"Saved {transaction_count} transactions for file {file_id} ({duplicate_count} duplicates)")
         
-        # Update the file record with transaction count and status
-        update_data = {
-            'processing_status': ProcessingStatus.PROCESSED.value,
-            'processed_at': datetime.now().isoformat(),
-            'transaction_count': len(transactions)
-        }
-        if field_map:
-            update_data['fieldMapId'] = field_map.field_map_id
+#         # Update the file record with transaction count and status
+#         update_data = {
+#             'processing_status': ProcessingStatus.PROCESSED.value,
+#             'processed_at': datetime.now().isoformat(),
+#             'transaction_count': len(transactions)
+#         }
+#         if field_map:
+#             update_data['fieldMapId'] = field_map.field_map_id
             
-        update_transaction_file(file_id, update_data)
+#         update_transaction_file(file_id, update_data)
         
-        return {
-            'statusCode': 200,
-            'body': json.dumps({
-                'message': f'Successfully processed {transaction_count} transactions',
-                'transactionCount': transaction_count
-            })
-        }
-    except Exception as e:
-        logger.error(f"Error processing transactions: {str(e)}")
-        logger.error(f"Error type: {type(e).__name__}")
-        logger.error(f"Error args: {e.args}")
-        update_transaction_file(file_id, {
-            'processingStatus': ProcessingStatus.ERROR,
-            'errorMessage': f'Error processing transactions: {str(e)}'
-        })
-        return {
-            'statusCode': 500,
-            'body': json.dumps({'message': f'Error processing transactions: {str(e)}'})
-        }
+#         return {
+#             'statusCode': 200,
+#             'body': json.dumps({
+#                 'message': f'Successfully processed {transaction_count} transactions',
+#                 'transactionCount': transaction_count
+#             })
+#         }
+#     except Exception as e:
+#         logger.error(f"Error processing transactions: {str(e)}")
+#         logger.error(f"Error type: {type(e).__name__}")
+#         logger.error(f"Error args: {e.args}")
+#         update_transaction_file(file_id, {
+#             'processingStatus': ProcessingStatus.ERROR,
+#             'errorMessage': f'Error processing transactions: {str(e)}'
+#         })
+#         return {
+#             'statusCode': 500,
+#             'body': json.dumps({'message': f'Error processing transactions: {str(e)}'})
+#         }
 
 def handler(event, context):
     """
@@ -303,13 +303,13 @@ def handler(event, context):
                 logger.info(f"Detected file format: {file_format}")
 
                 # Create or update file metadata in DynamoDB
-                current_time = datetime.utcnow().isoformat()
+                current_time = int(datetime.utcnow().timestamp())
                 transaction_file = TransactionFile(
                     file_id=file_id,
                     user_id=user_id,
                     file_name=file_name,
                     file_size=size,
-                    upload_date=current_time,
+                    upload_date=int(current_time),
                     s3_key=key,
                     file_format=file_format,
                     processing_status=ProcessingStatus.PENDING
@@ -322,19 +322,19 @@ def handler(event, context):
                 # If account has a default field map, add it to the file metadata
                 if account_id:
                     account = get_account(account_id)
-                    if account and account.default_field_map_id:
-                        transaction_file.field_map_id = account.default_field_map_id
-                        logger.info(f"Adding default field map ID to file metadata: {account.default_field_map_id}")
+                    if account and account.default_file_map_id:
+                        transaction_file.file_map_id = account.default_file_map_id
+                        logger.info(f"Adding default field map ID to file metadata: {account.default_file_map_id}")
 
 
                 logger.info(f"Processing file with account: {transaction_file}")
-                process_file_with_account(transaction_file)
+                process_file(transaction_file)
                 return {
                     'statusCode': 200,
                     'body': json.dumps({
                         'message': 'File processed and metadata created.',
                         'fileId': file_id,
-                        'fileFormat': file_format.value
+                        'fileFormat': file_format.value if file_format else None
                     })
                 }
 
@@ -368,7 +368,7 @@ def handler(event, context):
             })
         }
 
-def update_transaction_file(file_id: str, updates: Dict[str, Any]) -> None:
+def update_transaction_file(file_id: str, user_id: str, updates: Dict[str, Any]) -> None:
     """Update a transaction file record in DynamoDB."""
     try:
         # Convert snake_case keys to camelCase for DynamoDB

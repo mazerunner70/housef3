@@ -4,6 +4,7 @@ import re
 import logging
 import logging.config
 import os
+from unittest import mock
 import xml.etree.ElementTree as ET
 from decimal import Decimal
 from typing import List, Dict, Any, Optional, Tuple
@@ -11,13 +12,14 @@ from datetime import datetime
 from backend.src.models.account import Currency
 from backend.src.models.money import Money
 from backend.src.models.transaction import Transaction
-from models.transaction_file import FileFormat
+from models.transaction_file import FileFormat, TransactionFile
 from models.file_map import FileMap, FieldMapping
 import decimal
 
 # Configure logging
-if os.environ.get('LOGGING_CONFIG'):
-    logging.config.fileConfig(os.environ.get('LOGGING_CONFIG'))
+log_conf = os.environ.get('LOGGING_CONFIG')
+if log_conf:
+    logging.config.fileConfig(log_conf)
 else:
     logging.basicConfig(
         level=os.environ.get('LOG_LEVEL', 'INFO'),
@@ -109,11 +111,9 @@ def apply_field_mapping(row_data: Dict[str, Any], field_map: FileMap) -> Dict[st
     logger.info(f"Final mapped result: {result}")
     return result
 
-def parse_transactions(account_id: str,
-                      content: bytes, 
-                      file_format: FileFormat, 
-                      opening_balance: Optional[Money],
-                      field_map: Optional[FileMap] = None) -> List[Transaction]:
+def parse_transactions(transaction_file: TransactionFile,
+                      content: bytes,
+                      file_map: FileMap) -> List[Transaction]:
     """
     Parse transactions from file content based on the file format.
     
@@ -126,13 +126,15 @@ def parse_transactions(account_id: str,
     Returns:
         List of transaction dictionaries
     """
-    if file_format == FileFormat.CSV:
-        return parse_csv_transactions(content, opening_balance, field_map)
-    elif file_format in [FileFormat.OFX, FileFormat.QFX]:
-        return parse_ofx_transactions(content, opening_balance)
-    else:
-        logger.warning(f"Unsupported file format for transaction parsing: {file_format}")
-        return []
+    if transaction_file.file_map_id and transaction_file.opening_balance:
+        if transaction_file.file_format == FileFormat.CSV:
+            return parse_csv_transactions(transaction_file, content, file_map)
+        elif transaction_file.file_format in [FileFormat.OFX, FileFormat.QFX]:
+            return parse_ofx_transactions(transaction_file, content)
+        else:
+            logger.warning(f"Unsupported file format for transaction parsing: {transaction_file.file_format}")
+            return []
+    else: raise ValueError("File map or opening balance is required")
 
 def find_column_index(header: List[str], possible_names: List[str]) -> Optional[int]:
     """Find the index of a column given possible column names."""
@@ -154,7 +156,7 @@ def find_column_index(header: List[str], possible_names: List[str]) -> Optional[
     
     return None
 
-def parse_date(date_str: str) -> Optional[int]:
+def parse_date(date_str: str) -> int:
     """Try to parse date string in various formats and return milliseconds since epoch."""
     date_formats = [
         "%Y-%m-%d",
@@ -172,8 +174,7 @@ def parse_date(date_str: str) -> Optional[int]:
             return int(dt.timestamp() * 1000)
         except ValueError:
             continue
-    
-    return None
+    raise ValueError(f"Invalid date format: {date_str}")
 
 def preprocess_csv_text(text_content: str) -> str:
     """
@@ -262,14 +263,14 @@ def preprocess_csv_text(text_content: str) -> str:
             
     return '\n'.join(fixed_lines)
 
-def parse_csv_transactions(content: bytes, default_currency: Currency, opening_balance: Optional[Money] = None, field_map: Optional[FileMap] = None) -> List[Transaction]:
+def parse_csv_transactions(transaction_file: TransactionFile, content: bytes, file_map: FileMap) -> List[Transaction]:
     """
     Parse transactions from CSV file content.
     
     Args:
         content: The raw CSV file content
         opening_balance: Optional opening balance to use for running total calculation. Defaults to 0.00 if not provided.
-        field_map: Optional field mapping configuration
+        file_map: Optional field mapping configuration
         
     Returns:
         List of Transaction objects
@@ -308,29 +309,18 @@ def parse_csv_transactions(content: bytes, default_currency: Currency, opening_b
         header = [h.strip() for h in header]
         
         # Find columns by common names if no field map
-        if field_map:
-            # Use field mapping to get column indices
-            date_col = find_column_index(header, [m.source_field for m in field_map.mappings if m.target_field == 'date'])
-            desc_col = find_column_index(header, [m.source_field for m in field_map.mappings if m.target_field == 'description'])
-            amount_col = find_column_index(header, [m.source_field for m in field_map.mappings if m.target_field == 'amount'])
-            debitOrCredit_col = find_column_index(header, [m.source_field for m in field_map.mappings if m.target_field == 'debitOrCredit'])
-            category_col = find_column_index(header, [m.source_field for m in field_map.mappings if m.target_field == 'category'])
-            memo_col = find_column_index(header, [m.source_field for m in field_map.mappings if m.target_field == 'memo'])
-            currency_col = find_column_index(header, [m.source_field for m in field_map.mappings if m.target_field == 'currency'])
-        else:
-            # Use default column names
-            date_col = find_column_index(header, ['date', 'transaction date', 'posted date'])
-            desc_col = find_column_index(header, ['description', 'payee', 'merchant', 'transaction'])
-            amount_col = find_column_index(header, ['amount', 'transaction amount', 'billing amount'])
-            debitOrCredit_col = find_column_index(header, ['type', 'transaction type'])
-            category_col = find_column_index(header, ['category', 'transaction category'])
-            memo_col = find_column_index(header, ['memo', 'notes', 'reference'])
-            currency_col = find_column_index(header, ['currency'])
+
+        # Use field mapping to get column indices
+        date_col = find_column_index(header, [m.source_field for m in file_map.mappings if m.target_field == 'date'])
+        desc_col = find_column_index(header, [m.source_field for m in file_map.mappings if m.target_field == 'description'])
+        amount_col = find_column_index(header, [m.source_field for m in file_map.mappings if m.target_field == 'amount'])
+        debitOrCredit_col = find_column_index(header, [m.source_field for m in file_map.mappings if m.target_field == 'debitOrCredit'])
+        category_col = find_column_index(header, [m.source_field for m in file_map.mappings if m.target_field == 'category'])
+        memo_col = find_column_index(header, [m.source_field for m in file_map.mappings if m.target_field == 'memo'])
+        currency_col = find_column_index(header, [m.source_field for m in file_map.mappings if m.target_field == 'currency'])
         # Validate required columns
-        if date_col is None or desc_col is None or amount_col is None is None:
+        if date_col is None or desc_col is None or amount_col is None:
             raise ValueError("Missing required columns: Date, Description or Amount")
-        if currency_col is None and default_currency is None:
-            raise ValueError("Missing required columns: Currency with no default currency")
         
         # Read all rows
         rows = list(reader)
@@ -346,7 +336,15 @@ def parse_csv_transactions(content: bytes, default_currency: Currency, opening_b
             logger.info("Reversed transaction order to ascending")
             
         # Initialize balance
-        balance = opening_balance if opening_balance is not None else Money(Decimal('0.00'), Currency.USD)
+        if not transaction_file.opening_balance:
+            raise ValueError("Opening balance is required")
+        if not transaction_file.account_id:
+            raise ValueError("Account ID is required")
+        if not transaction_file.user_id:
+            raise ValueError("User ID is required")
+        if not transaction_file.file_id:
+            raise ValueError("File ID is required")
+        balance: Money = transaction_file.opening_balance
 
         # Process each row
         transactions = []
@@ -355,35 +353,25 @@ def parse_csv_transactions(content: bytes, default_currency: Currency, opening_b
                         continue
                         
             # Create raw row data dictionary
-            if field_map:
-                row_dict = dict(zip(header, row))
-                logger.info(f"Header: {header}")
-                logger.info(f"Row: {row}")
-                logger.info(f"Created row dict: {row_dict}")
-                row_data = apply_field_mapping(row_dict, field_map)
-                logger.info(f"After field mapping: {row_data}")
-                if not row_data:
-                    logger.warning("Field mapping returned empty result")
-                    continue
-            else:
-                row_data = {
-                    'date': row[date_col],
-                    'description': row[desc_col],
-                    'amount': row[amount_col],
-                    'debitOrCredit': row[debitOrCredit_col] if debitOrCredit_col is not None and len(row) > debitOrCredit_col else None,
-                    'category': row[category_col] if category_col is not None and len(row) > category_col else None,
-                    'memo': row[memo_col] if memo_col is not None and len(row) > memo_col else None,
-                    'currency': row[currency_col] if currency_col is not None and len(row) > currency_col else None
-                }
+            row_dict = dict(zip(header, row))
+            logger.info(f"Header: {header}")
             logger.info(f"Row: {row}")
-            logger.info(f"Row data: {row_data}")    
-
+            logger.info(f"Created row dict: {row_dict}")
+            row_data = apply_field_mapping(row_dict, file_map)
+            logger.info(f"After field mapping: {row_data}")
+            if not row_data:
+                logger.warning("Field mapping returned empty result")
+                continue
+            logger.info(f"in: Row: {row}")
+            logger.info(f"out: Row data: {row_data}")    
+            if row_data.get('currency') != balance.currency:
+                raise ValueError(f"Currency mismatch: {row_data.get('currency')} != {balance.currency}")
             # Process the amount
             try:
                 logger.info(f"Processing amount: {row_data['amount']}")
                 raw_amount = Decimal(str(row_data['amount']))
                 logger.info(f"Raw amount: {raw_amount}")
-                processed_amount = process_amount(raw_amount, row_data.get('debitOrCredit'), row_data.get('currency'))
+                processed_amount = process_amount(raw_amount, balance.currency, row_data.get('debitOrCredit'))
                 logger.info(f"Processed amount: {processed_amount}")
             except (decimal.InvalidOperation, KeyError) as e:
                 logger.error(f"Error processing amount: {str(e)}")
@@ -393,22 +381,24 @@ def parse_csv_transactions(content: bytes, default_currency: Currency, opening_b
             balance += processed_amount
                     
             # Create transaction dictionary
-            transaction = {
-                'date': parse_date(row_data['date']),
-                'description': row_data['description'].strip(),
-                'amount': processed_amount,  # Keep as Decimal
-                'balance': balance,  # Keep as Decimal
-                'import_order': i + 1,  # Add 1-based import order
-                'transaction_type': row_data.get('debitOrCredit')  # Use debitOrCredit value for transaction_type
-            }
+            transaction = Transaction.create(
+                account_id=transaction_file.account_id,
+                user_id=transaction_file.user_id,
+                file_id=transaction_file.file_id,    
+                date=parse_date(row_data['date']),
+                description=row_data['description'].strip(),
+                amount=processed_amount,  # Keep as Decimal
+                balance=balance,  # Keep as Decimal
+                import_order=i + 1,  # Add 1-based import order
+                transaction_type= row_data.get('debitOrCredit'),  # Use debitOrCredit value for transaction_type
+                memo=row_data.get('memo'),
+                check_number=row_data.get('checkNumber'),
+                fit_id=row_data.get('fitId'),
+                status=row_data.get('status')
+            )
             
             logger.info(f"Transaction: {transaction}")
-                    
-            # Add optional fields
-            if row_data.get('category'):
-                transaction['category'] = row_data['category'].strip()
-            if row_data.get('memo'):
-                transaction['memo'] = row_data['memo'].strip()
+
                 
             transactions.append(transaction)
         
@@ -418,13 +408,15 @@ def parse_csv_transactions(content: bytes, default_currency: Currency, opening_b
         logger.error(f"Error parsing CSV transactions: {str(e)}")
         return []
 
-def parse_ofx_colon_separated(text_content: str, opening_balance: float) -> List[Dict[str, Any]]:
+def parse_ofx_colon_separated(text_content: str, transaction_file: TransactionFile) -> List[Transaction]:
     """Parse OFX content in colon-separated format."""
-    transactions = []
-    balance = Decimal(str(opening_balance))
-    current_transaction = {}
-    in_transaction = False
-    import_order = 1
+    transactions: List[Transaction] = []
+    if not transaction_file.opening_balance:
+        raise ValueError("Opening balance is required")
+    balance: Money = transaction_file.opening_balance
+    current_transaction: Dict[str, str] = {}
+    in_transaction: bool = False
+    import_order: int = 1
     
     logger.info("Parsing colon-separated OFX/QFX")
     
@@ -438,10 +430,10 @@ def parse_ofx_colon_separated(text_content: str, opening_balance: float) -> List
             if in_transaction and current_transaction:
                 # Process the previous transaction
                 try:
-                    transaction = create_transaction_from_ofx(current_transaction, balance, import_order)
+                    transaction = create_transaction_from_ofx(transaction_file, current_transaction, balance, import_order)
                     if transaction:
                         transactions.append(transaction)
-                        balance += transaction['amount']
+                        balance += transaction.amount
                         import_order += 1
                 except Exception as e:
                     logger.error(f"Error processing transaction: {str(e)}")
@@ -450,10 +442,10 @@ def parse_ofx_colon_separated(text_content: str, opening_balance: float) -> List
         elif line == '</STMTTRN>' or (in_transaction and line.startswith('STMTTRN') and line != 'STMTTRN'):
             if in_transaction and current_transaction:
                 try:
-                    transaction = create_transaction_from_ofx(current_transaction, balance, import_order)
+                    transaction = create_transaction_from_ofx(transaction_file, current_transaction, balance, import_order)
                     if transaction:
                         transactions.append(transaction)
-                        balance += transaction['amount']
+                        balance += transaction.amount
                         import_order += 1
                 except Exception as e:
                     logger.error(f"Error processing transaction: {str(e)}")
@@ -472,7 +464,7 @@ def parse_ofx_colon_separated(text_content: str, opening_balance: float) -> List
     # Process any remaining transaction
     if in_transaction and current_transaction:
         try:
-            transaction = create_transaction_from_ofx(current_transaction, balance, import_order)
+            transaction = create_transaction_from_ofx(transaction_file, current_transaction, balance, import_order)
             if transaction:
                 transactions.append(transaction)
         except Exception as e:
@@ -481,7 +473,7 @@ def parse_ofx_colon_separated(text_content: str, opening_balance: float) -> List
     logger.info(f"Found {len(transactions)} transactions")
     return transactions
 
-def create_transaction_from_ofx(data: Dict[str, str], balance: Decimal, import_order: int) -> Optional[Dict[str, Any]]:
+def create_transaction_from_ofx(transaction_file: TransactionFile, data: Dict[str, str], balance: Money, import_order: int) -> Transaction:
     """Create a transaction dictionary from OFX data."""
     try:
         # Get required fields
@@ -489,36 +481,42 @@ def create_transaction_from_ofx(data: Dict[str, str], balance: Decimal, import_o
         date_ms = parse_date(date_str)
         if not date_ms:
             logger.warning(f"Invalid date format: {date_str}")
-            return None
+            raise ValueError(f"Invalid date format: {date_str}")
             
         # Get amount
         amount_str = data.get('TRNAMT', '0').replace(',', '')
-        amount = Decimal(amount_str)
+        if data.get('CURRENCY') != balance.currency:
+            raise ValueError(f"Currency mismatch: {data.get('CURRENCY')} != {balance.currency}")
+        amount = Money(Decimal(amount_str), balance.currency)
         
         # Get description from n tag, NAME, or MEMO
         description = data.get('n') or data.get('NAME') or data.get('MEMO', '')
         
+        if not transaction_file.account_id:
+            raise ValueError("Account ID is required")
+        if not transaction_file.user_id:
+            raise ValueError("User ID is required")
+        if not transaction_file.file_id:
+            raise ValueError("File ID is required")
         # Create transaction
-        transaction = {
-            'date': date_ms,
-            'description': description.strip(),
-            'amount': amount,
-            'balance': balance + amount,
-            'import_order': import_order,
-            'transaction_type': data.get('TRNTYPE', '').strip().upper() if data.get('TRNTYPE') else None
-        }
+        transaction = Transaction.create(
+            account_id=transaction_file.account_id,
+            user_id=transaction_file.user_id,
+            file_id=transaction_file.file_id,
+            date=date_ms,
+            description=description.strip(),
+            amount=amount,
+            balance=balance + amount,
+            import_order=import_order,
+            transaction_type=data.get('TRNTYPE', '').strip().upper() if data.get('TRNTYPE') else None
+        )
         
-        # Add memo if available and different from description
-        memo = data.get('MEMO')
-        if memo and memo.strip() != description.strip():
-            transaction['memo'] = memo.strip()
             
         return transaction
     except Exception as e:
-        logger.error(f"Error creating transaction: {str(e)}")
-        return None
+        raise ValueError(f"Error creating transaction: {str(e)}")
 
-def parse_ofx_transactions(content: bytes, opening_balance: float) -> List[Dict[str, Any]]:
+def parse_ofx_transactions(transaction_file: TransactionFile, content: bytes) -> List[Transaction]:
     """Parse transactions from OFX/QFX file content."""
     try:
         # Decode the content
@@ -528,14 +526,16 @@ def parse_ofx_transactions(content: bytes, opening_balance: float) -> List[Dict[
         # Check if this is a colon-separated format
         if any(marker in text_content for marker in ['OFXHEADER:', 'DATA:OFXSGML', 'STMTTRN']):
             logger.info("Detected colon-separated OFX/QFX format")
-            return parse_ofx_colon_separated(text_content, opening_balance)
+            return parse_ofx_colon_separated(text_content, transaction_file)
             
         # Try parsing as XML
         try:
             logger.info("Attempting to parse as XML")
             root = ET.fromstring(text_content)
             transactions = []
-            balance = Decimal(str(opening_balance))
+            if not transaction_file.opening_balance:
+                raise ValueError("Opening balance is required")
+            balance: Money = transaction_file.opening_balance
             
             # Find all transaction elements
             for i, stmttrn in enumerate(root.findall('.//STMTTRN'), 1):
@@ -547,13 +547,14 @@ def parse_ofx_transactions(content: bytes, opening_balance: float) -> List[Dict[
                         'n': stmttrn.findtext('n'),
                         'NAME': stmttrn.findtext('NAME'),
                         'MEMO': stmttrn.findtext('MEMO'),
-                        'TRNTYPE': stmttrn.findtext('TRNTYPE')
+                        'TRNTYPE': stmttrn.findtext('TRNTYPE'),
+                        'CURRENCY': stmttrn.findtext('CURRENCY')
                     }
                     
-                    transaction = create_transaction_from_ofx(data, balance, i)
+                    transaction = create_transaction_from_ofx(transaction_file, data, balance, i)
                     if transaction:
                         transactions.append(transaction)
-                        balance += transaction['amount']
+                        balance += transaction.amount
                         
                 except Exception as e:
                     logger.error(f"Error processing XML transaction: {str(e)}")

@@ -1,11 +1,21 @@
 from dataclasses import dataclass
 from decimal import Decimal
-from enum import Enum
+import enum
 from typing import Any, Dict
 
-from models.account import Currency
 
 
+class Currency(str, enum.Enum):
+    """Enum for currencies"""
+    USD = "USD"
+    EUR = "EUR"
+    GBP = "GBP"
+    CAD = "CAD"
+    JPY = "JPY"
+    AUD = "AUD"
+    CHF = "CHF"
+    CNY = "CNY"
+    OTHER = "other"
 
 
 @dataclass

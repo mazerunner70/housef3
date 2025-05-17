@@ -4,10 +4,10 @@ Authentication utility functions.
 import logging
 from typing import Dict, Any, Optional
 
-from models.file_map import FieldMapping
+from models.file_map import FieldMapping, FileMap
 from models.transaction_file import TransactionFile
 from models.account import Account
-from utils.db_utils import get_account, get_field_mapping, get_transaction_file
+from utils.db_utils import get_account, get_file_map, get_transaction_file
 
 # Configure logging
 logger = logging.getLogger()
@@ -59,7 +59,7 @@ def get_user_from_event(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 class NotFound(Exception): pass
 class NotAuthorized(Exception): pass
     
-def checked_optional_file(file_id: Optional[str], user_id: str) -> Optional[TransactionFile]:
+def checked_optional_transaction_file(file_id: Optional[str], user_id: str) -> Optional[TransactionFile]:
     if not file_id:
         return None
     file = get_transaction_file(file_id)
@@ -67,13 +67,13 @@ def checked_optional_file(file_id: Optional[str], user_id: str) -> Optional[Tran
         raise NotAuthorized("Not authorized to access this file")
     return file
 
-def checked_mandatory_file(file_id: str, user_id: str) -> 'TransactionFile':
-    file = checked_optional_file(file_id, user_id)
+def checked_mandatory_transaction_file(file_id: str, user_id: str) -> 'TransactionFile':
+    file = checked_optional_transaction_file(file_id, user_id)
     if not file:
         raise NotFound("File not found")
     return file
 
-def checked_mandatory_account(account_id: str, user_id: str) -> 'Account':
+def checked_mandatory_account(account_id: Optional[str], user_id: str) -> 'Account':
     account = checked_optional_account(account_id, user_id)
     if not account:
         raise NotFound("Account not found")
@@ -89,18 +89,18 @@ def checked_optional_account(account_id: Optional[str], user_id: str) -> Optiona
         raise NotAuthorized("Not authorized to access this account")
     return account
 
-def checked_optional_field_mapping(field_mapping_id: Optional[str], user_id: str) -> Optional['FieldMapping']:
-    if not field_mapping_id:
+def checked_optional_file_map(file_map_id: Optional[str], user_id: str) -> Optional['FileMap']:
+    if not file_map_id:
         return None
-    field_mapping = get_field_mapping(field_mapping_id)
-    if not field_mapping:
+    file_map = get_file_map(file_map_id)
+    if not file_map:
         return None
-    if field_mapping.user_id != user_id:
+    if file_map.user_id != user_id:
         raise NotAuthorized("Not authorized to access this field mapping")
-    return field_mapping
+    return file_map
 
-def checked_mandatory_field_mapping(field_mapping_id: str, user_id: str) -> 'FieldMapping':
-    field_mapping = checked_optional_field_mapping(field_mapping_id, user_id)
-    if not field_mapping:
-        raise NotFound("Field mapping not found")
-    return field_mapping
+def checked_mandatory_file_map(file_map_id: Optional[str], user_id: str) -> 'FileMap':
+    file_map = checked_optional_file_map(file_map_id, user_id)
+    if not file_map:
+        raise NotFound("File mapping not found")
+    return file_map

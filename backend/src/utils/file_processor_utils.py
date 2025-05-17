@@ -6,6 +6,7 @@ import os
 import re
 from models.transaction import Transaction
 import boto3
+from boto3.dynamodb.conditions import Key
 from typing import Dict, Any, List, Optional
 from decimal import Decimal
 from datetime import datetime
@@ -15,14 +16,9 @@ from models.file_map import FileMap
 from utils.transaction_parser import parse_transactions
 from utils.db_utils import (
     get_transaction_file,
-    update_transaction_file,
-    create_transaction,
-    delete_transactions_for_file,
-    get_field_mapping,
-    get_account_default_field_map,
-    get_transaction_by_account_and_hash,
     check_duplicate_transaction
 )
+from utils.s3_dao import get_s3_client
 
 # Configure logging
 logger = logging.getLogger()
@@ -30,7 +26,7 @@ logger.setLevel(logging.INFO)
 
 # Initialize clients
 dynamodb = boto3.resource('dynamodb')
-s3_client = boto3.client('s3')
+s3_client = get_s3_client()
 
 # Get table names from environment variables
 TRANSACTIONS_TABLE = os.environ.get('TRANSACTIONS_TABLE', 'transactions')
@@ -102,7 +98,7 @@ def find_file_records_by_s3_key(s3_key: str, table: Any = None) -> List[Dict[str
         # Query DynamoDB using the S3Key index
         response = table.query(
             IndexName='S3KeyIndex',
-            KeyConditionExpression=boto3.dynamodb.conditions.Key('s3Key').eq(s3_key)
+            KeyConditionExpression=Key('s3Key').eq(s3_key)
         )
         
         files = response.get('Items', [])
@@ -226,13 +222,12 @@ def extract_opening_balance_csv(content: str) -> Optional[float]:
                         
     return None 
 
-def calculate_opening_balance_from_duplicates(transactions: List[Dict[str, Any]], account_id: str) -> Optional[Decimal]:
+def calculate_opening_balance_from_duplicates(transactions: List[Transaction]) -> Optional[Decimal]:
     """
     Calculate opening balance by checking if first or last transaction is a duplicate.
     
     Args:
         transactions: List of parsed transactions
-        account_id: ID of the account to check for duplicates
         
     Returns:
         Decimal: Calculated opening balance if found, None otherwise
@@ -244,19 +239,19 @@ def calculate_opening_balance_from_duplicates(transactions: List[Dict[str, Any]]
         # Check first transaction
         first_tx = transactions[0]
         logger.info(f"Checking first transaction: {first_tx}")
-        if check_duplicate_transaction(first_tx, account_id):
+        if check_duplicate_transaction(first_tx):
             # If first transaction is duplicate, use its balance
-            logger.info(f"First transaction is duplicate, using balance: {first_tx['balance']}")
-            return Decimal(str(first_tx['balance']))
+            logger.info(f"First transaction is duplicate, using balance: {first_tx.balance}")
+            return Decimal(str(first_tx.balance))
             
         # Check last transaction
         last_tx = transactions[-1]
         logger.info(f"Checking last transaction: {last_tx}")
-        if check_duplicate_transaction(last_tx, account_id):
+        if check_duplicate_transaction(last_tx):
             # If last transaction is duplicate, calculate opening balance
             # by subtracting all transaction amounts from the matched balance
-            total_amount = sum(Decimal(str(tx['amount'])) for tx in transactions)
-            res = Decimal(str(last_tx['balance'])) - total_amount
+            total_amount = sum(Decimal(str(tx.amount)) for tx in transactions)
+            res = Decimal(str(last_tx.balance)) - total_amount
             logger.info(f"Last transaction is duplicate, calculated opening balance: {res}")
             return res
         return None
