@@ -1,173 +1,191 @@
 import unittest
 from decimal import Decimal
 from datetime import datetime
-from models.account import Currency
-from models.transaction import Transaction, Money
+import uuid
+import json
+
+from models.transaction import Transaction, validate_transaction_data, transaction_to_json
+from models.money import Money, Currency
 
 class TestTransaction(unittest.TestCase):
-    """Test cases for the Transaction class."""
-
     def setUp(self):
-        """Set up test data."""
-        self.test_transaction = Transaction(
-            transaction_id='test-tx-id',
-            user_id='test-user-id',
-            file_id='test-file-id',
-            account_id='test-account-id',
-            date=1716076800000,  # 2024-05-19 00:00:00
-            description='Test Transaction',
-            amount=Money(amount=Decimal('100.00'), currency=Currency.USD),
-            balance=Money(amount=Decimal('1000.00'), currency=Currency.USD),
-            import_order=1,
-            transaction_type='DEBIT',
-            memo='Test memo',
-            check_number='123',
-            fit_id='fit123',
-            status='new'
+        """Set up test fixtures."""
+        self.user_id = str(uuid.uuid4())
+        self.file_id = str(uuid.uuid4())
+        self.account_id = str(uuid.uuid4())
+        self.transaction_id = str(uuid.uuid4())
+        self.date = int(datetime.now().timestamp() * 1000)  # milliseconds since epoch
+        self.description = "Test transaction"
+        self.amount = Money(Decimal("100.50"), Currency.USD)
+        self.balance = Money(Decimal("1000.00"), Currency.USD)
+
+        # Create a sample transaction
+        self.transaction = Transaction(
+            user_id=self.user_id,
+            file_id=self.file_id,
+            transaction_id=self.transaction_id,
+            account_id=self.account_id,
+            date=self.date,
+            description=self.description,
+            amount=self.amount,
+            balance=self.balance
         )
 
-    def test_transaction_initialization(self):
-        """Test that a transaction is initialized correctly."""
-        self.assertEqual(self.test_transaction.transaction_id, 'test-tx-id')
-        self.assertEqual(self.test_transaction.user_id, 'test-user-id')
-        self.assertEqual(self.test_transaction.file_id, 'test-file-id')
-        self.assertEqual(self.test_transaction.account_id, 'test-account-id')
-        self.assertEqual(self.test_transaction.date, 1716076800000)
-        self.assertEqual(self.test_transaction.description, 'Test Transaction')
-        self.assertEqual(self.test_transaction.amount.amount, Decimal('100.00'))
-        self.assertEqual(self.test_transaction.amount.currency, Currency.USD)
-        self.assertEqual(self.test_transaction.balance.amount, Decimal('1000.00'))
-        self.assertEqual(self.test_transaction.import_order, 1)
-        self.assertEqual(self.test_transaction.transaction_type, 'DEBIT')
-        self.assertEqual(self.test_transaction.memo, 'Test memo')
-        self.assertEqual(self.test_transaction.check_number, '123')
-        self.assertEqual(self.test_transaction.fit_id, 'fit123')
-        self.assertEqual(self.test_transaction.status, 'new')
+    def test_transaction_creation(self):
+        """Test basic transaction creation."""
+        self.assertEqual(self.transaction.user_id, self.user_id)
+        self.assertEqual(self.transaction.file_id, self.file_id)
+        self.assertEqual(self.transaction.transaction_id, self.transaction_id)
+        self.assertEqual(self.transaction.account_id, self.account_id)
+        self.assertEqual(self.transaction.date, self.date)
+        self.assertEqual(self.transaction.description, self.description)
+        self.assertEqual(self.transaction.amount, self.amount)
+        self.assertEqual(self.transaction.balance, self.balance)
+        self.assertIsNotNone(self.transaction.transaction_hash)
 
-    def test_transaction_field_updates(self):
-        """Test that field updates work correctly and trigger hash regeneration."""
-        initial_hash = self.test_transaction.transaction_hash
+    def test_transaction_hash_generation(self):
+        """Test that transaction hash is generated correctly."""
+        # Create two transactions with same core data
+        tx1 = Transaction.create(
+            account_id=self.account_id,
+            user_id=self.user_id,
+            file_id=self.file_id,
+            date=self.date,
+            description=self.description,
+            amount=self.amount
+        )
         
-        # Update fields
-        self.test_transaction.account_id = 'new-account-id'
-        self.test_transaction.date = 1716163200000  # 2024-05-20 00:00:00
-        self.test_transaction.description = 'New Description'
-        self.test_transaction.amount = Money(amount=Decimal('200.00'), currency=Currency.USD)
-        
-        # Verify updates
-        self.assertEqual(self.test_transaction.account_id, 'new-account-id')
-        self.assertEqual(self.test_transaction.date, 1716163200000)
-        self.assertEqual(self.test_transaction.description, 'New Description')
-        self.assertEqual(self.test_transaction.amount.amount, Decimal('200.00'))
-        self.assertEqual(self.test_transaction.amount.currency, Currency.USD)
-        
-        # Verify hash was regenerated
-        self.assertNotEqual(self.test_transaction.transaction_hash, initial_hash)
-
-    def test_transaction_create_method(self):
-        """Test the create class method."""
-        transaction = Transaction.create(
-            account_id='new-account',
-            user_id='new-user',
-            file_id='new-file',
-            date=1716076800000,
-            description='New Transaction',
-            amount=Money(amount=Decimal('150.00'), currency=Currency.USD),
-            balance=Money(amount=Decimal('1150.00'), currency=Currency.USD),
-            import_order=2,
-            transaction_type='CREDIT',
-            memo='New memo',
-            check_number='456',
-            fit_id='fit456',
-            status='pending'
+        tx2 = Transaction.create(
+            account_id=self.account_id,
+            user_id=self.user_id,
+            file_id=self.file_id,
+            date=self.date,
+            description=self.description,
+            amount=self.amount
         )
 
-        # Verify required fields
-        self.assertIsNotNone(transaction.transaction_id)  # Should be auto-generated
-        self.assertEqual(transaction.account_id, 'new-account')
-        self.assertEqual(transaction.user_id, 'new-user')
-        self.assertEqual(transaction.file_id, 'new-file')
-        self.assertEqual(transaction.date, 1716076800000)
-        self.assertEqual(transaction.description, 'New Transaction')
-        self.assertEqual(transaction.amount.amount, Decimal('150.00'))
+        # Hashes should be equal even though transaction_ids are different
+        self.assertEqual(tx1.transaction_hash, tx2.transaction_hash)
+        self.assertNotEqual(tx1.transaction_id, tx2.transaction_id)
 
-        # Verify optional fields
-        self.assertEqual(transaction.balance.amount, Decimal('1150.00'))
-        self.assertEqual(transaction.import_order, 2)
-        self.assertEqual(transaction.transaction_type, 'CREDIT')
-        self.assertEqual(transaction.memo, 'New memo')
-        self.assertEqual(transaction.check_number, '456')
-        self.assertEqual(transaction.fit_id, 'fit456')
-        self.assertEqual(transaction.status, 'pending')
+    def test_hash_regeneration_on_field_change(self):
+        """Test that hash is regenerated when core fields change."""
+        original_hash = self.transaction.transaction_hash
+        
+        # Change description
+        self.transaction.description = "Updated description"
+        self.assertNotEqual(self.transaction.transaction_hash, original_hash)
+        
+        # Change amount
+        self.transaction.amount = Money(Decimal("200.00"), Currency.USD)
+        self.assertNotEqual(self.transaction.transaction_hash, original_hash)
 
-    def test_transaction_to_dict(self):
+    def test_to_dict(self):
         """Test conversion to dictionary."""
-        tx_dict = self.test_transaction.to_dict()
+        tx_dict = self.transaction.to_dict()
         
-        # Verify required fields
-        self.assertEqual(tx_dict['transactionId'], 'test-tx-id')
-        self.assertEqual(tx_dict['accountId'], 'test-account-id')
-        self.assertEqual(tx_dict['fileId'], 'test-file-id')
-        self.assertEqual(tx_dict['userId'], 'test-user-id')
-        self.assertEqual(tx_dict['date'], 1716076800000)
-        self.assertEqual(tx_dict['description'], 'Test Transaction')
-        self.assertEqual(tx_dict['amount']['amount'], '100.00')
-        self.assertEqual(tx_dict['amount']['currency'], 'USD')
+        self.assertEqual(tx_dict["userId"], self.user_id)
+        self.assertEqual(tx_dict["fileId"], self.file_id)
+        self.assertEqual(tx_dict["transactionId"], self.transaction_id)
+        self.assertEqual(tx_dict["accountId"], self.account_id)
+        self.assertEqual(tx_dict["date"], self.date)
+        self.assertEqual(tx_dict["description"], self.description)
+        self.assertEqual(tx_dict["amount"]["amount"], str(self.amount.amount))
+        self.assertEqual(tx_dict["amount"]["currency"], self.amount.currency.value)
 
-        # Verify optional fields
-        self.assertEqual(tx_dict['balance']['amount'], '1000.00')
-        self.assertEqual(tx_dict['balance']['currency'], Currency.USD)
-        self.assertEqual(tx_dict['importOrder'], 1)
-        self.assertEqual(tx_dict['transactionType'], 'DEBIT')
-        self.assertEqual(tx_dict['memo'], 'Test memo')
-        self.assertEqual(tx_dict['checkNumber'], '123')
-        self.assertEqual(tx_dict['fitId'], 'fit123')
-        self.assertEqual(tx_dict['status'], 'new')
-
-    def test_transaction_from_dict(self):
+    def test_from_dict(self):
         """Test creation from dictionary."""
-        tx_dict = {
-            'transactionId': 'dict-tx-id',
-            'accountId': 'dict-account-id',
-            'fileId': 'dict-file-id',
-            'userId': 'dict-user-id',
-            'date': 1716076800000,
-            'description': 'Dict Transaction',
-            'amount': {'amount': '150.00', 'currency': Currency.USD},
-            'balance': {'amount': '1150.00', 'currency': Currency.USD},
-            'importOrder': 3,
-            'transactionType': 'CREDIT',
-            'memo': 'Dict memo',
-            'checkNumber': '789',
-            'fitId': 'fit789',
-            'status': 'completed',
-            'createdAt': 1716076800000,
-            'updatedAt': 1716163200000
-        }
+        tx_dict = self.transaction.to_dict()
+        new_tx = Transaction.from_dict(tx_dict)
         
-        transaction = Transaction.from_dict(tx_dict)
-        
-        # Verify required fields
-        self.assertEqual(transaction.transaction_id, 'dict-tx-id')
-        self.assertEqual(transaction.account_id, 'dict-account-id')
-        self.assertEqual(transaction.file_id, 'dict-file-id')
-        self.assertEqual(transaction.user_id, 'dict-user-id')
-        self.assertEqual(transaction.date, 1716076800000)
-        self.assertEqual(transaction.description, 'Dict Transaction')
-        self.assertEqual(transaction.amount.amount, Decimal('150.00'))
-        self.assertEqual(transaction.amount.currency, Currency.USD)
+        self.assertEqual(new_tx.user_id, self.user_id)
+        self.assertEqual(new_tx.file_id, self.file_id)
+        self.assertEqual(new_tx.transaction_id, self.transaction_id)
+        self.assertEqual(new_tx.account_id, self.account_id)
+        self.assertEqual(new_tx.date, self.date)
+        self.assertEqual(new_tx.description, self.description)
+        self.assertEqual(new_tx.amount, self.amount)
+        self.assertEqual(new_tx.transaction_hash, self.transaction.transaction_hash)
 
-        # Verify optional fields
-        self.assertEqual(transaction.balance.amount, Decimal('1150.00'))
-        self.assertEqual(transaction.balance.currency, Currency.USD)
-        self.assertEqual(transaction.import_order, 3)
-        self.assertEqual(transaction.transaction_type, 'CREDIT')
-        self.assertEqual(transaction.memo, 'Dict memo')
-        self.assertEqual(transaction.check_number, '789')
-        self.assertEqual(transaction.fit_id, 'fit789')
-        self.assertEqual(transaction.status, 'completed')
-        self.assertEqual(transaction.created_at, 1716076800000)
-        self.assertEqual(transaction.updated_at, 1716163200000)
+    def test_validate_transaction_data(self):
+        """Test transaction data validation."""
+        # Valid data
+        valid_data = {
+            "userId": str(uuid.uuid4()),
+            "fileId": str(uuid.uuid4()),
+            "accountId": str(uuid.uuid4()),
+            "transactionId": str(uuid.uuid4()),
+            "date": int(datetime.now().timestamp() * 1000),
+            "description": "Test transaction",
+            "amount": {"amount": "100.50", "currency": "USD"}
+        }
+        self.assertTrue(validate_transaction_data(valid_data))
+
+        # Test missing required field
+        invalid_data = valid_data.copy()
+        del invalid_data["description"]
+        with self.assertRaises(ValueError):
+            validate_transaction_data(invalid_data)
+
+        # Test invalid date
+        invalid_data = valid_data.copy()
+        invalid_data["date"] = -1
+        with self.assertRaises(ValueError):
+            validate_transaction_data(invalid_data)
+
+        # Test invalid amount structure
+        invalid_data = valid_data.copy()
+        invalid_data["amount"] = {"invalid": "structure"}
+        with self.assertRaises(ValueError):
+            validate_transaction_data(invalid_data)
+
+    def test_transaction_to_json(self):
+        """Test JSON serialization."""
+        # Test with Transaction object
+        json_str = transaction_to_json(self.transaction)
+        data = json.loads(json_str)
+        
+        self.assertEqual(data["userId"], self.user_id)
+        self.assertEqual(data["amount"]["amount"], str(self.amount.amount))
+        
+        # Test with dictionary
+        tx_dict = self.transaction.to_dict()
+        json_str = transaction_to_json(tx_dict)
+        data = json.loads(json_str)
+        
+        self.assertEqual(data["userId"], self.user_id)
+        self.assertEqual(data["amount"]["amount"], str(self.amount.amount))
+
+    def test_optional_fields(self):
+        """Test transaction with optional fields."""
+        tx = Transaction.create(
+            account_id=self.account_id,
+            user_id=self.user_id,
+            file_id=self.file_id,
+            date=self.date,
+            description=self.description,
+            amount=self.amount,
+            memo="Test memo",
+            check_number="1234",
+            transaction_type="DEBIT",
+            status="PENDING"
+        )
+        
+        self.assertEqual(tx.memo, "Test memo")
+        self.assertEqual(tx.check_number, "1234")
+        self.assertEqual(tx.transaction_type, "DEBIT")
+        self.assertEqual(tx.status, "PENDING")
+
+    def test_class_level_access(self):
+        """Test that accessing fields at class level raises AttributeError."""
+        with self.assertRaises(AttributeError):
+            _ = Transaction.amount
+
+        with self.assertRaises(AttributeError):
+            _ = Transaction.date
+
+        with self.assertRaises(AttributeError):
+            _ = Transaction.description
 
 if __name__ == '__main__':
     unittest.main() 

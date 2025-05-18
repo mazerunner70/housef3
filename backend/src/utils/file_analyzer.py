@@ -38,7 +38,7 @@ def analyze_file_format(bucket: str, key: str) -> FileFormat:
         content_bytes = response['Body'].read()
         
         # Try to detect format based on content signatures
-        detected_format = detect_format_from_content(content_bytes, file_extension)
+        detected_format = detect_format_from_content(content_bytes)
         logger.info(f"File format detection result for {key}: {detected_format}")
         
         return detected_format
@@ -51,96 +51,110 @@ def analyze_file_format(bucket: str, key: str) -> FileFormat:
         # Fall back to extension-based detection
         return detect_format_from_extension(key)
 
-def detect_format_from_content(content_bytes: bytes, extension: str) -> FileFormat:
+def detect_format_from_content(content: bytes) -> FileFormat:
     """
     Detect file format based on content inspection.
     
     Args:
-        content_bytes: The file content as bytes
-        extension: The file extension (for fallback)
+        content: File content as bytes
         
     Returns:
         FileFormat enum value
     """
-    # Check for PDF signature - most PDFs start with "%PDF-"
-    if content_bytes.startswith(b'%PDF-'):
-        return FileFormat.PDF
-    
-    # Check for Excel XLSX signature 
-    # XLSX files are ZIP archives containing specific XML files
-    if content_bytes.startswith(b'PK\x03\x04'):
-        # This is a ZIP file signature, could be XLSX
-        # More thorough check would unzip and check for specific files
-        if extension == 'xlsx':
-            return FileFormat.XLSX
-    
-    # Try to decode as text for other formats
     try:
-        content_text = content_bytes.decode('utf-8')
-        
-        # Check for OFX/QFX signature (first look for SGML/XML format OFX)
-        if '<OFX>' in content_text or '<ofx>' in content_text:
-            return FileFormat.OFX
-        
-        # Check for the OFX headers in the older SGML format
-        if 'OFXHEADER:' in content_text:
-            return FileFormat.OFX
-            
-        # Check for QFX specific indicators
-        if '<QFX>' in content_text or 'INTU.BID' in content_text:
-            return FileFormat.QFX
-            
-        # Try to parse as CSV
+        # Check for PDF signature first (before text decoding)
+        if content.startswith(b'%PDF-'):
+            return FileFormat.PDF
+
+        # Check for XLSX signature (PK magic number for ZIP files)
+        if content.startswith(b'PK\x03\x04'):
+            # XLSX files are ZIP files containing specific XML files
+            # We could do more thorough checking by unzipping and checking for xl/ directory
+            # but for now, this basic check should suffice
+            return FileFormat.XLSX
+
+        # Try to decode as text first
         try:
-            reader = csv.reader(StringIO(content_text))
-            # Check if it has at least one row with multiple columns
-            first_row = next(reader, None)
-            if first_row and len(first_row) > 1:
+            text_content = content.decode('utf-8')
+        except UnicodeDecodeError:
+            # If not text, try as binary
+            return FileFormat.OTHER
+
+        # Check for OFX/QFX format
+        if text_content.strip().startswith('OFXHEADER:100'):
+            # Check if it's a QFX file
+            if '<QFX>' in text_content:
+                return FileFormat.QFX
+            return FileFormat.OFX
+        elif text_content.strip().startswith('<?OFX'):
+            return FileFormat.OFX
+
+        # Check for JSON format
+        if text_content.strip().startswith('{') or text_content.strip().startswith('['):
+            try:
+                json.loads(text_content)
+                return FileFormat.OTHER  # We treat JSON as OTHER format since we don't process it
+            except json.JSONDecodeError:
+                pass
+
+        # Check for CSV format
+        try:
+            # Try to parse as CSV
+            csv_reader = csv.reader(StringIO(text_content))
+            # Read all rows up to 3 rows to confirm it's structured like a CSV
+            rows = []
+            for _ in range(3):
+                try:
+                    row = next(csv_reader)
+                    rows.append(row)
+                except StopIteration:
+                    break
+            
+            # Check if we have at least one row with multiple columns
+            if rows and all(len(row) > 1 for row in rows):
                 return FileFormat.CSV
-        except:
+        except csv.Error:
             pass
-        
-        # Try to parse as JSON
+
+        # Check for XML format - treat all XML as OTHER unless it's OFX/QFX
         try:
-            json.loads(content_text)
-            return FileFormat.OTHER  # JSON is classified as OTHER
-        except:
+            ET.fromstring(text_content)
+            # Check if it's an OFX/QFX file in XML format
+            if '<OFX>' in text_content or '<QFX>' in text_content:
+                return FileFormat.OFX if '<OFX>' in text_content else FileFormat.QFX
+            return FileFormat.OTHER
+        except ET.ParseError:
             pass
-            
-        # Try to parse as XML
-        try:
-            ET.parse(StringIO(content_text))
-            return FileFormat.OTHER  # XML is classified as OTHER
-        except:
-            pass
-            
-    except UnicodeDecodeError:
-        # If we can't decode as text, it's likely a binary format
-        pass
-    
-    # Fall back to detection based on extension
-    return detect_format_from_extension(os.path.basename(extension))
+
+        return FileFormat.OTHER
+
+    except Exception as e:
+        logger.error(f"Error detecting file format: {str(e)}")
+        return FileFormat.OTHER
 
 def detect_format_from_extension(filename: str) -> FileFormat:
     """
-    Detect file format based on extension.
+    Detect file format based on file extension.
     
     Args:
-        filename: The filename including extension
+        filename: Name of the file
         
     Returns:
         FileFormat enum value
     """
+    # Get the file extension
     _, extension = os.path.splitext(filename)
     extension = extension.lower()[1:] if extension else ""
     
-    # Map extensions to FileFormat
-    extension_map = {
+    # Map extensions to formats
+    format_map = {
         'csv': FileFormat.CSV,
         'ofx': FileFormat.OFX,
         'qfx': FileFormat.QFX,
         'pdf': FileFormat.PDF,
-        'xlsx': FileFormat.XLSX
+        'xlsx': FileFormat.XLSX,
+        'xls': FileFormat.EXCEL,
+        'json': FileFormat.JSON
     }
     
-    return extension_map.get(extension, FileFormat.OTHER) 
+    return format_map.get(extension, FileFormat.OTHER) 

@@ -22,7 +22,6 @@ from models import (
 from models.transaction import Transaction
 from boto3.dynamodb.conditions import Key, Attr
 from models.file_map import FileMap
-from utils.auth import checked_mandatory_account, checked_mandatory_transaction_file
 from utils.transaction_utils import generate_transaction_hash
 
 # Configure logging
@@ -44,6 +43,75 @@ _accounts_table = None
 _files_table = None
 _transactions_table = None
 _file_maps_table = None
+
+class NotAuthorized(Exception):
+    """Raised when a user is not authorized to access a resource."""
+    pass
+
+class NotFound(Exception):
+    """Raised when a requested resource is not found."""
+    pass
+
+def check_user_owns_resource(resource_user_id: str, requesting_user_id: str) -> None:
+    """Check if a user owns a resource."""
+    if resource_user_id != requesting_user_id:
+        raise NotAuthorized("Not authorized to access this resource")
+
+def checked_mandatory_account(account_id: Optional[str], user_id: str) -> Account:
+    """Check if account exists and user has access to it."""
+    if not account_id:
+        raise NotFound("Account ID is required")
+    account = get_account(account_id)
+    if not account:
+        raise NotFound("Account not found")
+    check_user_owns_resource(account.user_id, user_id)
+    return account
+
+def checked_optional_account(account_id: Optional[str], user_id: str) -> Optional[Account]:
+    """Check if account exists and user has access to it, allowing None."""
+    if not account_id:
+        return None
+    account = get_account(account_id)
+    if not account:
+        return None
+    check_user_owns_resource(account.user_id, user_id)
+    return account
+
+def checked_mandatory_transaction_file(file_id: str, user_id: str) -> TransactionFile:
+    """Check if file exists and user has access to it."""
+    file = get_transaction_file(file_id)
+    if not file:
+        raise NotFound("File not found")
+    check_user_owns_resource(file.user_id, user_id)
+    return file
+
+def checked_optional_transaction_file(file_id: Optional[str], user_id: str) -> Optional[TransactionFile]:
+    """Check if file exists and user has access to it, allowing None."""
+    if not file_id:
+        return None
+    file = get_transaction_file(file_id)
+    if not file:
+        return None
+    check_user_owns_resource(file.user_id, user_id)
+    return file
+
+def checked_mandatory_file_map(file_map_id: Optional[str], user_id: str) -> FileMap:
+    """Check if file map exists and user has access to it."""
+    file_map = get_file_map(file_map_id)
+    if not file_map:
+        raise NotFound("File map not found")
+    check_user_owns_resource(file_map.user_id, user_id)
+    return file_map
+
+def checked_optional_file_map(file_map_id: Optional[str], user_id: str) -> Optional[FileMap]:
+    """Check if file map exists and user has access to it, allowing None."""
+    if not file_map_id:
+        return None
+    file_map = get_file_map(file_map_id)
+    if not file_map:
+        return None
+    check_user_owns_resource(file_map.user_id, user_id)
+    return file_map
 
 def get_accounts_table() -> Any:
     """Get the accounts table resource, initializing it if needed."""

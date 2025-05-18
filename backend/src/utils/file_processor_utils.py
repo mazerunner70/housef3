@@ -61,14 +61,14 @@ def get_file_content(file_id: str, s3_client: Any = None) -> Optional[bytes]:
         File content as bytes if found, None otherwise
     """
     try:
-        # Use provided client or default to boto3 s3_client
-        s3 = s3_client or boto3.client('s3')
-        
         # Get the file record to find the S3 key
         file_record = get_transaction_file(file_id)
         if not file_record or not file_record.s3_key:
             logger.error(f"File record or S3 key not found for ID: {file_id}")
             return None
+            
+        # Use provided s3_client or get a new one
+        s3 = s3_client or get_s3_client()
             
         # Get the file content from S3
         response = s3.get_object(
@@ -239,19 +239,19 @@ def calculate_opening_balance_from_duplicates(transactions: List[Transaction]) -
         # Check first transaction
         first_tx = transactions[0]
         logger.info(f"Checking first transaction: {first_tx}")
-        if check_duplicate_transaction(first_tx):
+        if check_duplicate_transaction(first_tx) and first_tx.balance:
             # If first transaction is duplicate, use its balance
             logger.info(f"First transaction is duplicate, using balance: {first_tx.balance}")
-            return Decimal(str(first_tx.balance))
+            return Decimal(str(first_tx.balance.amount))
             
         # Check last transaction
         last_tx = transactions[-1]
         logger.info(f"Checking last transaction: {last_tx}")
-        if check_duplicate_transaction(last_tx):
+        if check_duplicate_transaction(last_tx) and last_tx.balance and all(tx.amount for tx in transactions):
             # If last transaction is duplicate, calculate opening balance
             # by subtracting all transaction amounts from the matched balance
-            total_amount = sum(Decimal(str(tx.amount)) for tx in transactions)
-            res = Decimal(str(last_tx.balance)) - total_amount
+            total_amount = sum(tx.amount.amount for tx in transactions)
+            res = Decimal(str(last_tx.balance.amount)) - total_amount
             logger.info(f"Last transaction is duplicate, calculated opening balance: {res}")
             return res
         return None

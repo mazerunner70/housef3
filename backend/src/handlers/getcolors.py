@@ -49,18 +49,24 @@ def getcolors(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     logger.info(f"starting getcolors handler")
     try:
-        # Handle OPTIONS request
+        # Handle OPTIONS request first since it doesn't need auth
         if event and event.get("requestContext", {}).get("http", {}).get("method") == "OPTIONS":
             return create_response(200, {"message": "OK"})
 
-        # Get user from event
-        logger.info(f"Event structure: {json.dumps(event)}")
-        logger.info(f"Request context: {json.dumps(event.get('requestContext', {}))}")
-        logger.info(f"Authorizer: {json.dumps(event.get('requestContext', {}).get('authorizer', {}))}")
-        user = get_user_from_event(event)
-        logger.info(f"User result: {json.dumps(user) if user else 'None'}")
-        if not user:
+        # Get user from event - if this fails, treat as unauthorized
+        try:
+            user = get_user_from_event(event)
+            if not user:
+                logger.warning("No user found in event")
+                return create_response(401, {"message": "Unauthorized"})
+        except Exception as e:
+            logger.warning(f"Error getting user from event: {str(e)}")
             return create_response(401, {"message": "Unauthorized"})
+
+        # Now that we have a valid user, validate the rest of the event structure
+        if not event.get("requestContext", {}).get("http"):
+            logger.error("Missing http context in authenticated request")
+            return create_response(500, {"message": "Internal server error"})
 
         # Return mock colors for now
         colors = [

@@ -19,9 +19,10 @@ from utils.db_utils import (
     delete_file_metadata,
     delete_transactions_for_file,
     list_account_transactions,
-    list_file_transactions
+    list_file_transactions,
+    checked_mandatory_account
 )
-from utils.auth import checked_mandatory_account, get_user_from_event
+from utils.auth import get_user_from_event
 from utils.lambda_utils import mandatory_body_parameter, mandatory_path_parameter, mandatory_query_parameter, optional_body_parameter
 from utils.s3_dao import generate_upload_url
 

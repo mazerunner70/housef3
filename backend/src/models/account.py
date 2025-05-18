@@ -81,7 +81,7 @@ class Account:
             "accountName": self.account_name,
             "accountType": self.account_type.value,
             "institution": self.institution,
-            "balance": str(self.balance),  # Convert to string for DynamoDB
+            "balance": self.balance.to_dict(),  # Use Money's to_dict method
             "currency": self.currency.value,
             "isActive": self.is_active,
             "createdAt": self.created_at,
@@ -104,7 +104,7 @@ class Account:
             account_name=data["accountName"],
             account_type=AccountType(data["accountType"]),
             institution=data["institution"],
-            balance=Money(Decimal(data["balance"]), Currency(data["currency"])),
+            balance=Money.from_dict(data["balance"]),  # Use Money's from_dict method
             currency=Currency(data["currency"]),
             notes=data.get("notes"),
             is_active=data.get("isActive", True),
@@ -151,12 +151,21 @@ def validate_account_data(data: Dict[str, Any]) -> bool:
     if "currency" in data and data["currency"] not in [c.value for c in Currency]:
         raise ValueError(f"Invalid currency: {data['currency']}")
     
-    # Validate numeric fields
+    # Validate balance if present
     if "balance" in data:
         try:
-            Decimal(str(data["balance"]))
+            if isinstance(data["balance"], dict):
+                # Validate balance dictionary structure
+                if "amount" not in data["balance"] or "currency" not in data["balance"]:
+                    raise ValueError("Balance must have amount and currency fields")
+                Decimal(str(data["balance"]["amount"]))
+                if data["balance"]["currency"] not in [c.value for c in Currency]:
+                    raise ValueError(f"Invalid currency in balance: {data['balance']['currency']}")
+            else:
+                # For backward compatibility, try to parse as decimal
+                Decimal(str(data["balance"]))
         except (ValueError, TypeError, decimal.InvalidOperation):
-            raise ValueError("Balance must be a valid number")
+            raise ValueError("Balance must be a valid number or Money object")
     
     # Validate string lengths
     if "accountName" in data and len(data["accountName"]) > 100:

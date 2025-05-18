@@ -9,9 +9,9 @@ import xml.etree.ElementTree as ET
 from decimal import Decimal
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
-from backend.src.models.account import Currency
-from backend.src.models.money import Money
-from backend.src.models.transaction import Transaction
+from models.account import Currency
+from models.money import Money
+from models.transaction import Transaction
 from models.transaction_file import FileFormat, TransactionFile
 from models.file_map import FileMap, FieldMapping
 import decimal
@@ -180,6 +180,7 @@ def preprocess_csv_text(text_content: str) -> str:
     """
     Preprocess CSV text to fix rows with more columns than the other rows, due to the description having unquoted commas.
     Merges columns where a likely description field contains unquoted commas, quoting the merged field.
+    Also removes trailing commas from all lines.
     """
     # Split the text into lines
     lines = text_content.splitlines()
@@ -187,9 +188,9 @@ def preprocess_csv_text(text_content: str) -> str:
         return text_content
         
     # Parse the header to determine the expected number of fields
-    header_line = lines[0]
+    header_line = lines[0].rstrip(",")  # Remove trailing commas from header
     # Use csv module to correctly parse the header
-    reader = csv.reader([header_line.rstrip(",")])
+    reader = csv.reader([header_line])
     header_fields = next(reader)
     # count header fields excluding empty ones at the end
     expected_fields = len(header_fields)
@@ -218,10 +219,10 @@ def preprocess_csv_text(text_content: str) -> str:
         desc_col = 1  # Default to second column if no description column found
         
     # Process each line
-    fixed_lines = [header_line]  # Keep header as is
+    fixed_lines = [header_line]  # Use the cleaned header line
     
     for i in range(1, len(lines)):
-        line = lines[i].rstrip(",")
+        line = lines[i].rstrip(",")  # Remove trailing commas from data lines
         if not line.strip():
             continue  # Skip empty lines
             
@@ -242,9 +243,7 @@ def preprocess_csv_text(text_content: str) -> str:
             desc_with_excess = fields[desc_col:desc_col+excess+1]
             merged_desc = ','.join(desc_with_excess)
             
-            # Quote the merged field
-            if ',' in merged_desc and not (merged_desc.startswith('"') and merged_desc.endswith('"')):
-                merged_desc = f'"{merged_desc}"'
+
                 
             after_desc = fields[desc_col+excess+1:] if desc_col+excess+1 < len(fields) else []
             

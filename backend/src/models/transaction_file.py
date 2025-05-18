@@ -9,7 +9,7 @@ from typing import Optional, Dict, Any, Tuple
 from dataclasses import dataclass
 import json
 
-from backend.src.models.account import Currency
+from models.account import Currency
 from models.money import Money
 
 

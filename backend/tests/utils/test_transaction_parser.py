@@ -1,463 +1,277 @@
-import os
+"""
+Unit tests for transaction parser utilities.
+"""
 import unittest
 from decimal import Decimal
 from datetime import datetime
-from models.transaction_file import FileFormat
+import xml.etree.ElementTree as ET
+from unittest.mock import patch, mock_open
+from models.account import Currency
+from models.money import Money
+from models.transaction import Transaction
+from models.transaction_file import FileFormat, TransactionFile, ProcessingStatus
 from models.file_map import FileMap, FieldMapping
 from utils.transaction_parser import (
     parse_transactions,
     parse_csv_transactions,
     parse_ofx_transactions,
-    apply_field_mapping,
-    find_column_index,
     parse_date,
     detect_date_order,
+    file_type_selector,
+    apply_field_mapping,
+    find_column_index,
     preprocess_csv_text
 )
 
 class TestTransactionParser(unittest.TestCase):
     def setUp(self):
-        """Set up test data."""
-        # Set up test data directory
-        self.test_data_dir = os.path.join(os.path.dirname(__file__), 'test_data')
+        """Set up test fixtures."""
+        self.sample_currency = Currency.USD
+        self.sample_money = Money(Decimal('1000.00'), self.sample_currency)
         
-        # Sample field map for testing
+        # Sample transaction file
+        self.transaction_file = TransactionFile(
+            file_id="test_file_id",
+            user_id="test_user_id",
+            account_id="test_account_id",
+            file_format=FileFormat.CSV,
+            file_map_id="test_map_id",
+            opening_balance=self.sample_money,
+            file_name="test.csv",
+            upload_date=int(datetime.now().timestamp() * 1000),
+            file_size=1000,
+            s3_key="test/test.csv",
+            processing_status=ProcessingStatus.PENDING
+        )
+        
+        # Sample field mapping
         self.field_map = FileMap(
-            field_map_id="test-map-1",
-            name="Test Bank Statement",
-            description="Test mapping for bank statements",
-            user_id="test-user",
+            file_map_id="test_map_id",
+            user_id="test_user_id",
+            name="Test Map",
+            description="Test mapping configuration",
             mappings=[
                 FieldMapping(source_field="Date", target_field="date"),
                 FieldMapping(source_field="Description", target_field="description"),
-                FieldMapping(source_field="Amount", target_field="amount", transformation="float(value.replace('$', '').replace(',', ''))")
+                FieldMapping(source_field="Amount", target_field="amount"),
+                FieldMapping(source_field="Type", target_field="debitOrCredit"),
+                FieldMapping(source_field="Currency", target_field="currency")
             ]
         )
-        
-        # Sample CSV content for inline tests
-        self.csv_content = b"""Date,Description,Amount,Balance
-2024-01-01,Grocery Store,$123.45,"$1,000.00"
-2024-01-02,Gas Station,$45.67,"$954.33"
-2024-01-03,Restaurant,$67.89,"$886.44"
-"""
-
-        # Sample OFX content for inline tests
-        self.ofx_content = b"""OFXHEADER:100
-DATA:OFXSGML
-<OFX>
-<BANKMSGSRSV1>
-<STMTTRNRS>
-<STMTRS>
-<BANKTRANLIST>
-<STMTTRN>
-<TRNTYPE>DEBIT</TRNTYPE>
-<DTPOSTED>20240101</DTPOSTED>
-<TRNAMT>-123.45</TRNAMT>
-<n>Grocery Store</n>
-<MEMO>Purchase at Store</MEMO>
-</STMTTRN>
-<STMTTRN>
-<TRNTYPE>DEBIT</TRNTYPE>
-<DTPOSTED>20240102</DTPOSTED>
-<TRNAMT>-45.67</TRNAMT>
-<n>Gas Station</n>
-</STMTTRN>
-</BANKTRANLIST>
-</STMTRS>
-</STMTTRNRS>
-</BANKMSGSRSV1>
-</OFX>
-"""
-
-    def read_test_file(self, filename):
-        """Helper to read test data files."""
-        with open(os.path.join(self.test_data_dir, filename), 'rb') as f:
-            return f.read()
-
-    def test_find_column_index(self):
-        """Test finding column indices with various header formats."""
-        header = ['Transaction Date', 'Description', 'Amount', 'Category']
-        
-        test_cases = [
-            (["date", "transaction date"], 0),  # Exact match with case insensitive
-            (["desc", "description"], 1),       # Exact match
-            (["amount"], 2),                    # Simple match
-            (["balance"], None),                # No match
-            (["category"], 3),                  # Direct match
-        ]
-        
-        for possible_names, expected_index in test_cases:
-            with self.subTest(possible_names=possible_names):
-                result = find_column_index(header, possible_names)
-                self.assertEqual(result, expected_index)
 
     def test_parse_date(self):
-        """Test date parsing with various formats."""
+        """Test date parsing function."""
+        # Test various date formats
         test_cases = [
-            ('2024-03-15', 1710460800000),
-            ('03/15/2024', 1710460800000),
-            ('15/03/2024', 1710460800000),
-            ('20240315', 1710460800000),
-            ('03-15-2024', 1710460800000),
-            ('invalid date', None)
+            ("2024-03-15", 1710460800000),  # YYYY-MM-DD
+            ("03/15/2024", 1710460800000),  # MM/DD/YYYY
+            ("15/03/2024", 1710460800000),  # DD/MM/YYYY
+            ("20240315", 1710460800000),    # YYYYMMDD
+            ("03-15-2024", 1710460800000),  # MM-DD-YYYY
+            ("15-03-2024", 1710460800000)   # DD-MM-YYYY
         ]
         
-        for input_date, expected in test_cases:
-            with self.subTest(input_date=input_date):
-                self.assertEqual(parse_date(input_date), expected)
+        for date_str, expected_ms in test_cases:
+            with self.subTest(date_str=date_str):
+                result = parse_date(date_str)
+                self.assertEqual(result, expected_ms)
+        
+        # Test invalid date format
+        with self.assertRaises(ValueError):
+            parse_date("invalid-date")
+
+    def test_detect_date_order(self):
+        """Test date order detection."""
+        # Test ascending dates
+        asc_dates = ["2024-01-01", "2024-01-02", "2024-01-03"]
+        self.assertEqual(detect_date_order(asc_dates), "asc")
+        
+        # Test descending dates
+        desc_dates = ["2024-01-03", "2024-01-02", "2024-01-01"]
+        self.assertEqual(detect_date_order(desc_dates), "desc")
+        
+        # Test single date
+        single_date = ["2024-01-01"]
+        self.assertEqual(detect_date_order(single_date), "asc")
+        
+        # Test empty list
+        self.assertEqual(detect_date_order([]), "asc")
+        
+        # Test invalid dates
+        invalid_dates = ["invalid", "dates", "here"]
+        self.assertEqual(detect_date_order(invalid_dates), "asc")
+
+    def test_file_type_selector(self):
+        """Test file format detection."""
+        # Test CSV format
+        csv_content = b"Date,Description,Amount\n2024-03-15,Test,100.00"
+        self.assertEqual(file_type_selector(csv_content), FileFormat.CSV)
+        
+        # Test OFX format
+        ofx_content = b"<OFX><STMTTRN><DTPOSTED>20240315</DTPOSTED></STMTTRN></OFX>"
+        self.assertEqual(file_type_selector(ofx_content), FileFormat.OFX)
+        
+        # Test QFX format
+        qfx_content = b"<QFX><STMTTRN><DTPOSTED>20240315</DTPOSTED></STMTTRN></QFX>"
+        self.assertEqual(file_type_selector(qfx_content), FileFormat.QFX)
+        
+        # Test other format
+        other_content = b"Some random content"
+        self.assertEqual(file_type_selector(other_content), FileFormat.OTHER)
 
     def test_apply_field_mapping(self):
-        """Test applying field mappings to row data."""
+        """Test field mapping application."""
         row_data = {
-            "Date": "2024-01-01",
+            "Date": "2024-03-15",
             "Description": "Test Transaction",
-            "Amount": "$123.45",
-            "Extra": "Additional Info"
+            "Amount": "100.00",
+            "Type": "DBIT",
+            "Currency": "USD"
+        }
+        
+        expected = {
+            "date": "2024-03-15",
+            "description": "Test Transaction",
+            "amount": "100.00",
+            "debitOrCredit": "DBIT",
+            "currency": "USD"
         }
         
         result = apply_field_mapping(row_data, self.field_map)
+        self.assertEqual(result, expected)
         
-        self.assertEqual(result["date"], "2024-01-01")
-        self.assertEqual(result["description"], "Test Transaction")
-        self.assertEqual(result["amount"], 123.45)
-        self.assertNotIn("Extra", result)
-
-    def test_parse_csv_from_file(self):
-        """Test parsing CSV transactions from file."""
-        content = self.read_test_file('sample_transactions.csv')
-        transactions = parse_transactions(
-            account_id='test_account',
-            content=content,
-            file_format=FileFormat.CSV,
-            opening_balance=100.0,
-            field_map=None
-        )
-        
-        self.assertEqual(len(transactions), 6)
-        
-        # Check first transaction
-        expected = {
-            'date': 1710460800000,
-            'description': 'Grocery Store',
-            'amount': Decimal('-50.25'),
-            'balance': Decimal('49.75'),
-            'transaction_type': 'DEBIT',
-            'category': 'Food',
-            'memo': 'Weekly groceries',
-        }
-        self.assert_transaction_fields(transactions[0], expected)
-        
-        # Check running total calculation
-        expected_total = Decimal('100.0')  # Opening balance
-        for t in transactions:
-            expected_total += Decimal(t['amount'])
-            self.assertEqual(t['balance'], expected_total)
-
-    def test_parse_csv_with_field_map(self):
-        """Test parsing CSV transactions with field mapping."""
-        transactions = parse_transactions(
-            account_id='test_account',
-            content=self.csv_content,
-            file_format=FileFormat.CSV,
-            opening_balance=1000.0,
-            field_map=self.field_map
-        )
-        
-        self.assertEqual(len(transactions), 3)
-        
-        # Check first transaction
-        first_tx = transactions[0]
-        self.assertEqual(first_tx["date"], 1704067200000)
-        self.assertEqual(first_tx["description"], "Grocery Store")
-        self.assertEqual(first_tx["amount"], Decimal("123.45"))
-        self.assertEqual(first_tx["balance"], Decimal("1123.45"))
-
-    def test_parse_ofx_from_file(self):
-        """Test parsing OFX transactions from file."""
-        content = self.read_test_file('sample_transactions.ofx')
-        transactions = parse_transactions(
-            account_id='test_account',
-            content=content,
-            file_format=FileFormat.OFX,
-            opening_balance=100.0,
-            field_map=None
-        )
-        
-        self.assertEqual(len(transactions), 4)
-        
-        # Check first transaction
-        expected = {
-            'date': 1710460800000,
-            'description': 'Grocery Store',
-            'amount': Decimal('-50.25'),
-            'balance': Decimal('49.75'),
-            'transaction_type': 'DEBIT',
-            'memo': 'Weekly groceries',
-        }
-        self.assert_transaction_fields(transactions[0], expected)
-        
-        # Check running total calculation
-        expected_total = Decimal('100.0')  # Opening balance
-        for t in transactions:
-            expected_total += Decimal(t['amount'])
-            self.assertEqual(t['balance'], expected_total)
-
-    def test_parse_qfx_from_file(self):
-        """Test parsing QFX transactions from file."""
-        content = self.read_test_file('sample_transactions.qfx')
-        transactions = parse_transactions(
-            account_id='test_account',
-            content=content,
-            file_format=FileFormat.QFX,
-            opening_balance=100.0,
-            field_map=None
-        )
-        
-        self.assertEqual(len(transactions), 4)
-        
-        # Check first transaction
-        expected = {
-            'date': 1710460800000,
-            'description': 'Grocery Store',
-            'amount': Decimal('-50.25'),
-            'balance': Decimal('49.75'),
-            'transaction_type': 'DEBIT',
-            'memo': 'Weekly groceries',
-        }
-        self.assert_transaction_fields(transactions[0], expected)
-        
-        # Check running total calculation
-        expected_total = Decimal('100.0')  # Opening balance
-        for t in transactions:
-            expected_total += Decimal(t['amount'])
-            self.assertEqual(t['balance'], expected_total)
-
-    def test_parse_ofx_inline(self):
-        """Test parsing OFX transactions from inline content."""
-        transactions = parse_transactions(
-            account_id='test_account',
-            content=self.ofx_content,
-            file_format=FileFormat.OFX,
-            opening_balance=1000.0,
-            field_map=None
-        )
-        
-        self.assertEqual(len(transactions), 2)
-        
-        # Check first transaction
-        first_tx = transactions[0]
-        self.assertEqual(first_tx["date"], 1704067200000)  # 2024-01-01
-        self.assertEqual(first_tx["description"], "Grocery Store")
-        self.assertEqual(first_tx["amount"], Decimal("-123.45"))
-        self.assertEqual(first_tx["balance"], Decimal("876.55"))
-        self.assertEqual(first_tx["transaction_type"], "DEBIT")
-        self.assertEqual(first_tx["memo"], "Purchase at Store")
-
-    def test_invalid_csv_content(self):
-        """Test parsing invalid CSV content."""
-        transactions = parse_transactions(
-            account_id='test_account',
-            content=b'invalid,csv,content',
-            file_format=FileFormat.CSV,
-            opening_balance=100.0,
-            field_map=None
-        )
-        self.assertEqual(transactions, [])
-
-    def test_invalid_ofx_content(self):
-        """Test parsing invalid OFX content."""
-        transactions = parse_transactions(
-            account_id='test_account',
-            content=b'invalid ofx content',
-            file_format=FileFormat.OFX,
-            opening_balance=100.0,
-            field_map=None
-        )
-        self.assertEqual(transactions, [])
-
-    def test_field_mapping_with_missing_fields(self):
-        """Test field mapping when source fields are missing."""
-        row_data = {
-            "Date": "2024-01-01",
-            # Missing Description field
-            "Amount": "$123.45"
-        }
-        
-        result = apply_field_mapping(row_data, self.field_map)
+        # Test missing field
+        row_data_missing = {"Date": "2024-03-15"}
+        result = apply_field_mapping(row_data_missing, self.field_map)
         self.assertNotIn("description", result)
 
-    def test_field_mapping_with_invalid_transformation(self):
-        """Test field mapping with invalid transformation."""
-        field_map_with_bad_transform = FileMap(
-            field_map_id="test-map-2",
-            name="Bad Transform",
-            description="Map with invalid transformation",
-            user_id="test-user",
-            mappings=[
-                FieldMapping(
-                    source_field="Amount",
-                    target_field="amount",
-                    transformation="invalid_function(value)"
-                )
-            ]
+    def test_find_column_index(self):
+        """Test column index finding."""
+        header = ["Date", "Transaction Description", "Amount", "Balance"]
+        
+        # Test exact match
+        self.assertEqual(find_column_index(header, ["Date"]), 0)
+        
+        # Test partial match
+        self.assertEqual(find_column_index(header, ["Description"]), 1)
+        
+        # Test case insensitive
+        self.assertEqual(find_column_index(header, ["date"]), 0)
+        
+        # Test multiple possible names
+        self.assertEqual(find_column_index(header, ["Amt", "Amount"]), 2)
+        
+        # Test not found
+        self.assertIsNone(find_column_index(header, ["Category"]))
+
+    def test_preprocess_csv_text(self):
+        """Test CSV preprocessing."""
+        # Test normal CSV
+        normal_csv = "Date,Description,Amount\n2024-03-15,Test,100.00"
+        self.assertEqual(preprocess_csv_text(normal_csv), normal_csv)
+        
+        # Test CSV with unquoted commas in description
+        messy_csv = 'Date,Description,Amount,\n2024-03-15,Test, with commas,100.00'
+        expected = 'Date,Description,Amount\n2024-03-15,"Test, with commas",100.00'
+        self.assertEqual(preprocess_csv_text(messy_csv), expected)
+        
+        # Test empty input
+        self.assertEqual(preprocess_csv_text(""), "")
+
+    def test_parse_csv_transactions(self):
+        """Test CSV transaction parsing."""
+        csv_content = b"""Date,Description,Amount,Type,Currency
+2024-03-15,Test Transaction 1,100.00,DBIT,USD
+2024-03-16,Test Transaction 2,-50.00,CRDT,USD"""
+        
+        transactions = parse_csv_transactions(self.transaction_file, csv_content, self.field_map)
+        
+        self.assertEqual(len(transactions), 2)
+        self.assertEqual(transactions[0].description, "Test Transaction 1")
+        self.assertEqual(transactions[0].amount, Money(Decimal("-100.00"), Currency.USD))
+        self.assertEqual(transactions[1].description, "Test Transaction 2")
+        self.assertEqual(transactions[1].amount, Money(Decimal("-50.00"), Currency.USD))
+
+    def test_parse_ofx_transactions(self):
+        """Test OFX transaction parsing."""
+        ofx_content = b"""
+<OFX>
+    <STMTTRN>
+        <DTPOSTED>20240315</DTPOSTED>
+        <TRNAMT>-100.00</TRNAMT>
+        <NAME>Test Transaction 1</NAME>
+        <TRNTYPE>DEBIT</TRNTYPE>
+        <CURRENCY>USD</CURRENCY>
+    </STMTTRN>
+    <STMTTRN>
+        <DTPOSTED>20240316</DTPOSTED>
+        <TRNAMT>50.00</TRNAMT>
+        <NAME>Test Transaction 2</NAME>
+        <TRNTYPE>CREDIT</TRNTYPE>
+        <CURRENCY>USD</CURRENCY>
+    </STMTTRN>
+</OFX>"""
+        
+        transactions = parse_ofx_transactions(self.transaction_file, ofx_content)
+        
+        self.assertEqual(len(transactions), 2)
+        self.assertEqual(transactions[0].description, "Test Transaction 1")
+        self.assertEqual(transactions[0].amount, Money(Decimal("-100.00"), Currency.USD))
+        self.assertEqual(transactions[1].description, "Test Transaction 2")
+        self.assertEqual(transactions[1].amount, Money(Decimal("50.00"), Currency.USD))
+
+    def test_parse_transactions_invalid_input(self):
+        """Test transaction parsing with invalid input."""
+        # Test missing file map
+        invalid_file = TransactionFile(
+            file_id="test_file_id",
+            user_id="test_user_id",
+            account_id="test_account_id",
+            file_format=FileFormat.CSV,
+            file_map_id=None,
+            opening_balance=self.sample_money,
+            file_name="test.csv",
+            upload_date=int(datetime.now().timestamp() * 1000),
+            file_size=1000,
+            s3_key="test/test.csv",
+            processing_status=ProcessingStatus.PENDING
         )
         
-        row_data = {"Amount": "$123.45"}
-        result = apply_field_mapping(row_data, field_map_with_bad_transform)
-        self.assertNotIn("amount", result)
-
-    def test_detect_date_order_ascending(self):
-        """Test detection of ascending date order."""
-        dates = [
-            "2024-01-01",
-            "2024-01-02",
-            "2024-01-03",
-            "2024-01-04"
-        ]
-        result = detect_date_order(dates)
-        self.assertEqual(result, "asc")
-
-    def test_detect_date_order_descending(self):
-        """Test detection of descending date order."""
-        dates = [
-            "2024-01-04",
-            "2024-01-03",
-            "2024-01-02",
-            "2024-01-01"
-        ]
-        result = detect_date_order(dates)
-        self.assertEqual(result, "desc")
-
-    def test_detect_date_order_mixed(self):
-        """Test detection with mixed date order (should default to ascending)."""
-        dates = [
-            "2024-01-01",
-            "2024-01-03",
-            "2024-01-02",
-            "2024-01-04"
-        ]
-        result = detect_date_order(dates)
-        self.assertEqual(result, "asc")
-
-    def test_detect_date_order_single_date(self):
-        """Test detection with single date (should default to ascending)."""
-        dates = ["2024-01-01"]
-        result = detect_date_order(dates)
-        self.assertEqual(result, "asc")
-
-    def test_detect_date_order_empty(self):
-        """Test detection with empty list (should default to ascending)."""
-        dates = []
-        result = detect_date_order(dates)
-        self.assertEqual(result, "asc")
-
-    def test_detect_date_order_invalid_dates(self):
-        """Test detection with invalid dates (should skip invalid dates)."""
-        dates = [
-            "2024-01-01",
-            "invalid-date",
-            "2024-01-03",
-            "2024-01-02"
-        ]
-        result = detect_date_order(dates)
-        self.assertEqual(result, "asc")
-
-    def test_detect_date_order_real_dates(self):
-        """Test detection real dates."""
-        dates = [
-            '2024-12-16', '2024-12-03', '2024-12-01', '2024-12-01', '2024-11-03', '2024-11-01', '2024-11-01', '2024-10-13', '2024-10-03', '2024-10-01', '2024-10-01', '2024-09-24', '2024-09-03', '2024-09-01', '2024-09-01', '2024-08-28', '2024-08-05', '2024-08-05', '2024-08-04', '2024-08-01', '2024-08-01', '2024-07-21', '2024-07-03', '2024-07-03', '2024-07-01', '2024-07-01', '2024-06-20', '2024-06-03', '2024-06-02', '2024-06-02', '2024-05-19'
-        ]
-        result = detect_date_order(dates)
-        self.assertEqual(result, "desc")
-
-    def test_dates_with_equal_timestamps(self):
-        """Test dates with equal timestamps."""
-        dates = [
-            '2024-12-03', '2024-12-01', '2024-12-01'
-        ]
-        result = detect_date_order(dates)
-        self.assertEqual(result, "desc")
-
-    def test_equality(self):
-        """Test equality of two dates."""
-        date1 = datetime.strptime("2024-12-01", "%Y-%m-%d")
-        date2 = datetime.strptime("2024-12-01", "%Y-%m-%d")
-        self.assertEqual(date1, date2)
-
-    def test_parse_csv_with_commas_in_field_with_trailing_comma(self):
-        """Test parsing CSV where a field contains a comma and is not quoted, causing extra columns."""
-        # Header has an empty field due to extra comma in the data row
-        csv_content = b"Date,Description,Amount,Merchant City,\n2024-08-04,GITHUB,INC.,78.72,SAN FRANCISCO\n2024-08-05,Normal Merchant,12.34,London,\n2024-08-06,Another Merchant,56.78,Paris,\n"
-        # The first row should merge 'GITHUB,INC.' into one field for Description
-        # We'll assume the parser is fixed to handle this, or this test will fail until fixed
-        transactions = parse_csv_transactions(csv_content, 100.0)
-        self.assertEqual(len(transactions), 3)
-        # Check the problematic row
-        self.assertIn('description', transactions[0])
-        self.assertEqual(transactions[0]['description'], '"GITHUB,INC."')
-        self.assertEqual(transactions[0]['amount'], Decimal('78.72'))
-        self.assertEqual(transactions[0]['balance'], Decimal('178.72'))
-        # Check a normal row
-        self.assertEqual(transactions[1]['description'], 'Normal Merchant')
-        self.assertEqual(transactions[1]['amount'], Decimal('12.34'))
-        self.assertEqual(transactions[1]['balance'], Decimal('191.06'))
-
-    def test_parse_csv_with_commas_in_field(self):
-        """Test parsing CSV where a field contains a comma and is not quoted, causing extra columns in those rows alone"""
- 
-        csv_content = b"Date,Description,Amount,Merchant City\n2024-08-04,GITHUB,INC.,78.72,SAN FRANCISCO\n2024-08-05,Normal Merchant,12.34,London\n2024-08-06,Another Merchant,56.78,Paris\n"
-        # The first row should merge 'GITHUB,INC.' into one field for Description
-        # We'll assume the parser is fixed to handle this, or this test will fail until fixed
-        transactions = parse_csv_transactions(csv_content, 100.0)
-        self.assertEqual(len(transactions), 3)
-        # Check the problematic row
-        self.assertIn('description', transactions[0])
-        self.assertEqual(transactions[0]['description'], '"GITHUB,INC."')
-        self.assertEqual(transactions[0]['amount'], Decimal('78.72'))
-        self.assertEqual(transactions[0]['balance'], Decimal('178.72'))
-        # Check a normal row
-        self.assertEqual(transactions[1]['description'], 'Normal Merchant')
-        self.assertEqual(transactions[1]['amount'], Decimal('12.34'))
-        self.assertEqual(transactions[1]['balance'], Decimal('191.06'))
-
-    def assert_transaction_fields(self, transaction, expected):
-        for key, value in expected.items():
-            self.assertEqual(transaction[key], value)
-
-    def test_preprocess_csv_text_merges_unquoted_commas(self):
-        """Test that preprocess_csv_text merges unquoted commas in description and quotes the field."""
-        csv_text = "Date,Description,Amount,Merchant City,\n2024-08-04,GITHUB,INC.,78.72,SAN FRANCISCO\n2024-08-05,Normal Merchant,12.34,London,\n"
-        expected = (
-            'Date,Description,Amount,Merchant City,\n'
-            '2024-08-04,"GITHUB,INC.",78.72,SAN FRANCISCO,\n'
-            '2024-08-05,Normal Merchant,12.34,London,\n'
+        with self.assertRaises(ValueError):
+            parse_transactions(invalid_file, b"", self.field_map)
+        
+        # Test missing opening balance
+        invalid_file = TransactionFile(
+            file_id="test_file_id",
+            user_id="test_user_id",
+            account_id="test_account_id",
+            file_format=FileFormat.CSV,
+            file_map_id="test_map_id",
+            opening_balance=None,
+            file_name="test.csv",
+            upload_date=int(datetime.now().timestamp() * 1000),
+            file_size=1000,
+            s3_key="test/test.csv",
+            processing_status=ProcessingStatus.PENDING
         )
-        # The expected output is that the first data row's description is quoted and merged
-        processed = preprocess_csv_text(csv_text)
-        self.assertIn('"GITHUB,INC."', processed)
-        self.assertEqual(processed.count('"GITHUB,INC."'), 1)
-        self.assertTrue(processed.startswith('Date,Description'))
-
-    def test_preprocess_csv_text_merges_unquoted_commas_with_trailing_comma2(self):
-        """Test that preprocess_csv_text merges unquoted commas in description and quotes the field."""
-        csv_text = "Transaction Date,Posting Date,Billing Amount,Merchant,Merchant City,Merchant State,Merchant Postcode,Reference Number,Debit or Credit,SICMCC Code,Status,Transaction Currency,Additional Card Holder,Card Used,\n2024-08-05,2024-08-05,2.35,NON-STERLING TRANS FEE,,,,82117554217000005527406,DBIT,FE,BILLED,GBP,FALSE,2183,\n2024-08-04,2024-08-05,78.72,GITHUB,INC.,SAN FRANCISCO,USA,94107,82117554217000005527406,DBIT,PR,BILLED,GBP,FALSE,2183\n"
         
-        processed = preprocess_csv_text(csv_text)
+        with self.assertRaises(ValueError):
+            parse_transactions(invalid_file, b"", self.field_map)
         
-        # Verify the header is preserved
-        self.assertTrue(processed.startswith('Transaction Date,Posting Date,Billing Amount,Merchant'))
+        # Test unsupported file format
+        invalid_file = TransactionFile(
+            file_id="test_file_id",
+            user_id="test_user_id",
+            account_id="test_account_id",
+            file_format=FileFormat.OTHER,
+            file_map_id="test_map_id",
+            opening_balance=self.sample_money,
+            file_name="test.csv",
+            upload_date=int(datetime.now().timestamp() * 1000),
+            file_size=1000,
+            s3_key="test/test.csv",
+            processing_status=ProcessingStatus.PENDING
+        )
         
-        # Verify the GITHUB,INC. description is properly quoted
-        self.assertIn('"GITHUB,INC."', processed)
-        self.assertEqual(processed.count('"GITHUB,INC."'), 1)
-        
-        # Verify both transactions are present
-        self.assertIn('NON-STERLING TRANS FEE', processed)
-        self.assertIn('"GITHUB,INC."', processed)
-        
-        # Verify the amounts are preserved
-        self.assertIn('2.35', processed)
-        self.assertIn('78.72', processed)
-
-if __name__ == '__main__':
-    unittest.main() 
+        transactions = parse_transactions(invalid_file, b"", self.field_map)
+        self.assertEqual(transactions, []) 

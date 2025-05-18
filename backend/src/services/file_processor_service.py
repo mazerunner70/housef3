@@ -40,7 +40,14 @@ from utils.file_processor_utils import (
     get_file_content,
     calculate_opening_balance_from_duplicates
 )
-from utils.auth import checked_mandatory_account, checked_mandatory_file_map, checked_mandatory_transaction_file, NotAuthorized, NotFound, checked_optional_file_map, checked_optional_transaction_file
+from utils.auth import NotAuthorized, NotFound
+from services.auth_checks import (
+    checked_mandatory_account,
+    checked_mandatory_file_map,
+    checked_mandatory_transaction_file,
+    checked_optional_file_map,
+    checked_optional_transaction_file
+)
 
 # Configure logging
 logger = logging.getLogger()
@@ -136,28 +143,36 @@ def determine_file_map(transaction_file: TransactionFile) -> Optional[FileMap]:
     Args:
         file_record: The file record containing mapping and account info
         
+    Returns:
+        FileMap if found, None otherwise
     """
     try:
+        # First try to get the file map specified in the file record
         file_map = checked_optional_file_map(transaction_file.file_map_id, transaction_file.user_id)
-        account_id = transaction_file.account_id    
         
         logger.info(f"Determining file map - File map ID: {transaction_file.file_map_id}, Account ID: {transaction_file.account_id}")     
 
-   
         if file_map:
             logger.info(f"Using specified file map {transaction_file.file_map_id} for file {transaction_file.file_id}")
-        elif account_id:
-            # Try to use account's default field map
-            account = checked_mandatory_account(account_id, transaction_file.user_id)
-            file_map = get_file_map(account.default_file_map_id)
-            if file_map:
-                logger.info(f"Using account default file map for file {transaction_file.file_id}")
-                transaction_file.file_map_id = account.default_file_map_id
-            else:
-                logger.info(f"No file map found for account {account_id}")
+            return file_map
+            
+        # If no file map specified but we have an account, try to get the account's default map
+        if transaction_file.account_id:
+            account = checked_mandatory_account(transaction_file.account_id, transaction_file.user_id)
+            if account.default_file_map_id:
+                file_map = get_file_map(account.default_file_map_id)
+                if file_map:
+                    logger.info(f"Using account default file map for file {transaction_file.file_id}")
+                    transaction_file.file_map_id = account.default_file_map_id
+                    return file_map
+                    
+            logger.info(f"No file map found for account {transaction_file.account_id}")
+            
+        return None
+            
     except Exception as e:
         logger.error(f"Error determining file map: {str(e)}")
-        return None
+        raise  # Re-raise the exception to be handled by the caller
 
 
 def parse_file_transactions(
@@ -439,7 +454,7 @@ def update_file_mapping(transaction_file: TransactionFile) -> FileProcessorRespo
             transaction_file.file_map_id != field_map.file_map_id or
             transaction_file.file_map_id is None
         )
-        
+        logger.info(f"Should reprocess: {should_reprocess}")
         if should_reprocess:
             # Get file content
             content_bytes = get_file_content(transaction_file.file_id)
@@ -448,7 +463,7 @@ def update_file_mapping(transaction_file: TransactionFile) -> FileProcessorRespo
                 
             # Delete existing transactions
             logger.info(f"Field mapping has changed for file {transaction_file.file_id} - deleting existing transactions")
-            delete_transactions_for_file(transaction_file.file_id)
+            deleted_count = delete_transactions_for_file(transaction_file.file_id)
             
             # Process with new mapping
             transactions = parse_file_transactions(
@@ -457,7 +472,7 @@ def update_file_mapping(transaction_file: TransactionFile) -> FileProcessorRespo
             )
             
             if transactions:
-                update_transaction_duplicates(transactions)
+                duplicate_count = update_transaction_duplicates(transactions)
 
                 # Determine opening balance from transaction overlap
                 opening_balance = determine_opening_balances_from_transaction_overlap(transactions, transaction_file.currency)
@@ -469,7 +484,7 @@ def update_file_mapping(transaction_file: TransactionFile) -> FileProcessorRespo
                     raise ValueError("Opening balance is required to calculate running balances")
                 
                 # Save transactions
-                transaction_count, duplicate_count = save_transactions(
+                transaction_count, _ = save_transactions(
                     transactions,
                     transaction_file,
                     transaction_file.user_id,
@@ -483,12 +498,25 @@ def update_file_mapping(transaction_file: TransactionFile) -> FileProcessorRespo
                     transactions=transactions,
                     transaction_count=transaction_count,
                     duplicate_count=duplicate_count,
+                    deleted_count=deleted_count,
                     message="Field map updated, transactions reprocessed"
                 )
+            else:
+                return FileProcessorResponse(
+                    transactions=[],
+                    transaction_count=0,
+                    duplicate_count=0,
+                    deleted_count=deleted_count,
+                    message="No transactions found after reprocessing"
+                )
+         
+        # If field map hasn't changed, get existing transactions
+        transactions = list_file_transactions(transaction_file.file_id)
         return FileProcessorResponse(
-            transactions=[],
-            transaction_count=0,
+            transactions=transactions,
+            transaction_count=len(transactions) if transactions else 0,
             duplicate_count=0,
+            deleted_count=0,
             message="Field map is unchanged, no reprocessing needed"
         )
             

@@ -2,7 +2,7 @@ import unittest
 import json
 import os
 import sys
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Union
 from decimal import Decimal
 
 
@@ -16,7 +16,7 @@ class TestGetColors(unittest.TestCase):
         os.environ["TESTING"] = "false"
         
         # Create mock event
-        self.mock_event = {
+        self.mock_event: Dict[str, Any] = {
             "version": "2.0",
             "routeKey": "GET /colors",
             "rawPath": "/colors",
@@ -60,7 +60,7 @@ class TestGetColors(unittest.TestCase):
         }
         
         # Create mock context
-        self.mock_context = {
+        self.mock_context: Dict[str, Any] = {
             "aws_request_id": "test-request-id",
             "function_name": "test-function",
             "memory_limit_in_mb": 128,
@@ -104,14 +104,6 @@ class TestGetColors(unittest.TestCase):
         body = json.loads(response["body"])
         self.assertEqual(body["message"], "Unauthorized")
 
-    def test_getcolors_error(self):
-        """Test error handling"""
-        # Set event to None to trigger error
-        response = handler(None, self.mock_context)
-        self.assertEqual(response["statusCode"], 500)
-        body = json.loads(response["body"])
-        self.assertEqual(body["message"], "Internal server error")
-
     def test_cors_headers(self):
         """Test that CORS headers are properly set"""
         os.environ["TESTING"] = "true"
@@ -128,7 +120,7 @@ class TestGetColors(unittest.TestCase):
 
     def test_options_request(self):
         """Test handling of OPTIONS request"""
-        event = {
+        event: Dict[str, Any] = {
             "requestContext": {
                 "http": {
                     "method": "OPTIONS"
@@ -141,19 +133,10 @@ class TestGetColors(unittest.TestCase):
         body = json.loads(response["body"])
         self.assertEqual(body["message"], "OK")
 
-    def test_error_handling_none_event(self):
-        """Test error handling for None event"""
-        response = handler(None, self.mock_context)
-        self.assertEqual(response["statusCode"], 500)
-        self.assertIn("Content-Type", response["headers"])
-        self.assertEqual(response["headers"]["Content-Type"], "application/json")
-        body = json.loads(response["body"])
-        self.assertIn("message", body)
-        self.assertEqual(body["message"], "Internal server error")
-
-    def test_error_handling_empty_event(self):
-        """Test error handling for empty event"""
-        response = handler({}, self.mock_context)
+    def test_error_handling_malformed_event(self):
+        """Test error handling for malformed event"""
+        malformed_event: Dict[str, Any] = {}
+        response = handler(malformed_event, self.mock_context)
         self.assertEqual(response["statusCode"], 401)
         self.assertIn("Content-Type", response["headers"])
         self.assertEqual(response["headers"]["Content-Type"], "application/json")

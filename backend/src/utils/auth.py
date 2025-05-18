@@ -13,6 +13,14 @@ from utils.db_utils import get_account, get_file_map, get_transaction_file
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+class NotAuthorized(Exception):
+    """Raised when a user is not authorized to access a resource."""
+    pass
+
+class NotFound(Exception):
+    """Raised when a requested resource is not found."""
+    pass
+
 def get_user_from_event(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
     Extract user information from the event.
@@ -54,53 +62,5 @@ def get_user_from_event(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return user_info
     except Exception as e:
         logger.error(f"Error extracting user from event: {str(e)}")
-        return None 
-
-class NotFound(Exception): pass
-class NotAuthorized(Exception): pass
-    
-def checked_optional_transaction_file(file_id: Optional[str], user_id: str) -> Optional[TransactionFile]:
-    if not file_id:
         return None
-    file = get_transaction_file(file_id)
-    if file and file.user_id != user_id:
-        raise NotAuthorized("Not authorized to access this file")
-    return file
 
-def checked_mandatory_transaction_file(file_id: str, user_id: str) -> 'TransactionFile':
-    file = checked_optional_transaction_file(file_id, user_id)
-    if not file:
-        raise NotFound("File not found")
-    return file
-
-def checked_mandatory_account(account_id: Optional[str], user_id: str) -> 'Account':
-    account = checked_optional_account(account_id, user_id)
-    if not account:
-        raise NotFound("Account not found")
-    return account
-
-def checked_optional_account(account_id: Optional[str], user_id: str) -> Optional['Account']:
-    if not account_id:
-        return None
-    account = get_account(account_id)
-    if not account:
-        return None
-    if account.user_id != user_id:
-        raise NotAuthorized("Not authorized to access this account")
-    return account
-
-def checked_optional_file_map(file_map_id: Optional[str], user_id: str) -> Optional['FileMap']:
-    if not file_map_id:
-        return None
-    file_map = get_file_map(file_map_id)
-    if not file_map:
-        return None
-    if file_map.user_id != user_id:
-        raise NotAuthorized("Not authorized to access this field mapping")
-    return file_map
-
-def checked_mandatory_file_map(file_map_id: Optional[str], user_id: str) -> 'FileMap':
-    file_map = checked_optional_file_map(file_map_id, user_id)
-    if not file_map:
-        raise NotFound("File mapping not found")
-    return file_map

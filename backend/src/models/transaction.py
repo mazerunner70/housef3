@@ -24,7 +24,7 @@ class HashRegeneratingField(Generic[T]):
     
     def __get__(self, obj: Any, objtype: Any = None) -> T:
         if obj is None:
-            return self._field_type()
+            raise AttributeError(f"Cannot access {self._name} at class level - this field requires instance initialization")
         return getattr(obj, self._name)
     
     def __set__(self, obj: Any, value: T) -> None:
