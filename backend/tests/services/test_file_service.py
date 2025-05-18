@@ -125,7 +125,7 @@ class TestFileService(unittest.TestCase):
         minimal_file = TransactionFile(
             file_id="test_file_id",
             user_id=self.user_id,
-            file_name="test.csv",
+            file_name="test.csv" ,
             upload_date=int(datetime.now().timestamp() * 1000),
             file_size=1000,
             s3_key="test/test.csv",
@@ -141,6 +141,6 @@ class TestFileService(unittest.TestCase):
         # Check optional fields are not present
         self.assertNotIn('openingBalance', result)
         self.assertNotIn('fieldMap', result)
-        self.assertNotIn('accountId', result)
+        self.assertNotIn('accountId', result) 
         self.assertNotIn('fileFormat', result)
         self.assertNotIn('recordCount', result) 

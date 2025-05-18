@@ -7,51 +7,123 @@ resource "null_resource" "prepare_lambda" {
   provisioner "local-exec" {
     working_dir = "../../backend"
     command     = <<EOF
+      echo "Current working directory:"
+      pwd
+      
+      # Create test venv and install all dependencies for testing
+      python -m venv .venv_test
+      source .venv_test/bin/activate
+      pip install -r requirements.txt
+      
       # Run tests
       chmod +x run_tests.sh && ./run_tests.sh
       
+      # Deactivate test venv
+      deactivate
+      
       # Setup build
-      rm -rf build
+      rm -rf build lambda_deploy.zip
       mkdir -p build
       
-      # Create venv and install dependencies
-      python -m venv .venv_build
-      source .venv_build/bin/activate
-      pip install -r requirements.txt --target build
+      # Install only Lambda runtime dependencies directly to build directory
+      pip install -r requirements-lambda.txt -t build/
       
       # Copy source code
       cp -r src/* build/
       
-      # Create zip
+      # Clean up unnecessary files
+      find build -type d -name "__pycache__" -exec rm -rf {} +
+      find build -type d -name "*.dist-info" -exec rm -rf {} +
+      find build -type d -name "*.egg-info" -exec rm -rf {} +
+      find build -type f -name "*.pyc" -delete
+      find build -type f -name "*.pyo" -delete
+      find build -type f -name "*.so" -delete
+      find build -type f -name "*.dylib" -delete
+      find build -type f -name "*.dll" -delete
+      find build -type f -name "*.exe" -delete
+      find build -type f -name "*.bat" -delete
+      find build -type f -name "*.sh" -delete
+      find build -type f -name "*.txt" -delete
+      find build -type f -name "*.md" -delete
+      find build -type f -name "*.rst" -delete
+      find build -type f -name "*.html" -delete
+      find build -type f -name "*.css" -delete
+      find build -type f -name "*.js" -delete
+      find build -type f -name "*.json" -delete
+      find build -type f -name "*.xml" -delete
+      find build -type f -name "*.yaml" -delete
+      find build -type f -name "*.yml" -delete
+      find build -type f -name "*.ini" -delete
+      find build -type f -name "*.cfg" -delete
+      find build -type f -name "*.conf" -delete
+      find build -type f -name "*.log" -delete
+      find build -type f -name "*.dat" -delete
+      find build -type f -name "*.db" -delete
+      find build -type f -name "*.sqlite" -delete
+      find build -type f -name "*.sqlite3" -delete
+      find build -type f -name "*.pdb" -delete
+      find build -type f -name "*.pyd" -delete
+      find build -type f -name "*.pyi" -delete
+      find build -type f -name "*.pyx" -delete
+      find build -type f -name "*.pxd" -delete
+      find build -type f -name "*.pxi" -delete
+      find build -type f -name "*.h" -delete
+      find build -type f -name "*.c" -delete
+      find build -type f -name "*.cpp" -delete
+      find build -type f -name "*.cc" -delete
+      find build -type f -name "*.cxx" -delete
+      find build -type f -name "*.hpp" -delete
+      find build -type f -name "*.hh" -delete
+      find build -type f -name "*.hxx" -delete
+      find build -type f -name "*.f" -delete
+      find build -type f -name "*.f90" -delete
+      find build -type f -name "*.f95" -delete
+      find build -type f -name "*.f03" -delete
+      find build -type f -name "*.f08" -delete
+      find build -type f -name "*.for" -delete
+      find build -type f -name "*.ftn" -delete
+      
+      # Create deployment package
       cd build
-      zip -r ../lambda.zip ./*
+      zip -r ../lambda_deploy.zip .
+      cd ..
+      
+      # Check package size
+      PACKAGE_SIZE=$(stat -c %s lambda_deploy.zip)
+      MAX_SIZE=2621440  # 2.5MB in bytes
+      
+      echo "Final package size:"
+      ls -lh lambda_deploy.zip
+      
+      if [ "$PACKAGE_SIZE" -gt "$MAX_SIZE" ]; then
+        echo "Error: Lambda package size ($PACKAGE_SIZE bytes) exceeds maximum allowed size ($MAX_SIZE bytes)"
+        echo "Largest files in package:"
+        unzip -l lambda_deploy.zip | sort -k1nr | head -n 10
+        exit 1
+      fi
       
       # Cleanup
-      cd ..
-      rm -rf build
-      rm -rf .venv_build
+      rm -rf .venv_test build
+      
+      echo "Build process complete!"
+      echo "Final working directory:"
+      pwd
+      echo "Lambda package location:"
+      ls -l lambda_deploy.zip
     EOF
   }
 }
 
-# Package Lambda code
-data "archive_file" "lambda_code" {
-  depends_on  = [null_resource.prepare_lambda]
-  type        = "zip"
-  source_file = "../../backend/lambda.zip"
-  output_path = "../../backend/lambda_deploy.zip"
-}
-
 # File Operations Lambda
 resource "aws_lambda_function" "file_operations" {
-  filename         = data.archive_file.lambda_code.output_path
+  filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-file-operations"
   handler          = "handlers/file_operations.handler"
   runtime          = "python3.9"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 30
   memory_size     = 256
-  source_code_hash = data.archive_file.lambda_code.output_base64sha256
+  source_code_hash = filebase64sha256("../../backend/lambda_deploy.zip")
   
   environment {
     variables = {
@@ -74,14 +146,14 @@ resource "aws_lambda_function" "file_operations" {
 
 # File Processor Lambda
 resource "aws_lambda_function" "file_processor" {
-  filename         = data.archive_file.lambda_code.output_path
+  filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-file-processor"
   handler          = "handlers/file_processor.handler"
   runtime          = "python3.9"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 60
   memory_size     = 256
-  source_code_hash = data.archive_file.lambda_code.output_base64sha256
+  source_code_hash = filebase64sha256("../../backend/lambda_deploy.zip")
   
   environment {
     variables = {
@@ -103,14 +175,14 @@ resource "aws_lambda_function" "file_processor" {
 
 # Account Operations Lambda
 resource "aws_lambda_function" "account_operations" {
-  filename         = data.archive_file.lambda_code.output_path
+  filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-account-operations"
   handler          = "handlers/account_operations.handler"
   runtime          = "python3.9"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 30
   memory_size     = 256
-  source_code_hash = data.archive_file.lambda_code.output_base64sha256
+  source_code_hash = filebase64sha256("../../backend/lambda_deploy.zip")
   
   environment {
     variables = {
@@ -131,14 +203,14 @@ resource "aws_lambda_function" "account_operations" {
 
 # Transaction Operations Lambda
 resource "aws_lambda_function" "transaction_operations" {
-  filename         = data.archive_file.lambda_code.output_path
+  filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-transaction-operations"
   handler          = "handlers/transaction_operations.handler"
   runtime          = "python3.9"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 30
   memory_size     = 256
-  source_code_hash = data.archive_file.lambda_code.output_base64sha256
+  source_code_hash = filebase64sha256("../../backend/lambda_deploy.zip")
 
   environment {
     variables = {
@@ -153,6 +225,33 @@ resource "aws_lambda_function" "transaction_operations" {
     Environment = var.environment
     Project     = var.project_name
     ManagedBy   = "terraform"
+  }
+}
+
+# Get Colors Lambda
+resource "aws_lambda_function" "getcolors" {
+  filename         = "../../backend/lambda_deploy.zip"
+  function_name    = "${var.project_name}-getcolors"
+  role            = aws_iam_role.lambda_exec.arn
+  handler         = "handlers/getcolors.handler"
+  source_code_hash = filebase64sha256("../../backend/lambda_deploy.zip")
+  runtime         = "python3.11"
+  timeout         = 30
+  memory_size     = 128
+
+  environment {
+    variables = {
+      DYNAMODB_ACCOUNTS_TABLE = aws_dynamodb_table.accounts.name
+      DYNAMODB_FILES_TABLE   = aws_dynamodb_table.transaction_files.name
+      DYNAMODB_TRANSACTIONS_TABLE = aws_dynamodb_table.transactions.name
+      S3_BUCKET             = aws_s3_bucket.file_storage.id
+      TESTING              = "false"
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
   }
 }
 
@@ -290,30 +389,4 @@ output "lambda_transaction_operations_name" {
 
 output "lambda_getcolors_name" {
   value = aws_lambda_function.getcolors.function_name
-}
-
-resource "aws_lambda_function" "getcolors" {
-  filename         = data.archive_file.lambda_code.output_path
-  function_name    = "${var.project_name}-getcolors"
-  role            = aws_iam_role.lambda_exec.arn
-  handler         = "handlers/getcolors.handler"
-  source_code_hash = data.archive_file.lambda_code.output_base64sha256
-  runtime         = "python3.11"
-  timeout         = 30
-  memory_size     = 128
-
-  environment {
-    variables = {
-      DYNAMODB_ACCOUNTS_TABLE = aws_dynamodb_table.accounts.name
-      DYNAMODB_FILES_TABLE   = aws_dynamodb_table.transaction_files.name
-      DYNAMODB_TRANSACTIONS_TABLE = aws_dynamodb_table.transactions.name
-      S3_BUCKET             = aws_s3_bucket.file_storage.id
-      TESTING              = "false"
-    }
-  }
-
-  tags = {
-    Environment = var.environment
-    Project     = var.project_name
-  }
 } 

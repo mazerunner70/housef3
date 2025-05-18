@@ -1,18 +1,20 @@
 # File map operations Lambda function
 resource "aws_lambda_function" "file_map_operations" {
-  filename         = data.archive_file.lambda_code.output_path
+  filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-file-map-operations"
+  handler          = "handlers/file_map_operations.handler"
+  runtime          = "python3.9"
   role            = aws_iam_role.lambda_exec.arn
-  handler         = "handlers.file_map_operations.handler"
-  source_code_hash = data.archive_file.lambda_code.output_base64sha256
-  runtime         = "python3.9"
   timeout         = 30
   memory_size     = 256
+  source_code_hash = filebase64sha256("../../backend/lambda_deploy.zip")
 
   environment {
     variables = {
-      ENVIRONMENT      = var.environment
-      FILE_MAPS_TABLE = aws_dynamodb_table.file_maps.name
+      ENVIRONMENT        = var.environment
+      FILE_MAPS_TABLE   = aws_dynamodb_table.file_maps.name
+      FILES_TABLE       = aws_dynamodb_table.transaction_files.name
+      FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.id
     }
   }
 

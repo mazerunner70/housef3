@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import traceback
 import uuid
 import boto3
 from datetime import datetime, timezone
@@ -163,7 +164,9 @@ def list_accounts_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[s
             }
         })
     except Exception as e:
+        # Always log stacktrace
         logger.error(f"Error listing accounts: {str(e)}")
+        logger.error(f"Stacktrace: {traceback.format_exc()}")
         return create_response(500, {"message": "Error listing accounts"})
 
 def update_account_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
