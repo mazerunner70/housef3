@@ -138,12 +138,13 @@ def get_account_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str
         
         # Convert account to dictionary
         account_dict = account.to_dict()
-        
+        logger.info(f"Account: {account_dict}") 
         return create_response(200, {
             'account': account_dict
         })
     except Exception as e:
         logger.error(f"Error getting account: {str(e)}")
+        logger.error(f"Stacktrace: {traceback.format_exc()}")
         return create_response(500, {"message": "Error retrieving account"})
 
 def list_accounts_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
@@ -165,7 +166,7 @@ def list_accounts_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[s
         })
     except Exception as e:
         # Always log stacktrace
-        logger.error(f"Error listing accounts: {str(e)}")
+        logger.error(f"Error listing accounts: {str(e)}") 
         logger.error(f"Stacktrace: {traceback.format_exc()}")
         return create_response(500, {"message": "Error listing accounts"})
 

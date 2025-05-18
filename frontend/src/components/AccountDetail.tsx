@@ -60,7 +60,7 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
       console.log('[Timeline Diagnostics] Safe files:', safeFiles);
       setFiles(safeFiles);
 
-      const transactionsData = await getAccountTransactions(id);
+      const transactionsData = await getAccountTransactions(id, 50);  // Get up to 50 transactions
       setTransactions(transactionsData.transactions || []);
     } catch (err) {
       console.error('Error fetching account details:', err);

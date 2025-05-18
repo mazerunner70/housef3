@@ -263,5 +263,86 @@ class TestAccount(unittest.TestCase):
         self.assertEqual(self.account.balance, original_balance)
         self.assertEqual(self.account.notes, "New notes")
 
+    def test_to_flat_dict(self):
+        """Test conversion to flat dictionary format for DynamoDB."""
+        flat_dict = self.account.to_flat_dict()
+        
+        # Test that all fields are present
+        self.assertEqual(flat_dict["accountId"], self.account_id)
+        self.assertEqual(flat_dict["userId"], self.user_id)
+        self.assertEqual(flat_dict["accountName"], self.account_name)
+        self.assertEqual(flat_dict["accountType"], self.account_type.value)
+        self.assertEqual(flat_dict["institution"], self.institution)
+        
+        # Check that Money object is flattened
+        self.assertEqual(flat_dict["balance"], str(self.balance.amount))
+        self.assertEqual(flat_dict["currency"], self.currency.value)
+        
+        # Check that boolean is converted to string
+        self.assertEqual(flat_dict["isActive"], "True")
+        
+        # Check optional fields
+        self.assertEqual(flat_dict["notes"], self.notes)
+        self.assertEqual(flat_dict["defaultFileMapId"], self.default_file_map_id)
+        
+        # Check timestamps
+        self.assertIn("createdAt", flat_dict)
+        self.assertIn("updatedAt", flat_dict)
+
+    def test_from_flat_dict(self):
+        """Test creation from flat dictionary."""
+        # Create a flat dictionary similar to what would be stored in DynamoDB
+        flat_dict = {
+            "accountId": self.account_id,
+            "userId": self.user_id,
+            "accountName": self.account_name,
+            "accountType": self.account_type.value,
+            "institution": self.institution,
+            "balance": str(self.balance.amount),
+            "currency": self.currency.value,
+            "isActive": "True",
+            "notes": self.notes,
+            "defaultFileMapId": self.default_file_map_id,
+            "createdAt": self.account.created_at,
+            "updatedAt": self.account.updated_at
+        }
+        
+        # Create account from flat dictionary
+        account_from_flat = Account.from_flat_dict(flat_dict)
+        
+        # Verify all fields are correctly reconstructed
+        self.assertEqual(account_from_flat.account_id, self.account_id)
+        self.assertEqual(account_from_flat.user_id, self.user_id)
+        self.assertEqual(account_from_flat.account_name, self.account_name)
+        self.assertEqual(account_from_flat.account_type, self.account_type)
+        self.assertEqual(account_from_flat.institution, self.institution)
+        
+        # Verify Money object is correctly reconstructed
+        self.assertEqual(account_from_flat.balance.amount, self.balance.amount)
+        self.assertEqual(account_from_flat.balance.currency, self.balance.currency)
+        self.assertEqual(account_from_flat.currency, self.currency)
+        
+        # Verify optional fields
+        self.assertEqual(account_from_flat.notes, self.notes)
+        self.assertEqual(account_from_flat.default_file_map_id, self.default_file_map_id)
+        
+        # Verify timestamps
+        self.assertEqual(account_from_flat.created_at, self.account.created_at)
+        self.assertEqual(account_from_flat.updated_at, self.account.updated_at)
+        
+    def test_flat_dict_roundtrip(self):
+        """Test roundtrip conversion between Account object and flat dictionary."""
+        # Convert to flat dict
+        flat_dict = self.account.to_flat_dict()
+        
+        # Convert back to Account
+        roundtrip_account = Account.from_flat_dict(flat_dict)
+        
+        # Verify key properties match
+        self.assertEqual(roundtrip_account.account_id, self.account.account_id)
+        self.assertEqual(roundtrip_account.account_name, self.account.account_name)
+        self.assertEqual(roundtrip_account.balance.amount, self.account.balance.amount)
+        self.assertEqual(roundtrip_account.balance.currency, self.account.balance.currency)
+
 if __name__ == '__main__':
     unittest.main() 

@@ -1,7 +1,7 @@
 import { getCurrentUser, refreshToken, isAuthenticated } from './AuthService';
 
 export interface FieldMap {
-  fieldMapId: string;
+  fileMapId: string;
   name: string;
   description?: string;
   accountId?: string;
@@ -17,7 +17,7 @@ export interface FieldMapListResponse {
   fieldMaps: FieldMap[];
 }
 
-const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/api/field-maps`;
+const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/api/file-maps`;
 
 // Helper function to handle API requests with authentication
 const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
@@ -97,9 +97,13 @@ const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
 // Get list of field maps
 export const listFieldMaps = async (): Promise<FieldMapListResponse> => {
   try {
+    console.log('Fetching field maps from:', API_ENDPOINT);
     const response = await authenticatedRequest(API_ENDPOINT);
-    const data: FieldMapListResponse = await response.json();
-    return data;
+    const data = await response.json();
+    console.log('Raw field maps response:', data);
+    return {
+      fieldMaps: data.fileMaps || [] // Ensure we always return an array
+    };
   } catch (error) {
     console.error('Error listing field maps:', error);
     throw error;
@@ -107,9 +111,9 @@ export const listFieldMaps = async (): Promise<FieldMapListResponse> => {
 };
 
 // Get a single field map
-export const getFieldMap = async (fieldMapId: string): Promise<FieldMap> => {
+export const getFieldMap = async (fileMapId: string): Promise<FieldMap> => {
   try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/${fieldMapId}`);
+    const response = await authenticatedRequest(`${API_ENDPOINT}/${fileMapId}`);
     const data: FieldMap = await response.json();
     return data;
   } catch (error) {
@@ -119,7 +123,7 @@ export const getFieldMap = async (fieldMapId: string): Promise<FieldMap> => {
 };
 
 // Create a new field map
-export const createFieldMap = async (fieldMap: Omit<FieldMap, 'fieldMapId' | 'createdAt' | 'updatedAt'>): Promise<FieldMap> => {
+export const createFieldMap = async (fieldMap: Omit<FieldMap, 'fileMapId' | 'createdAt' | 'updatedAt'>): Promise<FieldMap> => {
   try {
     const response = await authenticatedRequest(API_ENDPOINT, {
       method: 'POST',
@@ -134,9 +138,9 @@ export const createFieldMap = async (fieldMap: Omit<FieldMap, 'fieldMapId' | 'cr
 };
 
 // Update a field map
-export const updateFieldMap = async (fieldMapId: string, updates: Partial<FieldMap>): Promise<FieldMap> => {
+export const updateFieldMap = async (fileMapId: string, updates: Partial<FieldMap>): Promise<FieldMap> => {
   try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/${fieldMapId}`, {
+    const response = await authenticatedRequest(`${API_ENDPOINT}/${fileMapId}`, {
       method: 'PUT',
       body: JSON.stringify(updates)
     });
@@ -149,9 +153,9 @@ export const updateFieldMap = async (fieldMapId: string, updates: Partial<FieldM
 };
 
 // Delete a field map
-export const deleteFieldMap = async (fieldMapId: string): Promise<void> => {
+export const deleteFieldMap = async (fileMapId: string): Promise<void> => {
   try {
-    await authenticatedRequest(`${API_ENDPOINT}/${fieldMapId}`, {
+    await authenticatedRequest(`${API_ENDPOINT}/${fileMapId}`, {
       method: 'DELETE'
     });
   } catch (error) {

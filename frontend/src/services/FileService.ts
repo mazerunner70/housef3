@@ -16,7 +16,7 @@ export interface FileMetadata {
   errorMessage?: string;
   openingBalance?: number;
   fieldMap?: {
-    fieldMapId: string;
+    fileMapId: string;
     name: string;
     description?: string;
   };
@@ -81,7 +81,7 @@ export interface FileResponse {
   uploadDate: string;
   accountId?: string;
   fieldMap?: {
-    fieldMapId: string;
+    fileMapId: string;
     name: string;
     description?: string;
   };
@@ -212,7 +212,10 @@ export const getUploadUrl = async (
       body: JSON.stringify({
         key: s3Key,
         contentType,
-        accountId
+        accountId,
+        metadata: accountId ? {
+          accountid: accountId  // Using lowercase 'accountid' to match Lambda's expectation
+        } : undefined
       })
     });
     
@@ -246,6 +249,7 @@ export const uploadFileToS3 = async (presignedData: PresignedPostData, file: Blo
     const formData = new FormData();
     
     // Add all fields from presigned URL - these MUST come before the file
+    // The order of fields is important for S3's policy validation
     Object.entries(presignedData.fields).forEach(([key, value]) => {
       formData.append(key, value);
       console.log(`Adding presigned field: ${key} = ${value}`);
@@ -262,9 +266,7 @@ export const uploadFileToS3 = async (presignedData: PresignedPostData, file: Blo
     // Set proper options for S3 direct upload
     const uploadOptions = {
       method: 'POST',
-      body: formData,
-      // IMPORTANT: Do not set Content-Type header - the browser will set it with boundary
-      headers: {}
+      body: formData
     };
     
     const response = await fetch(presignedData.url, uploadOptions);
@@ -364,13 +366,19 @@ export const updateFileBalance = async (fileId: string, openingBalance: number):
 // Associate a field map with a file
 export const associateFieldMap = async (fileId: string, fieldMapId: string): Promise<void> => {
   try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/${fileId}/field-map`, {
+    const response = await authenticatedRequest(`${API_ENDPOINT}/${fileId}/file-map`, {
       method: 'PUT',
-      body: JSON.stringify({ fieldMapId })
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        fileMapId: fieldMapId  // Use fileMapId as expected by the backend
+      })
     });
     
     if (!response.ok) {
-      throw new Error(`Failed to associate field map: ${response.status} ${response.statusText}`);
+      const data = await response.json();
+      throw new Error(data.message || `Failed to associate field map: ${response.status} ${response.statusText}`);
     }
   } catch (error) {
     console.error('Error associating field map:', error);

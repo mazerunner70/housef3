@@ -163,7 +163,7 @@ resource "aws_apigatewayv2_route" "get_file_metadata" {
 # File field map route
 resource "aws_apigatewayv2_route" "update_file_field_map" {
   api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "PUT /files/{id}/field-map"
+  route_key          = "PUT /files/{id}/file-map"
   target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
@@ -315,7 +315,7 @@ resource "aws_apigatewayv2_integration" "field_map_operations" {
 # Create field map
 resource "aws_apigatewayv2_route" "create_field_map" {
   api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /field-maps"
+  route_key          = "POST /file-maps"
   target             = "integrations/${aws_apigatewayv2_integration.field_map_operations.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
@@ -324,7 +324,7 @@ resource "aws_apigatewayv2_route" "create_field_map" {
 # Get field map by ID
 resource "aws_apigatewayv2_route" "get_field_map" {
   api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /field-maps/{id}"
+  route_key          = "GET /file-maps/{id}"
   target             = "integrations/${aws_apigatewayv2_integration.field_map_operations.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
@@ -333,7 +333,7 @@ resource "aws_apigatewayv2_route" "get_field_map" {
 # List field maps
 resource "aws_apigatewayv2_route" "list_field_maps" {
   api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /field-maps"
+  route_key          = "GET /file-maps"
   target             = "integrations/${aws_apigatewayv2_integration.field_map_operations.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
@@ -342,7 +342,7 @@ resource "aws_apigatewayv2_route" "list_field_maps" {
 # Update field map
 resource "aws_apigatewayv2_route" "update_field_map" {
   api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "PUT /field-maps/{id}"
+  route_key          = "PUT /file-maps/{id}"
   target             = "integrations/${aws_apigatewayv2_integration.field_map_operations.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
@@ -351,7 +351,7 @@ resource "aws_apigatewayv2_route" "update_field_map" {
 # Delete field map
 resource "aws_apigatewayv2_route" "delete_field_map" {
   api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "DELETE /field-maps/{id}"
+  route_key          = "DELETE /file-maps/{id}"
   target             = "integrations/${aws_apigatewayv2_integration.field_map_operations.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id

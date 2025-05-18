@@ -116,7 +116,7 @@ resource "null_resource" "prepare_lambda" {
 
 # File Operations Lambda
 resource "aws_lambda_function" "file_operations" {
-  filename         = "../../backend/lambda_deploy.zip"
+  filename         = "${path.module}/../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-file-operations"
   handler          = "handlers/file_operations.handler"
   runtime          = "python3.9"
@@ -124,6 +124,7 @@ resource "aws_lambda_function" "file_operations" {
   timeout         = 30
   memory_size     = 256
   source_code_hash = filebase64sha256("../../backend/lambda_deploy.zip")
+  depends_on      = [null_resource.prepare_lambda]
   
   environment {
     variables = {
@@ -154,6 +155,7 @@ resource "aws_lambda_function" "file_processor" {
   timeout         = 60
   memory_size     = 256
   source_code_hash = filebase64sha256("../../backend/lambda_deploy.zip")
+  depends_on      = [null_resource.prepare_lambda]
   
   environment {
     variables = {
@@ -183,6 +185,7 @@ resource "aws_lambda_function" "account_operations" {
   timeout         = 30
   memory_size     = 256
   source_code_hash = filebase64sha256("../../backend/lambda_deploy.zip")
+  depends_on      = [null_resource.prepare_lambda]
   
   environment {
     variables = {
@@ -211,6 +214,7 @@ resource "aws_lambda_function" "transaction_operations" {
   timeout         = 30
   memory_size     = 256
   source_code_hash = filebase64sha256("../../backend/lambda_deploy.zip")
+  depends_on      = [null_resource.prepare_lambda]
 
   environment {
     variables = {
@@ -238,6 +242,7 @@ resource "aws_lambda_function" "getcolors" {
   runtime         = "python3.11"
   timeout         = 30
   memory_size     = 128
+  depends_on      = [null_resource.prepare_lambda]
 
   environment {
     variables = {

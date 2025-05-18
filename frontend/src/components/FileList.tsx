@@ -385,27 +385,33 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
   };
 
   const handleSelectMap = async (fileId: string) => {
+    console.log('handleSelectMap called with fileId:', fileId);
     setSelectedFileForMap(fileId);
     try {
       const file = files.find(f => f.fileId === fileId);
-      if (file?.fieldMap?.fieldMapId) {
-        const fieldMap = await FieldMapService.getFieldMap(file.fieldMap.fieldMapId);
+      console.log('Found file:', file);
+      if (file?.fieldMap?.fileMapId) {
+        console.log('Existing field map found, fetching details:', file.fieldMap);
+        const fieldMap = await FieldMapService.getFieldMap(file.fieldMap.fileMapId);
+        console.log('Fetched field map:', fieldMap);
         setShowFieldMapForm(true);
-        // Pass the field map to the form
         setSelectedFieldMap(fieldMap);
       } else {
+        console.log('No existing field map, showing field map form');
         setShowFieldMapForm(true);
       }
     } catch (error) {
-      console.error('Error fetching field map:', error);
+      console.error('Error in handleSelectMap:', error);
       setError('Failed to load field map details');
     }
   };
 
   const handleFieldMapSave = async (fieldMap: FieldMap) => {
+    console.log('handleFieldMapSave called with:', fieldMap);
     try {
       if (selectedFileForMap) {
-        await FileService.associateFieldMap(selectedFileForMap, fieldMap.fieldMapId);
+        console.log('Associating field map with file:', selectedFileForMap);
+        await FileService.associateFieldMap(selectedFileForMap, fieldMap.fileMapId);
         
         // Update the local state immediately
         setFiles(prevFiles => prevFiles.map(file => {
@@ -413,7 +419,7 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
             return {
               ...file,
               fieldMap: {
-                fieldMapId: fieldMap.fieldMapId,
+                fileMapId: fieldMap.fileMapId,
                 name: fieldMap.name,
                 description: fieldMap.description
               }
@@ -738,7 +744,7 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
             <FieldMapList
               onSelectMap={(map) => {
                 if (selectedFileForMap) {
-                  FileService.associateFieldMap(selectedFileForMap, map.fieldMapId)
+                  FileService.associateFieldMap(selectedFileForMap, map.fileMapId)
                     .then(() => {
                       loadFiles();
                       setShowFieldMapModal(false);

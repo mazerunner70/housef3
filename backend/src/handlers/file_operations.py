@@ -177,21 +177,26 @@ def get_upload_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
             except ValueError as e:
                 return create_response(403, {'message': str(e)})
             
-        # Generate presigned URL for upload with metadata headers allowed
-        # Use a starts-with condition for Content-Type to be more flexible
-        conditions = [
-            ['starts-with', '$Content-Type', '']
-        ]
-        
         # Prepare fields for presigned URL
         fields = {}
+        
+        # Define policy conditions using consistent format
+        conditions = [
+            ['starts-with', '$Content-Type', ''],
+            ['starts-with', '$key', f"{user['id']}/"]  # Ensure key starts with user ID
+        ]
         
         # If account_id is provided, explicitly allow it in the policy
         if account_id:
             # Add the x-amz-meta-accountid field to allowed fields
-            conditions.append(['x-amz-meta-accountid', account_id])
-            # Also add it to the fields so it gets included in the form
+            # Use the AWS-documented format for metadata fields in S3 policies
             fields['x-amz-meta-accountid'] = account_id
+            # AWS requires explicit condition for each metadata field in POST policy
+            conditions.append(['eq', '$x-amz-meta-accountid', account_id])
+            
+        # Log the complete conditions and fields for debugging
+        logger.info(f"S3 policy conditions: {json.dumps(conditions)}")
+        logger.info(f"S3 policy fields: {json.dumps(fields)}")
             
         # Get presigned post data with all fields pre-populated
         presigned_data = get_presigned_post_url(
@@ -554,7 +559,9 @@ def update_file_field_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -
     try:
         # Get file ID from path parameters
         file_id = mandatory_path_parameter(event, 'id')
-        field_map_id = mandatory_body_parameter(event, 'fieldMapId')
+        
+        # Get the field map ID from the request body
+        field_map_id = mandatory_body_parameter(event, 'fileMapId')
             
         # Get file metadata from DynamoDB
         file = checked_mandatory_transaction_file(file_id, user['id'])
@@ -612,7 +619,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return associate_file_handler(event, user)
         elif route == "POST /files/{id}/balance":
             return update_file_balance_handler(event, user)
-        elif route == "PUT /files/{id}/field-map":
+        elif route == "PUT /files/{id}/file-map":
             return update_file_field_map_handler(event, user)
         elif route == "POST /files/upload":
             return get_upload_url_handler(event, user)

@@ -29,16 +29,14 @@ export const FieldMapForm: React.FC<FieldMapFormProps> = ({
   const [name, setName] = useState(fieldMap?.name || '');
   const [description, setDescription] = useState(fieldMap?.description || '');
   const [mappings, setMappings] = useState<FieldMapping[]>(() => {
-    if (fieldMap?.mappings) {
-      return transactionFields.map(targetField => ({
-        sourceField: fieldMap.mappings.find(m => m.targetField === targetField)?.sourceField || '',
-        targetField
-      }));
-    }
-    return transactionFields.map(targetField => ({
-      sourceField: '',
+    console.log('Initializing mappings with fieldMap:', fieldMap, "and transactionFields:", transactionFields);
+    // Always initialize with transaction fields, whether we have a field map or not
+    const mappings = transactionFields.map(targetField => ({
+      sourceField: fieldMap?.mappings?.find(m => m.targetField === targetField)?.sourceField || '',
       targetField
     }));
+    console.log('Mappings:', mappings);
+    return mappings;
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -46,7 +44,7 @@ export const FieldMapForm: React.FC<FieldMapFormProps> = ({
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [previewError, setPreviewError] = useState<string | undefined>();
   const [availableFieldMaps, setAvailableFieldMaps] = useState<FieldMap[]>([]);
-  const [selectedFieldMapId, setSelectedFieldMapId] = useState<string | undefined>(fieldMap?.fieldMapId);
+  const [selectedFieldMapId, setSelectedFieldMapId] = useState<string | undefined>(fieldMap?.fileMapId);
   const [availableColumns, setAvailableColumns] = useState<string[]>([]);
 
   useEffect(() => {
@@ -58,18 +56,25 @@ export const FieldMapForm: React.FC<FieldMapFormProps> = ({
 
   const loadFieldMaps = async () => {
     try {
+      console.log('Loading field maps');
       const response = await FieldMapService.listFieldMaps();
-      setAvailableFieldMaps(response.fieldMaps);
+      console.log('Field maps loaded:', response.fieldMaps);
+      setAvailableFieldMaps(response.fieldMaps || []); // Ensure we always set an array
+      if (!response.fieldMaps || response.fieldMaps.length === 0) {
+        console.log('No field maps available');
+      }
     } catch (error) {
       console.error('Error loading field maps:', error);
       setError('Failed to load existing field maps');
+      setAvailableFieldMaps([]); // Set empty array on error
     }
   };
 
-  const handleFieldMapSelect = async (fieldMapId: string) => {
-    const selectedMap = availableFieldMaps.find(fm => fm.fieldMapId === fieldMapId);
+  const handleFieldMapSelect = async (fileMapId: string) => {
+    console.log('handleFieldMapSelect called with:', fileMapId);
+    const selectedMap = availableFieldMaps.find(fm => fm.fileMapId === fileMapId);
     if (selectedMap) {
-      setSelectedFieldMapId(fieldMapId);
+      setSelectedFieldMapId(fileMapId);
       setName(selectedMap.name);
       setDescription(selectedMap.description || '');
       setMappings(transactionFields.map(targetField => ({
@@ -165,7 +170,7 @@ export const FieldMapForm: React.FC<FieldMapFormProps> = ({
         >
           <option value="">Create New Map</option>
           {availableFieldMaps.map(fm => (
-            <option key={fm.fieldMapId} value={fm.fieldMapId}>
+            <option key={fm.fileMapId} value={fm.fileMapId}>
               {fm.name}
             </option>
           ))}
@@ -236,15 +241,36 @@ export const FieldMapForm: React.FC<FieldMapFormProps> = ({
               Cancel
             </button>
             <button
-              onClick={() => onSave({
-                fieldMapId: selectedFieldMapId || '',
-                name,
-                description,
-                mappings: mappings.map(m => ({
-                  sourceField: m.sourceField,
-                  targetField: m.targetField
-                }))
-              })}
+              onClick={async () => {
+                try {
+                  setSaving(true);
+                  let savedFieldMap: FieldMap;
+                  
+                  const fieldMapData = {
+                    name,
+                    description,
+                    mappings: mappings.map(m => ({
+                      sourceField: m.sourceField,
+                      targetField: m.targetField
+                    }))
+                  };
+
+                  if (selectedFieldMapId) {
+                    // Update existing field map
+                    savedFieldMap = await FieldMapService.updateFieldMap(selectedFieldMapId, fieldMapData);
+                  } else {
+                    // Create new field map
+                    savedFieldMap = await FieldMapService.createFieldMap(fieldMapData);
+                  }
+                  
+                  onSave(savedFieldMap);
+                } catch (error) {
+                  console.error('Error saving field map:', error);
+                  setError('Failed to save field map');
+                } finally {
+                  setSaving(false);
+                }
+              }}
               className="save-button"
               disabled={saving || !name || (!selectedFieldMapId && mappings.some(m => !m.sourceField))}
             >

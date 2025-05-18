@@ -110,7 +110,7 @@ class TestDBUtils(unittest.TestCase):
         # Setup
         mock_get_table.return_value = self.mock_accounts_table
         self.mock_accounts_table.get_item.return_value = {
-            'Item': self.account.to_dict()
+            'Item': self.account.to_flat_dict()
         }
 
         # Execute
@@ -125,6 +125,8 @@ class TestDBUtils(unittest.TestCase):
         if result:  # Type guard for mypy
             self.assertEqual(result.account_id, self.account.account_id)
             self.assertEqual(result.user_id, self.account.user_id)
+            self.assertEqual(result.balance.amount, self.account.balance.amount)
+            self.assertEqual(result.balance.currency, self.account.balance.currency)
 
     @patch('utils.db_utils.get_accounts_table')
     def test_get_account_not_found(self, mock_get_table):
@@ -145,7 +147,7 @@ class TestDBUtils(unittest.TestCase):
         # Setup
         mock_get_table.return_value = self.mock_accounts_table
         self.mock_accounts_table.query.return_value = {
-            'Items': [self.account.to_dict()]
+            'Items': [self.account.to_flat_dict()]
         }
 
         # Execute
@@ -159,6 +161,8 @@ class TestDBUtils(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertIsInstance(results[0], Account)
         self.assertEqual(results[0].user_id, self.user_id)
+        self.assertEqual(results[0].balance.amount, self.account.balance.amount)
+        self.assertEqual(results[0].balance.currency, self.account.balance.currency)
 
     @patch('utils.db_utils.get_accounts_table')
     def test_create_account(self, mock_get_table):

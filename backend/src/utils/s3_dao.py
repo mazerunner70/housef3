@@ -6,6 +6,7 @@ import os
 import boto3
 from typing import Optional, Dict, Any, Union, Tuple
 from botocore.exceptions import ClientError
+import json
 
 # Configure logging
 logger = logging.getLogger()
@@ -105,6 +106,19 @@ def get_presigned_post_url(bucket: str, key: str, expires_in: int = 3600, condit
             
         logger.info(f"Generating presigned POST URL with conditions: {post_conditions}")
         logger.info(f"Fields: {post_fields}")
+        
+        # Debug log the exact final request
+        try:
+            request_dict = {
+                'Bucket': bucket,
+                'Key': key,
+                'Fields': post_fields,
+                'Conditions': post_conditions,
+                'ExpiresIn': expires_in
+            }
+            logger.info(f"S3 presigned POST request: {json.dumps(request_dict, default=str)}")
+        except Exception as debug_error:
+            logger.error(f"Error in debug logging: {str(debug_error)}")
             
         response = client.generate_presigned_post(
             Bucket=bucket,

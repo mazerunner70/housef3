@@ -73,7 +73,7 @@ class Account:
 
     def to_dict(self) -> Dict[str, Any]:
         """
-        Convert the account object to a dictionary suitable for storage.
+        Convert the account object to a dictionary.
         """
         result = {
             "accountId": self.account_id,
@@ -91,6 +91,50 @@ class Account:
             result['notes'] = self.notes
         if self.default_file_map_id:
             result['defaultFileMapId'] = self.default_file_map_id
+        return result
+
+    def to_flat_dict(self) -> Dict[str, str]:
+        """
+        Convert the account object to a flat dictionary, suitable for storage in DynamoDB.
+        All output values are strings.
+        """
+        result = {
+            "accountId": self.account_id,
+            "userId": self.user_id,
+            "accountName": self.account_name,
+            "accountType": self.account_type.value,
+            "institution": self.institution,
+            "balance": str(self.balance.amount),
+            "currency": self.currency.value,
+            "isActive": str(self.is_active), 
+            "defaultFileMapId": self.default_file_map_id,
+            "createdAt": self.created_at,
+            "updatedAt": self.updated_at
+        }
+        if self.notes:
+            result['notes'] = self.notes
+        return result
+    @classmethod
+    def from_flat_dict(cls, data: Dict[str, str]) -> 'Account':
+        """
+        Create an account object from a flat dictionary, as if from storage in DynamoDB.
+        All values are strings, so we need to convert them to the correct types.
+        """
+        result = cls(
+            account_id=data["accountId"],
+            user_id=data["userId"],
+            account_name=data["accountName"],
+            account_type=AccountType(data["accountType"]),
+            institution=data["institution"],
+            balance=Money(Decimal(str(data["balance"])), Currency(data["currency"])),
+            currency=Currency(data["currency"]),
+            is_active=data.get("isActive") == "True",
+            default_file_map_id=data.get("defaultFileMapId"),
+            created_at=data.get("createdAt", datetime.utcnow().isoformat()),
+            updated_at=data.get("updatedAt", datetime.utcnow().isoformat())
+        )
+        if data.get("notes"):
+            result.notes = data["notes"]
         return result
 
     @classmethod

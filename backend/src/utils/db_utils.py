@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional, Union
 from botocore.exceptions import ClientError
 from decimal import Decimal
+import decimal
 
 from models import (
     Account, 
@@ -153,9 +154,9 @@ def get_account(account_id: str) -> Optional[Account]:
     """
     try:
         response = get_accounts_table().get_item(Key={'accountId': account_id})
-        
+
         if 'Item' in response:
-            return Account.from_dict(response['Item'])
+            return Account.from_flat_dict(response['Item'])
         return None
     except ClientError as e:
         logger.error(f"Error retrieving account {account_id}: {str(e)}")
@@ -181,8 +182,16 @@ def list_user_accounts(user_id: str) -> List[Account]:
         
         accounts = []
         for item in response.get('Items', []):
-            accounts.append(Account.from_dict(item))
-            
+            # Check and fix balance format if needed
+            try:
+                account = Account.from_flat_dict(item)
+                accounts.append(account)
+            except Exception as e:
+                logger.error(f"Error creating Account from item: {str(e)}")
+                logger.error(f"Problematic item: {item}")
+                # Continue with other accounts
+                continue
+        logger.info(f"Listed {len(accounts)} accounts for user {user_id}")    
         return accounts
     except ClientError as e:
         logger.error(f"Error listing accounts for user {user_id}: {str(e)}")

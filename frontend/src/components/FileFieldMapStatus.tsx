@@ -2,7 +2,7 @@ import React from 'react';
 import './FileFieldMapStatus.css';
 
 interface FieldMap {
-  fieldMapId: string;
+  fileMapId: string;
   name: string;
   description?: string;
 }
@@ -20,6 +20,13 @@ const FileFieldMapStatus: React.FC<FileFieldMapStatusProps> = ({
   onCreateMap,
   className = ''
 }) => {
+  console.log('FileFieldMapStatus rendering with props:', { fieldMap, className });
+  
+  const handleClick = () => {
+    console.log('Link/field map clicked, calling onSelectMap');
+    onSelectMap();
+  };
+
   return (
     <div className={`file-field-map-status ${className}`}>
       {fieldMap ? (
@@ -28,7 +35,7 @@ const FileFieldMapStatus: React.FC<FileFieldMapStatusProps> = ({
             <span 
               className="field-map-name clickable" 
               title={fieldMap.description || 'Click to change field map'} 
-              onClick={onSelectMap}
+              onClick={handleClick}
             >
               {fieldMap.name}
             </span>
@@ -42,7 +49,7 @@ const FileFieldMapStatus: React.FC<FileFieldMapStatusProps> = ({
       ) : (
         <button
           className="link-button"
-          onClick={onSelectMap}
+          onClick={handleClick}
           title="Link to a field map"
         >
           Link

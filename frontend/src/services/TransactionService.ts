@@ -29,10 +29,8 @@ export const transactionFields = [
   'date',
   'description',
   'amount',
-  'transactionType',
-  'category',
   'debitOrCredit',
-  'importOrder'
+  'currency'
 ];
 
 // Response interface for transaction list
@@ -132,9 +130,9 @@ export const getFileTransactions = async (fileId: string): Promise<TransactionLi
 };
 
 // Get transactions for an account
-export const getAccountTransactions = async (accountId: string): Promise<TransactionListResponse> => {
+export const getAccountTransactions = async (accountId: string, limit: number = 50): Promise<TransactionListResponse> => {
   try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/api/accounts/${accountId}/transactions`);
+    const response = await authenticatedRequest(`${API_ENDPOINT}/api/accounts/${accountId}/transactions?limit=${limit}`);
     return response;
   } catch (error) {
     console.error('Error fetching account transactions:', error);
