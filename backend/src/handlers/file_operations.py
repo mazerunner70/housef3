@@ -182,8 +182,8 @@ def get_upload_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
         
         # Define policy conditions using consistent format
         conditions = [
-            ['starts-with', '$Content-Type', ''],
-            ['starts-with', '$key', f"{user['id']}/"]  # Ensure key starts with user ID
+            {'starts-with': ['$Content-Type', '']},
+            {'starts-with': ['$key', f"{user['id']}/"]}  # Ensure key starts with user ID
         ]
         
         # If account_id is provided, explicitly allow it in the policy
@@ -192,7 +192,7 @@ def get_upload_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
             # Use the AWS-documented format for metadata fields in S3 policies
             fields['x-amz-meta-accountid'] = account_id
             # AWS requires explicit condition for each metadata field in POST policy
-            conditions.append(['eq', '$x-amz-meta-accountid', account_id])
+            conditions.append({'eq': ['$x-amz-meta-accountid', account_id]})
             
         # Log the complete conditions and fields for debugging
         logger.info(f"S3 policy conditions: {json.dumps(conditions)}")
@@ -571,6 +571,7 @@ def update_file_field_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -
         if not field_map:
             return create_response(404, {"message": "Field map not found"})
         file.file_map_id = field_map_id
+        logger.info(f"Updating file {file_id} with field map {field_map_id}")
         response: FileProcessorResponse = process_file(file)
         return create_response(200, response.to_dict())
                     

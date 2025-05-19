@@ -440,59 +440,61 @@ def process_new_file(transaction_file: TransactionFile, content_bytes: bytes) ->
         transactions=transactions
     )
 
-def update_file_mapping(transaction_file: TransactionFile) -> FileProcessorResponse:
+def update_file_mapping(old_transaction_file: TransactionFile, new_transaction_file: TransactionFile) -> FileProcessorResponse:
     """Update a file's field mapping and reprocess transactions."""
-    try:
-        if not transaction_file.currency:
-            raise ValueError("Currency is required")    
+    try:   
         # Get field map
-        field_map: FileMap = checked_mandatory_file_map(transaction_file.file_map_id, transaction_file.user_id)
-        account = checked_mandatory_account(transaction_file.account_id, transaction_file.user_id)
-           
+        new_field_map: FileMap = checked_mandatory_file_map(new_transaction_file.file_map_id, new_transaction_file.user_id)
+        account = checked_mandatory_account(new_transaction_file.account_id, new_transaction_file.user_id)
+        logger.info(f"Comparing file mapping new {new_transaction_file.file_map_id} with old {old_transaction_file.file_map_id}")
         # Check if field mapping has changed
         should_reprocess = (
-            transaction_file.file_map_id != field_map.file_map_id or
-            transaction_file.file_map_id is None
+            old_transaction_file.file_map_id != new_field_map.file_map_id and
+            new_transaction_file.opening_balance is not None
         )
         logger.info(f"Should reprocess: {should_reprocess}")
         if should_reprocess:
             # Get file content
-            content_bytes = get_file_content(transaction_file.file_id)
+            content_bytes = get_file_content(new_transaction_file.file_id)
             if not content_bytes:
                 raise NotFound("File content not found")
                 
             # Delete existing transactions
-            logger.info(f"Field mapping has changed for file {transaction_file.file_id} - deleting existing transactions")
-            deleted_count = delete_transactions_for_file(transaction_file.file_id)
+            logger.info(f"Field mapping has changed for file {new_transaction_file.file_id} - deleting existing transactions")
+            deleted_count = delete_transactions_for_file(new_transaction_file.file_id)
             
             # Process with new mapping
             transactions = parse_file_transactions(
-                transaction_file,
+                new_transaction_file,
                 content_bytes
             )
-            
+            currency = transactions[0].amount.currency if transactions else new_transaction_file.currency 
+            if not currency:
+                raise ValueError("Currency is required")
+            logger.info(f"Processing with new mapping for file {new_transaction_file.file_id} and currency {currency}")
             if transactions:
                 duplicate_count = update_transaction_duplicates(transactions)
-
+                logger.info(f"Duplicate count: {duplicate_count}")
                 # Determine opening balance from transaction overlap
-                opening_balance = determine_opening_balances_from_transaction_overlap(transactions, transaction_file.currency)
-                transaction_file.opening_balance = opening_balance if opening_balance else transaction_file.opening_balance
+                opening_balance = determine_opening_balances_from_transaction_overlap(transactions, currency)
+                logger.info(f"Opening balance: {opening_balance}")
+                new_transaction_file.opening_balance = opening_balance if opening_balance else new_transaction_file.opening_balance
                 # Calculate running balances
-                if transaction_file.opening_balance:
-                    calculate_running_balances(transactions, transaction_file.opening_balance)
+                if new_transaction_file.opening_balance:
+                    calculate_running_balances(transactions, new_transaction_file.opening_balance)
                 else:
                     raise ValueError("Opening balance is required to calculate running balances")
                 
                 # Save transactions
                 transaction_count, _ = save_transactions(
                     transactions,
-                    transaction_file,
-                    transaction_file.user_id,
+                    new_transaction_file,
+                    new_transaction_file.user_id,
                     account
                 )
                 
                 # Update file status
-                update_file_status(transaction_file, transactions)
+                update_file_status(new_transaction_file, transactions)
                 
                 return FileProcessorResponse(
                     transactions=transactions,
@@ -509,9 +511,11 @@ def update_file_mapping(transaction_file: TransactionFile) -> FileProcessorRespo
                     deleted_count=deleted_count,
                     message="No transactions found after reprocessing"
                 )
-         
-        # If field map hasn't changed, get existing transactions
-        transactions = list_file_transactions(transaction_file.file_id)
+        else:
+        # If field map hasn't changed, just update the mapping
+            update_transaction_file(new_transaction_file.file_id, new_transaction_file.user_id, {'file_map_id': new_transaction_file.file_map_id})
+            logger.info(f"transaction reprocessing not needed for file {new_transaction_file.file_id}, just updated the mapping to {new_transaction_file.file_map_id}   ")
+        transactions = list_file_transactions(new_transaction_file.file_id)
         return FileProcessorResponse(
             transactions=transactions,
             transaction_count=len(transactions) if transactions else 0,
@@ -631,7 +635,7 @@ def process_file(transaction_file: TransactionFile) -> FileProcessorResponse:
     Returns:
         API Gateway response with processing results
     """
-
+    logger.info(f"Processing file {transaction_file}")
     old_transaction_file = checked_optional_transaction_file(transaction_file.file_id, transaction_file.user_id)
     # No preexisting transaction file, so we need to process the file
     if not old_transaction_file:
@@ -646,7 +650,7 @@ def process_file(transaction_file: TransactionFile) -> FileProcessorResponse:
         return change_file_account(transaction_file)
         # determine if field map or balance update
     if transaction_file.file_map_id != old_transaction_file.file_map_id:
-        return update_file_mapping(transaction_file)
+        return update_file_mapping(old_transaction_file, transaction_file)
     if transaction_file.opening_balance != old_transaction_file.opening_balance:
         return update_opening_balance(transaction_file)
     raise ValueError("No changes to file")

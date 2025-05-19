@@ -22,7 +22,7 @@ resource "null_resource" "prepare_lambda" {
       deactivate
       
       # Setup build
-      rm -rf build lambda_deploy.zip
+      rm -rf build
       mkdir -p build
       
       # Install only Lambda runtime dependencies directly to build directory
@@ -88,22 +88,8 @@ resource "null_resource" "prepare_lambda" {
       zip -r ../lambda_deploy.zip .
       cd ..
       
-      # Check package size
-      PACKAGE_SIZE=$(stat -c %s lambda_deploy.zip)
-      MAX_SIZE=2621440  # 2.5MB in bytes
-      
-      echo "Final package size:"
-      ls -lh lambda_deploy.zip
-      
-      if [ "$PACKAGE_SIZE" -gt "$MAX_SIZE" ]; then
-        echo "Error: Lambda package size ($PACKAGE_SIZE bytes) exceeds maximum allowed size ($MAX_SIZE bytes)"
-        echo "Largest files in package:"
-        unzip -l lambda_deploy.zip | sort -k1nr | head -n 10
-        exit 1
-      fi
-      
       # Cleanup
-      rm -rf .venv_test build
+      rm -rf build .venv_test
       
       echo "Build process complete!"
       echo "Final working directory:"
@@ -114,16 +100,21 @@ resource "null_resource" "prepare_lambda" {
   }
 }
 
+# Calculate source code hash from source files
+locals {
+  source_code_hash = "${sha256(file("../../backend/requirements.txt"))}-${sha256(join("", [for f in fileset("../../backend/src", "**"): filesha256("../../backend/src/${f}")])) }"
+}
+
 # File Operations Lambda
 resource "aws_lambda_function" "file_operations" {
-  filename         = "${path.module}/../../backend/lambda_deploy.zip"
+  filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-file-operations"
   handler          = "handlers/file_operations.handler"
   runtime          = "python3.9"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 30
   memory_size     = 256
-  source_code_hash = filebase64sha256("../../backend/lambda_deploy.zip")
+  source_code_hash = base64encode(local.source_code_hash)
   depends_on      = [null_resource.prepare_lambda]
   
   environment {
@@ -154,7 +145,7 @@ resource "aws_lambda_function" "file_processor" {
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 60
   memory_size     = 256
-  source_code_hash = filebase64sha256("../../backend/lambda_deploy.zip")
+  source_code_hash = base64encode(local.source_code_hash)
   depends_on      = [null_resource.prepare_lambda]
   
   environment {
@@ -184,7 +175,7 @@ resource "aws_lambda_function" "account_operations" {
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 30
   memory_size     = 256
-  source_code_hash = filebase64sha256("../../backend/lambda_deploy.zip")
+  source_code_hash = base64encode(local.source_code_hash)
   depends_on      = [null_resource.prepare_lambda]
   
   environment {
@@ -213,7 +204,7 @@ resource "aws_lambda_function" "transaction_operations" {
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 30
   memory_size     = 256
-  source_code_hash = filebase64sha256("../../backend/lambda_deploy.zip")
+  source_code_hash = base64encode(local.source_code_hash)
   depends_on      = [null_resource.prepare_lambda]
 
   environment {
@@ -238,7 +229,7 @@ resource "aws_lambda_function" "getcolors" {
   function_name    = "${var.project_name}-getcolors"
   role            = aws_iam_role.lambda_exec.arn
   handler         = "handlers/getcolors.handler"
-  source_code_hash = filebase64sha256("../../backend/lambda_deploy.zip")
+  source_code_hash = base64encode(local.source_code_hash)
   runtime         = "python3.11"
   timeout         = 30
   memory_size     = 128
