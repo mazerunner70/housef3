@@ -132,6 +132,7 @@ def list_files_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str,
         })
     except Exception as e:
         logger.error(f"Error listing files: {str(e)}, Exception type: {type(e).__name__}")
+        logger.error(traceback.format_exc())
         return create_response(500, {"message": "Error listing files"})
 
 def get_files_by_account_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
@@ -178,21 +179,22 @@ def get_upload_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
                 return create_response(403, {'message': str(e)})
             
         # Prepare fields for presigned URL
-        fields = {}
+        fields = {
+            'Content-Type': content_type,
+            'key': key
+        }
         
-        # Define policy conditions using consistent format
+        # Define policy conditions using AWS-documented format
         conditions = [
-            {'starts-with': ['$Content-Type', '']},
-            {'starts-with': ['$key', f"{user['id']}/"]}  # Ensure key starts with user ID
+            ['starts-with', '$Content-Type', ''],
+            ['starts-with', '$key', f"{user['id']}/"]  # Ensure key starts with user ID
         ]
         
-        # If account_id is provided, explicitly allow it in the policy
+        # If account_id is provided, add metadata field and condition
         if account_id:
-            # Add the x-amz-meta-accountid field to allowed fields
-            # Use the AWS-documented format for metadata fields in S3 policies
-            fields['x-amz-meta-accountid'] = account_id
-            # AWS requires explicit condition for each metadata field in POST policy
-            conditions.append({'eq': ['$x-amz-meta-accountid', account_id]})
+            account_id_str = str(account_id)  # Explicitly convert to string
+            fields['x-amz-meta-accountid'] = account_id_str
+            conditions.append(['eq', '$x-amz-meta-accountid', account_id_str])
             
         # Log the complete conditions and fields for debugging
         logger.info(f"S3 policy conditions: {json.dumps(conditions)}")
@@ -206,10 +208,6 @@ def get_upload_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
             conditions=conditions,
             fields=fields
         )
-        
-        # Add content type to fields to ensure it's sent correctly
-        if 'fields' in presigned_data:
-            presigned_data['fields']['Content-Type'] = content_type
         
         # Extract file ID from key (format: userId/fileId/filename)
         file_id = key.split('/')[1]
@@ -422,10 +420,11 @@ def update_file_balance_handler(event: Dict[str, Any], user: Dict[str, Any]) -> 
         file = checked_mandatory_transaction_file(file_id, user['id'])
         
         # Parse the request body to get the opening balance
-        amount = Decimal(mandatory_body_parameter(event, 'amount'))
-        currency = mandatory_body_parameter(event, 'currency')
-        opening_balance = Money(amount, Currency(currency))
-        file.opening_balance = opening_balance
+        amount = Decimal(mandatory_body_parameter(event, 'openingBalance'))
+        currency = optional_body_parameter(event, 'currency') 
+        currency = Currency(currency) if currency else file.currency
+        currency = currency or file.currency
+        file.opening_balance = Money(amount, currency)
         response: FileProcessorResponse = process_file(file)
 
         return create_response(200, response.to_dict())

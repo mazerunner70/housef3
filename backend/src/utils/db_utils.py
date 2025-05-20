@@ -208,7 +208,7 @@ def create_account(account: Account):
     """
 
     # Save to DynamoDB
-    get_accounts_table().put_item(Item=account.to_dict())
+    get_accounts_table().put_item(Item=account.to_flat_dict())
 
 
 
@@ -257,7 +257,7 @@ def update_account(account_id: str, user_id: str, update_data: Dict[str, Any]) -
     account.validate()
     
     # Save updates to DynamoDB
-    get_accounts_table().put_item(Item=account.to_dict())
+    get_accounts_table().put_item(Item=account.to_flat_dict())
     
     return account
 
@@ -317,7 +317,7 @@ def get_transaction_file(file_id: str) -> Optional[TransactionFile]:
         response = get_files_table().get_item(Key={'fileId': file_id})
         
         if 'Item' in response:
-            return TransactionFile.from_dict(response['Item'])
+            return TransactionFile.from_flat_dict(response['Item'])
         return None
     except ClientError as e:
         logger.error(f"Error retrieving file {file_id}: {str(e)}")
@@ -343,7 +343,7 @@ def list_account_files(account_id: str) -> List[TransactionFile]:
         
         files = []
         for item in response.get('Items', []):
-            files.append(TransactionFile.from_dict(item))
+            files.append(TransactionFile.from_flat_dict(item))
             
         return files
     except ClientError as e:
@@ -370,7 +370,12 @@ def list_user_files(user_id: str) -> List[TransactionFile]:
         
         files = []
         for item in response.get('Items', []):
-            files.append(TransactionFile.from_dict(item))
+            try:
+                files.append(TransactionFile.from_flat_dict(item))
+            except Exception as e:
+                logger.error(f"Error creating TransactionFile from item: {str(e)}")
+                logger.error(f"Problematic item: {item}")
+                raise
             
         return files
     except ClientError as e:
@@ -392,7 +397,7 @@ def create_transaction_file(transaction_file: TransactionFile):
     
         
         # Save to DynamoDB
-        get_files_table().put_item(Item=transaction_file.to_dict())
+        get_files_table().put_item(Item=transaction_file.to_flat_dict())
         
     except ValueError as e:
         logger.error(f"Validation error creating file: {str(e)}")
@@ -420,7 +425,7 @@ def update_transaction_file(file_id: str, user_id: str, updates: Dict[str, Any])
     transaction_file = checked_mandatory_transaction_file(file_id, user_id)
     transaction_file.update(**updates)
     transaction_file.validate()
-    get_files_table().put_item(Item=transaction_file.to_dict())
+    get_files_table().put_item(Item=transaction_file.to_flat_dict())
 
 def delete_transaction_file(file_id: str) -> bool:
     """
@@ -513,7 +518,7 @@ def create_transaction(transaction: Transaction):
     """
     try:
         # Save to DynamoDB
-        get_transactions_table().put_item(Item=transaction.to_dict())
+        get_transactions_table().put_item(Item=transaction.to_flat_dict())
         
         return transaction
     except Exception as e:
@@ -766,7 +771,7 @@ def list_account_transactions(account_id: str, limit: int = 50, last_evaluated_k
         response = get_transactions_table().query(**query_params)
         
         # Convert items to Transaction objects
-        transactions = [Transaction.from_dict(item) for item in response.get('Items', [])]
+        transactions = [Transaction.from_flat_dict(item) for item in response.get('Items', [])]
         
         # Sort by import order within each date
         transactions.sort(key=lambda x: (x.date, x.import_order or 0))
@@ -894,7 +899,7 @@ def get_transaction_by_account_and_hash(account_id: str, transaction_hash: int) 
         items = response.get('Items', [])
         if items:
             
-            return Transaction.from_dict(items[0])
+            return Transaction.from_flat_dict(items[0])
         return None
     except Exception as e:
         logger.error(f"Error retrieving transaction by account and hash: {str(e)}")
@@ -938,7 +943,7 @@ def update_transaction(transaction: Transaction) -> None:
         bool: True if successful, False otherwise
     """
     try:
-        get_transactions_table().put_item(Item=transaction.to_dict())
+        get_transactions_table().put_item(Item=transaction.to_flat_dict())
     except ClientError as e:
         logger.error(f"Error updating transaction {transaction.transaction_id}: {str(e)}")
         raise e

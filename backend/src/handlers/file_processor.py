@@ -37,6 +37,8 @@ from utils.file_processor_utils import (
 )
 from datetime import datetime
 import time
+from utils.s3_dao import get_object_content, get_object_metadata
+import traceback
 
 # Configure logging
 logger = logging.getLogger()
@@ -260,111 +262,107 @@ field_maps_table = dynamodb.Table(FIELD_MAPS_TABLE)
 
 def handler(event, context):
     """
-    Lambda handler for processing transaction files via S3 upload events only.
-    Handles only S3 event triggers.
+    Process a file that was uploaded to S3.
+    
+    This handler is triggered by S3 events when a file is uploaded.
+    It performs the following steps:
+    1. Downloads the file from S3
+    2. Detects the file format
+    3. Creates or updates file metadata in DynamoDB
+    4. Optionally associates the file with an account if specified
+    
+    Args:
+        event: S3 event notification
+        context: Lambda context
+        
+    Returns:
+        Dict containing processing results
     """
     try:
-        logger.info(f"Lambda invoked with event: {json.dumps(event)[:1000]}")
-        # S3 event trigger path only
-        if "Records" in event and "s3" in event["Records"][0]:
-            record = event["Records"][0]
-            bucket = record["s3"]["bucket"]["name"]
-            key = record["s3"]["object"]["key"]
-            size = record["s3"]["object"].get("size", 0)
-            logger.info(f"Processing S3 event for bucket: {bucket}, key: {key}")
-
-            # Extract user_id and file_id from the key path (format: user_id/file_id/filename)
-            key_parts = key.split('/')
-            if len(key_parts) != 3:
-                logger.error(f"Invalid S3 key format: {key}")
-                return {
-                    'statusCode': 400,
-                    'body': json.dumps({'message': 'Invalid S3 key format'})
-                }
+        # Extract file information from the S3 event
+        logger.info(f"Processing S3 event: {json.dumps(event)}")
+        
+        # Get the S3 bucket and key from the event
+        bucket = event['Records'][0]['s3']['bucket']['name']
+        key = event['Records'][0]['s3']['object']['key']
+        size = event['Records'][0]['s3']['object']['size']
+        
+        # Extract user ID and file ID from the key (format: userId/fileId/filename)
+        key_parts = key.split('/')
+        if len(key_parts) != 3:
+            raise ValueError(f"Invalid S3 key format: {key}")
             
-            user_id = key_parts[0]
-            file_id = key_parts[1]
-            file_name = key_parts[2]
+        user_id = key_parts[0]
+        file_id = key_parts[1]
+        file_name = key_parts[2]
+        
+        logger.info(f"Processing file upload - User: {user_id}, File: {file_id}, Name: {file_name}")
 
-            try:
-                # Get object metadata first to check for account ID
-                object_metadata = s3_client.head_object(Bucket=bucket, Key=key)
-                logger.info(f"S3 object metadata: {json.dumps(object_metadata.get('Metadata', {}))}")
-                account_id = object_metadata.get('Metadata', {}).get('accountid')
-                logger.info(f"Found account ID in metadata: {account_id}")
+        try:
+            # Get object metadata first to check for account ID
+            metadata = get_object_metadata(key, bucket)
+            if metadata is None:
+                raise ValueError(f"Could not get metadata for file: {key}")
+                
+            account_id = metadata.get('metadata', {}).get('accountid')
+            logger.info(f"Found account ID in metadata: {account_id}")
 
-                # Download file from S3
-                logger.info(f"Attempting to download file from S3: {bucket}/{key}")
-                content_bytes = s3_client.get_object(Bucket=bucket, Key=key)["Body"].read()
-                logger.info(f"Successfully downloaded file from S3, size: {len(content_bytes)} bytes")
+            # Download file from S3
+            logger.info(f"Attempting to download file from S3: {bucket}/{key}")
+            content_bytes = get_object_content(key, bucket)
+            if content_bytes is None:
+                raise ValueError(f"Could not download file content: {key}")
+                
+            logger.info(f"Successfully downloaded file from S3, size: {len(content_bytes)} bytes")
 
-                # Detect file type
-                file_format = file_type_selector(content_bytes)
-                logger.info(f"Detected file format: {file_format}")
+            # Detect file type
+            file_format = file_type_selector(content_bytes)
+            logger.info(f"Detected file format: {file_format}")
 
-                # Create or update file metadata in DynamoDB
-                current_time = int(datetime.utcnow().timestamp())
-                transaction_file = TransactionFile(
-                    file_id=file_id,
-                    user_id=user_id,
-                    file_name=file_name,
-                    file_size=size,
-                    upload_date=int(current_time),
-                    s3_key=key,
-                    file_format=file_format,
-                    processing_status=ProcessingStatus.PENDING
-                )
+            # Create or update file metadata in DynamoDB
+            current_time = int(datetime.utcnow().timestamp())
+            transaction_file = TransactionFile(
+                file_id=file_id,
+                user_id=user_id,
+                file_name=file_name,
+                file_size=size,
+                upload_date=int(current_time),
+                s3_key=key,
+                file_format=file_format,
+                processing_status=ProcessingStatus.PENDING
+            )
 
-                # Add account ID if it was found in metadata
-                if account_id:
-                    transaction_file.account_id = account_id
-                    logger.info(f"Adding account ID to file metadata: {account_id}")
-                # If account has a default field map, add it to the file metadata
-                if account_id:
-                    account = get_account(account_id)
-                    if account and account.default_file_map_id:
-                        transaction_file.file_map_id = account.default_file_map_id
-                        logger.info(f"Adding default field map ID to file metadata: {account.default_file_map_id}")
+            # Add account ID if it was found in metadata
+            if account_id:
+                transaction_file.account_id = account_id
+                logger.info(f"Adding account ID to file metadata: {account_id}")
 
-
-                logger.info(f"Processing file with account: {transaction_file}")
-                process_file(transaction_file)
-                return {
-                    'statusCode': 200,
-                    'body': json.dumps({
-                        'message': 'File processed and metadata created.',
-                        'fileId': file_id,
-                        'fileFormat': file_format.value if file_format else None
-                    })
-                }
-
-            except s3_client.exceptions.NoSuchKey:
-                logger.error(f"File not found in S3: {bucket}/{key}")
-                return {
-                    'statusCode': 404,
-                    'body': json.dumps({'message': 'File not found in S3 bucket'})
-                }
-            except Exception as s3_error:
-                logger.error(f"Error processing file2: {str(s3_error)}")
-                return {
-                    'statusCode': 500,
-                    'body': json.dumps({'message': f'Error processing file: {str(s3_error)}'})
-                }
-        else:
-            logger.error("Lambda invoked with unsupported event structure (not an S3 event)")
+            # Process the file
+            response = process_file(transaction_file)
+            logger.info(f"File processing complete: {json.dumps(response.to_dict())}")
+            
             return {
-                'statusCode': 400,
-                'body': json.dumps({'message': 'Unsupported event structure: expected S3 event'})
+                'statusCode': 200,
+                'body': json.dumps(response.to_dict())
             }
+            
+        except Exception as e:
+            logger.error(f"Error processing file: {str(e)}")
+            logger.error(f"Stack trace: {traceback.format_exc()}")
+            return {
+                'statusCode': 500,
+                'body': json.dumps({
+                    'message': f"Error processing file: {str(e)}"
+                })
+            }
+            
     except Exception as e:
-        logger.error(f"Error in file processor lambda: {str(e)}")
+        logger.error(f"Error handling S3 event: {str(e)}")
+        logger.error(f"Stack trace: {traceback.format_exc()}")
         return {
             'statusCode': 500,
-            'headers': {
-                'Content-Type': 'application/json'
-            },
             'body': json.dumps({
-                'message': f'Error processing file: {str(e)}'
+                'message': f"Error handling S3 event: {str(e)}"
             })
         }
 

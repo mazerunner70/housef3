@@ -7,6 +7,7 @@ from decimal import Decimal
 from dataclasses import dataclass, field
 from utils.transaction_utils import generate_transaction_hash
 from models.money import Money
+from models.account import Currency
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -150,6 +151,93 @@ class Transaction:
             "updatedAt": self.updated_at,
             "transactionHash": self.transaction_hash
         }
+
+    def to_flat_dict(self) -> Dict[str, str]:
+        """
+        Convert the transaction object to a flattened dictionary where all values are strings.
+        This is useful for storage systems that don't support nested structures.
+        """
+        result = {
+            "transactionId": self.transaction_id,
+            "accountId": self._account_id,
+            "fileId": self.file_id,
+            "userId": self.user_id,
+            "date": str(self._date),
+            "description": self._description,
+            "amount": str(self._amount.amount),
+            "currency": self._amount.currency.value if self._amount.currency else None
+        }
+
+        if self.balance:
+            result["balance"] = str(self.balance.amount)
+
+        if self.import_order is not None:
+            result["importOrder"] = str(self.import_order)
+
+        if self.transaction_type:
+            result["transactionType"] = self.transaction_type
+
+        if self.memo:
+            result["memo"] = self.memo
+
+        if self.check_number:
+            result["checkNumber"] = self.check_number
+
+        if self.fit_id:
+            result["fitId"] = self.fit_id
+
+        if self.status:
+            result["status"] = self.status
+
+        if self.created_at:
+            result["createdAt"] = str(self.created_at)
+
+        if self.updated_at:
+            result["updatedAt"] = str(self.updated_at)
+
+        if self.transaction_hash:
+            result["transactionHash"] = str(self.transaction_hash)
+
+        return result
+
+    @classmethod
+    def from_flat_dict(cls, data: Dict[str, str]) -> 'Transaction':
+        """
+        Create a transaction object from a flattened dictionary where all values are strings.
+        This is useful for reconstructing objects from storage systems that don't support nested structures.
+        """
+        # Create Money objects for amount and balance
+        amount = Money(
+            amount=Decimal(data["amount"]),
+            currency=Currency(data["currency"])
+        )
+
+        balance = None
+        if "balance" in data:
+            balance = Money(
+                amount=Decimal(data["balance"]),
+                currency=Currency(data["currency"])
+            )
+
+        # Create the Transaction object
+        return cls(
+            transaction_id=data["transactionId"],
+            account_id=data["accountId"],
+            file_id=data["fileId"],
+            user_id=data["userId"],
+            date=int(data["date"]),
+            description=data["description"],
+            amount=amount,
+            balance=balance,
+            import_order=int(data["importOrder"]) if "importOrder" in data else None,
+            transaction_type=data.get("transactionType"),
+            memo=data.get("memo"),
+            check_number=data.get("checkNumber"),
+            fit_id=data.get("fitId"),
+            status=data.get("status"),
+            created_at=int(data["createdAt"]) if "createdAt" in data else None,
+            updated_at=int(data["updatedAt"]) if "updatedAt" in data else None
+        )
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Transaction':

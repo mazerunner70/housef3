@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from decimal import Decimal
 import enum
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 
@@ -21,13 +21,13 @@ class Currency(str, enum.Enum):
 @dataclass
 class Money:
     amount: Decimal
-    currency: Currency
+    currency: Optional[Currency]
     
     def __post_init__(self):
         # Ensure amount is a Decimal
         if not isinstance(self.amount, Decimal):
             self.amount = Decimal(str(self.amount))
-        if not self.currency or not isinstance(self.currency, Currency):
+        if self.currency and not isinstance(self.currency, Currency):
             raise ValueError("Currency is required")
 
 
@@ -50,12 +50,12 @@ class Money:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "amount": str(self.amount),
-            "currency": self.currency.value
+            "currency": self.currency.value if self.currency else None
         }
         
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Money':
         return cls(
             amount=Decimal(str(data["amount"])),
-            currency=Currency(data["currency"])
+            currency=Currency(data["currency"]) if data["currency"] else None
         ) 

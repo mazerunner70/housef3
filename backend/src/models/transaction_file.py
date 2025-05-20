@@ -80,6 +80,97 @@ class TransactionFile:
     currency: Optional[Currency] = None
     duplicate_count: Optional[int] = None
     transaction_count: Optional[int] = None
+
+    def to_flat_dict(self) -> Dict[str, str]:
+        """
+        Convert the transaction file object to a flattened dictionary where all values are strings.
+        This is useful for storage systems that don't support nested structures.
+        """
+        result = {
+            "fileId": self.file_id,
+            "userId": self.user_id,
+            "fileName": self.file_name,
+            "uploadDate": str(self.upload_date),
+            "fileSize": str(self.file_size),
+            "s3Key": self.s3_key,
+            "processingStatus": self.processing_status.value
+        }
+        
+        if self.processed_date is not None:
+            result["processedDate"] = str(self.processed_date)
+        
+        if self.file_format:
+            result["fileFormat"] = self.file_format.value
+        
+        if self.account_id:
+            result["accountId"] = self.account_id
+        
+        if self.file_map_id:
+            result["fileMapId"] = self.file_map_id
+        
+        if self.record_count is not None:
+            result["recordCount"] = str(self.record_count)
+        
+        if self.date_range_start:
+            result["dateRangeStart"] = str(self.date_range_start)
+        
+        if self.date_range_end:
+            result["dateRangeEnd"] = str(self.date_range_end)
+        
+        if self.error_message:
+            result["errorMessage"] = self.error_message
+            
+        if self.opening_balance:
+            result["openingBalanceAmount"] = str(self.opening_balance.amount)
+
+        if self.currency:
+            result["currency"] = self.currency.value
+
+        if self.duplicate_count is not None:
+            result["duplicateCount"] = str(self.duplicate_count)
+
+        if self.transaction_count is not None:
+            result["transactionCount"] = str(self.transaction_count)
+            
+        return result
+
+    @classmethod
+    def from_flat_dict(cls, data: Dict[str, str]) -> 'TransactionFile':
+        """
+        Create a transaction file object from a flattened dictionary where all values are strings.
+        This is useful for reconstructing objects from storage systems that don't support nested structures.
+        """
+        # Handle opening balance if present
+        opening_balance = None
+        if "openingBalanceAmount" in data and "openingBalanceCurrency" in data:
+            opening_balance = Money(
+                amount=Decimal(data["openingBalanceAmount"]),
+                currency=Currency(data["currency"])
+            )
+
+        # Create the TransactionFile object
+        return cls(
+            file_id=data["fileId"],
+            user_id=data["userId"],
+            file_name=data["fileName"],
+            upload_date=int(data["uploadDate"]),
+            file_size=int(data["fileSize"]),
+            s3_key=data["s3Key"],
+            processing_status=ProcessingStatus(data["processingStatus"]),
+            processed_date=int(data["processedDate"]) if "processedDate" in data else None,
+            file_format=FileFormat(data["fileFormat"]) if "fileFormat" in data else None,
+            account_id=data.get("accountId"),
+            file_map_id=data.get("fileMapId"),
+            record_count=int(data["recordCount"]) if "recordCount" in data else None,
+            date_range_start=int(data["dateRangeStart"]) if "dateRangeStart" in data else None,
+            date_range_end=int(data["dateRangeEnd"]) if "dateRangeEnd" in data else None,
+            error_message=data.get("errorMessage"),
+            opening_balance=opening_balance,
+            currency=Currency(data["currency"]) if "currency" in data else None,
+            duplicate_count=int(data["duplicateCount"]) if "duplicateCount" in data else None,
+            transaction_count=int(data["transactionCount"]) if "transactionCount" in data else None
+        )
+
     def to_dict(self) -> Dict[str, Any]:
         """
         Convert the transaction file object to a dictionary suitable for storage.

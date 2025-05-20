@@ -7,15 +7,11 @@ import csv
 import json
 import xml.etree.ElementTree as ET
 from io import BytesIO, StringIO
-import boto3
-from botocore.exceptions import ClientError
-
 from models.transaction_file import FileFormat
+from utils.s3_dao import get_object_content
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
-s3_client = boto3.client('s3')
 
 def analyze_file_format(bucket: str, key: str) -> FileFormat:
     """
@@ -33,19 +29,17 @@ def analyze_file_format(bucket: str, key: str) -> FileFormat:
         _, file_extension = os.path.splitext(key)
         file_extension = file_extension.lower()[1:] if file_extension else ""
         
-        # Try to download the file content
-        response = s3_client.get_object(Bucket=bucket, Key=key)
-        content_bytes = response['Body'].read()
+        # Try to download the file content using s3_dao
+        content_bytes = get_object_content(key, bucket)
+        if content_bytes is None:
+            logger.error(f"Could not download file content from S3: {key}")
+            return detect_format_from_extension(key)
         
         # Try to detect format based on content signatures
         detected_format = detect_format_from_content(content_bytes)
         logger.info(f"File format detection result for {key}: {detected_format}")
         
         return detected_format
-    except ClientError as e:
-        logger.error(f"Error downloading file from S3: {str(e)}")
-        # Fall back to extension-based detection
-        return detect_format_from_extension(key)
     except Exception as e:
         logger.error(f"Error analyzing file format: {str(e)}")
         # Fall back to extension-based detection

@@ -16,7 +16,7 @@ from handlers.account_operations import create_response
 from models import account
 from models.account import Account, Currency
 from models.money import Money
-from models.transaction_file import FileFormat, ProcessingStatus, TransactionFile
+from models.transaction_file import FileFormat, ProcessingStatus, TransactionFile, transaction_file_to_json
 from models.file_map import FileMap
 from models.transaction import Transaction
 from utils.lambda_utils import handle_error
@@ -395,9 +395,6 @@ def determine_opening_balances_from_transaction_overlap(transactions: List[Trans
 
 def process_new_file(transaction_file: TransactionFile, content_bytes: bytes) -> FileProcessorResponse:
     """Process a newly uploaded file."""
-
-    if not transaction_file.currency:
-        raise ValueError("Currency is required")    
     account = checked_mandatory_account(transaction_file.account_id, transaction_file.user_id)
     if not transaction_file.user_id:
         raise ValueError("User ID is required")
@@ -413,8 +410,10 @@ def process_new_file(transaction_file: TransactionFile, content_bytes: bytes) ->
         content_bytes
     ) if transaction_file.file_format and transaction_file.file_map_id  and transaction_file.account_id and transaction_file.opening_balance else None
     if transactions:
+        transaction_file.currency = transactions[0].amount.currency
         update_transaction_duplicates(transactions)
-
+        if not transaction_file.currency:
+            raise ValueError("Currency is required")
         # Determine opening balance from transaction overlap
         opening_balance = determine_opening_balances_from_transaction_overlap(transactions, transaction_file.currency)
         transaction_file.opening_balance = opening_balance if opening_balance else transaction_file.opening_balance
@@ -534,34 +533,35 @@ def update_opening_balance(transaction_file: TransactionFile) -> FileProcessorRe
 
     if not transaction_file.opening_balance:
         raise ValueError("New opening balance is required")
+    return create_new_file(transaction_file)
         
-    old_transaction_file = checked_mandatory_transaction_file(transaction_file.file_id, transaction_file.user_id)
-    if not old_transaction_file.opening_balance:
-        raise ValueError("Old opening balance is required")
+    # old_transaction_file = checked_mandatory_transaction_file(transaction_file.file_id, transaction_file.user_id)
+    # if not old_transaction_file.opening_balance:
+    #     raise ValueError("Old opening balance is required")
         
-    balance_change = transaction_file.opening_balance - old_transaction_file.opening_balance
+    # balance_change = transaction_file.opening_balance - old_transaction_file.opening_balance
         
-    # Update all transactions from account adding balance change to the balance
-    if not transaction_file.account_id:
-        raise ValueError("Account ID is required")
+    # # Update all transactions from account adding balance change to the balance
+    # if not transaction_file.account_id:
+    #     raise ValueError("Account ID is required")
         
-    transactions = list_account_transactions(transaction_file.account_id)
+    # transactions = list_account_transactions(transaction_file.account_id)
     
-    # Update transactions in database
-    for tx in transactions:
-        if tx.balance:
-            tx.balance += balance_change
-            update_transaction(tx)
+    # # Update transactions in database
+    # for tx in transactions:
+    #     if tx.balance:
+    #         tx.balance += balance_change
+    #         update_transaction(tx)
     
-    transaction_files = list_account_files(transaction_file.account_id)
-    for file in transaction_files:
-        if file.opening_balance:
-            update_transaction_file(file.file_id, file.user_id, {'opening_balance': file.opening_balance})
+    # transaction_files = list_account_files(transaction_file.account_id)
+    # for file in transaction_files:
+    #     if file.opening_balance:
+    #         update_transaction_file(file.file_id, file.user_id, {'opening_balance': file.opening_balance})
     
-    return FileProcessorResponse(
-        message="Opening balance updated successfully",
-        transaction_count=len(transactions)
-    )
+    # return FileProcessorResponse(
+    #     message="Opening balance updated successfully",
+    #     transaction_count=len(transactions)
+    # )
     
 
 def change_file_account(transaction_file: TransactionFile) -> FileProcessorResponse:
@@ -613,7 +613,7 @@ def create_new_file(transaction_file: TransactionFile) -> FileProcessorResponse:
 
     # Create the file record
     create_transaction_file(transaction_file)
-    logger.info(f"Created file metadata in DynamoDB: {json.dumps(transaction_file.to_dict())}")
+    logger.info(f"Created file metadata in DynamoDB: {json.dumps(transaction_file_to_json(transaction_file))}")
     content_bytes = get_file_content(transaction_file.file_id)
     if not content_bytes:
         raise NotFound("File content not found")

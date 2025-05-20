@@ -18,7 +18,7 @@ from utils.db_utils import (
     get_transaction_file,
     check_duplicate_transaction
 )
-from utils.s3_dao import get_s3_client
+from utils.s3_dao import get_object_content
 
 # Configure logging
 logger = logging.getLogger()
@@ -26,7 +26,6 @@ logger.setLevel(logging.INFO)
 
 # Initialize clients
 dynamodb = boto3.resource('dynamodb')
-s3_client = get_s3_client()
 
 # Get table names from environment variables
 TRANSACTIONS_TABLE = os.environ.get('TRANSACTIONS_TABLE', 'transactions')
@@ -67,15 +66,8 @@ def get_file_content(file_id: str, s3_client: Any = None) -> Optional[bytes]:
             logger.error(f"File record or S3 key not found for ID: {file_id}")
             return None
             
-        # Use provided s3_client or get a new one
-        s3 = s3_client or get_s3_client()
-            
-        # Get the file content from S3
-        response = s3.get_object(
-            Bucket=os.environ.get('FILE_STORAGE_BUCKET'),
-            Key=file_record.s3_key
-        )
-        return response['Body'].read()
+        # Use s3_dao to get file content
+        return get_object_content(file_record.s3_key)
     except Exception as e:
         logger.error(f"Error getting file content: {str(e)}")
         return None
