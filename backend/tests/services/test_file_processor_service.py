@@ -22,12 +22,12 @@ from services.file_processor_service import (
     save_transactions,
     update_file_status,
     update_transaction_duplicates,
-    determine_opening_balances_from_transaction_overlap,
+    determine_opening_balance_from_transaction_overlap,
     process_new_file,
     update_file_mapping,
     update_opening_balance,
     change_file_account,
-    process_file
+    create_file
 )
 from utils.auth import NotAuthorized, NotFound
 
@@ -234,7 +234,7 @@ class TestFileProcessorService(unittest.TestCase):
         mock_get_tx.return_value = mock_tx
         
         self.transactions[0].status = "duplicate"
-        result = determine_opening_balances_from_transaction_overlap(self.transactions, Currency.USD)
+        result = determine_opening_balance_from_transaction_overlap(self.transactions, Currency.USD)
         self.assertEqual(result, Money(Decimal("1000.00"), Currency.USD))
 
     @patch('services.file_processor_service.get_file_content')
@@ -253,7 +253,7 @@ class TestFileProcessorService(unittest.TestCase):
                 transactions=self.transactions
             )
             
-            result = process_file(self.transaction_file)
+            result = create_file(self.transaction_file)
             self.assertIsNotNone(result)
             self.assertEqual(result.transaction_count, 2)
             self.assertEqual(result.duplicate_count, 0)

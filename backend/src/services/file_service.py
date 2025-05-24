@@ -37,9 +37,10 @@ def format_file_metadata(file: TransactionFile) -> Dict[str, Any]:
         if value is not None:
             formatted[camel] = value
 
-
+    # Override openingBalance with just the numeric amount for frontend compatibility
     if file.opening_balance:
-        formatted['openingBalance'] = file.opening_balance
+        formatted['openingBalance'] = float(file.opening_balance.amount)
+    
     if file.file_map_id:
         field_map = get_file_map(file.file_map_id)
         if field_map:

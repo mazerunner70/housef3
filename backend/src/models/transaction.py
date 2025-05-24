@@ -162,17 +162,17 @@ class Transaction:
             "accountId": self._account_id,
             "fileId": self.file_id,
             "userId": self.user_id,
-            "date": str(self._date),
+            "date": self._date,  # Keep as number, don't convert to string
             "description": self._description,
-            "amount": str(self._amount.amount),
+            "amount": self._amount.amount,  # Keep as Decimal for DynamoDB
             "currency": self._amount.currency.value if self._amount.currency else None
         }
 
         if self.balance:
-            result["balance"] = str(self.balance.amount)
+            result["balance"] = self.balance.amount  # Keep as Decimal for DynamoDB
 
         if self.import_order is not None:
-            result["importOrder"] = str(self.import_order)
+            result["importOrder"] = self.import_order
 
         if self.transaction_type:
             result["transactionType"] = self.transaction_type
@@ -190,13 +190,13 @@ class Transaction:
             result["status"] = self.status
 
         if self.created_at:
-            result["createdAt"] = str(self.created_at)
+            result["createdAt"] = self.created_at  # Keep as number, don't convert to string
 
         if self.updated_at:
-            result["updatedAt"] = str(self.updated_at)
+            result["updatedAt"] = self.updated_at  # Keep as number, don't convert to string
 
         if self.transaction_hash:
-            result["transactionHash"] = str(self.transaction_hash)
+            result["transactionHash"] = self.transaction_hash
 
         return result
 
@@ -209,14 +209,14 @@ class Transaction:
         # Create Money objects for amount and balance
         amount = Money(
             amount=Decimal(data["amount"]),
-            currency=Currency(data["currency"])
+            currency=Currency(data["currency"]) if data["currency"] else None
         )
 
         balance = None
         if "balance" in data:
             balance = Money(
                 amount=Decimal(data["balance"]),
-                currency=Currency(data["currency"])
+                currency=Currency(data["currency"]) if data["currency"] else None
             )
 
         # Create the Transaction object

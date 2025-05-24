@@ -227,33 +227,7 @@ def update_account(account_id: str, user_id: str, update_data: Dict[str, Any]) -
     # Retrieve the existing account
     account = checked_mandatory_account(account_id, user_id)
     
-    # Convert enum string values to actual enum types
-    if 'accountType' in update_data and isinstance(update_data['accountType'], str):
-        update_data['accountType'] = AccountType(update_data['accountType'])
-        
-    if 'currency' in update_data and isinstance(update_data['currency'], str):
-        update_data['currency'] = Currency(update_data['currency'])
-    
-    # Update fields
-    update_data_snake_case = {}
-    field_mapping = {
-        'accountName': 'account_name',
-        'accountType': 'account_type',
-        'institution': 'institution',
-        'balance': 'balance',
-        'currency': 'currency',
-        'notes': 'notes',
-        'isActive': 'is_active',
-        'defaultFieldMapId': 'default_field_map_id'
-    }
-    
-    for key, value in update_data.items():
-        if key in field_mapping:
-            update_data_snake_case[field_mapping[key]] = value
-        else:
-            raise ValueError(f"Skipping update for field {key}")
-    
-    account.update(**update_data_snake_case)
+    account.update(**update_data)
     account.validate()
     
     # Save updates to DynamoDB
@@ -421,11 +395,26 @@ def update_transaction_file(file_id: str, user_id: str, updates: Dict[str, Any])
     Returns:
         bool: True if successful, False otherwise
     """
+    try:
+        transaction_file = checked_mandatory_transaction_file(file_id, user_id)
+        transaction_file.update(**updates)
+        transaction_file.validate()
+        get_files_table().put_item(Item=transaction_file.to_flat_dict())
+    except Exception as e:
+        logger.error(f"Error updating transaction file {file_id}: {str(e)}")
+        logger.error(traceback.format_exc())
+        logger.error(f"Transaction file object: {transaction_file}")
+        logger.error(f"Updates: {updates}")
+        raise
 
-    transaction_file = checked_mandatory_transaction_file(file_id, user_id)
-    transaction_file.update(**updates)
-    transaction_file.validate()
-    get_files_table().put_item(Item=transaction_file.to_flat_dict())
+def update_transaction_file_object(transaction_file: TransactionFile):
+    """
+    Update a transaction file object in DynamoDB.
+    """
+    try:
+        get_files_table().put_item(Item=transaction_file.to_flat_dict())
+    except Exception as e:
+        logger.error(f"Error updating transaction file object {transaction_file.file_id}: {str(e)}")
 
 def delete_transaction_file(file_id: str) -> bool:
     """
@@ -472,7 +461,7 @@ def list_file_transactions(file_id: str) -> List[Transaction]:
             IndexName='FileIdIndex',
             KeyConditionExpression=Key('fileId').eq(file_id)
         )
-        return [Transaction.from_dict(item) for item in response.get('Items', [])]
+        return [Transaction.from_flat_dict(item) for item in response.get('Items', [])]
     except ClientError as e:
         logger.error(f"Error listing transactions for file {file_id}: {str(e)}")
         raise

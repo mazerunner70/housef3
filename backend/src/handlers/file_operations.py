@@ -4,7 +4,7 @@ import os
 import traceback
 import uuid
 from models.money import Currency, Money
-from services.file_processor_service import FileProcessorResponse
+from services.file_processor_service import FileProcessorResponse, process_file
 from utils.db_utils import (
     get_file_map, 
     get_transaction_file, 
@@ -37,7 +37,7 @@ from utils.s3_dao import (
     get_presigned_url_simple,
     put_object
 )
-from handlers.file_processor import process_file
+from handlers.file_processor import create_file
 from services.file_service import get_files_for_user, format_file_metadata, get_files_for_account
 from utils.lambda_utils import create_response, mandatory_body_parameter, mandatory_path_parameter, handle_error, optional_body_parameter, optional_query_parameter 
 
@@ -422,8 +422,7 @@ def update_file_balance_handler(event: Dict[str, Any], user: Dict[str, Any]) -> 
         # Parse the request body to get the opening balance
         amount = Decimal(mandatory_body_parameter(event, 'openingBalance'))
         currency = optional_body_parameter(event, 'currency') 
-        currency = Currency(currency) if currency else file.currency
-        currency = currency or file.currency
+        currency = Currency(currency) if currency else None
         file.opening_balance = Money(amount, currency)
         response: FileProcessorResponse = process_file(file)
 

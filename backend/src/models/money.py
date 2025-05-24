@@ -18,6 +18,12 @@ class Currency(str, enum.Enum):
     OTHER = "other"
 
 
+"""
+Money is a class that represents a monetary amount.
+It is used to represent the amount of money in a given currency.
+A None currency is used to represent a currency that is not yet known because the transactions have not been parsed yet
+"""
+
 @dataclass
 class Money:
     amount: Decimal

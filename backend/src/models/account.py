@@ -35,7 +35,7 @@ class Account:
     account_type: AccountType
     institution: str
     balance: Money
-    currency: Currency
+    currency: Optional[Currency] = None
     notes: Optional[str] = None
     is_active: bool = True
     default_file_map_id: Optional[str] = None
@@ -50,7 +50,7 @@ class Account:
         account_type: AccountType,
         institution: str,
         balance: float = 0.0,
-        currency: Currency = Currency.USD,
+        currency: Optional[Currency] = None,
         notes: Optional[str] = None,
         is_active: bool = True,
         default_file_map_id: Optional[str] = None
@@ -82,7 +82,7 @@ class Account:
             "accountType": self.account_type.value,
             "institution": self.institution,
             "balance": self.balance.to_dict(),  # Use Money's to_dict method
-            "currency": self.currency.value,
+            "currency": self.currency.value if self.currency else None,
             "isActive": self.is_active,
             "createdAt": self.created_at,
             "updatedAt": self.updated_at
@@ -104,8 +104,8 @@ class Account:
             "accountName": self.account_name,
             "accountType": self.account_type.value,
             "institution": self.institution,
-            "balance": str(self.balance.amount),
-            "currency": self.currency.value,
+            "balance": self.balance.amount,
+            "currency": self.currency.value if self.currency else "",
             "isActive": str(self.is_active), 
             "defaultFileMapId": self.default_file_map_id,
             "createdAt": self.created_at,
@@ -126,8 +126,8 @@ class Account:
             account_name=data["accountName"],
             account_type=AccountType(data["accountType"]),
             institution=data["institution"],
-            balance=Money(Decimal(str(data["balance"])), Currency(data["currency"])),
-            currency=Currency(data["currency"]),
+            balance=Money(Decimal(str(data["balance"])), Currency(data["currency"]) if data["currency"] else None),
+            currency=Currency(data["currency"]) if data["currency"] else None,
             is_active=data.get("isActive") == "True",
             default_file_map_id=data.get("defaultFileMapId"),
             created_at=data.get("createdAt", datetime.utcnow().isoformat()),
@@ -149,7 +149,7 @@ class Account:
             account_type=AccountType(data["accountType"]),
             institution=data["institution"],
             balance=Money.from_dict(data["balance"]),  # Use Money's from_dict method
-            currency=Currency(data["currency"]),
+            currency=Currency(data["currency"]) if data.get("currency") else None,
             notes=data.get("notes"),
             is_active=data.get("isActive", True),
             default_file_map_id=data.get("defaultFileMapId"),

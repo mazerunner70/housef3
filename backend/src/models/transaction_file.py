@@ -81,56 +81,56 @@ class TransactionFile:
     duplicate_count: Optional[int] = None
     transaction_count: Optional[int] = None
 
-    def to_flat_dict(self) -> Dict[str, str]:
+    def to_flat_dict(self) -> Dict[str, Any]:
         """
-        Convert the transaction file object to a flattened dictionary where all values are strings.
-        This is useful for storage systems that don't support nested structures.
+        Convert the transaction file object to a flattened dictionary.
+        Numeric fields are kept as numbers for efficient DynamoDB storage and querying.
         """
-        result = {
-            "fileId": self.file_id,
-            "userId": self.user_id,
-            "fileName": self.file_name,
-            "uploadDate": str(self.upload_date),
-            "fileSize": str(self.file_size),
-            "s3Key": self.s3_key,
-            "processingStatus": self.processing_status.value
+        result: Dict[str, Any] = {
+            "fileId": self.file_id,                    # String (indexed)
+            "userId": self.user_id,                    # String (indexed)
+            "fileName": self.file_name,                # String
+            "uploadDate": self.upload_date,            # Number (timestamp)
+            "fileSize": self.file_size,                # Number
+            "s3Key": self.s3_key,                      # String (indexed)
+            "processingStatus": self.processing_status.value  # String
         }
         
         if self.processed_date is not None:
-            result["processedDate"] = str(self.processed_date)
+            result["processedDate"] = self.processed_date  # Number (timestamp)
         
         if self.file_format:
-            result["fileFormat"] = self.file_format.value
+            result["fileFormat"] = self.file_format.value  # String
         
         if self.account_id:
-            result["accountId"] = self.account_id
+            result["accountId"] = self.account_id          # String (indexed)
         
         if self.file_map_id:
-            result["fileMapId"] = self.file_map_id
+            result["fileMapId"] = self.file_map_id         # String
         
         if self.record_count is not None:
-            result["recordCount"] = str(self.record_count)
+            result["recordCount"] = self.record_count      # Number
         
         if self.date_range_start:
-            result["dateRangeStart"] = str(self.date_range_start)
+            result["dateRangeStart"] = self.date_range_start  # Number (timestamp)
         
         if self.date_range_end:
-            result["dateRangeEnd"] = str(self.date_range_end)
+            result["dateRangeEnd"] = self.date_range_end   # Number (timestamp)
         
         if self.error_message:
-            result["errorMessage"] = self.error_message
+            result["errorMessage"] = self.error_message    # String
             
         if self.opening_balance:
-            result["openingBalanceAmount"] = str(self.opening_balance.amount)
+            result["openingBalanceAmount"] = self.opening_balance.amount  # Number (Decimal)
 
         if self.currency:
-            result["currency"] = self.currency.value
+            result["currency"] = self.currency.value       # String
 
         if self.duplicate_count is not None:
-            result["duplicateCount"] = str(self.duplicate_count)
+            result["duplicateCount"] = self.duplicate_count  # Number
 
         if self.transaction_count is not None:
-            result["transactionCount"] = str(self.transaction_count)
+            result["transactionCount"] = self.transaction_count  # Number
             
         return result
 
@@ -142,11 +142,11 @@ class TransactionFile:
         """
         # Handle opening balance if present
         opening_balance = None
-        if "openingBalanceAmount" in data and "openingBalanceCurrency" in data:
+        if "openingBalanceAmount" in data:
             opening_balance = Money(
                 amount=Decimal(data["openingBalanceAmount"]),
-                currency=Currency(data["currency"])
-            )
+                currency=Currency(data["currency"]) if "currency" in data else None
+            ) 
 
         # Create the TransactionFile object
         return cls(
@@ -369,11 +369,13 @@ def validate_transaction_file_data(transaction_file: TransactionFile) -> bool:
 def type_default(obj):
     if isinstance(obj, Decimal):
         return float(obj)  # Convert Decimal to float for JSON
+    if isinstance(obj, Money):
+        return obj.to_dict()
     if isinstance(obj, datetime):
         return obj.isoformat()
     raise TypeError
 
-def transaction_file_to_json(file):
+def transaction_file_to_json(file: TransactionFile) -> str:
     """Convert a TransactionFile object to a JSON string with proper type handling."""
     # If already a TransactionFile object, use to_dict; else, from_dict
     if isinstance(file, TransactionFile):

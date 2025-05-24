@@ -15,6 +15,7 @@ export interface FileMetadata {
   processingStatus?: 'pending' | 'processing' | 'processed' | 'error';
   errorMessage?: string;
   openingBalance?: number;
+  currency?: string;
   fieldMap?: {
     fileMapId: string;
     name: string;

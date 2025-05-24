@@ -16,6 +16,8 @@ from models.transaction_file import FileFormat, TransactionFile
 from models.file_map import FileMap, FieldMapping
 import decimal
 
+from utils.db_utils import checked_mandatory_file_map
+
 # Configure logging
 log_conf = os.environ.get('LOGGING_CONFIG')
 if log_conf:
@@ -112,8 +114,7 @@ def apply_field_mapping(row_data: Dict[str, Any], field_map: FileMap) -> Dict[st
     return result
 
 def parse_transactions(transaction_file: TransactionFile,
-                      content: bytes,
-                      file_map: FileMap) -> List[Transaction]:
+                      content: bytes) -> Optional[List[Transaction]]:
     """
     Parse transactions from file content based on the file format.
     
@@ -128,13 +129,15 @@ def parse_transactions(transaction_file: TransactionFile,
     """
     if transaction_file.file_map_id and transaction_file.opening_balance:
         if transaction_file.file_format == FileFormat.CSV:
-            return parse_csv_transactions(transaction_file, content, file_map)
+            return parse_csv_transactions(transaction_file, content)
         elif transaction_file.file_format in [FileFormat.OFX, FileFormat.QFX]:
             return parse_ofx_transactions(transaction_file, content)
         else:
             logger.warning(f"Unsupported file format for transaction parsing: {transaction_file.file_format}")
             return []
-    else: raise ValueError("File map or opening balance is required")
+    else: 
+        logger.warning(f"File map or opening balance is required for transaction parsing: {transaction_file.file_map_id} {transaction_file.opening_balance}")
+        return None
 
 def find_column_index(header: List[str], possible_names: List[str]) -> Optional[int]:
     """Find the index of a column given possible column names."""
@@ -262,7 +265,7 @@ def preprocess_csv_text(text_content: str) -> str:
             
     return '\n'.join(fixed_lines)
 
-def parse_csv_transactions(transaction_file: TransactionFile, content: bytes, file_map: FileMap) -> List[Transaction]:
+def parse_csv_transactions(transaction_file: TransactionFile, content: bytes) -> Optional[List[Transaction]]:
     """
     Parse transactions from CSV file content.
     
@@ -274,13 +277,16 @@ def parse_csv_transactions(transaction_file: TransactionFile, content: bytes, fi
     Returns:
         List of Transaction objects
     """
-    def process_amount(amount: Decimal, currency: Currency, debit_credit: Optional[str] = None) -> Money:
+    def process_amount(amount: Decimal, currency: Optional[Currency], debit_credit: Optional[str] = None) -> Money:
         """Process amount based on debit/credit indicator."""
         if debit_credit and debit_credit.upper() == 'DBIT':
             return Money(-abs(amount), currency)
         return Money(amount, currency)
     
     try:
+        if not transaction_file.file_map_id:
+            return None
+        file_map = checked_mandatory_file_map(transaction_file.file_map_id, transaction_file.user_id)
         # Decode the content
         raw_content = content.decode('utf-8')
         # Preprocess CSV text to fix unquoted commas
@@ -363,7 +369,7 @@ def parse_csv_transactions(transaction_file: TransactionFile, content: bytes, fi
                 continue
             logger.info(f"in: Row: {row}")
             logger.info(f"out: Row data: {row_data}")    
-            if row_data.get('currency') != balance.currency:
+            if balance.currency and row_data.get('currency') != balance.currency:
                 raise ValueError(f"Currency mismatch: {row_data.get('currency')} != {balance.currency}")
             # Process the amount
             try:
@@ -386,8 +392,8 @@ def parse_csv_transactions(transaction_file: TransactionFile, content: bytes, fi
                 file_id=transaction_file.file_id,    
                 date=parse_date(row_data['date']),
                 description=row_data['description'].strip(),
-                amount=processed_amount,  # Keep as Decimal
-                balance=balance,  # Keep as Decimal
+                amount=processed_amount,  
+                balance=balance,  
                 import_order=i + 1,  # Add 1-based import order
                 transaction_type= row_data.get('debitOrCredit'),  # Use debitOrCredit value for transaction_type
                 memo=row_data.get('memo'),

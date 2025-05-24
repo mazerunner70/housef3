@@ -55,7 +55,12 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
 
   const queryClient = useQueryClient();
 
-  const updateBalanceMutation = useMutation<UpdateBalanceResponse, Error, { fileId: string, balanceValue: number }>({
+  // Add type for mutation context
+  interface MutationContext {
+    previousFile?: FileMetadata;
+  }
+
+  const updateBalanceMutation = useMutation<UpdateBalanceResponse, Error, { fileId: string, balanceValue: number }, MutationContext>({
     mutationFn: ({ fileId, balanceValue }: { fileId: string, balanceValue: number }) => updateFileBalance(fileId, balanceValue),
     onSuccess: (data) => {
       console.log('[onSuccess] API responded with:', data);
@@ -77,7 +82,7 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
     onMutate: async ({ fileId, balanceValue }: { fileId: string, balanceValue: number }) => {
       console.log('[onMutate] Optimistically updating file', fileId, 'with balance', balanceValue);
       await queryClient.cancelQueries({ queryKey: ['file', fileId] });
-      const previousFile = queryClient.getQueryData(['file', fileId]);
+      const previousFile = queryClient.getQueryData<FileMetadata>(['file', fileId]);
       setEditingBalanceFileId(null);
       setBalanceInput('');
       queryClient.setQueryData(['file', fileId], (old: FileMetadata) => ({
@@ -519,6 +524,7 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
                     <th>Format</th>
                     <th>Status</th>
                     <th>Account</th>
+                    <th>Currency</th>
                     <th>Opening Balance</th>
                     <th>Field Map</th>
                     <th>Actions</th>
@@ -596,6 +602,7 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
                           </div>
                         )}
                       </td>
+                      <td>{file.currency || 'Non-parsed'}</td>
                       <td className="file-balance-cell">
                         {file.openingBalance !== undefined ? (
                           editingBalanceFileId === file.fileId ? (
@@ -627,7 +634,7 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
                             </div>
                           ) : (
                             <div className="balance-with-edit">
-                              <span className="balance-display">${file.openingBalance.toFixed(2)}</span>
+                              <span className="balance-display">{file.currency || '$'}{file.openingBalance.toFixed(2)}</span>
                               <button
                                 className="edit-balance-button"
                                 onClick={() => handleEditBalance(file.fileId, file.openingBalance)}
