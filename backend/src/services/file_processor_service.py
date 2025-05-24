@@ -371,6 +371,7 @@ def determine_opening_balance_from_transaction_overlap(transactions: List[Transa
             return None
         if not currency:
             return None
+        logger.info(f"Determining opening balance from transaction overlap")
             
         first_transaction = min(transactions, key=lambda tx: tx.import_order or 0)
         last_transaction = max(transactions, key=lambda tx: tx.import_order or 0)
@@ -379,14 +380,18 @@ def determine_opening_balance_from_transaction_overlap(transactions: List[Transa
         if first_transaction.status == 'duplicate':
             matching_transaction = get_transaction_by_account_and_hash(first_transaction.account_id, first_transaction.transaction_hash if first_transaction.transaction_hash else 1)
             if matching_transaction and matching_transaction.balance and matching_transaction.amount:
-                return matching_transaction.balance - matching_transaction.amount
+                logger.info(f"First transaction is duplicate, using balance {matching_transaction.balance} - amount {matching_transaction.amount}")
+                money = matching_transaction.balance - matching_transaction.amount
+                return money if money.currency else Money(Decimal(money.amount), currency)
                 
         if last_transaction.status == 'duplicate':
             matching_transaction = get_transaction_by_account_and_hash(last_transaction.account_id, last_transaction.transaction_hash if last_transaction.transaction_hash else 1)
             if matching_transaction and matching_transaction.balance:
                 total_amount = sum([tx.amount for tx in transactions], Money(Decimal(0), currency)) 
-                return matching_transaction.balance - total_amount
-                
+                logger.info(f"Last transaction is duplicate, using balance {matching_transaction.balance} - amount {total_amount}")
+                money = matching_transaction.balance - total_amount
+                return money if money.currency else Money(Decimal(money.amount), currency)
+        logger.info(f"No opening balance found from transaction overlap")        
         return None
     except Exception as e:
         logger.error(f"Error determining opening balance: {str(e)}")
@@ -688,7 +693,7 @@ def update_file(old_transaction_file: Optional[TransactionFile], transaction_fil
                 transaction_file.opening_balance = opening_balance if opening_balance else transaction_file.opening_balance
                 calculate_running_balances(transactions, transaction_file.opening_balance)
             update_file_object(transaction_file, transactions)
-
+        if transactions and transaction_file.opening_balance:
             create_transactions(transactions, transaction_file)
         set_defaults_into_account(transaction_file)
         update_transaction_file_object(transaction_file)

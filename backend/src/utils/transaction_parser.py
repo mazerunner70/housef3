@@ -127,7 +127,7 @@ def parse_transactions(transaction_file: TransactionFile,
     Returns:
         List of transaction dictionaries
     """
-    if transaction_file.file_map_id and transaction_file.opening_balance:
+    if transaction_file.file_map_id:
         if transaction_file.file_format == FileFormat.CSV:
             return parse_csv_transactions(transaction_file, content)
         elif transaction_file.file_format in [FileFormat.OFX, FileFormat.QFX]:
@@ -136,7 +136,7 @@ def parse_transactions(transaction_file: TransactionFile,
             logger.warning(f"Unsupported file format for transaction parsing: {transaction_file.file_format}")
             return []
     else: 
-        logger.warning(f"File map or opening balance is required for transaction parsing: {transaction_file.file_map_id} {transaction_file.opening_balance}")
+        logger.warning(f"File map is required for transaction parsing: {transaction_file.file_map_id}")
         return None
 
 def find_column_index(header: List[str], possible_names: List[str]) -> Optional[int]:
@@ -271,8 +271,6 @@ def parse_csv_transactions(transaction_file: TransactionFile, content: bytes) ->
     
     Args:
         content: The raw CSV file content
-        opening_balance: Optional opening balance to use for running total calculation. Defaults to 0.00 if not provided.
-        file_map: Optional field mapping configuration
         
     Returns:
         List of Transaction objects
@@ -341,15 +339,13 @@ def parse_csv_transactions(transaction_file: TransactionFile, content: bytes) ->
             logger.info("Reversed transaction order to ascending")
             
         # Initialize balance
-        if not transaction_file.opening_balance:
-            raise ValueError("Opening balance is required")
         if not transaction_file.account_id:
             raise ValueError("Account ID is required")
         if not transaction_file.user_id:
             raise ValueError("User ID is required")
         if not transaction_file.file_id:
             raise ValueError("File ID is required")
-        balance: Money = transaction_file.opening_balance
+        balance: Money = transaction_file.opening_balance if transaction_file.opening_balance else Money(Decimal(0), transaction_file.currency)
 
         # Process each row
         transactions = []
