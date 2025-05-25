@@ -216,3 +216,6 @@ test_usecase/config.json
 
 # Ignore test_usecase/usecase_data/
 scripts/test_usecase/usecase_data/**
+
+
+.venv_build/
