@@ -1,0 +1,72 @@
+.new-ui-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  font-family: sans-serif;
+}
+
+.new-ui-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 20px;
+  background-color: #f0f0f0;
+  border-bottom: 1px solid #ddd;
+}
+
+.new-ui-logo {
+  font-weight: bold;
+  margin-right: 20px;
+  font-size: 1.2em;
+  /* Replace with actual logo later */
+}
+
+.new-ui-title {
+  font-size: 1.5em;
+  margin: 0;
+}
+
+.new-ui-layout-content {
+    display: flex;
+    flex-grow: 1;
+}
+
+.new-ui-sidebar {
+  width: 220px;
+  background-color: #f8f9fa;
+  padding: 20px;
+  border-right: 1px solid #ddd;
+  height: calc(100vh - 60px); /* Adjust based on header height */
+}
+
+.new-ui-sidebar p {
+    margin-bottom: 10px;
+    cursor: pointer;
+}
+
+.new-ui-sidebar p:hover {
+    color: #007bff;
+}
+
+.new-ui-sidebar p.active {
+  color: #0056b3; /* Darker blue for active */
+  font-weight: 600; /* Make it bold */
+  background-color: #e9ecef; /* Light background highlight */
+  border-left: 3px solid #0056b3; /* Accent border */
+  padding-left: 17px; /* Adjust padding to align text with border */
+  margin-left: -20px; /* Counteract the main padding to extend highlight */
+  margin-right: -20px; /* Counteract the main padding */
+  padding-right: 20px;
+}
+
+.new-ui-main-content {
+  flex-grow: 1;
+  padding: 20px;
+  overflow-y: auto;
+  height: calc(100vh - 60px); /* Adjust based on header height */
+}
+
+.sign-out-button {
+  margin-top: auto; /* Pushes to the bottom of the sidebar */
+  padding-top: 10px;
+  border-top: 1px solid #ddd; /* Optional: add a separator line */
+} 

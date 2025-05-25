@@ -289,8 +289,6 @@
 }
 
 .transactions-table {
-  width: 100%;
-  min-width: 1200px;  /* Ensure minimum width for all columns */
   border-collapse: separate;
   border-spacing: 0;
 }

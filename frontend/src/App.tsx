@@ -4,6 +4,7 @@ import UserProfile from './components/UserProfile';
 import { ColorDisplay } from './components/ColorDisplay';
 import FileManager from './components/FileManager';
 import AccountManager from './components/AccountManager';
+import NewUILayout from './new-ui/layouts/NewUILayout';
 import { AuthUser, getCurrentUser, isAuthenticated, refreshToken } from './services/AuthService';
 import './App.css'
 
@@ -12,6 +13,7 @@ function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [activeSection, setActiveSection] = useState<'colors' | 'files' | 'accounts'>('files');
+  const [showNewUI, setShowNewUI] = useState<boolean>(false);
 
   // Check authentication status on component mount
   useEffect(() => {
@@ -76,12 +78,23 @@ function App() {
     setActiveSection(section);
   };
 
+  const toggleUIVersion = () => {
+    setShowNewUI(prev => !prev);
+  };
+
   if (loading) {
     return <div className="loading-auth">Checking authentication...</div>;
   }
 
+  if (showNewUI) {
+    return <NewUILayout onSignOut={handleSignOut} />;
+  }
+
   return (
     <div className="app-container">
+      <button onClick={toggleUIVersion} style={{ position: 'absolute', top: '10px', left: '10px', zIndex: 1000 }}>
+        Switch to {showNewUI ? 'Old' : 'New'} UI
+      </button>
       <h1>House F3 Application</h1>
       
       {authenticated && user ? (

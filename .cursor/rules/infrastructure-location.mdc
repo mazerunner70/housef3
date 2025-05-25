@@ -11,6 +11,7 @@ The main backend logic, models, and related files are here.
 Frontend code
 Located in: frontend/src/
 All React (or other frontend framework) code and assets are here.
+Old componenets are in components directory, do not add any files into this folder
 
 Infrastructure code
 Located in: infrastructure/terraform/

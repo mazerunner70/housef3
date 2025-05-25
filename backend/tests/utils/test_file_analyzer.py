@@ -55,31 +55,27 @@ INTU.BID:12345
         self.json_content = b'{"transactions": [{"date": "2024-01-01", "amount": 100.00}]}'
         self.xml_content = b'<?xml version="1.0"?><root><transaction><date>2024-01-01</date></transaction></root>'
 
-    @patch('utils.file_analyzer.s3_client')
-    def test_analyze_file_format_pdf(self, mock_s3):
+    @patch('utils.file_analyzer.get_object_content')
+    def test_analyze_file_format_pdf(self, mock_get_object_content):
         """Test analyzing PDF file format."""
         # Setup
-        mock_s3.get_object.return_value = {
-            'Body': BytesIO(self.pdf_content)
-        }
+        mock_get_object_content.return_value = self.pdf_content
 
         # Execute
         result = analyze_file_format('test-bucket', 'test.pdf')
 
         # Verify
         self.assertEqual(result, FileFormat.PDF)
-        mock_s3.get_object.assert_called_with(
-            Bucket='test-bucket',
-            Key='test.pdf'
+        mock_get_object_content.assert_called_with(
+            'test.pdf',
+            'test-bucket'
         )
 
-    @patch('utils.file_analyzer.s3_client')
-    def test_analyze_file_format_xlsx(self, mock_s3):
+    @patch('utils.file_analyzer.get_object_content')
+    def test_analyze_file_format_xlsx(self, mock_get_object_content):
         """Test analyzing XLSX file format."""
         # Setup
-        mock_s3.get_object.return_value = {
-            'Body': BytesIO(self.xlsx_content)
-        }
+        mock_get_object_content.return_value = self.xlsx_content
 
         # Execute
         result = analyze_file_format('test-bucket', 'test.xlsx')
@@ -87,13 +83,11 @@ INTU.BID:12345
         # Verify
         self.assertEqual(result, FileFormat.XLSX)
 
-    @patch('utils.file_analyzer.s3_client')
-    def test_analyze_file_format_ofx(self, mock_s3):
+    @patch('utils.file_analyzer.get_object_content')
+    def test_analyze_file_format_ofx(self, mock_get_object_content):
         """Test analyzing OFX file format."""
         # Setup
-        mock_s3.get_object.return_value = {
-            'Body': BytesIO(self.ofx_content)
-        }
+        mock_get_object_content.return_value = self.ofx_content
 
         # Execute
         result = analyze_file_format('test-bucket', 'test.ofx')
@@ -101,13 +95,11 @@ INTU.BID:12345
         # Verify
         self.assertEqual(result, FileFormat.OFX)
 
-    @patch('utils.file_analyzer.s3_client')
-    def test_analyze_file_format_qfx(self, mock_s3):
+    @patch('utils.file_analyzer.get_object_content')
+    def test_analyze_file_format_qfx(self, mock_get_object_content):
         """Test analyzing QFX file format."""
         # Setup
-        mock_s3.get_object.return_value = {
-            'Body': BytesIO(self.qfx_content)
-        }
+        mock_get_object_content.return_value = self.qfx_content
 
         # Execute
         result = analyze_file_format('test-bucket', 'test.qfx')
@@ -115,13 +107,11 @@ INTU.BID:12345
         # Verify
         self.assertEqual(result, FileFormat.QFX)
 
-    @patch('utils.file_analyzer.s3_client')
-    def test_analyze_file_format_csv(self, mock_s3):
+    @patch('utils.file_analyzer.get_object_content')
+    def test_analyze_file_format_csv(self, mock_get_object_content):
         """Test analyzing CSV file format."""
         # Setup
-        mock_s3.get_object.return_value = {
-            'Body': BytesIO(self.csv_content)
-        }
+        mock_get_object_content.return_value = self.csv_content
 
         # Execute
         result = analyze_file_format('test-bucket', 'test.csv')
@@ -129,13 +119,11 @@ INTU.BID:12345
         # Verify
         self.assertEqual(result, FileFormat.CSV)
 
-    @patch('utils.file_analyzer.s3_client')
-    def test_analyze_file_format_json(self, mock_s3):
+    @patch('utils.file_analyzer.get_object_content')
+    def test_analyze_file_format_json(self, mock_get_object_content):
         """Test analyzing JSON file format."""
         # Setup
-        mock_s3.get_object.return_value = {
-            'Body': BytesIO(self.json_content)
-        }
+        mock_get_object_content.return_value = self.json_content
 
         # Execute
         result = analyze_file_format('test-bucket', 'test.json')
@@ -143,13 +131,11 @@ INTU.BID:12345
         # Verify
         self.assertEqual(result, FileFormat.OTHER)
 
-    @patch('utils.file_analyzer.s3_client')
-    def test_analyze_file_format_xml(self, mock_s3):
+    @patch('utils.file_analyzer.get_object_content')
+    def test_analyze_file_format_xml(self, mock_get_object_content):
         """Test analyzing XML file format."""
         # Setup
-        mock_s3.get_object.return_value = {
-            'Body': BytesIO(self.xml_content)
-        }
+        mock_get_object_content.return_value = self.xml_content
 
         # Execute
         result = analyze_file_format('test-bucket', 'test.xml')
@@ -157,17 +143,28 @@ INTU.BID:12345
         # Verify
         self.assertEqual(result, FileFormat.OTHER)
 
-    @patch('utils.file_analyzer.s3_client')
-    def test_analyze_file_format_s3_error(self, mock_s3):
+    @patch('utils.file_analyzer.get_object_content')
+    def test_analyze_file_format_s3_error(self, mock_get_object_content):
         """Test handling S3 client error."""
         # Setup
-        mock_s3.get_object.side_effect = Exception("S3 error")
+        mock_get_object_content.side_effect = Exception("S3 error")
 
         # Execute
         result = analyze_file_format('test-bucket', 'test.csv')
 
         # Verify
         self.assertEqual(result, FileFormat.CSV)  # Should fall back to extension-based detection
+
+    @patch('utils.file_analyzer.get_object_content')
+    def test_analyze_file_format_download_fails_fallback_to_extension(self, mock_get_object_content):
+        """Test that analyze_file_format falls back to extension if download fails."""
+        mock_get_object_content.return_value = None # Simulate download failure
+
+        result = analyze_file_format('test-bucket', 'test_file.ofx')
+        self.assertEqual(result, FileFormat.OFX) # Should use extension
+
+        result = analyze_file_format('test-bucket', 'unknown_file.xyz')
+        self.assertEqual(result, FileFormat.OTHER) # Extension unknown
 
     def test_detect_format_from_content(self):
         """Test format detection from file content."""

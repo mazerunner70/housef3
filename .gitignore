@@ -209,6 +209,7 @@ scripts/config.json
 # Ignore lambda.zip files
 **/lambda.zip
 lambda.zip
+lambda*.zip
 
 # Ignore test_usecase/config.json
 test_usecase/config.json

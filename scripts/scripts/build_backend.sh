@@ -3,16 +3,20 @@ set -e
 
 echo "Rebuilding backend with Terraform..."
 
-# Get project root directory
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cd "$PROJECT_ROOT"
+# Get the directory where the script is located
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Navigate to the Terraform directory
-cd "$PROJECT_ROOT/infrastructure/terraform"
+# Navigate to the Terraform directory, which is two levels up and then into infrastructure/terraform
+TERRAFORM_DIR="$SCRIPT_DIR/../../infrastructure/terraform"
+
+echo "Changing to directory: $TERRAFORM_DIR"
+cd "$TERRAFORM_DIR"
 
 echo "Applying Terraform changes to update Lambda functions..."
 terraform init -reconfigure
 terraform apply -auto-approve
 
 echo "Backend rebuild with Terraform completed successfully"
-cd "$PROJECT_ROOT" 
+# Go back to the original project root if needed, or simply exit.
+# For now, let's assume operations are done within terraform dir or it's not critical to return.
+# cd "$SCRIPT_DIR/../.." 

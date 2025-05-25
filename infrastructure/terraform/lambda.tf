@@ -321,7 +321,6 @@ resource "aws_iam_role_policy" "lambda_dynamodb_access" {
   })
 }
 
-
 resource "aws_cloudwatch_log_group" "file_operations" {
   name              = "/aws/lambda/${aws_lambda_function.file_operations.function_name}"
   retention_in_days = 7
@@ -366,6 +365,104 @@ resource "aws_cloudwatch_log_group" "transaction_operations" {
   }
 }
 
+# Categories Lambda IAM Resources
+data "aws_iam_policy_document" "categories_lambda_assume_role_policy" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "categories_lambda_role" {
+  name               = "${var.project_name}-${var.environment}-categories-lambda-role"
+  assume_role_policy = data.aws_iam_policy_document.categories_lambda_assume_role_policy.json
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
+data "aws_iam_policy_document" "categories_lambda_dynamodb_policy_doc" {
+  statement {
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:Query",
+      "dynamodb:Scan"
+    ]
+    resources = [
+      # Ensure aws_dynamodb_table.categories is defined, if not, this will need adjustment
+      # Assuming it's defined in another .tf file (e.g., dynamo_categories.tf)
+      aws_dynamodb_table.categories.arn,
+      "${aws_dynamodb_table.categories.arn}/index/*"
+    ]
+  }
+}
+
+resource "aws_iam_policy" "categories_lambda_dynamodb_policy" {
+  name        = "${var.project_name}-${var.environment}-categories-lambda-dynamodb-policy"
+  description = "IAM policy for Categories Lambda to access Categories DynamoDB table"
+  policy      = data.aws_iam_policy_document.categories_lambda_dynamodb_policy_doc.json
+}
+
+resource "aws_iam_role_policy_attachment" "categories_lambda_dynamodb_attachment" {
+  role       = aws_iam_role.categories_lambda_role.name
+  policy_arn = aws_iam_policy.categories_lambda_dynamodb_policy.arn
+}
+
+resource "aws_iam_role_policy_attachment" "categories_lambda_basic_execution" {
+  role       = aws_iam_role.categories_lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+# End Categories Lambda IAM Resources
+
+# Categories Lambda Function
+resource "aws_lambda_function" "categories_lambda" {
+  function_name = "${var.project_name}-${var.environment}-categories-lambda"
+  role          = aws_iam_role.categories_lambda_role.arn
+  handler       = "handlers.category_operations.handler" # Updated handler
+  runtime       = "python3.9"
+  timeout       = 30 # seconds
+  memory_size   = 256 # MB
+
+  filename         = "../../backend/lambda_deploy.zip"     # Use common deployment package
+  source_code_hash = base64encode(local.source_code_hash) # Use common source_code_hash
+  depends_on       = [null_resource.prepare_lambda]        # Add dependency
+
+  environment {
+    variables = {
+      CATEGORIES_TABLE_NAME = aws_dynamodb_table.categories.name # Ensure aws_dynamodb_table.categories is defined
+      ENVIRONMENT           = var.environment
+      LOG_LEVEL             = "INFO"
+      # Add other necessary environment variables if any, e.g. for utils
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+# End Categories Lambda Function
+
+resource "aws_cloudwatch_log_group" "categories_lambda" {
+  name              = "/aws/lambda/${aws_lambda_function.categories_lambda.function_name}"
+  retention_in_days = 7
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
 # Outputs
 output "lambda_file_operations_name" {
   value = aws_lambda_function.file_operations.function_name
@@ -385,4 +482,76 @@ output "lambda_transaction_operations_name" {
 
 output "lambda_getcolors_name" {
   value = aws_lambda_function.getcolors.function_name
+}
+
+output "categories_lambda_name" {
+  description = "Name of the Categories Lambda function"
+  value       = aws_lambda_function.categories_lambda.function_name
+}
+
+output "categories_lambda_arn" {
+  description = "ARN of the Categories Lambda function"
+  value       = aws_lambda_function.categories_lambda.arn
+}
+
+output "categories_lambda_invoke_arn" {
+  description = "Invoke ARN of the Categories Lambda function"
+  value       = aws_lambda_function.categories_lambda.invoke_arn
+}
+
+# === Merged from lambda_field_maps.tf ===
+
+# File map operations Lambda function
+resource "aws_lambda_function" "file_map_operations" {
+  filename         = "../../backend/lambda_deploy.zip"
+  function_name    = "${var.project_name}-${var.environment}-file-map-operations"
+  handler          = "handlers/file_map_operations.handler"
+  runtime          = "python3.9"
+  role            = aws_iam_role.lambda_exec.arn
+  timeout         = 30
+  memory_size     = 256
+  source_code_hash = base64encode(local.source_code_hash)
+  depends_on       = [null_resource.prepare_lambda]
+
+  environment {
+    variables = {
+      ENVIRONMENT        = var.environment
+      FILE_MAPS_TABLE   = aws_dynamodb_table.file_maps.name
+      FILES_TABLE       = aws_dynamodb_table.transaction_files.name
+      FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.id
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
+# CloudWatch log group for file map operations Lambda
+resource "aws_cloudwatch_log_group" "file_map_operations" {
+  name              = "/aws/lambda/${aws_lambda_function.file_map_operations.function_name}"
+  retention_in_days = 14
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
+# Lambda permission for API Gateway to invoke file map operations
+resource "aws_lambda_permission" "api_gateway_file_maps" {
+  statement_id  = "AllowAPIGatewayInvokeFileMaps"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.file_map_operations.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+}
+
+# Output the Lambda function name
+output "lambda_file_map_operations_name" {
+  description = "The name of the file map operations Lambda function"
+  value       = aws_lambda_function.file_map_operations.function_name
 } 

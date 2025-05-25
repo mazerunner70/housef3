@@ -357,6 +357,60 @@ resource "aws_apigatewayv2_route" "delete_field_map" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# Categories Operations Integration
+resource "aws_apigatewayv2_integration" "category_operations" {
+  api_id                 = aws_apigatewayv2_api.main.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.categories_lambda.invoke_arn # From lambda_categories.tf
+  payload_format_version = "2.0"
+  description            = "Lambda integration for category CRUD operations"
+}
+
+# Create Category route
+resource "aws_apigatewayv2_route" "create_category" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /categories"
+  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# List Categories route
+resource "aws_apigatewayv2_route" "list_categories" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /categories"
+  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Get Category by ID route
+resource "aws_apigatewayv2_route" "get_category" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /categories/{categoryId}"
+  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Update Category by ID route
+resource "aws_apigatewayv2_route" "update_category" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "PUT /categories/{categoryId}"
+  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Delete Category by ID route
+resource "aws_apigatewayv2_route" "delete_category" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "DELETE /categories/{categoryId}"
+  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 resource "aws_apigatewayv2_stage" "main" {
   api_id      = aws_apigatewayv2_api.main.id
   name        = var.environment
@@ -439,6 +493,24 @@ resource "aws_lambda_permission" "getcolors" {
   statement_id  = "AllowAPIGatewayInvoke"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.getcolors.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+}
+
+# Lambda permission for field maps
+resource "aws_lambda_permission" "api_gateway_field_maps" {
+  statement_id  = "AllowAPIGatewayInvokeFieldMapsLambda"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.file_map_operations.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+}
+
+# Lambda permission for categories
+resource "aws_lambda_permission" "api_gateway_categories" {
+  statement_id  = "AllowAPIGatewayInvokeCategoriesLambda"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.categories_lambda.function_name # From lambda_categories.tf
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
 }

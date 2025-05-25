@@ -72,6 +72,7 @@ Primary Key: `transactionId` (String)
 | description | S | Transaction description | Yes |
 | amount | N | Transaction amount as Decimal | Yes |
 | balance | N | Running balance after this transaction as Decimal | Yes |
+| categoryId | S | ID of the category this transaction is assigned to | No |
 | importOrder | N | Order in which this transaction was imported | No |
 | transactionHash | N | Numeric hash for duplicate detection | No |
 | status | S | Transaction status (e.g., "PENDING", "PROCESSED") | No |
@@ -79,8 +80,8 @@ Primary Key: `transactionId` (String)
 | memo | S | Additional transaction notes | No |
 | checkNumber | S | Check number if applicable | No |
 | fitId | S | Financial Institution Transaction ID | No |
-| createdAt | S | ISO timestamp of creation | No |
-| updatedAt | S | ISO timestamp of last update | No |
+| createdAt | N | Transaction creation timestamp in milliseconds since epoch | No |
+| updatedAt | N | Transaction last update timestamp in milliseconds since epoch | No |
 
 Estimated size: 1-2KB per transaction
 
@@ -122,6 +123,11 @@ Estimated size: 1-2KB per transaction
    - Range Key: `transactionHash`
    - Purpose: Efficient duplicate detection
 
+9. `AccountCategoryIndex`
+   - Hash Key: `accountId`
+   - Range Key: `categoryId`
+   - Purpose: Query transactions by account and category
+
 ### 2. Transaction Files Table
 Primary Key: `fileId` (String)
 
@@ -132,15 +138,15 @@ Primary Key: `fileId` (String)
 | userId | S | ID of the user who uploaded the file | Yes |
 | accountId | S | ID of the account this file is associated with | No |
 | fileName | S | Original name of the uploaded file | Yes |
-| uploadDate | S | ISO timestamp of upload | Yes |
+| uploadDate | N | File upload timestamp in milliseconds since epoch | Yes |
 | fileSize | N | Size of the file in bytes | Yes |
 | fileFormat | S | Format of the file (e.g., "CSV", "OFX") | Yes |
 | s3Key | S | S3 object key for the file | Yes |
 | processingStatus | S | Current processing status | Yes |
 | fieldMapId | S | ID of the field mapping used | No |
 | recordCount | N | Number of records in the file | No |
-| dateRangeStart | S | Start date of transactions in the file | No |
-| dateRangeEnd | S | End date of transactions in the file | No |
+| dateRangeStart | N | Start date of transactions in the file in milliseconds since epoch | No |
+| dateRangeEnd | N | End date of transactions in the file in milliseconds since epoch | No |
 | errorMessage | S | Error message if processing failed | No |
 | openingBalance | N | Opening balance from the file | No |
 
@@ -172,7 +178,7 @@ Primary Key: `accountId` (String)
 | currency | S | Currency code (e.g., "USD") | Yes |
 | notes | S | Additional account notes | No |
 | isActive | BOOL | Whether the account is active | Yes |
-| createdAt | S | ISO timestamp of creation | Yes |
+| createdAt | N | Account creation timestamp in milliseconds since epoch | Yes |
 | defaultFieldMapId | S | ID of the default field map | No |
 
 #### Global Secondary Indexes:
@@ -193,8 +199,8 @@ Primary Key: `fieldMapId` (String)
 | name | S | Name of the field map | Yes |
 | mappings | M | Map of source to destination fields | Yes |
 | isDefault | BOOL | Whether this is the default field map | No |
-| createdAt | S | ISO timestamp of creation | Yes |
-| updatedAt | S | ISO timestamp of last update | Yes |
+| createdAt | N | Field map creation timestamp in milliseconds since epoch | Yes |
+| updatedAt | N | Field map last update timestamp in milliseconds since epoch | Yes |
 
 #### Global Secondary Indexes:
 1. `UserIdIndex`
@@ -204,6 +210,47 @@ Primary Key: `fieldMapId` (String)
 2. `AccountIdIndex`
    - Hash Key: `accountId`
    - Purpose: Query field maps by account
+
+### 5. Categories Table
+Primary Key: `categoryId` (String)
+
+#### Purpose:
+Stores user-defined categories for classifying transactions. Supports hierarchical categories (parent-child relationships) and rules for auto-categorization as described in `docs/new_ui_transactions_view.md`.
+
+#### Fields:
+| Field Name      | Type   | Description                                                                 | Required |
+|-----------------|--------|-----------------------------------------------------------------------------|----------|
+| categoryId      | S      | Unique identifier for the category (e.g., "cat_ groceries_123")               | Yes      |
+| userId          | S      | ID of the user who owns this category                                         | Yes      |
+| name            | S      | Display name of the category (e.g., "Groceries", "Salary")                  | Yes      |
+| type            | S      | Type of category ("INCOME", "EXPENSE")                                      | Yes      |
+| parentCategoryId| S      | ID of the parent category for sub-categories (optional)                     | No       |
+| icon            | S      | Optional icon identifier for the category (e.g., "cart", "briefcase")       | No       |
+| color           | S      | Optional color code for the category (e.g., "#FF5733")                       | No       |
+| createdAt       | N      | Category creation timestamp in milliseconds since epoch                     | Yes      |
+| updatedAt       | N      | Category last update timestamp in milliseconds since epoch                  | Yes      |
+| rules           | L of M | List of rules for auto-categorization. Each rule is a map:                | No       |
+|                 |        | - `fieldToMatch` (S): "Description/Payee", "Notes", "Amount"                |          |
+|                 |        | - `condition` (S): "Contains", "StartsWith", "Equals", "Regex", "GT", "LT"  |          |
+|                 |        | - `value` (S or N): Value/pattern to match                                  |          |
+|                 |        | - `ruleLogic` (S): "AND", "OR" (if multiple conditions in one rule object)  | No       |
+
+
+#### Global Secondary Indexes:
+1.  `UserIdIndex`
+    *   Hash Key: `userId`
+    *   Range Key: `name` (to sort categories by name for a user)
+    *   Purpose: Query categories by user, optionally sort/filter by name.
+
+2.  `UserIdParentCategoryIdIndex`
+    *   Hash Key: `userId`
+    *   Range Key: `parentCategoryId`
+    *   Purpose: Efficiently query for sub-categories of a given parent category for a user. Allows fetching top-level categories by querying where `parentCategoryId` is null or not present.
+
+#### Notes:
+*   The `rules` attribute stores an array of rule objects. Each object defines a condition (or set of conditions if `ruleLogic` is used) that, if met by a transaction's details, will assign this category to that transaction.
+*   When a transaction is created or updated, these rules can be evaluated by the backend to suggest or automatically assign a category.
+*   The `Transactions` table should be updated to include a `categoryId` field (String, optional) to link transactions to a category. If a transaction is categorized, this field will store the `categoryId`. This allows for efficient filtering of transactions by category.
 
 ## Technical Details
 
@@ -220,7 +267,7 @@ Primary Key: `fieldMapId` (String)
 - Could be leveraged for batch duplicate checking
 
 ### Notes
-1. All timestamps are stored in ISO 8601 format
+1. All timestamps are stored as milliseconds since epoch.
 2. Monetary values are stored as Money objects to maintain precision
 3. The `transactionHash` is a 64-bit numeric hash used for duplicate detection
 4. The `date` field in transactions is stored as milliseconds since epoch for efficient sorting

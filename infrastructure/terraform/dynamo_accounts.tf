@@ -22,7 +22,7 @@ resource "aws_dynamodb_table" "accounts" {
 
   attribute {
     name = "createdAt"
-    type = "S"  # String (ISO format timestamp)
+    type = "N"  # Changed from S to N (milliseconds since epoch)
   }
 
   # Global Secondary Index for querying accounts by user

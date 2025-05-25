@@ -6,7 +6,7 @@ import logging
 import traceback
 import boto3
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional, Union
 from botocore.exceptions import ClientError
 from decimal import Decimal
@@ -20,6 +20,7 @@ from models import (
     AccountType,
     Currency
 )
+from models.category import Category, CategoryUpdate
 from models.transaction import Transaction
 from boto3.dynamodb.conditions import Key, Attr
 from models.file_map import FileMap
@@ -38,6 +39,7 @@ ACCOUNTS_TABLE = os.environ.get('ACCOUNTS_TABLE')
 FILES_TABLE = os.environ.get('FILES_TABLE')
 TRANSACTIONS_TABLE = os.environ.get('TRANSACTIONS_TABLE')
 FILE_MAPS_TABLE = os.environ.get('FILE_MAPS_TABLE')
+CATEGORIES_TABLE_NAME = os.environ.get('CATEGORIES_TABLE_NAME')
 
 # Initialize table resources lazily
 _accounts_table = None
@@ -936,3 +938,117 @@ def update_transaction(transaction: Transaction) -> None:
     except ClientError as e:
         logger.error(f"Error updating transaction {transaction.transaction_id}: {str(e)}")
         raise e
+
+categories_table = None
+if CATEGORIES_TABLE_NAME:
+    categories_table = dynamodb.Table(CATEGORIES_TABLE_NAME)
+    logger.info(f"db_utils_categories: Categories table {CATEGORIES_TABLE_NAME} resource initialized.")
+else:
+    logger.error("db_utils_categories: CATEGORIES_TABLE_NAME environment variable not set. DB functions will fail.")
+
+def create_category_in_db(category: Category) -> Category:
+    if not categories_table:
+        logger.error("DB: Categories table not initialized for create_category_in_db")
+        raise ConnectionError("Categories table not initialized")
+    logger.debug(f"DB: Creating category {category.categoryId}")
+    categories_table.put_item(Item=category.dict())
+    return category
+
+def get_category_by_id_from_db(category_id: str, user_id: str) -> Optional[Category]:
+    if not categories_table:
+        logger.error("DB: Categories table not initialized for get_category_by_id_from_db")
+        return None
+    logger.debug(f"DB: Getting category {category_id} for user {user_id}")
+    response = categories_table.get_item(Key={'categoryId': category_id})
+    item = response.get('Item')
+    if item and item.get('userId') == user_id:
+        return Category(**item)
+    elif item:
+        logger.warning(f"User {user_id} attempted to access category {category_id} owned by {item.get('userId')}")
+        return None
+    return None
+
+def list_categories_by_user_from_db(user_id: str, parent_category_id: Optional[str] = None, top_level_only: bool = False) -> List[Category]:
+    if not categories_table:
+        logger.error("DB: Categories table not initialized for list_categories_by_user_from_db")
+        return []
+    logger.debug(f"DB: Listing categories for user {user_id}, parent: {parent_category_id}, top_level: {top_level_only}")
+    params: Dict[str, Any] = {}
+    filter_expressions = []
+    if parent_category_id is not None:
+        if parent_category_id.lower() == "null" or parent_category_id == "": 
+            params['IndexName'] = 'UserIdIndex'
+            params['KeyConditionExpression'] = Key('userId').eq(user_id)
+            filter_expressions.append(Attr('parentCategoryId').not_exists())
+        else: 
+            params['IndexName'] = 'UserIdParentCategoryIdIndex'
+            params['KeyConditionExpression'] = Key('userId').eq(user_id) & Key('parentCategoryId').eq(parent_category_id)
+    else: 
+        params['IndexName'] = 'UserIdIndex'
+        params['KeyConditionExpression'] = Key('userId').eq(user_id)
+        if top_level_only:
+            filter_expressions.append(Attr('parentCategoryId').not_exists())
+    
+    if filter_expressions:
+        final_filter_expression = filter_expressions[0]
+        for i in range(1, len(filter_expressions)):
+            final_filter_expression = final_filter_expression & filter_expressions[i]
+        params['FilterExpression'] = final_filter_expression
+
+    all_items_raw = []
+    current_params = params.copy() # To avoid modifying params for subsequent calls if pagination is added here
+    while True:
+        response = categories_table.query(**current_params)
+        all_items_raw.extend(response.get('Items', []))
+        if 'LastEvaluatedKey' not in response:
+            break
+        current_params['ExclusiveStartKey'] = response['LastEvaluatedKey']
+    return [Category(**item) for item in all_items_raw]
+
+def update_category_in_db(category_id: str, user_id: str, update_data: CategoryUpdate) -> Optional[Category]:
+    if not categories_table:
+        logger.error("DB: Categories table not initialized for update_category_in_db")
+        return None
+    logger.debug(f"DB: Updating category {category_id} for user {user_id}")
+    existing_category = get_category_by_id_from_db(category_id, user_id) # Use the util version
+    if not existing_category:
+        return None
+    update_dict = update_data.dict(exclude_unset=True)
+    if not update_dict:
+        return existing_category
+    update_dict['updatedAt'] = int(datetime.now(timezone.utc).timestamp() * 1000)
+    update_expression_parts = []
+    expression_attribute_values: Dict[str, Any] = {}
+    expression_attribute_names: Dict[str, str] = {}
+    for key, value in update_dict.items():
+        attr_name_placeholder = f"#{key}"
+        attr_value_placeholder = f":{key}"
+        expression_attribute_names[attr_name_placeholder] = key
+        expression_attribute_values[attr_value_placeholder] = value
+        update_expression_parts.append(f"{attr_name_placeholder} = {attr_value_placeholder}")
+    if not update_expression_parts:
+        return existing_category # Should not happen if updatedAt is always present
+    update_expression = "SET " + ", ".join(update_expression_parts)
+    response = categories_table.update_item(
+        Key={'categoryId': category_id},
+        UpdateExpression=update_expression,
+        ExpressionAttributeNames=expression_attribute_names,
+        ExpressionAttributeValues=expression_attribute_values,
+        ReturnValues="ALL_NEW"
+    )
+    return Category(**response.get('Attributes'))
+
+def delete_category_from_db(category_id: str, user_id: str) -> bool:
+    if not categories_table:
+        logger.error("DB: Categories table not initialized for delete_category_from_db")
+        return False
+    logger.debug(f"DB: Deleting category {category_id} for user {user_id}")
+    category_to_delete = get_category_by_id_from_db(category_id, user_id) # Use the util version
+    if not category_to_delete:
+        return False
+    child_categories = list_categories_by_user_from_db(user_id, parent_category_id=category_id) # Use the util version
+    if child_categories:
+        logger.warning(f"Attempt to delete category {category_id} which has child categories.")
+        raise ValueError("Cannot delete category: it has child categories.")
+    categories_table.delete_item(Key={'categoryId': category_id})
+    return True 
