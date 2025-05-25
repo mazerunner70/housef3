@@ -160,11 +160,11 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
     }
   };
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (money: { amount: number; currency: string }) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: account?.currency || 'USD'
-    }).format(amount);
+      currency: money.currency || account?.currency || 'USD'
+    }).format(money.amount);
   };
 
   const formatDate = (dateString: string | number) => {
@@ -223,7 +223,9 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
           </div>
           <div>
             <span className="account-detail-label">Balance:</span>
-            <span className="account-detail-balance">{formatCurrency(account.balance)}</span>
+            <span className="account-detail-balance">
+              {formatCurrency({ amount: account.balance, currency: account.currency })}
+            </span>
           </div>
           {account.institution && (
             <div>
@@ -363,7 +365,7 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
                   <div key={transaction.transactionId} className="transaction-row">
                     <div className="cell date">{formatDate(transaction.date)}</div>
                     <div className="cell description">{transaction.description}</div>
-                    <div className={`cell amount ${transaction.amount >= 0 ? 'positive' : 'negative'}`}>
+                    <div className={`cell amount ${transaction.amount.amount >= 0 ? 'positive' : 'negative'}`}>
                       {formatCurrency(transaction.amount)}
                     </div>
                     <div className="cell transaction-balance">

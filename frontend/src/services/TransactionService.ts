@@ -1,4 +1,11 @@
 import { getCurrentUser, refreshToken, isAuthenticated } from './AuthService';
+import { Currency } from './AccountService';
+
+// Money interface to match backend model
+export interface Money {
+  amount: number;
+  currency: Currency;
+}
 
 // Get API endpoint from environment variables
 const API_ENDPOINT = import.meta.env.VITE_API_ENDPOINT;
@@ -10,8 +17,8 @@ export interface Transaction {
   userId: string;
   date: number;  // milliseconds since epoch
   description: string;
-  amount: number;
-  balance: number;
+  amount: Money;
+  balance: Money;
   transactionType?: string;
   category?: string;
   payee?: string;
