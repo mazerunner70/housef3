@@ -1,8 +1,10 @@
 .account-list {
-  padding: 0.75rem;
+  padding: 1.5rem;
   background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e1e5e9;
+  height: fit-content;
 }
 
 .account-list-header {
@@ -11,33 +13,48 @@
 
 .account-list-header h3 {
   margin: 0;
-  color: #333;
-  font-size: 1.2rem;
+  color: #2c3e50;
+  font-size: 1.3rem;
+  font-weight: 600;
 }
 
 .account-list-container {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 0.75rem;
 }
 
 .account-card {
-  padding: 0.75rem;
+  padding: 1rem;
   background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
+  border: 1px solid #e1e5e9;
+  border-radius: 10px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
+  position: relative;
 }
 
 .account-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: #667eea;
 }
 
 .account-card.selected {
-  border: 2px solid #007bff;
-  background: #f8f9ff;
+  border: 2px solid #667eea;
+  background: linear-gradient(135deg, #f8f9ff 0%, #f0f4ff 100%);
+  box-shadow: 0 3px 10px rgba(102, 126, 234, 0.15);
+}
+
+.account-card.selected::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 10px 0 0 10px;
 }
 
 .account-header {
@@ -79,8 +96,8 @@
 
 .account-balance {
   font-size: 1.2rem;
-  font-weight: 600;
-  color: #28a745;
+  font-weight: 700;
+  color: #10b981;
 }
 
 .account-currency {

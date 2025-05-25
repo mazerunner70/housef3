@@ -693,7 +693,7 @@ def update_file(old_transaction_file: Optional[TransactionFile], transaction_fil
                 transaction_file.opening_balance = opening_balance if opening_balance else transaction_file.opening_balance
                 calculate_running_balances(transactions, transaction_file.opening_balance)
             update_file_object(transaction_file, transactions)
-        if transactions and transaction_file.opening_balance:
+        if transactions and transaction_file.opening_balance and transaction_file.currency:
             create_transactions(transactions, transaction_file)
         set_defaults_into_account(transaction_file)
         update_transaction_file_object(transaction_file)

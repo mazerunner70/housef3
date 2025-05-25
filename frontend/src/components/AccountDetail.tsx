@@ -42,17 +42,16 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
       setAccount(accountData.account);
       
       // Use getFileTimeline for timeline data
-      const timelineFiles = await getFileTimeline(id);
+      const response = await getFileTimeline(id);
+      console.log('[Timeline Diagnostics] Timeline response:', response);
+      
+      // Extract timeline array from response
+      const timelineFiles = response.timeline || [];
       console.log('[Timeline Diagnostics] Timeline files:', timelineFiles);
-      // Extract the timeline array if present
-      const filesArray = Array.isArray(timelineFiles.timeline)
-        ? timelineFiles.timeline
-        : Array.isArray(timelineFiles)
-          ? timelineFiles
-          : [];
-      const safeFiles = filesArray
-        .filter(f => f.startDate && f.endDate)
-        .map(f => ({
+      
+      const safeFiles = timelineFiles
+        .filter((f: FileMetadata) => f.startDate && f.endDate)
+        .map((f: FileMetadata) => ({
           ...f,
           startDate: typeof f.startDate === 'string' ? new Date(f.startDate).getTime() : f.startDate,
           endDate: typeof f.endDate === 'string' ? new Date(f.endDate).getTime() : f.endDate,
@@ -96,15 +95,16 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
       await deleteFile(fileId);
       // Refresh the files list
       if (accountId) {
-        const filesData = await getFileTimeline(accountId);
-        const filesArray = Array.isArray(filesData.timeline)
-          ? filesData.timeline
-          : Array.isArray(filesData)
-            ? filesData
-            : [];
-        const safeFiles = filesArray
-          .filter(f => f.startDate && f.endDate)
-          .map(f => ({
+        const response = await getFileTimeline(accountId);
+        console.log('[Timeline Diagnostics] Refresh response:', response);
+        
+        // Extract timeline array from response
+        const timelineFiles = response.timeline || [];
+        console.log('[Timeline Diagnostics] Refresh files:', timelineFiles);
+        
+        const safeFiles = timelineFiles
+          .filter((f: FileMetadata) => f.startDate && f.endDate)
+          .map((f: FileMetadata) => ({
             ...f,
             startDate: typeof f.startDate === 'string' ? new Date(f.startDate).getTime() : f.startDate,
             endDate: typeof f.endDate === 'string' ? new Date(f.endDate).getTime() : f.endDate,

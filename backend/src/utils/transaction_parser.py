@@ -345,8 +345,10 @@ def parse_csv_transactions(transaction_file: TransactionFile, content: bytes) ->
             raise ValueError("User ID is required")
         if not transaction_file.file_id:
             raise ValueError("File ID is required")
-        balance: Money = transaction_file.opening_balance if transaction_file.opening_balance else Money(Decimal(0), transaction_file.currency)
-
+        currency = transaction_file.currency 
+        if transaction_file.opening_balance and currency != transaction_file.opening_balance.currency:
+            raise ValueError(f"Currency mismatch: {currency} != {transaction_file.opening_balance.currency}")
+        balance: Money = transaction_file.opening_balance if transaction_file.opening_balance else Money(Decimal(0), currency)
         # Process each row
         transactions = []
         for i, row in enumerate(rows):
@@ -368,6 +370,7 @@ def parse_csv_transactions(transaction_file: TransactionFile, content: bytes) ->
             if balance.currency and row_data.get('currency') != balance.currency:
                 raise ValueError(f"Currency mismatch: {row_data.get('currency')} != {balance.currency}")
             # Process the amount
+            currency = row_data.get('currency') if row_data.get('currency') else currency
             try:
                 logger.info(f"Processing amount: {row_data['amount']}")
                 raw_amount = Decimal(str(row_data['amount']))

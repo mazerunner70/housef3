@@ -422,7 +422,7 @@ def update_file_balance_handler(event: Dict[str, Any], user: Dict[str, Any]) -> 
         # Parse the request body to get the opening balance
         amount = Decimal(mandatory_body_parameter(event, 'openingBalance'))
         currency = optional_body_parameter(event, 'currency') 
-        currency = Currency(currency) if currency else None
+        currency = Currency(currency) if currency else file.currency
         file.opening_balance = Money(amount, currency)
         response: FileProcessorResponse = process_file(file)
 
