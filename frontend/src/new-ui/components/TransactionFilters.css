@@ -1,8 +1,8 @@
 .transaction-filters-form {
   background-color: #f8f9fa;
-  padding: 20px;
+  padding: 5px;
   border-radius: 8px;
-  margin-bottom: 20px;
+  margin-bottom: 15px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 }
@@ -10,8 +10,8 @@
 .filter-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* Responsive grid */
-  gap: 20px;
-  margin-bottom: 20px;
+  gap: 10px;
+  margin-bottom: 15px;
 }
 
 .filter-group {
@@ -20,18 +20,18 @@
 }
 
 .filter-group label {
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   font-weight: 500;
   color: #343a40;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 .filter-input,
 .filter-select {
-  padding: 10px 12px;
+  padding: 6px 10px;
   border: 1px solid #ced4da;
   border-radius: 4px;
-  font-size: 1rem;
+  font-size: 0.9rem;
   transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
   background-color: #fff;
 }
@@ -44,14 +44,15 @@
 }
 
 .filter-select.multi-select {
-  min-height: 80px; /* Allow space for multiple options */
+  min-height: 40px; /* Allow space for multiple options */
 }
 
 .date-range-group {
   display: flex;
   flex-direction: row; /* Align date inputs horizontally */
   align-items: center; /* Align items vertically */
-  gap: 10px;
+  gap: 8px;
+  grid-column: span 2; /* Make it span 2 grid columns by default */
 }
 
 .date-range-group label {
@@ -65,13 +66,13 @@
 
 .transaction-type-group .button-group {
   display: flex;
-  gap: 8px; /* Space between buttons */
+  gap: 5px; /* Space between buttons */
 }
 
 .filter-button.type-button {
   flex-grow: 1;
-  padding: 10px;
-  font-size: 0.9rem;
+  padding: 6px 8px;
+  font-size: 0.85rem;
   background-color: #fff;
   color: #007bff;
   border: 1px solid #007bff;
@@ -98,19 +99,19 @@
 .filter-actions {
   display: flex;
   justify-content: flex-end; /* Align buttons to the right */
-  gap: 10px;
-  padding-top: 10px;
+  gap: 8px;
+  padding-top: 8px;
   border-top: 1px solid #e0e0e0;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .filter-button {
-  padding: 10px 20px;
+  padding: 6px 15px;
   border-radius: 4px;
   border: none;
   cursor: pointer;
   font-weight: 500;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   transition: background-color 0.2s ease, opacity 0.2s ease;
 }
 
@@ -140,6 +141,7 @@
   .date-range-group {
     flex-direction: column; /* Stack date inputs */
     align-items: stretch;
+    grid-column: span 1; /* Reset span for single column layout */
   }
   .date-range-group label {
     margin-bottom: 8px;

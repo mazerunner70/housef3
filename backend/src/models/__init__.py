@@ -9,7 +9,7 @@ from .account import (
     validate_account_data
 )
 
-from .transaction import Transaction, validate_transaction_data
+from .transaction import Transaction
 
 from .transaction_file import (
     TransactionFile,

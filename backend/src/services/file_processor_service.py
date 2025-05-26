@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import traceback
+import uuid
 from typing import Dict, Any, List, Optional, Tuple, Union
 from decimal import Decimal
 from dataclasses import dataclass
@@ -68,7 +69,7 @@ class FileProcessorResponse:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "message": self.message,
-            "transactions": [tx.to_dict() for tx in self.transactions] if self.transactions else [],
+            "transactions": [tx.model_dump() for tx in self.transactions] if self.transactions else [],
             "transaction_count": self.transaction_count,
             "duplicate_count": self.duplicate_count,
             "updated_count": self.updated_count,
@@ -275,8 +276,8 @@ def create_transactions(
         for transaction in transactions:
             try:
                 # Add the file_id and user_id to each transaction
-                transaction.file_id = transaction_file.file_id
-                transaction.user_id = transaction_file.user_id
+                transaction.file_id = uuid.UUID(transaction_file.file_id) if isinstance(transaction_file.file_id, str) else transaction_file.file_id
+                transaction.user_id = uuid.UUID(transaction_file.user_id) if isinstance(transaction_file.user_id, str) else transaction_file.user_id
                                 
                 # Create and save the transaction
                 create_transaction(transaction)
@@ -595,7 +596,7 @@ def change_file_account(transaction_file: TransactionFile) -> FileProcessorRespo
             calculate_running_balances(transactions, transaction_file.opening_balance)
         # Update account ID for all transactions
         for tx in transactions:
-            tx.account_id = account.account_id
+            tx.account_id = uuid.UUID(account.account_id) if isinstance(account.account_id, str) else account.account_id
             update_transaction(tx)
             
     return FileProcessorResponse(

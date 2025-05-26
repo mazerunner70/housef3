@@ -107,7 +107,7 @@ def checked_mandatory_file_map(file_map_id: Optional[str], user_id: str) -> File
     file_map = get_file_map(file_map_id)
     if not file_map:
         raise NotFound("File map not found")
-    check_user_owns_resource(file_map.user_id, user_id)
+    check_user_owns_resource(str(file_map.user_id), user_id)
     return file_map
 
 def checked_optional_file_map(file_map_id: Optional[str], user_id: str) -> Optional[FileMap]:
@@ -117,7 +117,7 @@ def checked_optional_file_map(file_map_id: Optional[str], user_id: str) -> Optio
     file_map = get_file_map(file_map_id)
     if not file_map:
         return None
-    check_user_owns_resource(file_map.user_id, user_id)
+    check_user_owns_resource(str(file_map.user_id), user_id)
     return file_map
 
 def get_accounts_table() -> Any:
@@ -482,7 +482,8 @@ def list_user_transactions(
     account_ids: Optional[List[str]] = None,
     transaction_type: Optional[str] = None,
     search_term: Optional[str] = None,
-    sort_order_date: str = 'desc'
+    sort_order_date: str = 'desc',
+    ignore_dup: bool = False
 ) -> Tuple[List[Transaction], Optional[Dict[str, Any]], int]:
     """
     List transactions for a user with filtering, date sorting, and pagination.
@@ -527,6 +528,9 @@ def list_user_transactions(
         if search_term:
             filter_expressions.append(Attr('description').contains(search_term))
 
+        if ignore_dup:
+            filter_expressions.append(Attr('status').ne('duplicate'))
+
         if filter_expressions:
             final_filter_expression = filter_expressions[0]
             if len(filter_expressions) > 1:
@@ -537,14 +541,18 @@ def list_user_transactions(
         logger.debug(f"DynamoDB query params: {query_params}")
         response = table.query(**query_params)
         
-        transactions = [Transaction.from_dict(item) for item in response.get('Items', [])]
+        transactions = [Transaction.from_flat_dict(item) for item in response.get('Items', [])]
         new_last_evaluated_key = response.get('LastEvaluatedKey')
         
-        current_page_scanned_count = response.get('ScannedCount', 0)
-        logger.info(f"Query for user {user_id} returned {len(transactions)} items. ScannedCount: {current_page_scanned_count}")
+        # Count of items returned in this specific query response
+        items_in_current_response = len(transactions) # Use response.get('Count', len(transactions)) if prefer DynamoDB's count
+        
+        logger.info(f"Query for user {user_id} returned {items_in_current_response} items. ScannedCount: {response.get('ScannedCount', 0)}")
 
-        total_items_placeholder = 0 
-        return transactions, new_last_evaluated_key, total_items_placeholder
+        # Return items_in_current_response instead of a hardcoded 0.
+        # The caller (transaction_operations.py) will use this and new_last_evaluated_key
+        # to determine pagination display logic.
+        return transactions, new_last_evaluated_key, items_in_current_response
             
     except ClientError as e:
         logger.error(f"Error querying transactions by user {user_id}: {str(e)}", exc_info=True)
@@ -623,26 +631,29 @@ def delete_file_metadata(file_id: str) -> bool:
 
 def get_file_map(file_map_id: Optional[str] = None) -> Optional[FileMap]:
     """
-    Get a file map by ID.
+    Retrieve a file map by ID.
     
     Args:
-        file_map_id: ID of the file map to retrieve
+        file_map_id: The unique identifier of the file map
         
     Returns:
-        FileMap instance if found, None otherwise
+        FileMap object if found, None otherwise
     """
+    if not file_map_id:
+        return None
     try:
-        if file_map_id:
-            response = get_file_maps_table().get_item(
-                Key={'fileMapId': file_map_id}
-            )
-        
+        table = get_file_maps_table()
+        if not table:
+            logger.error("File maps table not initialized.")
+            return None
+        response = table.get_item(Key={'fileMapId': file_map_id})
+
         if 'Item' in response:
-            return FileMap.from_dict(response['Item'])
+            return FileMap.model_validate(response['Item'])
         return None
-    except Exception as e:
-        logger.error(f"Error getting file map {file_map_id}: {str(e)}")
-        return None
+    except ClientError as e:
+        logger.error(f"Error retrieving file map {file_map_id}: {str(e)}")
+        raise
 
 
 def get_account_default_file_map(account_id: str) -> Optional[FileMap]:
@@ -676,51 +687,39 @@ def get_account_default_file_map(account_id: str) -> Optional[FileMap]:
         return None
 
 
-def create_file_map(file_map: FileMap) -> bool:
+def create_file_map(file_map: FileMap) -> None:
     """
     Create a new file map.
     
     Args:
-        file_map: FileMap instance to create
-        
-    Returns:
-        True if successful, False otherwise
+        file_map: The FileMap object to create
     """
     try:
-        get_file_maps_table().put_item(
-            Item=file_map.to_dict(),
-            ConditionExpression='attribute_not_exists(fileMapId)'
-        )
-        return True
-    except Exception as e:
-        logger.error(f"Error creating file map: {str(e)}")
-        return False
+        get_file_maps_table().put_item(Item=file_map.model_dump(by_alias=True))
+        logger.info(f"Successfully created file map {file_map.file_map_id}")
+    except ClientError as e:
+        logger.error(f"Error creating file map {file_map.file_map_id}: {str(e)}")
+        raise
 
 
-def update_file_map(file_map: FileMap) -> bool:
+def update_file_map(file_map: FileMap) -> None:
     """
     Update an existing file map.
     
     Args:
-        file_map: FileMap instance to update
-        
-    Returns:
-        True if successful, False otherwise
+        file_map: The FileMap object with updated details
     """
     try:
-        get_file_maps_table().put_item(
-            Item=file_map.to_dict(),
-            ConditionExpression='attribute_exists(fileMapId)'
-        )
-        return True
-    except Exception as e:
-        logger.error(f"Error updating file map: {str(e)}")
-        return False
+        get_file_maps_table().put_item(Item=file_map.model_dump(by_alias=True))
+        logger.info(f"Successfully updated file map {file_map.file_map_id}")
+    except ClientError as e:
+        logger.error(f"Error updating file map {file_map.file_map_id}: {str(e)}")
+        raise
 
 
 def delete_file_map(file_map_id: str) -> bool:
     """
-    Delete a file map.
+    Delete a file map by ID.
     
     Args:
         file_map_id: ID of the file map to delete
@@ -740,7 +739,7 @@ def delete_file_map(file_map_id: str) -> bool:
 
 def list_file_maps_by_user(user_id: str) -> List[FileMap]:
     """
-    List all file maps for a user.
+    List all file maps for a specific user.
     
     Args:
         user_id: ID of the user
@@ -750,42 +749,40 @@ def list_file_maps_by_user(user_id: str) -> List[FileMap]:
     """
     try:
         response = get_file_maps_table().query(
-            IndexName='userId-index',
-            KeyConditionExpression='userId = :userId',
-            ExpressionAttributeValues={':userId': user_id}
+            IndexName='UserIdIndex',
+            KeyConditionExpression=Key('userId').eq(user_id)
         )
-        
-        return [FileMap.from_dict(item) for item in response.get('Items', [])]
-    except Exception as e:
+        return [FileMap.model_validate(item) for item in response.get('Items', [])]
+    except ClientError as e:
         logger.error(f"Error listing file maps for user {user_id}: {str(e)}")
-        return []
+        raise
 
 
 def list_account_file_maps(account_id: str) -> List[FileMap]:
     """
-    List all file maps for an account.
+    List all file maps for a specific account.
     
     Args:
-        account_id: ID of the account
+        account_id: The account's unique identifier
         
     Returns:
-        List of FileMap instances
+        List of FileMap objects
     """
     try:
+        # Query using GSI for accountId
         response = get_file_maps_table().query(
-            IndexName='accountId-index',
-            KeyConditionExpression='accountId = :accountId',
-            ExpressionAttributeValues={':accountId': account_id}
+            IndexName='AccountIdIndex',
+            KeyConditionExpression=Key('accountId').eq(account_id)
         )
-        
-        return [FileMap.from_dict(item) for item in response.get('Items', [])]
+        return [FileMap.model_validate(item) for item in response.get('Items', [])]
     except Exception as e:
         logger.error(f"Error listing file maps for account {account_id}: {str(e)}")
-        return []
+        raise
 
 
 def list_account_transactions(account_id: str, limit: int = 50, last_evaluated_key: Optional[Dict] = None) -> List[Transaction]:
-    """List transactions for an account with pagination, sorted by date.
+    """
+    List transactions for a specific account with pagination.
     
     Note: This function requires a GSI named 'AccountDateIndex' with:
         - Partition key: accountId
@@ -928,9 +925,9 @@ def update_file_field_map(file_id: str, field_map_id: str) -> None:
         raise
 
 
-def get_transaction_by_account_and_hash(account_id: str, transaction_hash: int) -> Optional[Transaction]:
+def get_transaction_by_account_and_hash(account_id: Union[str, uuid.UUID], transaction_hash: int) -> Optional[Transaction]:
     """
-    Retrieve a transaction by accountId and transactionHash using the TransactionHashIndex.
+    Retrieve a specific transaction by account ID and transaction hash.
     Args:
         account_id: The account ID
         transaction_hash: The transaction hash
@@ -939,17 +936,15 @@ def get_transaction_by_account_and_hash(account_id: str, transaction_hash: int) 
     """
     try:
         response = get_transactions_table().query(
-            IndexName='TransactionHashIndex',
-            KeyConditionExpression=Key('accountId').eq(account_id) & Key('transactionHash').eq(transaction_hash)
+            IndexName='AccountHashIndex', 
+            KeyConditionExpression=Key('accountId').eq(str(account_id)) & Key('transactionHash').eq(transaction_hash)
         )
-        items = response.get('Items', [])
-        if items:
-            
-            return Transaction.from_flat_dict(items[0])
+        if response.get('Items'):
+            return Transaction.model_validate(response['Items'][0])
         return None
-    except Exception as e:
-        logger.error(f"Error retrieving transaction by account and hash: {str(e)}")
-        return None
+    except ClientError as e:
+        logger.error(f"Error retrieving transaction by account {account_id} and hash {transaction_hash}: {e}")
+        raise
 
 
 def check_duplicate_transaction(transaction: Transaction) -> bool: 

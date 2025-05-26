@@ -60,19 +60,19 @@ export interface CategoryInfo {
 
 export interface AccountInfo {
   id: string;
-  name: string;
+  // name: string; // Remove name, as we'll fetch it separately
   // Add other fields if your API returns more, e.g., type, currency
 }
 
 export interface TransactionViewItem extends Omit<Transaction, 'category' | 'account' | 'date' | 'amount'> {
   id: string; // transactionId from existing Transaction interface
-  date: string; // ISO date string "YYYY-MM-DD" as per new_ui_transactions_view.md
+  date: number; // milliseconds since epoch
   description: string;
   payee?: string;
   category: CategoryInfo; // Use new CategoryInfo
-  account: AccountInfo;   // Use new AccountInfo
-  amount: number; // Direct number, as per new_ui_transactions_view.md example
-  currency: string; // e.g. "USD", as per new_ui_transactions_view.md example
+  account?: string;   // Changed to string (accountId)
+  amount: Money; 
+  balance: Money; 
   type: 'income' | 'expense' | 'transfer';
   notes?: string;
   isSplit?: boolean;
@@ -103,6 +103,7 @@ export interface TransactionRequestParams {
   sortBy?: keyof TransactionViewItem | string;
   sortOrder?: 'asc' | 'desc';
   lastEvaluatedKey?: Record<string, any>;
+  ignoreDup?: boolean;
 }
 
 // Function to fetch transactions for the main transaction view
@@ -122,6 +123,7 @@ export const getUserTransactions = async (params: TransactionRequestParams): Pro
   if (params.sortBy) query.append('sortBy', params.sortBy as string);
   if (params.sortOrder) query.append('sortOrder', params.sortOrder);
   if (params.lastEvaluatedKey) query.append('lastEvaluatedKey', JSON.stringify(params.lastEvaluatedKey));
+  if (params.ignoreDup !== undefined) query.append('ignoreDup', params.ignoreDup.toString());
 
   const endpoint = `${API_ENDPOINT}/api/transactions?${query.toString()}`; 
   try {

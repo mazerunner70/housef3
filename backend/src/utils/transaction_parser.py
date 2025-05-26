@@ -229,8 +229,8 @@ def preprocess_csv_text(text_content: str) -> str:
         if not line.strip():
             continue  # Skip empty lines
             
-        # Parse the line
-        fields = parse_csv_line(line)
+        # Parse the line, applying strip to every parsed field
+        fields = [field.strip() for field in parse_csv_line(line)]
         
         # If field count matches expected, keep it as is
         if len(fields) == expected_fields:

@@ -1,32 +1,8 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import './TransactionTable.css';
 import Pagination from './Pagination'; // Import Pagination
-import { TransactionViewItem, CategoryInfo, AccountInfo } from '../../services/TransactionService'; // IMPORT SERVICE TYPES
-
-// REMOVE LOCAL TYPE DEFINITIONS
-// interface Category {
-//   id: string;
-//   name: string;
-// }
-// 
-// interface Account {
-//   id: string;
-//   name: string;
-// }
-// 
-// export interface Transaction {
-//   id: string;
-//   date: string; // "2023-10-26"
-//   description: string;
-//   payee?: string;
-//   category: Category; // Changed to CategoryInfo
-//   account: Account;   // Changed to AccountInfo
-//   amount: number;
-//   currency: string;
-//   type: 'income' | 'expense' | 'transfer';
-//   notes?: string;
-//   isSplit?: boolean;
-// }
+import { TransactionViewItem, CategoryInfo } from '../../services/TransactionService'; // IMPORT SERVICE TYPES
+import { Account as AccountDetail } from '../../services/AccountService'; // IMPORT ACCOUNT SERVICE
 
 export interface SortConfig {
   key: keyof TransactionViewItem | null; // USE TransactionViewItem
@@ -38,6 +14,7 @@ interface TransactionTableProps {
   isLoading: boolean;
   error?: string | null;
   categories?: CategoryInfo[]; // USE CategoryInfo
+  accountsData: AccountDetail[]; // NEW PROP for accounts from parent
   onEditTransaction: (transactionId: string) => void;
   onQuickCategoryChange: (transactionId: string, newCategoryId: string) => void;
   currentPage: number;
@@ -45,13 +22,15 @@ interface TransactionTableProps {
   onPageChange: (page: number) => void;
   itemsPerPage: number;
   totalItems: number;
+  onPageSizeChange: (newPageSize: number) => void; // New prop
 }
 
 const TransactionTable: React.FC<TransactionTableProps> = ({
   transactions,
-  isLoading,
-  error,
+  isLoading: isLoadingTransactions, // Prop renamed for clarity if needed, or keep as isLoading
+  error: transactionsError, // Prop renamed for clarity
   categories, // This is now CategoryInfo[]
+  accountsData, // Destructure new prop
   onEditTransaction,
   onQuickCategoryChange,
   currentPage,
@@ -59,10 +38,23 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   onPageChange,
   itemsPerPage,
   totalItems,
+  onPageSizeChange, // Destructure new prop
 }) => {
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'date', direction: 'descending' });
   const [selectedTransactionIds, setSelectedTransactionIds] = useState<Set<string>>(new Set());
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
+
+  // Create accountsMap from the accountsData prop using useMemo
+  const accountsMap = useMemo(() => {
+    const newMap = new Map<string, string>();
+    if (accountsData) {
+      accountsData.forEach(acc => {
+        newMap.set(acc.accountId, acc.accountName);
+      });
+    }
+    // console.log("TransactionTable: accountsMap created from prop:", newMap); // Optional: for debugging
+    return newMap;
+  }, [accountsData]);
 
   // Dummy categories for inline editing example - ensure it conforms to CategoryInfo[]
   const DUMMY_CATEGORIES: CategoryInfo[] = [ // USE CategoryInfo
@@ -101,9 +93,10 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
           const bCatName = (bValue as CategoryInfo).name;
           return sortConfig.direction === 'ascending' ? aCatName.localeCompare(bCatName) : bCatName.localeCompare(aCatName);
         }
+        // Updated sorting for account ID to use names from accountsMap
         if (sortConfig.key === 'account') {
-          const aAccName = (aValue as AccountInfo).name;
-          const bAccName = (bValue as AccountInfo).name;
+          const aAccName = accountsMap.get(aValue as string) || 'N/A';
+          const bAccName = accountsMap.get(bValue as string) || 'N/A';
           return sortConfig.direction === 'ascending' ? aAccName.localeCompare(bAccName) : bAccName.localeCompare(aAccName);
         }
 
@@ -117,7 +110,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
       });
     }
     return sortableItems;
-  }, [transactions, sortConfig]);
+  }, [transactions, sortConfig, accountsMap]); // Added accountsMap dependency
   
   useEffect(() => {
     if (selectAllCheckboxRef.current) {
@@ -155,15 +148,15 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
     return '';
   };
 
-  if (isLoading) {
+  if (isLoadingTransactions) { 
     return <div className="transaction-table-loading">Loading transactions...</div>;
   }
 
-  if (error) {
-    return <div className="transaction-table-error">Error loading transactions: {error}</div>;
+  if (transactionsError) {
+    return <div className="transaction-table-error">Error loading transactions: {transactionsError}</div>;
   }
 
-  if (!isLoading && transactions.length === 0 && totalItems === 0) {
+  if (!isLoadingTransactions && transactions.length === 0 && totalItems === 0) {
     return <div className="transaction-table-empty">No transactions found.</div>;
   } 
 
@@ -206,15 +199,17 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                   onChange={(e) => handleSelectSingle(transaction.id, e.target.checked)}
                 />
               </td>
-              {/* Assuming transaction.date is "YYYY-MM-DD" string as per TransactionViewItem */}
-              <td>{new Date(transaction.date + 'T00:00:00').toLocaleDateString()}</td> 
+              <td>
+                {/* transaction.date is a number (milliseconds since epoch) as per TransactionViewItem */}
+                {new Date(transaction.date).toLocaleDateString()}
+              </td>
               <td>
                 {transaction.description}
                 {transaction.payee && <span className="payee-details"> ({transaction.payee})</span>}
               </td>
               <td>
                 <select 
-                  value={transaction.category.id} // transaction.category is CategoryInfo
+                  value={transaction.category?.id || ''} // Safely access and provide fallback
                   onChange={(e) => onQuickCategoryChange(transaction.id, e.target.value)}
                   className="category-quick-select"
                   onClick={(e) => e.stopPropagation()} 
@@ -223,17 +218,44 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                     <option key={cat.id} value={cat.id}>{cat.name}</option>
                   ))}
                   {/* Ensure the currently selected category is in the list */}
-                  {!availableCategories.find(c => c.id === transaction.category.id) && (
+                  {transaction.category && !availableCategories.find(c => c.id === transaction.category!.id) && (
                     <option key={transaction.category.id} value={transaction.category.id} disabled>
                       {transaction.category.name} (Current)
                     </option>
                   )}
+                  {!transaction.category && (
+                     <option key="uncategorized-current" value="" disabled>
+                       Uncategorized (Current)
+                     </option>
+                  )}
                 </select>
               </td>
-              <td>{transaction.account.name}</td> {/* transaction.account is AccountInfo */}
-              <td className={transaction.amount >= 0 ? 'amount-income' : 'amount-expense'}>
-                {transaction.currency}{transaction.amount.toFixed(2)}
-              </td>
+              {/* Updated to use accountsMap */}
+              <td>{accountsMap.get(transaction.accountId || '') || 'N/A'}</td>
+              {(() => {
+                // Default values for safety
+                let displayAmount = "0.00";
+                let currencySymbol = "";
+                let amountClass = 'amount-expense'; // Default to expense or neutral
+
+                if (transaction.amount && typeof transaction.amount.amount === 'number') {
+                  const numericAmount = transaction.amount.amount;
+                  displayAmount = numericAmount.toFixed(2);
+                  if (transaction.amount.currency) {
+                    currencySymbol = transaction.amount.currency as string; // Assuming Currency is string-compatible
+                  }
+                  amountClass = numericAmount >= 0 ? 'amount-income' : 'amount-expense';
+                } else {
+                  // Fallback for unexpected structure or undefined amount
+                  console.warn("Transaction amount or its structure is unexpected:", transaction);
+                }
+                console.log("Transaction:", transaction);
+                return (
+                  <td className={amountClass}>
+                    {currencySymbol}{displayAmount}
+                  </td>
+                );
+              })()}
               <td>
                 <button onClick={() => onEditTransaction(transaction.id)} className="action-button edit-button" title="Edit transaction">
                   ✎
@@ -248,6 +270,9 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
           currentPage={currentPage}
           totalPages={totalPages}
           onPageChange={onPageChange}
+          itemsPerPage={itemsPerPage}
+          onPageSizeChange={onPageSizeChange}
+          totalItems={totalItems}
         />
       )}
     </div>

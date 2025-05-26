@@ -1,11 +1,14 @@
 from typing import Dict, Any
 import json
 from decimal import Decimal
+import uuid
 
 class DecimalEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, Decimal):
             return float(obj) if obj % 1 else int(obj)
+        if isinstance(obj, uuid.UUID):
+            return str(obj)
         return super(DecimalEncoder, self).default(obj)
 
 def create_response(status_code: int, body: Dict[str, Any]) -> Dict[str, Any]:

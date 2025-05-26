@@ -2,14 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   getUserTransactions,
   getCategories,
-  getAccounts,
   quickUpdateTransactionCategory,
   TransactionViewItem,
   CategoryInfo,
-  AccountInfo,
   PaginationInfo,
   TransactionRequestParams,
 } from '../../services/TransactionService';
+import { listAccounts, Account } from '../../services/AccountService';
 import TransactionFilters, { FilterValues } from '../components/TransactionFilters';
 import TransactionTable from '../components/TransactionTable';
 import './TransactionsView.css';
@@ -54,7 +53,7 @@ const formatDateToString = (date: Date | null): string => {
 
 const TransactionsView: React.FC = () => {
   const [transactions, setTransactions] = useState<TransactionViewItem[]>([]);
-  const [accounts, setAccounts] = useState<AccountInfo[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<CategoryInfo[]>([]);
   
   const [filters, setFilters] = useState<FilterValues>({
@@ -81,12 +80,12 @@ const TransactionsView: React.FC = () => {
   const fetchInitialData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [accs, cats] = await Promise.all([
-        getAccounts(),
-        getCategories(),
-      ]);
-      setAccounts(accs);
-      setCategories(cats);
+      const accountsResponse = await listAccounts();
+      setAccounts(accountsResponse.accounts);
+
+      const categoriesResponse = await getCategories();
+      setCategories(categoriesResponse);
+
     } catch (err) {
       console.error("Error fetching initial data:", err);
       setError("Failed to load accounts or categories.");
@@ -131,6 +130,7 @@ const TransactionsView: React.FC = () => {
       sortBy: 'date', 
       sortOrder: 'desc',
       lastEvaluatedKey: keyForNextPage,
+      ignoreDup: true,
     };
 
     try {
@@ -167,8 +167,24 @@ const TransactionsView: React.FC = () => {
              console.warn("Navigating to a previous page without a stored LEK history; fetching from the start of the filtered set for page:", newPage);
         }
     }
-    setPagination(prev => ({ ...prev, currentPage: newPage }));
     fetchTransactions(filters, newPage, pagination.pageSize, keyForPageFetch);
+    setPagination(prev => ({ ...prev, currentPage: newPage })); 
+  };
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    if (newPageSize === pagination.pageSize) return; // No change
+
+    console.log(`Changing page size from ${pagination.pageSize} to ${newPageSize}`);
+    // When page size changes, reset to page 1 and clear LEK
+    setPagination(prev => ({
+      ...prev,
+      pageSize: newPageSize,
+      currentPage: 1, // Reset to page 1
+      lastEvaluatedKey: undefined, // Clear LEK for a fresh fetch from page 1
+    }));
+    setCurrentRequestLastEvaluatedKey(undefined); // Also clear the component's LEK state
+    // Fetch transactions with new page size, from page 1
+    fetchTransactions(filters, 1, newPageSize, undefined);
   };
 
   const handleEditTransaction = (transactionId: string) => {
@@ -202,7 +218,7 @@ const TransactionsView: React.FC = () => {
     }
   };
   
-  const initialFilterValuesProvided = accounts.length > 0 && categories.length > 0;
+  const initialFilterValuesProvided = accounts.length > 0 ;
 
   return (
     <div className="transactions-view">
@@ -214,7 +230,7 @@ const TransactionsView: React.FC = () => {
           <TransactionFilters
             accounts={accounts}
             categories={categories}
-            initialFilters={filters} // Pass the current filters state
+            initialFilters={filters}
             onApplyFilters={handleApplyFilters}
           />
       ) : (
@@ -226,6 +242,7 @@ const TransactionsView: React.FC = () => {
         isLoading={isLoading}
         error={error}
         categories={categories}
+        accountsData={accounts}
         onEditTransaction={handleEditTransaction}
         onQuickCategoryChange={handleQuickCategoryChange}
         currentPage={pagination.currentPage}
@@ -233,6 +250,7 @@ const TransactionsView: React.FC = () => {
         onPageChange={handlePageChange}
         itemsPerPage={pagination.pageSize}
         totalItems={pagination.totalItems}
+        onPageSizeChange={handlePageSizeChange}
       />
       {isLoading && transactions.length === 0 && <div className="loading-spinner">Loading transactions...</div>}
     </div>

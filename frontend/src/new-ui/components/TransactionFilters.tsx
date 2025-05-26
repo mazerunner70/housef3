@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './TransactionFilters.css';
-import { AccountInfo, CategoryInfo } from '../../services/TransactionService'; // Assuming types are exported
+import { CategoryInfo } from '../../services/TransactionService'; // Keep CategoryInfo
+import { Account } from '../../services/AccountService'; // Import Account from AccountService
 
 export interface FilterValues {
   startDate?: string;
@@ -12,7 +13,7 @@ export interface FilterValues {
 }
 
 interface TransactionFiltersProps {
-  accounts: AccountInfo[];
+  accounts: Account[]; // Changed from AccountInfo[]
   categories: CategoryInfo[];
   initialFilters?: FilterValues;
   onApplyFilters: (filters: FilterValues) => void;
@@ -104,7 +105,7 @@ const TransactionFilters: React.FC<TransactionFiltersProps> = ({
             className="filter-select multi-select"
           >
             {accounts.map(account => (
-              <option key={account.id} value={account.id}>{account.name}</option>
+              <option key={account.accountId} value={account.accountId}>{account.accountName}</option>
             ))}
           </select>
         </div>

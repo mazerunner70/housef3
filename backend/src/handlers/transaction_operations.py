@@ -6,7 +6,7 @@ from datetime import datetime
 from models.transaction import Transaction
 from utils.auth import get_user_from_event
 from utils.db_utils import list_user_transactions, get_transactions_table
-from backend.src.utils.lambda_utils import create_response
+from utils.lambda_utils import create_response
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -43,6 +43,8 @@ def get_transactions_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
         # Default to 'all' if not provided or empty
         transaction_type = query_params.get("transactionType") if query_params.get("transactionType") else "all"
         search_term = query_params.get("searchTerm")
+        ignore_dup_str = query_params.get("ignoreDup", "false") # Get ignoreDup, default to "false"
+        ignore_dup = ignore_dup_str.lower() == "true" # Convert to boolean
 
         account_ids = account_ids_str.split(',') if account_ids_str else []
         category_ids = category_ids_str.split(',') if category_ids_str else []
@@ -56,34 +58,49 @@ def get_transactions_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
         # Log extracted parameters for now
         logger.info(f"User {user_id} requested transactions with params:")
         logger.info(f"  PageSize: {page_size}, LastEvaluatedKey: {last_evaluated_key}, CurrentPageForUI: {current_page_for_response}")
-        logger.info(f"  Filters: StartDateTS={start_date_ts}, EndDateTS={end_date_ts}, Accounts={account_ids}, Categories={category_ids}, Type={transaction_type}, Search='{search_term}'")
+        logger.info(f"  Filters: StartDateTS={start_date_ts}, EndDateTS={end_date_ts}, Accounts={account_ids}, Categories={category_ids}, Type={transaction_type}, Search='{search_term}', IgnoreDup={ignore_dup}")
         logger.info(f"  SortOrder (for date): {sort_order}")
 
-        # Updated call to the modified list_user_transactions
-        transactions_list, new_last_evaluated_key, total_items = list_user_transactions(
+        transactions_list, new_last_evaluated_key, items_on_this_page = list_user_transactions(
             user_id=user_id, 
             limit=page_size, 
             last_evaluated_key=last_evaluated_key,
-            start_date_ts=start_date_ts,      # Pass integer timestamp
-            end_date_ts=end_date_ts,        # Pass integer timestamp
+            start_date_ts=start_date_ts,      
+            end_date_ts=end_date_ts,        
             account_ids=account_ids,
-            # category_ids=category_ids, # Pass if/when implemented in list_user_transactions
             transaction_type=transaction_type,
             search_term=search_term,
-            sort_order_date=sort_order
+            sort_order_date=sort_order,
+            ignore_dup=ignore_dup
         )
         
-        total_pages = (total_items + page_size - 1) // page_size if total_items > 0 else 0
-        if total_items == 0 and transactions_list: # If total_items is a placeholder but we got items
-            pass # Keep total_pages as 0 or make an estimate if desired
+        total_items_for_response = items_on_this_page
+
+        if items_on_this_page == 0:
+            if current_page_for_response == 1 and not new_last_evaluated_key:
+                # No items on the first page, and no indication of more pages.
+                total_pages_for_response = 0
+            else:
+                # No items on current page, but it's either not the first page
+                # or there might be more pages (new_last_evaluated_key is present).
+                # In this case, total_pages is effectively the current page,
+                # or current_page + 1 if LEK suggests more data coming.
+                total_pages_for_response = current_page_for_response + 1 if new_last_evaluated_key else current_page_for_response
+        else: # items_on_this_page > 0
+            if new_last_evaluated_key:
+                # Items on this page, and there's a key for the next page.
+                total_pages_for_response = current_page_for_response + 1
+            else:
+                # Items on this page, but no key for the next page (this is the last page).
+                total_pages_for_response = current_page_for_response
 
         response_data: Dict[str, Any] = {
-            "transactions": [t.to_dict() for t in transactions_list],
+            "transactions": [t.model_dump(by_alias=True) for t in transactions_list],
             "pagination": {
                 "currentPage": current_page_for_response,
                 "pageSize": page_size,
-                "totalItems": total_items, 
-                "totalPages": total_pages,
+                "totalItems": total_items_for_response, # Number of items on the current page
+                "totalPages": total_pages_for_response,
             }
         }
         if new_last_evaluated_key:
@@ -111,7 +128,7 @@ def delete_transaction_handler(event: Dict[str, Any], user_id: str) -> Dict[str,
         if 'Item' not in response:
             return create_response(404, {"message": "Transaction not found"})
         
-        transaction = Transaction.from_dict(response['Item'])
+        transaction = Transaction.from_flat_dict(response['Item'])
         if transaction.user_id != user_id:
             return create_response(403, {"message": "Unauthorized to delete this transaction"})
         
@@ -124,31 +141,29 @@ def delete_transaction_handler(event: Dict[str, Any], user_id: str) -> Dict[str,
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main handler for transaction operations."""
-    try:
-        user = get_user_from_event(event)
-        if not user:
-            return create_response(401, {"message": "Unauthorized"})
+    # Get route from event
+    route = event.get('routeKey')
+    if not route:
+        return create_response(400, {"message": "Missing route key"})
         
-        user_id = user["id"]
-        # Method and path for routing
-        http_method = event.get("requestContext", {}).get("http", {}).get("method", "").upper()
-        path = event.get("requestContext", {}).get("http", {}).get("path", "") # e.g. /api/transactions or /api/transactions/some-id
+    # Get user from event
+    user = get_user_from_event(event)
+    if not user:
+        return create_response(401, {"message": "Unauthorized"})
+    user_id = user.get('id')
+    if not user_id:
+        return create_response(401, {"message": "Unauthorized"})
+        
+    logger.info(f"Processing {route} request for user {user_id}")
 
-        logger.info(f"Transaction handler invoked: Method={http_method}, Path={path}, UserID={user_id}")
-
-        # Simplified routing based on method and path pattern
-        if http_method == "GET" and path == "/api/transactions": # Assuming API Gateway route is /api/transactions
-            return get_transactions_handler(event, user_id)
-        elif http_method == "DELETE" and path.startswith("/api/transactions/"):
-             # Ensure pathParameters and id exist, or handle error
-            if "pathParameters" not in event or "id" not in event["pathParameters"]:
-                logger.warning(f"Missing transaction ID in DELETE request path: {path}")
-                return create_response(400, {"message": "Transaction ID missing in path."})
-            return delete_transaction_handler(event, user_id)
-        else:
-            logger.warning(f"Unsupported route: Method={http_method}, Path={path}")
-            return create_response(400, {"message": f"Unsupported route: {http_method} {path}"})
+    if route == "GET /transactions":
+        return get_transactions_handler(event, user_id)
+    elif route == "DELETE /transactions/{id}":
+            # Ensure pathParameters and id exist, or handle error
+        if "pathParameters" not in event or "id" not in event["pathParameters"]:
+            logger.warning(f"Missing transaction ID in DELETE request path: {event.get('path')}")
+            return create_response(400, {"message": "Transaction ID missing in path."})
+        return delete_transaction_handler(event, user_id)
+    logger.warning(f"Unsupported route: {route}")
+    return create_response(400, {"message": f"Unsupported route: {route}"})
             
-    except Exception as e:
-        logger.error(f"Error in transaction operations main handler: {str(e)}", exc_info=True)
-        return create_response(500, {"message": "Internal server error in handler."}) 
