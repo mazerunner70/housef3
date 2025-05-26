@@ -1,11 +1,12 @@
 import React from 'react';
+import ImportTransactionsView from './ImportTransactionsView'; // Import the detailed view
 
 const StatementsImportsTab: React.FC = () => {
   return (
-    <div className="tab-content-placeholder" style={{ padding: '20px', textAlign: 'center', border: '1px dashed #ccc', borderRadius: '4px', background: '#f9f9f9' }}>
-      Statements & Imports content will go here.
-      <p style={{fontSize: '0.9em', color: '#666'}}>Import transaction files (e.g., bank statements) and view import history.</p>
-    </div>
+    // The parent div can remain if you want consistent padding/styling for all tab contents
+    // or ImportTransactionsView can manage its own top-level styling.
+    // For now, let ImportTransactionsView handle its own container styling.
+    <ImportTransactionsView />
   );
 };
 export default StatementsImportsTab; 

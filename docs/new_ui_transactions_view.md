@@ -103,7 +103,7 @@ This tab centralizes file import operations and history.
 
 *   **Dedicated Page/Section:** This tab will host the multi-step import process.
 *   **Step 1: File Upload & Account Selection**
-    *   **Modern UI:** Large, clear drag-and-drop area and a prominent file selector button.
+    *   **Modern UI:** Large, clear drag-and-drop area at the top of the page with an account selected and below it a list of files previously imported and the mapping for each. uploading a new file or selecting existing will enable the button.
     *   Supported formats clearly indicated with icons (OFX, QFX, CSV).
     *   Account selection dropdown.
     *   `[Next/Preview]` button.
