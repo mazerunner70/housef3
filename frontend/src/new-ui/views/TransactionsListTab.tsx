@@ -1,17 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getUserTransactions,
   getCategories,
   quickUpdateTransactionCategory,
   TransactionViewItem,
   CategoryInfo,
-  PaginationInfo,
   TransactionRequestParams,
+  PaginationInfo as BackendPaginationInfo,
+  TransactionsViewResponse,
 } from '../../services/TransactionService';
 import { listAccounts, Account } from '../../services/AccountService';
-import TransactionFilters, { FilterValues } from '../components/TransactionFilters';
+import TransactionFilters, { FilterValues as ComponentFilterValues } from '../components/TransactionFilters';
 import TransactionTable from '../components/TransactionTable';
-import './TransactionsView.css'; // Assuming this CSS can be shared or adjusted
+import './TransactionsView.css';
+import { useTransactionsUIStore, FilterValues as StoreFilterValues } from '../../stores/transactionsStore';
 
 // Placeholder for a potential future Modal component
 // For now, we can use alerts or simple divs
@@ -33,6 +36,12 @@ const ModalPlaceholder: React.FC<{ title: string; onClose: () => void; children:
 
 const DEFAULT_PAGE_SIZE = 25;
 
+// API Response type for getUserTransactions -- This can be removed if TransactionsViewResponse is used directly
+// interface TransactionsApiResponse {
+//   transactions: TransactionViewItem[];
+//   pagination: BackendPaginationInfo;
+// }
+
 // Helper to convert YYYY-MM-DD string to Date or null
 const parseDateString = (dateStr: string | undefined): Date | null => {
   if (!dateStr) return null;
@@ -51,178 +60,141 @@ const formatDateToString = (date: Date | null): string => {
   return `${year}-${month}-${day}`;
 };
 
-const TransactionsListTab: React.FC = () => { // Renamed component
-  const [transactions, setTransactions] = useState<TransactionViewItem[]>([]);
+const TransactionsListTab: React.FC = () => {
+  const queryClient = useQueryClient();
+  const {
+    filters,
+    currentPage,
+    pageSize,
+    applyNewFilters,
+    setCurrentPage,
+    setPageSize,
+  } = useTransactionsUIStore();
+
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<CategoryInfo[]>([]);
-  
-  const [filters, setFilters] = useState<FilterValues>({
-    startDate: '',
-    endDate: '',
-    accountIds: [],
-    categoryIds: [],
-    transactionType: 'all',
-    searchTerm: '',
-  });
-  
-  const [pagination, setPagination] = useState<PaginationInfo>({
-    currentPage: 1,
-    pageSize: DEFAULT_PAGE_SIZE,
-    totalItems: 0,
-    totalPages: 0,
-    lastEvaluatedKey: undefined,
-  });
-  const [currentRequestLastEvaluatedKey, setCurrentRequestLastEvaluatedKey] = useState<Record<string, any> | undefined>(undefined);
+  const [initialDataLoading, setInitialDataLoading] = useState(true);
+  const [initialDataError, setInitialDataError] = useState<string | null>(null);
+  const [currentAPILastEvaluatedKey, setCurrentAPILastEvaluatedKey] = useState<Record<string, any> | undefined>();
 
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchInitialData = useCallback(async () => {
-    setIsLoading(true);
+  const fetchInitialFilterData = useCallback(async () => {
+    setInitialDataLoading(true);
+    setInitialDataError(null);
     try {
       const accountsResponse = await listAccounts();
       setAccounts(accountsResponse.accounts);
-
       const categoriesResponse = await getCategories();
       setCategories(categoriesResponse);
-
     } catch (err) {
-      console.error("Error fetching initial data:", err);
-      setError("Failed to load accounts or categories.");
+      console.error("Error fetching initial filter data:", err);
+      setInitialDataError("Failed to load account or category data for filters.");
     } finally {
-      setIsLoading(false);
+      setInitialDataLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchInitialData();
-  }, [fetchInitialData]);
+    fetchInitialFilterData();
+  }, [fetchInitialFilterData]);
 
-  const fetchTransactions = useCallback(async (
-    currentFilters: FilterValues,
-    currentPage: number,
-    pageSize: number,
-    keyForNextPage?: Record<string, any> 
-  ) => {
-    setIsLoading(true);
-    setError(null);
-
-    const startDateMs = currentFilters.startDate ? parseDateString(currentFilters.startDate)?.getTime() : undefined;
-    const endDateSourceDate = parseDateString(currentFilters.endDate);
+  // Construct queryKey. LEK is part of it to ensure new data fetch when it changes.
+  const queryKey = ['transactions', filters, currentPage, pageSize];
+  
+  const fetchTransactionsQueryFn = useCallback(async (): Promise<TransactionsViewResponse> => {
+    const startDateMs = filters.startDate ? parseDateString(filters.startDate)?.getTime() : undefined;
+    const endDateSourceDate = parseDateString(filters.endDate);
     let endDateMs = endDateSourceDate ? endDateSourceDate.getTime() : undefined;
-
     if (endDateMs && endDateSourceDate) {
-        // Ensure endDateMs represents the end of the selected day if it's just a date string
-        const endOfDay = new Date(endDateSourceDate);
-        endOfDay.setHours(23, 59, 59, 999);
-        endDateMs = endOfDay.getTime();
+      const endOfDay = new Date(endDateSourceDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      endDateMs = endOfDay.getTime();
     }
 
     const params: TransactionRequestParams = {
       page: currentPage,
       pageSize: pageSize,
-      transactionType: currentFilters.transactionType === 'all' ? undefined : currentFilters.transactionType,
-      searchTerm: currentFilters.searchTerm || undefined,
-      accountIds: currentFilters.accountIds && currentFilters.accountIds.length > 0 ? currentFilters.accountIds : undefined,
-      categoryIds: currentFilters.categoryIds && currentFilters.categoryIds.length > 0 ? currentFilters.categoryIds : undefined,
+      transactionType: filters.transactionType === 'all' ? undefined : filters.transactionType,
+      searchTerm: filters.searchTerm || undefined,
+      accountIds: filters.accountIds && filters.accountIds.length > 0 ? filters.accountIds : undefined,
+      categoryIds: filters.categoryIds && filters.categoryIds.length > 0 ? filters.categoryIds : undefined,
       startDate: startDateMs,
       endDate: endDateMs,
       sortBy: 'date', 
       sortOrder: 'desc',
-      lastEvaluatedKey: keyForNextPage,
+      lastEvaluatedKey: currentAPILastEvaluatedKey,
       ignoreDup: true,
     };
+    return getUserTransactions(params);
+  }, [filters, currentPage, pageSize, currentAPILastEvaluatedKey]);
 
-    try {
-      const response = await getUserTransactions(params);
-      setTransactions(response.transactions);
-      setPagination(response.pagination);
-      setCurrentRequestLastEvaluatedKey(response.pagination.lastEvaluatedKey);
-    } catch (err) {
-      console.error("Error fetching transactions:", err);
-      setError("Failed to load transactions.");
-      setTransactions([]);
-      setPagination(prev => ({ ...prev, totalItems: 0, totalPages: 0, lastEvaluatedKey: undefined }));
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const {
+    data: transactionsData,
+    isLoading: transactionsLoading,
+    error: transactionsErrorObj,
+    isFetching: transactionsIsFetching,
+  } = useQuery<TransactionsViewResponse, Error>({
+    queryKey,
+    queryFn: fetchTransactionsQueryFn,
+    placeholderData: (previousData) => previousData,
+  });
 
   useEffect(() => {
-    fetchTransactions(filters, 1, pagination.pageSize);
-    setCurrentRequestLastEvaluatedKey(undefined); 
-  }, [filters, fetchTransactions, pagination.pageSize]); // Added pagination.pageSize to dependencies
+    if (transactionsData?.pagination?.lastEvaluatedKey) {
+      setCurrentAPILastEvaluatedKey(transactionsData.pagination.lastEvaluatedKey);
+    }
+  }, [transactionsData]);
 
-  const handleApplyFilters = (newFilters: FilterValues) => {
-    setFilters(newFilters);
-    setPagination(prev => ({ ...prev, currentPage: 1, lastEvaluatedKey: undefined }));
+  const handleApplyFilters = (newFiltersFromComponent: ComponentFilterValues) => {
+    setCurrentAPILastEvaluatedKey(undefined);
+    const filtersForStore: StoreFilterValues = {
+      startDate: newFiltersFromComponent.startDate,
+      endDate: newFiltersFromComponent.endDate,
+      accountIds: newFiltersFromComponent.accountIds || [],
+      categoryIds: newFiltersFromComponent.categoryIds || [],
+      transactionType: newFiltersFromComponent.transactionType || 'all',
+      searchTerm: newFiltersFromComponent.searchTerm || '',
+    };
+    applyNewFilters(filtersForStore);
   };
   
   const handlePageChange = (newPage: number) => {
-    let keyForPageFetch = newPage === 1 ? undefined : currentRequestLastEvaluatedKey;
-    
-    if (newPage <= pagination.currentPage && newPage !== 1) {
-        keyForPageFetch = undefined; 
-        if (pagination.currentPage > 1 && newPage < pagination.currentPage) {
-             console.warn("Navigating to a previous page without a stored LEK history; fetching from the start of the filtered set for page:", newPage);
-        }
+    if (newPage === 1 || newPage < currentPage) {
+      setCurrentAPILastEvaluatedKey(undefined);
     }
-    fetchTransactions(filters, newPage, pagination.pageSize, keyForPageFetch);
-    setPagination(prev => ({ ...prev, currentPage: newPage })); 
+    setCurrentPage(newPage);
   };
 
   const handlePageSizeChange = (newPageSize: number) => {
-    if (newPageSize === pagination.pageSize) return; // No change
-
-    console.log(`Changing page size from ${pagination.pageSize} to ${newPageSize}`);
-    // When page size changes, reset to page 1 and clear LEK
-    setPagination(prev => ({
-      ...prev,
-      pageSize: newPageSize,
-      currentPage: 1, // Reset to page 1
-      lastEvaluatedKey: undefined, // Clear LEK for a fresh fetch from page 1
-    }));
-    setCurrentRequestLastEvaluatedKey(undefined); // Also clear the component's LEK state
-    // Fetch transactions with new page size, from page 1
-    fetchTransactions(filters, 1, newPageSize, undefined);
+    setCurrentAPILastEvaluatedKey(undefined);
+    setPageSize(newPageSize);
   };
 
-  const handleEditTransaction = (transactionId: string) => {
-    console.log("Edit transaction:", transactionId);
-  };
-
+  const [isQuickUpdating, setIsQuickUpdating] = useState(false);
   const handleQuickCategoryChange = async (transactionId: string, newCategoryId: string) => {
-    setIsLoading(true);
+    setIsQuickUpdating(true);
     try {
       await quickUpdateTransactionCategory(transactionId, newCategoryId);
-      const updatedCategoryInfo = categories.find(c => c.id === newCategoryId);
-
-      if (updatedCategoryInfo) {
-        setTransactions(prevTransactions =>
-          prevTransactions.map(t =>
-            t.id === transactionId ? { ...t, category: updatedCategoryInfo } : t
-          )
-        );
-      } else {
-        // If category info not found locally (should be rare if `categories` state is up-to-date),
-        // or if quickUpdateTransactionCategory returned a complex object needing full refresh.
-        fetchTransactions(filters, pagination.currentPage, pagination.pageSize, pagination.currentPage === 1 ? undefined : currentRequestLastEvaluatedKey);
-      }
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
     } catch (err) {
       console.error("Error updating category:", err);
-      setError("Failed to update category.");
-      // Refetch on error to ensure data consistency
-      fetchTransactions(filters, pagination.currentPage, pagination.pageSize, pagination.currentPage === 1 ? undefined : currentRequestLastEvaluatedKey);
     } finally {
-      setIsLoading(false);
+      setIsQuickUpdating(false);
     }
   };
   
-  const initialFilterValuesProvided = accounts.length > 0 ;
+  const initialFilterValuesProvided = !initialDataLoading && accounts.length > 0;
+  const apiError = transactionsErrorObj;
 
-  // This component now only renders its specific content, not the overall page shell or tabs
+  const handleEditTransaction = (transactionId: string) => {
+    console.log("Edit transaction (placeholder):", transactionId);
+    alert('Edit functionality to be implemented, typically involves a modal and a mutation followed by query invalidation.');
+  };
+
   return (
     <>
+      {initialDataLoading && <div className="loading-spinner">Loading filter options...</div>}
+      {initialDataError && <div className="error-message">{initialDataError}</div>}
+      
       {initialFilterValuesProvided ? (
           <TransactionFilters
             accounts={accounts}
@@ -231,27 +203,34 @@ const TransactionsListTab: React.FC = () => { // Renamed component
             onApplyFilters={handleApplyFilters}
           />
       ) : (
-        <div>Loading filters...</div> // Or some other placeholder
+        !initialDataLoading && <div>Filter options could not be loaded or are empty.</div>
       )}
-      {error && <div className="error-message">Error: {error}</div>}
+
+      {apiError && <div className="error-message">Error loading transactions: {apiError.message || 'Unknown error'}</div>}
+      
       <TransactionTable
-        transactions={transactions}
-        isLoading={isLoading}
-        error={error}
+        transactions={transactionsData?.transactions || []}
+        isLoading={transactionsLoading || transactionsIsFetching || isQuickUpdating || initialDataLoading}
+        error={null}
         categories={categories}
         accountsData={accounts}
         onEditTransaction={handleEditTransaction}
         onQuickCategoryChange={handleQuickCategoryChange}
-        currentPage={pagination.currentPage}
-        totalPages={pagination.totalPages}
+        currentPage={currentPage}
+        totalPages={transactionsData?.pagination?.totalPages || 0}
         onPageChange={handlePageChange}
-        itemsPerPage={pagination.pageSize}
-        totalItems={pagination.totalItems}
+        itemsPerPage={pageSize}
+        totalItems={transactionsData?.pagination?.totalItems || 0}
         onPageSizeChange={handlePageSizeChange}
       />
-      {isLoading && transactions.length === 0 && <div className="loading-spinner">Loading transactions...</div>}
+      {(transactionsLoading || transactionsIsFetching) && (!transactionsData?.transactions || transactionsData.transactions.length === 0) && 
+        <div className="loading-spinner">Loading transactions...</div>
+      }
+      {!transactionsLoading && !transactionsIsFetching && !initialDataLoading && (!transactionsData?.transactions || transactionsData.transactions.length === 0) && 
+        <div className="transaction-table-empty">No transactions found for the current filters.</div>
+      }
     </>
   );
 };
 
-export default TransactionsListTab; // Export with new name 
+export default TransactionsListTab; 

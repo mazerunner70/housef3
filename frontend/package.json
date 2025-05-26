@@ -19,10 +19,12 @@
     "apexcharts": "^4.7.0",
     "react": "^19.0.0",
     "react-apexcharts": "^1.7.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "zustand": "^5.0.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
+    "@tanstack/react-query-devtools": "^5.77.2",
     "@types/jest": "^29.5.0",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",

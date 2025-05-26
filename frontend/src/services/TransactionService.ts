@@ -128,7 +128,9 @@ export const getUserTransactions = async (params: TransactionRequestParams): Pro
   const endpoint = `${API_ENDPOINT}/api/transactions?${query.toString()}`; 
   try {
     const response = await authenticatedRequest(endpoint);
-    return response as TransactionsViewResponse; 
+    const res = response as TransactionsViewResponse; 
+    console.log('res size', res.transactions.length);
+    return res;
   } catch (error) {
     console.error('Error fetching user transactions:', error);
     throw error;
