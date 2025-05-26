@@ -7,10 +7,12 @@ import traceback
 import boto3
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional, Union, Tuple
 from botocore.exceptions import ClientError
 from decimal import Decimal
 import decimal
+
+from pydantic import BaseModel
 
 from models import (
     Account, 
@@ -20,7 +22,7 @@ from models import (
     AccountType,
     Currency
 )
-from models.category import Category, CategoryUpdate
+from models.category import Category, CategoryType, CategoryUpdate
 from models.transaction import Transaction
 from boto3.dynamodb.conditions import Key, Attr
 from models.file_map import FileMap
@@ -46,6 +48,8 @@ _accounts_table = None
 _files_table = None
 _transactions_table = None
 _file_maps_table = None
+
+categories_table = None
 
 class NotAuthorized(Exception):
     """Raised when a user is not authorized to access a resource."""
@@ -469,33 +473,84 @@ def list_file_transactions(file_id: str) -> List[Transaction]:
         raise
 
 
-def list_user_transactions(user_id: str) -> List[Transaction]:
+def list_user_transactions(
+    user_id: str, 
+    limit: int = 50, 
+    last_evaluated_key: Optional[Dict[str, Any]] = None,
+    start_date_ts: Optional[int] = None,
+    end_date_ts: Optional[int] = None,
+    account_ids: Optional[List[str]] = None,
+    transaction_type: Optional[str] = None,
+    search_term: Optional[str] = None,
+    sort_order_date: str = 'desc'
+) -> Tuple[List[Transaction], Optional[Dict[str, Any]], int]:
     """
-    List all transactions for a specific user using the UserIdIndex GSI.
-    
-    Args:
-        user_id: The ID of the user whose transactions to retrieve
-        
-    Returns:
-        List of Transaction objects
-        
-    Raises:
-        ClientError if the query fails
+    List transactions for a user with filtering, date sorting, and pagination.
+    Assumes 'UserIdIndex' GSI with 'userId' as PK and 'date' (ms since epoch) as SK or other suitable SK for date sorting.
+    And that 'date' attribute in DynamoDB is stored as numeric milliseconds since epoch.
     """
     try:
-        response = get_transactions_table().query(
-            IndexName='UserIdIndex',
-            KeyConditionExpression=Key('userId').eq(user_id)
-        )
+        table = get_transactions_table()
+        if not table:
+            logger.error("TRANSACTIONS_TABLE is not configured.")
+            return [], None, 0
+
+        query_params: Dict[str, Any] = {
+            'IndexName': 'UserIdIndex',
+            'KeyConditionExpression': Key('userId').eq(user_id),
+            'Limit': limit,
+            'ScanIndexForward': sort_order_date.lower() == 'asc'
+        }
+
+        if last_evaluated_key:
+            query_params['ExclusiveStartKey'] = last_evaluated_key
+
+        filter_expressions = []
+
+        # Date range filter using integer timestamps
+        if start_date_ts is not None and end_date_ts is not None:
+            # Frontend should ensure end_date_ts is end of day if a full day range is intended.
+            # Or, if frontend sends start of day for end_date_ts, add (24*60*60*1000 - 1) ms to make it inclusive.
+            # For now, using the timestamps as provided.
+            filter_expressions.append(Attr('date').between(start_date_ts, end_date_ts))
+        elif start_date_ts is not None:
+            filter_expressions.append(Attr('date').gte(start_date_ts))
+        elif end_date_ts is not None:
+            filter_expressions.append(Attr('date').lte(end_date_ts))
         
-        transactions = []
-        for item in response.get('Items', []):
-            transactions.append(Transaction.from_dict(item))
+        if account_ids:
+            filter_expressions.append(Attr('accountId').is_in(account_ids))
+
+        if transaction_type and transaction_type.lower() != 'all':
+            filter_expressions.append(Attr('transactionType').eq(transaction_type))
         
-        return transactions
+        if search_term:
+            filter_expressions.append(Attr('description').contains(search_term))
+
+        if filter_expressions:
+            final_filter_expression = filter_expressions[0]
+            if len(filter_expressions) > 1:
+                for i in range(1, len(filter_expressions)):
+                    final_filter_expression = final_filter_expression & filter_expressions[i]
+            query_params['FilterExpression'] = final_filter_expression
+
+        logger.debug(f"DynamoDB query params: {query_params}")
+        response = table.query(**query_params)
+        
+        transactions = [Transaction.from_dict(item) for item in response.get('Items', [])]
+        new_last_evaluated_key = response.get('LastEvaluatedKey')
+        
+        current_page_scanned_count = response.get('ScannedCount', 0)
+        logger.info(f"Query for user {user_id} returned {len(transactions)} items. ScannedCount: {current_page_scanned_count}")
+
+        total_items_placeholder = 0 
+        return transactions, new_last_evaluated_key, total_items_placeholder
             
     except ClientError as e:
-        logger.error(f"Error querying transactions by user: {str(e)}")
+        logger.error(f"Error querying transactions by user {user_id}: {str(e)}", exc_info=True)
+        raise 
+    except Exception as e:
+        logger.error(f"Unexpected error in list_user_transactions for user {user_id}: {str(e)}", exc_info=True)
         raise
 
 
@@ -939,20 +994,35 @@ def update_transaction(transaction: Transaction) -> None:
         logger.error(f"Error updating transaction {transaction.transaction_id}: {str(e)}")
         raise e
 
-categories_table = None
-if CATEGORIES_TABLE_NAME:
-    categories_table = dynamodb.Table(CATEGORIES_TABLE_NAME)
-    logger.info(f"db_utils_categories: Categories table {CATEGORIES_TABLE_NAME} resource initialized.")
-else:
-    logger.error("db_utils_categories: CATEGORIES_TABLE_NAME environment variable not set. DB functions will fail.")
+def get_categories_table():
+    global categories_table
+    if categories_table is None:
+        if CATEGORIES_TABLE_NAME:
+            categories_table = dynamodb.Table(CATEGORIES_TABLE_NAME)
+            logger.info(f"DynamoDB Categories table {CATEGORIES_TABLE_NAME} initialized.")
+        else:
+            logger.critical("CRITICAL: CATEGORIES_TABLE_NAME env var not set.")
+            raise ConnectionError("CATEGORIES_TABLE_NAME not set") # Or some other appropriate error
+    return categories_table
 
 def create_category_in_db(category: Category) -> Category:
-    if not categories_table:
+    """Persist a new category to DynamoDB."""
+    table = get_categories_table()
+    if not table:
         logger.error("DB: Categories table not initialized for create_category_in_db")
-        raise ConnectionError("Categories table not initialized")
-    logger.debug(f"DB: Creating category {category.categoryId}")
-    categories_table.put_item(Item=category.dict())
-    return category
+        raise ConnectionError("Database table not initialized")
+    
+    try:
+        # Category is already a Pydantic model, so use model_dump()
+        table.put_item(Item=category.model_dump())
+        logger.info(f"DB: Category {category.categoryId} created successfully for user {category.userId}.")
+        return category
+    except ClientError as e:
+        logger.error(f"DB: Error creating category {category.categoryId}: {str(e)}", exc_info=True)
+        raise
+    except Exception as e:
+        logger.error(f"DB: Unexpected error creating category {category.categoryId}: {str(e)}", exc_info=True)
+        raise
 
 def get_category_by_id_from_db(category_id: str, user_id: str) -> Optional[Category]:
     if not categories_table:
@@ -1005,38 +1075,89 @@ def list_categories_by_user_from_db(user_id: str, parent_category_id: Optional[s
         current_params['ExclusiveStartKey'] = response['LastEvaluatedKey']
     return [Category(**item) for item in all_items_raw]
 
-def update_category_in_db(category_id: str, user_id: str, update_data: CategoryUpdate) -> Optional[Category]:
-    if not categories_table:
+def update_category_in_db(category_id: str, user_id: str, update_data: Dict[str, Any]) -> Optional[Category]:
+    """Update an existing category in DynamoDB using a dictionary of update fields."""
+    table = get_categories_table()
+    if not table:
         logger.error("DB: Categories table not initialized for update_category_in_db")
-        return None
-    logger.debug(f"DB: Updating category {category_id} for user {user_id}")
-    existing_category = get_category_by_id_from_db(category_id, user_id) # Use the util version
+        raise ConnectionError("Database table not initialized") 
+
+    existing_category = get_category_by_id_from_db(category_id, user_id)
     if not existing_category:
+        logger.warning(f"DB: Category {category_id} not found or user {user_id} has no access.")
         return None
-    update_dict = update_data.dict(exclude_unset=True)
-    if not update_dict:
-        return existing_category
-    update_dict['updatedAt'] = int(datetime.now(timezone.utc).timestamp() * 1000)
+
+    if not update_data: 
+        logger.info(f"DB: No update data provided for category {category_id}. Returning existing.")
+        return existing_category 
+
     update_expression_parts = []
-    expression_attribute_values: Dict[str, Any] = {}
-    expression_attribute_names: Dict[str, str] = {}
-    for key, value in update_dict.items():
-        attr_name_placeholder = f"#{key}"
-        attr_value_placeholder = f":{key}"
-        expression_attribute_names[attr_name_placeholder] = key
-        expression_attribute_values[attr_value_placeholder] = value
-        update_expression_parts.append(f"{attr_name_placeholder} = {attr_value_placeholder}")
+    expression_attribute_values = {}
+    expression_attribute_names = {}
+
+    allowed_fields_to_update = ["name", "type", "parentCategoryId", "icon", "color"]
+    for key, value in update_data.items():
+        if key in allowed_fields_to_update:
+            attr_key_placeholder = f"#{key}Attr"
+            attr_val_placeholder = f":{key}Val"
+            update_expression_parts.append(f"{attr_key_placeholder} = {attr_val_placeholder}")
+            expression_attribute_names[attr_key_placeholder] = key
+            if key == "type" and isinstance(value, CategoryType):
+                 expression_attribute_values[attr_val_placeholder] = value.value
+            elif key == "parentCategoryId": 
+                 if value is None or value == "": # Treat empty string as null for parentCategoryId
+                    update_expression_parts[-1] = f"REMOVE {attr_key_placeholder}"
+                    if attr_val_placeholder in expression_attribute_values: # only delete if it was added
+                        del expression_attribute_values[attr_val_placeholder]
+                    continue 
+                 else:
+                    expression_attribute_values[attr_val_placeholder] = value
+            else:
+                expression_attribute_values[attr_val_placeholder] = value
+    
+    if "rules" in update_data and update_data["rules"] is not None: # Ensure rules is not None
+        attr_key_placeholder = f"#rulesAttr"
+        attr_val_placeholder = f":rulesVal"
+        update_expression_parts.append(f"{attr_key_placeholder} = {attr_val_placeholder}")
+        expression_attribute_names[attr_key_placeholder] = "rules"
+        expression_attribute_values[attr_val_placeholder] = [rule.model_dump() if isinstance(rule, BaseModel) else rule for rule in update_data["rules"]]
+
     if not update_expression_parts:
-        return existing_category # Should not happen if updatedAt is always present
+        logger.info(f"DB: No valid fields to update for category {category_id} after filtering.")
+        return existing_category
+
+    updated_at_key_placeholder = "#updatedAtAttr"
+    updated_at_val_placeholder = ":updatedAtVal"
+    update_expression_parts.append(f"{updated_at_key_placeholder} = {updated_at_val_placeholder}")
+    expression_attribute_names[updated_at_key_placeholder] = "updatedAt"
+    expression_attribute_values[updated_at_val_placeholder] = int(datetime.now(timezone.utc).timestamp() * 1000)
+
     update_expression = "SET " + ", ".join(update_expression_parts)
-    response = categories_table.update_item(
-        Key={'categoryId': category_id},
-        UpdateExpression=update_expression,
-        ExpressionAttributeNames=expression_attribute_names,
-        ExpressionAttributeValues=expression_attribute_values,
-        ReturnValues="ALL_NEW"
-    )
-    return Category(**response.get('Attributes'))
+
+    logger.debug(f"DB: Updating category {category_id}. Expression: {update_expression}, Values: {expression_attribute_values}, Names: {expression_attribute_names}")
+
+    try:
+        response = table.update_item(
+            Key={'categoryId': category_id, 'userId': user_id}, 
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_attribute_values,
+            ExpressionAttributeNames=expression_attribute_names,
+            ReturnValues="ALL_NEW"
+        )
+        logger.info(f"DB: Category {category_id} updated successfully.")
+        return Category(**response['Attributes'])
+    except ClientError as e:
+        logger.error(f"DB: Error updating category {category_id}: {str(e)}", exc_info=True)
+        # Safer access to error details
+        error_info = e.response.get('Error', {})
+        error_code = error_info.get('Code')
+        if error_code == "ConditionalCheckFailedException":
+            logger.warning(f"DB: Conditional check failed for category {category_id}. Item might not exist or condition not met.")
+            return None
+        raise 
+    except Exception as e:
+        logger.error(f"DB: Unexpected error updating category {category_id}: {str(e)}", exc_info=True)
+        raise
 
 def delete_category_from_db(category_id: str, user_id: str) -> bool:
     if not categories_table:

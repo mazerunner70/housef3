@@ -1,0 +1,159 @@
+.transaction-filters-form {
+  background-color: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* Responsive grid */
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.filter-group label {
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #343a40;
+  font-size: 0.9rem;
+}
+
+.filter-input,
+.filter-select {
+  padding: 10px 12px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 1rem;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  background-color: #fff;
+}
+
+.filter-input:focus,
+.filter-select:focus {
+  border-color: #80bdff;
+  outline: 0;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.filter-select.multi-select {
+  min-height: 80px; /* Allow space for multiple options */
+}
+
+.date-range-group {
+  display: flex;
+  flex-direction: row; /* Align date inputs horizontally */
+  align-items: center; /* Align items vertically */
+  gap: 10px;
+}
+
+.date-range-group label {
+  margin-bottom: 0; /* Remove bottom margin for inline labels */
+  white-space: nowrap;
+}
+
+.date-range-group input[type="date"] {
+  flex-grow: 1;
+}
+
+.transaction-type-group .button-group {
+  display: flex;
+  gap: 8px; /* Space between buttons */
+}
+
+.filter-button.type-button {
+  flex-grow: 1;
+  padding: 10px;
+  font-size: 0.9rem;
+  background-color: #fff;
+  color: #007bff;
+  border: 1px solid #007bff;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  text-align: center;
+}
+
+.filter-button.type-button:hover {
+  background-color: #e6f2ff;
+}
+
+.filter-button.type-button.active {
+  background-color: #007bff;
+  color: white;
+  font-weight: bold;
+}
+
+.search-group .search-input {
+  width: 100%; /* Make search input take full width of its grid cell */
+}
+
+.filter-actions {
+  display: flex;
+  justify-content: flex-end; /* Align buttons to the right */
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #e0e0e0;
+  margin-top: 10px;
+}
+
+.filter-button {
+  padding: 10px 20px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.95rem;
+  transition: background-color 0.2s ease, opacity 0.2s ease;
+}
+
+.filter-button.apply-button {
+  background-color: #007bff;
+  color: white;
+}
+
+.filter-button.apply-button:hover {
+  background-color: #0056b3;
+}
+
+.filter-button.clear-button {
+  background-color: #6c757d;
+  color: white;
+}
+
+.filter-button.clear-button:hover {
+  background-color: #5a6268;
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-width: 768px) {
+  .filter-grid {
+    grid-template-columns: 1fr; /* Stack filters vertically */
+  }
+  .date-range-group {
+    flex-direction: column; /* Stack date inputs */
+    align-items: stretch;
+  }
+  .date-range-group label {
+    margin-bottom: 8px;
+  }
+  .transaction-type-group .button-group {
+    flex-wrap: wrap; /* Allow type buttons to wrap */
+  }
+  .filter-button.type-button {
+    flex-basis: calc(50% - 4px); /* Two buttons per row on small screens */
+  }
+  .filter-actions {
+    flex-direction: column;
+  }
+  .filter-button {
+    width: 100%;
+  }
+} 

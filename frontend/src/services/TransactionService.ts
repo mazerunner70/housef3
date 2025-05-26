@@ -50,6 +50,133 @@ export interface TransactionListResponse {
   };
 }
 
+// --- New interfaces and functions for Transactions View ---
+
+export interface CategoryInfo {
+  id: string;
+  name: string;
+  // Add other fields if your API returns more, e.g., type, parentId
+}
+
+export interface AccountInfo {
+  id: string;
+  name: string;
+  // Add other fields if your API returns more, e.g., type, currency
+}
+
+export interface TransactionViewItem extends Omit<Transaction, 'category' | 'account' | 'date' | 'amount'> {
+  id: string; // transactionId from existing Transaction interface
+  date: string; // ISO date string "YYYY-MM-DD" as per new_ui_transactions_view.md
+  description: string;
+  payee?: string;
+  category: CategoryInfo; // Use new CategoryInfo
+  account: AccountInfo;   // Use new AccountInfo
+  amount: number; // Direct number, as per new_ui_transactions_view.md example
+  currency: string; // e.g. "USD", as per new_ui_transactions_view.md example
+  type: 'income' | 'expense' | 'transfer';
+  notes?: string;
+  isSplit?: boolean;
+}
+
+export interface PaginationInfo {
+  currentPage: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  lastEvaluatedKey?: Record<string, any>;
+}
+
+export interface TransactionsViewResponse {
+  transactions: TransactionViewItem[];
+  pagination: PaginationInfo;
+}
+
+export interface TransactionRequestParams {
+  page?: number;
+  pageSize?: number;
+  startDate?: number; // Changed to number for millisecond timestamp
+  endDate?: number;   // Changed to number for millisecond timestamp
+  accountIds?: string[];
+  categoryIds?: string[];
+  transactionType?: 'all' | 'income' | 'expense' | 'transfer';
+  searchTerm?: string;
+  sortBy?: keyof TransactionViewItem | string;
+  sortOrder?: 'asc' | 'desc';
+  lastEvaluatedKey?: Record<string, any>;
+}
+
+// Function to fetch transactions for the main transaction view
+export const getUserTransactions = async (params: TransactionRequestParams): Promise<TransactionsViewResponse> => {
+  const query = new URLSearchParams();
+  if (params.page) query.append('page', params.page.toString());
+  if (params.pageSize) query.append('pageSize', params.pageSize.toString());
+  
+  // Append timestamps as strings
+  if (params.startDate !== undefined) query.append('startDate', params.startDate.toString());
+  if (params.endDate !== undefined) query.append('endDate', params.endDate.toString());
+  
+  if (params.accountIds && params.accountIds.length > 0) query.append('accountIds', params.accountIds.join(','));
+  if (params.categoryIds && params.categoryIds.length > 0) query.append('categoryIds', params.categoryIds.join(','));
+  if (params.transactionType) query.append('transactionType', params.transactionType);
+  if (params.searchTerm) query.append('searchTerm', params.searchTerm);
+  if (params.sortBy) query.append('sortBy', params.sortBy as string);
+  if (params.sortOrder) query.append('sortOrder', params.sortOrder);
+  if (params.lastEvaluatedKey) query.append('lastEvaluatedKey', JSON.stringify(params.lastEvaluatedKey));
+
+  const endpoint = `${API_ENDPOINT}/api/transactions?${query.toString()}`; 
+  try {
+    const response = await authenticatedRequest(endpoint);
+    return response as TransactionsViewResponse; 
+  } catch (error) {
+    console.error('Error fetching user transactions:', error);
+    throw error;
+  }
+};
+
+// Function to fetch all categories
+export const getCategories = async (): Promise<CategoryInfo[]> => {
+  const endpoint = `${API_ENDPOINT}/api/categories`;
+  try {
+    const response = await authenticatedRequest(endpoint);
+    // Assuming API returns [{ id: "cat_abc", name: "Groceries" }, ...]
+    return response as CategoryInfo[]; // Adjust if API returns a more complex object e.g. { categories: [] }
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    throw error;
+  }
+};
+
+// Function to fetch all accounts
+export const getAccounts = async (): Promise<AccountInfo[]> => {
+  const endpoint = `${API_ENDPOINT}/api/accounts`;
+  try {
+    const response = await authenticatedRequest(endpoint);
+    // Assuming API returns [{ id: "acc_123", name: "Checking Account" }, ...]
+    return response as AccountInfo[]; // Adjust if API returns a more complex object e.g. { accounts: [] }
+  } catch (error) {
+    console.error('Error fetching accounts:', error);
+    throw error;
+  }
+};
+
+// Function for quick category update
+export const quickUpdateTransactionCategory = async (transactionId: string, categoryId: string): Promise<TransactionViewItem | { success: boolean }> => {
+  const endpoint = `${API_ENDPOINT}/api/transactions/${transactionId}/category`;
+  try {
+    const response = await authenticatedRequest(endpoint, {
+      method: 'PUT',
+      body: JSON.stringify({ categoryId }),
+    });
+    // The response could be the updated transaction or a simple success message
+    return response; 
+  } catch (error) {
+    console.error('Error updating transaction category:', error);
+    throw error;
+  }
+};
+
+// --- End of New interfaces and functions ---
+
 // Helper function to handle API requests with authentication
 const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
   const currentUser = getCurrentUser();
@@ -150,5 +277,9 @@ export const getAccountTransactions = async (accountId: string, limit: number = 
 // Default export
 export default {
   getFileTransactions,
-  getAccountTransactions
+  getAccountTransactions,
+  getUserTransactions,
+  getCategories,
+  getAccounts,
+  quickUpdateTransactionCategory
 }; 

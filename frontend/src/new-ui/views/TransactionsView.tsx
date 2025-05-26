@@ -1,4 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  getUserTransactions,
+  getCategories,
+  getAccounts,
+  quickUpdateTransactionCategory,
+  TransactionViewItem,
+  CategoryInfo,
+  AccountInfo,
+  PaginationInfo,
+  TransactionRequestParams,
+} from '../../services/TransactionService';
+import TransactionFilters, { FilterValues } from '../components/TransactionFilters';
+import TransactionTable from '../components/TransactionTable';
 import './TransactionsView.css';
 
 // Placeholder for a potential future Modal component
@@ -19,100 +32,209 @@ const ModalPlaceholder: React.FC<{ title: string; onClose: () => void; children:
 
 type TransactionTab = 'TRANSACTIONS_LIST' | 'CATEGORY_MANAGEMENT' | 'STATEMENTS_IMPORTS';
 
-const TransactionsView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<TransactionTab>('TRANSACTIONS_LIST');
-  const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
-  const [showImportStatementModal, setShowImportStatementModal] = useState(false);
+const DEFAULT_PAGE_SIZE = 25;
 
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 'TRANSACTIONS_LIST':
-        return (
-          <div className="tab-content-container">
-            {/* Section 3.1 Filtering and Search Controls will go here */}
-            {/* Section 3.2 Transaction Table will go here */}
-            {/* Section 3.4 Bulk Actions Bar will go here (conditionally) */}
-            <p>Transaction list, filters, and editing dialogs will appear here.</p>
-            <p>This tab will fulfill section 3 of the design document.</p>
-          </div>
-        );
-      case 'CATEGORY_MANAGEMENT':
-        return (
-          <div className="tab-content-container">
-            <p>Category management, including regex rules, will appear here.</p>
-            <p>This tab will fulfill section 4 of the design document.</p>
-          </div>
-        );
-      case 'STATEMENTS_IMPORTS':
-        return (
-          <div className="tab-content-container">
-            <p>Statement import workflow and history will appear here.</p>
-            <p>This tab will fulfill section 5 of the design document.</p>
-            <button 
-              className="action-button import-statement-button-tab"
-              onClick={() => setShowImportStatementModal(true)}
-            >
-              <span role="img" aria-label="import">📥</span> Initiate Import
-            </button>
-          </div>
-        );
-      default:
-        return null;
+// Helper to convert YYYY-MM-DD string to Date or null
+const parseDateString = (dateStr: string | undefined): Date | null => {
+  if (!dateStr) return null;
+  const date = new Date(dateStr);
+  return isNaN(date.getTime()) ? null : date;
+};
+
+// Helper to format Date to YYYY-MM-DD string or empty string
+const formatDateToString = (date: Date | null): string => {
+  if (!date) return '';
+  // Adjust for timezone offset to get YYYY-MM-DD in local time
+  const pad = (num: number) => num.toString().padStart(2, '0');
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  return `${year}-${month}-${day}`;
+};
+
+const TransactionsView: React.FC = () => {
+  const [transactions, setTransactions] = useState<TransactionViewItem[]>([]);
+  const [accounts, setAccounts] = useState<AccountInfo[]>([]);
+  const [categories, setCategories] = useState<CategoryInfo[]>([]);
+  
+  const [filters, setFilters] = useState<FilterValues>({
+    startDate: '',
+    endDate: '',
+    accountIds: [],
+    categoryIds: [],
+    transactionType: 'all',
+    searchTerm: '',
+  });
+  
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    currentPage: 1,
+    pageSize: DEFAULT_PAGE_SIZE,
+    totalItems: 0,
+    totalPages: 0,
+    lastEvaluatedKey: undefined,
+  });
+  const [currentRequestLastEvaluatedKey, setCurrentRequestLastEvaluatedKey] = useState<Record<string, any> | undefined>(undefined);
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchInitialData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [accs, cats] = await Promise.all([
+        getAccounts(),
+        getCategories(),
+      ]);
+      setAccounts(accs);
+      setCategories(cats);
+    } catch (err) {
+      console.error("Error fetching initial data:", err);
+      setError("Failed to load accounts or categories.");
+    } finally {
+      setIsLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    fetchInitialData();
+  }, [fetchInitialData]);
+
+  const fetchTransactions = useCallback(async (
+    currentFilters: FilterValues,
+    currentPage: number,
+    pageSize: number,
+    keyForNextPage?: Record<string, any> 
+  ) => {
+    setIsLoading(true);
+    setError(null);
+
+    const startDateMs = currentFilters.startDate ? parseDateString(currentFilters.startDate)?.getTime() : undefined;
+    const endDateSourceDate = parseDateString(currentFilters.endDate);
+    let endDateMs = endDateSourceDate ? endDateSourceDate.getTime() : undefined;
+
+    if (endDateMs && endDateSourceDate) {
+        // Ensure endDateMs represents the end of the selected day if it's just a date string
+        const endOfDay = new Date(endDateSourceDate);
+        endOfDay.setHours(23, 59, 59, 999);
+        endDateMs = endOfDay.getTime();
+    }
+
+    const params: TransactionRequestParams = {
+      page: currentPage,
+      pageSize: pageSize,
+      transactionType: currentFilters.transactionType === 'all' ? undefined : currentFilters.transactionType,
+      searchTerm: currentFilters.searchTerm || undefined,
+      accountIds: currentFilters.accountIds && currentFilters.accountIds.length > 0 ? currentFilters.accountIds : undefined,
+      categoryIds: currentFilters.categoryIds && currentFilters.categoryIds.length > 0 ? currentFilters.categoryIds : undefined,
+      startDate: startDateMs,
+      endDate: endDateMs,
+      sortBy: 'date', 
+      sortOrder: 'desc',
+      lastEvaluatedKey: keyForNextPage,
+    };
+
+    try {
+      const response = await getUserTransactions(params);
+      setTransactions(response.transactions);
+      setPagination(response.pagination);
+      setCurrentRequestLastEvaluatedKey(response.pagination.lastEvaluatedKey);
+    } catch (err) {
+      console.error("Error fetching transactions:", err);
+      setError("Failed to load transactions.");
+      setTransactions([]);
+      setPagination(prev => ({ ...prev, totalItems: 0, totalPages: 0, lastEvaluatedKey: undefined }));
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTransactions(filters, 1, pagination.pageSize);
+    setCurrentRequestLastEvaluatedKey(undefined); 
+  }, [filters, fetchTransactions]);
+
+  const handleApplyFilters = (newFilters: FilterValues) => {
+    setFilters(newFilters);
+    setPagination(prev => ({ ...prev, currentPage: 1, lastEvaluatedKey: undefined }));
+  };
+  
+  const handlePageChange = (newPage: number) => {
+    let keyForPageFetch = newPage === 1 ? undefined : currentRequestLastEvaluatedKey;
+    
+    if (newPage <= pagination.currentPage && newPage !== 1) {
+        keyForPageFetch = undefined; 
+        if (pagination.currentPage > 1 && newPage < pagination.currentPage) {
+             console.warn("Navigating to a previous page without a stored LEK history; fetching from the start of the filtered set for page:", newPage);
+        }
+    }
+    setPagination(prev => ({ ...prev, currentPage: newPage }));
+    fetchTransactions(filters, newPage, pagination.pageSize, keyForPageFetch);
   };
 
+  const handleEditTransaction = (transactionId: string) => {
+    console.log("Edit transaction:", transactionId);
+  };
+
+  const handleQuickCategoryChange = async (transactionId: string, newCategoryId: string) => {
+    setIsLoading(true);
+    try {
+      await quickUpdateTransactionCategory(transactionId, newCategoryId);
+      const updatedCategoryInfo = categories.find(c => c.id === newCategoryId);
+
+      if (updatedCategoryInfo) {
+        setTransactions(prevTransactions =>
+          prevTransactions.map(t =>
+            t.id === transactionId ? { ...t, category: updatedCategoryInfo } : t
+          )
+        );
+      } else {
+        // If category info not found locally (should be rare if `categories` state is up-to-date),
+        // or if quickUpdateTransactionCategory returned a complex object needing full refresh.
+        fetchTransactions(filters, pagination.currentPage, pagination.pageSize, pagination.currentPage === 1 ? undefined : currentRequestLastEvaluatedKey);
+      }
+    } catch (err) {
+      console.error("Error updating category:", err);
+      setError("Failed to update category.");
+      // Refetch on error to ensure data consistency
+      fetchTransactions(filters, pagination.currentPage, pagination.pageSize, pagination.currentPage === 1 ? undefined : currentRequestLastEvaluatedKey);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const initialFilterValuesProvided = accounts.length > 0 && categories.length > 0;
+
   return (
-    <div className="transactions-view-container">
+    <div className="transactions-view">
       <header className="transactions-view-header">
         <h1>Transactions</h1>
-        <button 
-          className="action-button add-transaction-button-global"
-          onClick={() => setShowAddTransactionModal(true)}
-        >
-          <span role="img" aria-label="add">➕</span> Add Transaction
-        </button>
+        {/* Add Transaction button can be added here if needed, with its own state for modal visibility */}
       </header>
-
-      <nav className="transactions-view-tabs">
-        <button 
-          className={`tab-button ${activeTab === 'TRANSACTIONS_LIST' ? 'active' : ''}`}
-          onClick={() => setActiveTab('TRANSACTIONS_LIST')}
-        >
-          <span role="img" aria-label="list">📋</span> Transactions List
-        </button>
-        <button 
-          className={`tab-button ${activeTab === 'CATEGORY_MANAGEMENT' ? 'active' : ''}`}
-          onClick={() => setActiveTab('CATEGORY_MANAGEMENT')}
-        >
-          <span role="img" aria-label="categories">🏷️</span> Category Management
-        </button>
-        <button 
-          className={`tab-button ${activeTab === 'STATEMENTS_IMPORTS' ? 'active' : ''}`}
-          onClick={() => setActiveTab('STATEMENTS_IMPORTS')}
-        >
-          <span role="img" aria-label="statements">📄</span> Statements & Imports
-        </button>
-      </nav>
-
-      <div className="transactions-tab-content">
-        {renderTabContent()}
-      </div>
-
-      {showAddTransactionModal && (
-        <ModalPlaceholder title="Add New Transaction" onClose={() => setShowAddTransactionModal(false)}>
-          <p>Form for adding a new transaction will be here.</p>
-          {/* Future: <AddTransactionForm onSubmit={...} onCancel={...} /> */}
-        </ModalPlaceholder>
+      {initialFilterValuesProvided ? (
+          <TransactionFilters
+            accounts={accounts}
+            categories={categories}
+            initialFilters={filters} // Pass the current filters state
+            onApplyFilters={handleApplyFilters}
+          />
+      ) : (
+        <div>Loading filters...</div> // Or some other placeholder
       )}
-
-      {showImportStatementModal && (
-        <ModalPlaceholder title="Import Statement - Step 1: Upload" onClose={() => setShowImportStatementModal(false)}>
-          <p>File upload (drag & drop, file selector) and account selection will be here.</p>
-          <p>This is the entry point for Section 4 (File Management: Import Workflow).</p>
-          {/* Future: <ImportStep1 onNext={...} onCancel={...} /> */}
-        </ModalPlaceholder>
-      )}
-
+      {error && <div className="error-message">Error: {error}</div>}
+      <TransactionTable
+        transactions={transactions}
+        isLoading={isLoading}
+        error={error}
+        categories={categories}
+        onEditTransaction={handleEditTransaction}
+        onQuickCategoryChange={handleQuickCategoryChange}
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        onPageChange={handlePageChange}
+        itemsPerPage={pagination.pageSize}
+        totalItems={pagination.totalItems}
+      />
+      {isLoading && transactions.length === 0 && <div className="loading-spinner">Loading transactions...</div>}
     </div>
   );
 };

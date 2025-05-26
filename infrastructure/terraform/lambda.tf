@@ -26,19 +26,20 @@ resource "null_resource" "prepare_lambda" {
       mkdir -p build
       
       # Install only Lambda runtime dependencies directly to build directory
-      pip install -r requirements-lambda.txt -t build/
+      python3.10 -m pip install \
+        -r requirements-lambda.txt \
+        -t build/ \
+        --platform manylinux2014_x86_64 \
+        --python-version 3.10 \
+        --only-binary=:all:
       
       # Copy source code
       cp -r src/* build/
       
       # Clean up unnecessary files
       find build -type d -name "__pycache__" -exec rm -rf {} +
-      find build -type d -name "*.dist-info" -exec rm -rf {} +
-      find build -type d -name "*.egg-info" -exec rm -rf {} +
       find build -type f -name "*.pyc" -delete
       find build -type f -name "*.pyo" -delete
-      find build -type f -name "*.so" -delete
-      find build -type f -name "*.dylib" -delete
       find build -type f -name "*.dll" -delete
       find build -type f -name "*.exe" -delete
       find build -type f -name "*.bat" -delete
@@ -110,7 +111,7 @@ resource "aws_lambda_function" "file_operations" {
   filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-file-operations"
   handler          = "handlers/file_operations.handler"
-  runtime          = "python3.9"
+  runtime          = "python3.10"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 30
   memory_size     = 256
@@ -141,7 +142,7 @@ resource "aws_lambda_function" "file_processor" {
   filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-file-processor"
   handler          = "handlers/file_processor.handler"
-  runtime          = "python3.9"
+  runtime          = "python3.10"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 60
   memory_size     = 256
@@ -171,7 +172,7 @@ resource "aws_lambda_function" "account_operations" {
   filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-account-operations"
   handler          = "handlers/account_operations.handler"
-  runtime          = "python3.9"
+  runtime          = "python3.10"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 30
   memory_size     = 256
@@ -200,7 +201,7 @@ resource "aws_lambda_function" "transaction_operations" {
   filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-transaction-operations"
   handler          = "handlers/transaction_operations.handler"
-  runtime          = "python3.9"
+  runtime          = "python3.10"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 30
   memory_size     = 256
@@ -230,7 +231,7 @@ resource "aws_lambda_function" "getcolors" {
   role            = aws_iam_role.lambda_exec.arn
   handler         = "handlers/getcolors.handler"
   source_code_hash = base64encode(local.source_code_hash)
-  runtime         = "python3.11"
+  runtime         = "python3.10"
   timeout         = 30
   memory_size     = 128
   depends_on      = [null_resource.prepare_lambda]
@@ -426,8 +427,8 @@ resource "aws_iam_role_policy_attachment" "categories_lambda_basic_execution" {
 resource "aws_lambda_function" "categories_lambda" {
   function_name = "${var.project_name}-${var.environment}-categories-lambda"
   role          = aws_iam_role.categories_lambda_role.arn
-  handler       = "handlers.category_operations.handler" # Updated handler
-  runtime       = "python3.9"
+  handler       = "handlers/category_operations.handler" # Updated handler
+  runtime       = "python3.10"
   timeout       = 30 # seconds
   memory_size   = 256 # MB
 
@@ -506,7 +507,7 @@ resource "aws_lambda_function" "file_map_operations" {
   filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-file-map-operations"
   handler          = "handlers/file_map_operations.handler"
-  runtime          = "python3.9"
+  runtime          = "python3.10"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 30
   memory_size     = 256

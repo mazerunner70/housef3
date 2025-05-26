@@ -82,6 +82,15 @@ This is a key feature for a modern experience, allowing users to automate catego
         *   `Condition`: Dropdown (e.g., "Contains", "Starts With", "Ends With", "Equals", "Regex Match", "Greater Than", "Less Than").
         *   `Value`: Text input for the value/pattern (e.g., "AMAZON", "^UBER TRIP", "\d{2}/\d{2}").
     *   Multiple conditions for a rule could be combined with AND/OR logic.
+*   **Assisted Rule Generation ('Match Like This'):**
+    *   To simplify regex creation, users can initiate rule generation from the "Transactions List" tab.
+    *   After filtering transactions (e.g., by a keyword in the description), a button like `[Create Rule from Filter]` or `[Match Like This]` would be available.
+    *   Activating this feature would:
+        1.  Send the relevant transaction descriptions (from the filtered set) to the backend.
+        2.  The backend analyzes these descriptions to generate a candidate regular expression that aims to match similar future transactions.
+        3.  The user is then taken to the rule creation interface within "Category Management", with the "Field to Match" (e.g., "Description/Payee"), "Condition" ("Regex Match"), and the generated "Value" (the regex) pre-filled.
+    *   This allows users to create powerful rules based on observed patterns without needing to write regex manually from scratch. They can then refine the suggested regex if needed.
+    *   (This implies a new backend endpoint, e.g., `POST /api/rules/generate-regex-from-pattern` or similar, to handle the regex generation logic.)
 *   **Testing Area (Optional but Recommended):** A small input where a user can paste a sample transaction description to see if it would match the defined rules for the current category.
 *   **Priority/Ordering:** If multiple categories have rules that could match a single transaction, a system for prioritizing rules (e.g., order of categories, more specific rules first) might be needed in advanced scenarios.
 *   **Feedback:** Clear indication of how many rules are set for each category in the list view.
@@ -154,7 +163,7 @@ This section outlines the backend API endpoints required to support the "Transac
         *   `categoryIds` (comma-separated string, e.g., "cat_abc,cat_xyz")
         *   `transactionType` (string, e.g., "income", "expense", "transfer", "all")
         *   `searchTerm` (string, e.g., "coffee shop")
-        *   `sortBy` (string, e.g., "date")
+        *   `sortBy` fixed to date
         *   `sortOrder` (string, e.g., "asc", "desc")
     *   **Example Response Structure:**
         ```json
