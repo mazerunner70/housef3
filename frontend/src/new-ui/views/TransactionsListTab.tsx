@@ -136,11 +136,12 @@ const TransactionsListTab: React.FC = () => {
     queryKey,
     queryFn: fetchTransactionsQueryFn,
     placeholderData: (previousData) => previousData,
+    staleTime: 120000, // 2 minutes
   });
 
   useEffect(() => {
-    if (transactionsData?.pagination?.lastEvaluatedKey) {
-      setCurrentAPILastEvaluatedKey(transactionsData.pagination.lastEvaluatedKey);
+    if (transactionsData) {
+      setCurrentAPILastEvaluatedKey(transactionsData.pagination?.lastEvaluatedKey);
     }
   }, [transactionsData]);
 
