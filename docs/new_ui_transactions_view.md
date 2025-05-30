@@ -108,11 +108,9 @@ This tab centralizes file import operations and history.
     *   Account selection dropdown.
     *   `[Next/Preview]` button.
 *   **Step 2: Preview, Mapping (CSV), & Confirmation**
-    *   **Clean Table Preview:** Parsed transactions shown in a clear table.
-    *   **Intuitive CSV Mapping:** If CSV, an interactive interface to map columns. Visual cues for matched/unmatched columns. Option to save mapping for the source.
-    *   **Clear Duplicate Handling:** Duplicates highlighted, with clear options (`Skip`, `Import`, `Overwrite` - use with caution).
-    *   Summary of import (new, duplicates).
-    *   `[Complete Import]`, `[Cancel]` buttons.
+    *   **Clean Table Preview:** Preview of Parsed transactions shown in a clear table.
+    *   **Intuitive CSV Mapping:** If CSV, an interactive interface to map columns. Visual cues for matched/unmatched columns. Option to save mapping for the source. Check for existing mapping from metadata or the associated account if any. have a suitable regex for each target mapping and provide green visual cue if the proposed mapping is correct
+    *   `[Complete Import]`, `[Cancel]` buttons. only enable complete if all mapping in place.
 *   **Step 3: Completion Summary**
     *   Clear success/error message. Link to view imported transactions.
 

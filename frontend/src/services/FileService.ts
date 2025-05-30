@@ -93,6 +93,14 @@ interface PresignedPostData {
   fields: Record<string, string>;
 }
 
+// This interface represents the actual structure returned by the getUploadUrl backend endpoint
+export interface GetUploadUrlResponse {
+  fileId: string;
+  url: string; // This is the S3 presigned URL
+  fields: Record<string, string>; // These are the S3 presigned POST fields
+  expires: number;
+}
+
 // Get API endpoint from environment variables
 const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/api/files`;
 
@@ -190,7 +198,7 @@ export const getUploadUrl = async (
   fileSize: number, 
   userId: string,
   accountId?: string
-): Promise<PresignedPostData> => {
+): Promise<GetUploadUrlResponse> => {
   try {
     // Generate a unique file ID
     const fileId = uuidv4();
@@ -220,7 +228,7 @@ export const getUploadUrl = async (
       })
     });
     
-    const data = await response.json();
+    const data: GetUploadUrlResponse = await response.json();
     console.log('Received presigned URL data:', data);
     
     return data;
@@ -231,7 +239,7 @@ export const getUploadUrl = async (
 };
 
 // Upload file to S3 using presigned URL
-export const uploadFileToS3 = async (presignedData: PresignedPostData, file: Blob, accountId?: string): Promise<void> => {
+export const uploadFileToS3 = async (presignedUploadData: GetUploadUrlResponse, file: Blob, accountId?: string): Promise<void> => {
   try {
     // For logging, safely get file properties
     const fileName = file instanceof File ? file.name : 'unnamed-blob';
@@ -239,8 +247,8 @@ export const uploadFileToS3 = async (presignedData: PresignedPostData, file: Blo
     const fileSize = file.size;
     
     console.log('Starting S3 upload with:', {
-      url: presignedData.url,
-      fields: presignedData.fields,
+      url: presignedUploadData.url,
+      fields: presignedUploadData.fields,
       accountId,
       fileName,
       fileType,
@@ -251,7 +259,7 @@ export const uploadFileToS3 = async (presignedData: PresignedPostData, file: Blo
     
     // Add all fields from presigned URL - these MUST come before the file
     // The order of fields is important for S3's policy validation
-    Object.entries(presignedData.fields).forEach(([key, value]) => {
+    Object.entries(presignedUploadData.fields).forEach(([key, value]) => {
       formData.append(key, value);
       console.log(`Adding presigned field: ${key} = ${value}`);
     });
@@ -270,7 +278,7 @@ export const uploadFileToS3 = async (presignedData: PresignedPostData, file: Blo
       body: formData
     };
     
-    const response = await fetch(presignedData.url, uploadOptions);
+    const response = await fetch(presignedUploadData.url, uploadOptions);
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -387,17 +395,17 @@ export const associateFieldMap = async (fileId: string, fieldMapId: string): Pro
   }
 };
 
-// Get preview data for a file
-// export const getFilePreview = async (fileId: string): Promise<FilePreviewResponse> => {
-//   try {
-//     const response = await authenticatedRequest(`${API_ENDPOINT}/${fileId}/preview`);
-//     const data: FilePreviewResponse = await response.json();
-//     return data;
-//   } catch (error) {
-//     console.error('Error getting file preview:', error);
-//     throw error;
-//   }
-// };
+//Get preview data for a file
+export const getFilePreview = async (fileId: string): Promise<FilePreviewResponse> => {
+  try {
+    const response = await authenticatedRequest(`${API_ENDPOINT}/${fileId}/preview`);
+    const data: FilePreviewResponse = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error getting file preview:', error);
+    throw error;
+  }
+};
 
 // Get file content
 export const getFile = async (fileId: string): Promise<FileResponse> => {

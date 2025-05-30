@@ -169,6 +169,15 @@ resource "aws_apigatewayv2_route" "update_file_field_map" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# File preview route
+resource "aws_apigatewayv2_route" "get_file_preview" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /files/{id}/preview"
+  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 # Account Operations Integration
 resource "aws_apigatewayv2_integration" "account_operations" {
   api_id                 = aws_apigatewayv2_api.main.id

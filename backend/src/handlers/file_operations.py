@@ -3,6 +3,8 @@ import logging
 import os
 import traceback
 import uuid
+import csv
+import io
 from models.money import Currency, Money
 from services.file_processor_service import FileProcessorResponse, process_file
 from utils.db_utils import (
@@ -580,6 +582,77 @@ def update_file_field_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -
         logger.error(f"Error updating file field map: {str(e)}", exc_info=True)
         return create_response(500, {"message": "Error updating file field map"})
 
+def get_file_preview_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    """Get a preview of a file, specifically for CSVs."""
+    try:
+        file_id = mandatory_path_parameter(event, 'id')
+        file = checked_mandatory_transaction_file(file_id, user['id'])
+
+        if file.file_format == FileFormat.CSV:
+            content_bytes = get_object_content(file.s3_key)
+            if content_bytes is None:
+                return handle_error(500, "Error reading file content from S3.")
+
+            try:
+                content_str = content_bytes.decode('utf-8')
+                # Use io.StringIO to treat the string as a file
+                csv_file = io.StringIO(content_str)
+                reader = csv.reader(csv_file)
+                
+                headers = next(reader, None)
+                if not headers:
+                    return create_response(200, {'columns': [], 'data': [], 'totalRows': 0, 'message': 'CSV file is empty or has no headers.'})
+
+                sample_rows = []
+                for i, row in enumerate(reader):
+                    if i < 10: # Get up to 10 sample rows
+                        sample_rows.append(dict(zip(headers, row)))
+                    else:
+                        # Continue iterating to count total rows without storing them all
+                        pass 
+                
+                # To get total rows, we need to re-iterate or count before sampling.
+                # For simplicity in preview, count all data rows after header.
+                # Reset stream and re-read for accurate total row count (excluding header)
+                csv_file.seek(0)
+                next(csv.reader(csv_file)) # Skip header again
+                total_row_count = sum(1 for _ in csv.reader(csv_file))
+
+                return create_response(200, {
+                    'fileId': file_id,
+                    'fileName': file.file_name,
+                    'fileFormat': file.file_format.value,
+                    'columns': headers,
+                    'data': sample_rows,
+                    'totalRows': total_row_count,
+                    'message': f'Preview of first {len(sample_rows)} data rows.' if sample_rows else 'No data rows found after header.'
+                })
+            except StopIteration: # Handles empty files after header read attempt
+                 return create_response(200, {'columns': headers if 'headers' in locals() else [], 'data': [], 'totalRows': 0, 'message': 'CSV file is empty or has no data rows.'})
+            except csv.Error as csv_e:
+                logger.error(f"CSV parsing error for file {file_id}: {str(csv_e)}")
+                return handle_error(400, f"Error parsing CSV file: {str(csv_e)}")
+            except Exception as decode_e: # Catch potential decoding errors
+                logger.error(f"Error decoding or processing file content for {file_id}: {str(decode_e)}")
+                return handle_error(500, "Error processing file content.")
+        else:
+            return create_response(200, {
+                'fileId': file_id,
+                'fileName': file.file_name,
+                'fileFormat': file.file_format.value if file.file_format else 'unknown',
+                'columns': [],
+                'data': [],
+                'totalRows': 0,
+                'message': 'Preview is only supported for CSV files.'
+            })
+    except ValueError as ve:
+        return handle_error(400, str(ve))
+    except NotFound as nf_e:
+        return handle_error(404, str(nf_e))
+    except Exception as e:
+        logger.error(f"Error in get_file_preview_handler for file {file_id if 'file_id' in locals() else 'unknown'}: {str(e)}", exc_info=True)
+        return handle_error(500, "Internal server error while generating file preview.")
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main Lambda handler for file operations."""
     try:
@@ -608,6 +681,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return get_download_url_handler(event, user)
         elif route == "GET /files/{id}/transactions":
             return get_file_transactions_handler(event, user)
+        elif route == "GET /files/{id}/preview":
+            return get_file_preview_handler(event, user)
         elif route == "DELETE /files/{id}/transactions":
             return delete_file_transactions_handler(event, user)
         elif route == "DELETE /files/{id}":
