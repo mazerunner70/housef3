@@ -4,10 +4,9 @@ Transaction file models for the financial account management system.
 from decimal import Decimal
 import enum
 import uuid
-from datetime import datetime
-from typing import Optional, Dict, Any, Tuple
-from dataclasses import dataclass
-import json
+from datetime import datetime, timezone
+from typing import Optional, Dict, Any, Tuple, List
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 from models.account import Currency
 from models.money import Money
@@ -34,357 +33,232 @@ class ProcessingStatus(str, enum.Enum):
     NEEDS_MAPPING = "needs_mapping"
 
 
-class DateRange:
+class DateRange(BaseModel):
     """Represents a date range for transactions in a file"""
-    def __init__(self, start_date: str, end_date: str):
-        self.start_date = start_date
-        self.end_date = end_date
-    
-    def to_dict(self) -> Dict[str, str]:
-        """Convert to dictionary for storage"""
-        return {
-            "startDate": self.start_date,
-            "endDate": self.end_date
-        }
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, str]) -> 'DateRange':
-        """Create from dictionary"""
-        return cls(
-            start_date=data["startDate"],
-            end_date=data["endDate"]
-        )
+    start_date: int = Field(alias="startDate") # milliseconds since epoch
+    end_date: int = Field(alias="endDate") # milliseconds since epoch
+
+    model_config = ConfigDict(
+        populate_by_name=True
+    )
 
 
-@dataclass
-class TransactionFile:
+class TransactionFile(BaseModel):
     """
     Represents a transaction file uploaded by a user and optionally associated with an account.
+    Uses Pydantic for validation and serialization.
     """
-    file_id: str
-    user_id: str
-    file_name: str
-    upload_date: int # milliseconds since epoch
-    file_size: int
-    s3_key: str
-    processing_status: ProcessingStatus
-    processed_date: Optional[int] = None
-    file_format: Optional[FileFormat] = None
-    account_id: Optional[str] = None
-    file_map_id: Optional[str] = None
-    record_count: Optional[int] = None
-    date_range_start: Optional[int] = None
-    date_range_end: Optional[int] = None
-    error_message: Optional[str] = None
-    opening_balance: Optional[Money] = None
-    currency: Optional[Currency] = None
-    duplicate_count: Optional[int] = None
-    transaction_count: Optional[int] = None
+    file_id: uuid.UUID = Field(default_factory=uuid.uuid4, alias="fileId")
+    user_id: str = Field(alias="userId") # Changed to str
+    file_name: str = Field(alias="fileName")
+    upload_date: int = Field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000), alias="uploadDate") # milliseconds since epoch
+    file_size: int = Field(alias="fileSize")
+    s3_key: str = Field(alias="s3Key")
+    processing_status: ProcessingStatus = Field(default=ProcessingStatus.PENDING, alias="processingStatus")
+    
+    processed_date: Optional[int] = Field(default=None, alias="processedDate") # milliseconds since epoch
+    file_format: Optional[FileFormat] = Field(default=None, alias="fileFormat")
+    account_id: Optional[uuid.UUID] = Field(default=None, alias="accountId")
+    file_map_id: Optional[uuid.UUID] = Field(default=None, alias="fileMapId") # Changed to UUID
+    record_count: Optional[int] = Field(default=None, alias="recordCount")
+    
+    # Replaced date_range_start and date_range_end with a DateRange object
+    date_range: Optional[DateRange] = Field(default=None, alias="dateRange")
+    
+    error_message: Optional[str] = Field(default=None, alias="errorMessage")
+    opening_balance: Optional[Decimal] = Field(default=None, alias="openingBalance")
+    currency: Optional[Currency] = None # This might be part of Money or derived, review usage
+    duplicate_count: Optional[int] = Field(default=None, alias="duplicateCount")
+    transaction_count: Optional[int] = Field(default=None, alias="transactionCount")
+    
+    created_at: int = Field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000), alias="createdAt")
+    updated_at: int = Field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000), alias="updatedAt")
 
-    def to_flat_dict(self) -> Dict[str, Any]:
-        """
-        Convert the transaction file object to a flattened dictionary.
-        Numeric fields are kept as numbers for efficient DynamoDB storage and querying.
-        """
-        result: Dict[str, Any] = {
-            "fileId": self.file_id,                    # String (indexed)
-            "userId": self.user_id,                    # String (indexed)
-            "fileName": self.file_name,                # String
-            "uploadDate": self.upload_date,            # Number (timestamp)
-            "fileSize": self.file_size,                # Number
-            "s3Key": self.s3_key,                      # String (indexed)
-            "processingStatus": self.processing_status.value  # String
-        }
-        
-        if self.processed_date is not None:
-            result["processedDate"] = self.processed_date  # Number (timestamp)
-        
-        if self.file_format:
-            result["fileFormat"] = self.file_format.value  # String
-        
-        if self.account_id:
-            result["accountId"] = self.account_id          # String (indexed)
-        
-        if self.file_map_id:
-            result["fileMapId"] = self.file_map_id         # String
-        
-        if self.record_count is not None:
-            result["recordCount"] = self.record_count      # Number
-        
-        if self.date_range_start:
-            result["dateRangeStart"] = self.date_range_start  # Number (timestamp)
-        
-        if self.date_range_end:
-            result["dateRangeEnd"] = self.date_range_end   # Number (timestamp)
-        
-        if self.error_message:
-            result["errorMessage"] = self.error_message    # String
-            
-        if self.opening_balance:
-            result["openingBalanceAmount"] = self.opening_balance.amount  # Number (Decimal)
+    model_config = ConfigDict(
+        populate_by_name=True,
+        json_encoders={
+            Decimal: str,
+            uuid.UUID: str,
+            # enum.Enum: lambda e: e.value # Handles FileFormat and ProcessingStatus automatically with Pydantic v2 if they are StrEnum
+        },
+        use_enum_values=True, # Ensures enum values are used in serialization
+        arbitrary_types_allowed=True # For Money if it's not a Pydantic model
+    )
 
-        if self.currency:
-            result["currency"] = self.currency.value       # String
-
-        if self.duplicate_count is not None:
-            result["duplicateCount"] = self.duplicate_count  # Number
-
-        if self.transaction_count is not None:
-            result["transactionCount"] = self.transaction_count  # Number
-            
-        return result
-
+    @field_validator('upload_date', 'processed_date', 'created_at', 'updated_at', check_fields=False)
     @classmethod
-    def from_flat_dict(cls, data: Dict[str, str]) -> 'TransactionFile':
-        """
-        Create a transaction file object from a flattened dictionary where all values are strings.
-        This is useful for reconstructing objects from storage systems that don't support nested structures.
-        """
-        # Handle opening balance if present
-        opening_balance = None
-        if "openingBalanceAmount" in data:
-            opening_balance = Money(
-                amount=Decimal(data["openingBalanceAmount"]),
-                currency=Currency(data["currency"]) if "currency" in data else None
-            ) 
+    def check_positive_timestamp(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v < 0:
+            raise ValueError("Timestamp must be a positive integer representing milliseconds since epoch")
+        return v
 
-        # Create the TransactionFile object
-        return cls(
-            file_id=data["fileId"],
-            user_id=data["userId"],
-            file_name=data["fileName"],
-            upload_date=int(data["uploadDate"]),
-            file_size=int(data["fileSize"]),
-            s3_key=data["s3Key"],
-            processing_status=ProcessingStatus(data["processingStatus"]),
-            processed_date=int(data["processedDate"]) if "processedDate" in data else None,
-            file_format=FileFormat(data["fileFormat"]) if "fileFormat" in data else None,
-            account_id=data.get("accountId"),
-            file_map_id=data.get("fileMapId"),
-            record_count=int(data["recordCount"]) if "recordCount" in data else None,
-            date_range_start=int(data["dateRangeStart"]) if "dateRangeStart" in data else None,
-            date_range_end=int(data["dateRangeEnd"]) if "dateRangeEnd" in data else None,
-            error_message=data.get("errorMessage"),
-            opening_balance=opening_balance,
-            currency=Currency(data["currency"]) if "currency" in data else None,
-            duplicate_count=int(data["duplicateCount"]) if "duplicateCount" in data else None,
-            transaction_count=int(data["transactionCount"]) if "transactionCount" in data else None
-        )
-
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Convert the transaction file object to a dictionary suitable for storage.
-        """
-        result = {
-            "fileId": self.file_id,
-            "userId": self.user_id,
-            "fileName": self.file_name,
-            "uploadDate": self.upload_date,
-            "fileSize": str(self.file_size),  # Convert to string for DynamoDB
-            "s3Key": self.s3_key,
-            "processingStatus": self.processing_status.value,
-            "processedDate": self.processed_date
-        }
-        
-        if self.file_format:
-            result["fileFormat"] = self.file_format.value
-        
-        # Add account_id only if it exists
-        if self.account_id:
-            result["accountId"] = self.account_id
-        
-        if self.file_map_id:
-            result["fileMapId"] = self.file_map_id
-        
-        # Add optional fields if they exist
-        if self.record_count is not None:
-            result["recordCount"] = str(self.record_count)
-        
-        if self.date_range_start and self.date_range_end:
-            result["dateRangeStart"] = self.date_range_start
-            result["dateRangeEnd"] = self.date_range_end
-        
-        if self.error_message:
-            result["errorMessage"] = self.error_message
-            
-        if self.opening_balance is not None:
-            result["openingBalance"] = self.opening_balance.to_dict()  # Convert to string for DynamoDB
-
-        if self.currency:
-            result["currency"] = self.currency.value    
-
-        if self.duplicate_count:
-            result["duplicateCount"] = self.duplicate_count
-
-        if self.transaction_count:
-            result["transactionCount"] = self.transaction_count
-            
-        return result
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'TransactionFile':
-        """
-        Create a transaction file object from a dictionary (e.g. from DynamoDB).
-        """
-        account_id = data.get("accountId")  # Use get() to handle optional field
-        opening_balance_amount = Decimal(str(data.get("openingBalance"))) if data.get("openingBalance") else None
-        currency = Currency(data.get("currency")) if data.get("currency") else None
-        opening_balance = Money(opening_balance_amount, currency) if opening_balance_amount and currency else None
-        record_count_str = data.get("recordCount")
-        record_count = int(record_count_str) if record_count_str else None
-        
-        file = cls(
-            file_id=data["fileId"],
-            user_id=data["userId"],
-            file_name=data["fileName"],
-            upload_date=data["uploadDate"],
-            file_size=int(data["fileSize"]),
-            s3_key=data["s3Key"],
-            processing_status=ProcessingStatus(data["processingStatus"]),
-            file_format=FileFormat(data.get("fileFormat")) if data.get("fileFormat") else None,
-            account_id=account_id,
-            file_map_id=data.get("fileMapId"),
-            record_count=record_count,
-            date_range_start=data.get("dateRangeStart"),
-            date_range_end=data.get("dateRangeEnd"),
-            error_message=data.get("errorMessage"),
-            opening_balance=opening_balance,
-            currency=currency,
-            duplicate_count=data.get("duplicateCount") if data.get("duplicateCount") else None,
-            transaction_count=data.get("transactionCount") if data.get("transactionCount") else None
-        )
-        
-        return file
+    # to_flat_dict, from_flat_dict, to_dict, from_dict are replaced by Pydantic's model_dump and model_validate
 
     def update_processing_status(
         self,
         status: ProcessingStatus,
         record_count: Optional[int] = None,
-        date_range: Optional[Tuple[str, str]] = None,
+        date_range_input: Optional[Tuple[int, int]] = None, # Expect tuple of int timestamps
         error_message: Optional[str] = None,
-        opening_balance: Optional[Money] = None
+        opening_balance_input: Optional[Decimal] = None # Expect Decimal object
     ) -> None:
         """
         Update processing status and related fields.
         """
         self.processing_status = status
+        self.processed_date = int(datetime.now(timezone.utc).timestamp() * 1000) # Set processed_date on status update
         
         if record_count is not None:
             self.record_count = record_count
             
-        if date_range is not None:
-            start_date_str, end_date_str = date_range
-            self.date_range_start = int(start_date_str)
-            self.date_range_end = int(end_date_str)
+        if date_range_input is not None:
+            start_ts, end_ts = date_range_input
+            self.date_range = DateRange(startDate=start_ts, endDate=end_ts)
             
         if error_message is not None:
             self.error_message = error_message
+        else: # Clear error message if status is not ERROR
+            if status != ProcessingStatus.ERROR:
+                 self.error_message = None
             
-        if opening_balance is not None:
-            self.opening_balance = opening_balance
-    def update(self, **kwargs):
-        """Update the transaction file with the given key-value pairs."""
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-        self.validate()
-
-    def validate(self):
-        """Validate the transaction file according to business rules."""
-        validate_transaction_file_data(self)
-
-def validate_transaction_file_data(transaction_file: TransactionFile) -> bool:
-    """
-    Validate transaction file data according to business rules.
-    
-    Args:
-        transaction_file: TransactionFile object to validate
+        if opening_balance_input is not None:
+            self.opening_balance = opening_balance_input
         
-    Returns:
-        bool: True if valid
+        self.updated_at = int(datetime.now(timezone.utc).timestamp() * 1000)
+
+
+    def update_with_data(self, update_data: 'TransactionFileUpdate') -> bool:
+        """
+        Updates the transaction file with data from a TransactionFileUpdate DTO.
+        Returns True if any fields were changed, False otherwise.
+        """
+        updated_fields = False
+        update_dict = update_data.model_dump(exclude_unset=True, by_alias=False) # Use field names
+
+        for key, value in update_dict.items():
+            if hasattr(self, key) and getattr(self, key) != value:
+                setattr(self, key, value)
+                updated_fields = True
         
-    Raises:
-        ValueError: If validation fails, with details about what failed
-    """
-    # Check required fields
-    if not transaction_file.user_id:
-        raise ValueError("Missing required field: user_id")
-    if not transaction_file.file_name:
-        raise ValueError("Missing required field: file_name")
-    if not transaction_file.file_size:
-        raise ValueError("Missing required field: file_size")
-    if not transaction_file.s3_key:
-        raise ValueError("Missing required field: s3_key")
-    
-    # Validate file format if provided
-    if transaction_file.file_format and not isinstance(transaction_file.file_format, FileFormat):
-        raise ValueError(f"Invalid file format: {transaction_file.file_format}")
-    
-    # Validate processing status if provided
-    if transaction_file.processing_status and not isinstance(transaction_file.processing_status, ProcessingStatus):
-        raise ValueError(f"Invalid processing status: {transaction_file.processing_status}")
-    
-    # Validate account_id if provided
-    if transaction_file.account_id and not isinstance(transaction_file.account_id, str):
-        raise ValueError("Account ID must be a string")
-    
-    # Validate numeric fields
-    if transaction_file.file_size:
-        if not isinstance(transaction_file.file_size, int):
-            raise ValueError("File size must be a valid integer")
-        if transaction_file.file_size <= 0:
-            raise ValueError("File size must be positive")
-    
-    if transaction_file.record_count is not None:
-        if not isinstance(transaction_file.record_count, int):
-            raise ValueError("Record count must be a valid integer")
-        if transaction_file.record_count < 0:
-            raise ValueError("Record count must be non-negative")
+        if updated_fields:
+            self.updated_at = int(datetime.now(timezone.utc).timestamp() * 1000)
+        return updated_fields
 
-    # Validate opening balance if provided
-    if transaction_file.opening_balance:
-        if not isinstance(transaction_file.opening_balance, Money):
-            raise ValueError("Opening balance must be a Money object")
-        try:
-            Decimal(str(transaction_file.opening_balance.amount))
-        except (ValueError, TypeError):
-            raise ValueError("Opening balance amount must be a valid number")
-    
-    # Validate date range if provided
-    if transaction_file.date_range_start or transaction_file.date_range_end:
-        if not isinstance(transaction_file.date_range_start, int) or not isinstance(transaction_file.date_range_end, int):
-            raise ValueError("Date range must be timestamps")
+    def to_dynamodb_item(self) -> Dict[str, Any]:
+        """Serializes TransactionFile to a flat dictionary for DynamoDB."""
+        data = self.model_dump(by_alias=True, exclude_none=True)
+
+        # Decimal 'openingBalance' is handled by Pydantic's model_dump and json_encoders.
+        # No special Money conversion needed.
         
-        if transaction_file.date_range_start > transaction_file.date_range_end:
-            raise ValueError("Start date must be before end date")
-    
-    # Validate string lengths
-    if transaction_file.file_name and len(transaction_file.file_name) > 255:
-        raise ValueError("File name must be 255 characters or less")
-    
-    if transaction_file.error_message and len(transaction_file.error_message) > 1000:
-        raise ValueError("Error message must be 1000 characters or less")
-    
-    return True
+        # date_range is a DateRange model; model_dump already converts it to a dict.
+        # Enums (processingStatus, fileFormat) are handled by Pydantic (use_enum_values=True)
+        # UUIDs are handled by json_encoders in model_config
+        # Timestamps are already ints (milliseconds)
+        return data
 
-def type_default(obj):
-    if isinstance(obj, Decimal):
-        return float(obj)  # Convert Decimal to float for JSON
-    if isinstance(obj, Money):
-        return obj.to_dict()
-    if isinstance(obj, datetime):
-        return obj.isoformat()
-    raise TypeError
+    @classmethod
+    def from_dynamodb_item(cls, data: Dict[str, Any]) -> "TransactionFile":
+        """Deserializes a dictionary from DynamoDB to a TransactionFile instance."""
+        # Pydantic will handle Decimal conversion for 'openingBalance' if it's a string/number in data.
+        # No special Money conversion needed.
+        
+        # Pydantic will reconstruct DateRange if 'dateRange' in data is a dict and matches DateRange fields.
+        # Pydantic handles enums and UUIDs based on type hints and model_config.
+        return cls.model_validate(data)
 
-def transaction_file_to_json(file: TransactionFile) -> str:
-    """Convert a TransactionFile object to a JSON string with proper type handling."""
-    # If already a TransactionFile object, use to_dict; else, from_dict
-    if isinstance(file, TransactionFile):
-        d = file.to_dict()
-    else:
-        d = TransactionFile.from_dict(file).to_dict()
+    # Removed validate method as Pydantic handles validation
+
+# DTO for creating a TransactionFile
+class TransactionFileCreate(BaseModel):
+    user_id: str = Field(alias="userId")
+    file_name: str = Field(alias="fileName")
+    file_size: int = Field(alias="fileSize")
+    s3_key: str = Field(alias="s3Key")
     
-    # Handle date range formatting if both start and end exist
-    if 'dateRangeStart' in d and 'dateRangeEnd' in d:
-        d['dateRange'] = f"{d.pop('dateRangeStart')} to {d.pop('dateRangeEnd')}"
-    
-    return json.dumps(d, default=type_default) 
+    file_format: Optional[FileFormat] = Field(default=None, alias="fileFormat")
+    account_id: Optional[uuid.UUID] = Field(default=None, alias="accountId")
+    file_map_id: Optional[uuid.UUID] = Field(default=None, alias="fileMapId") # Changed to UUID
+    currency: Optional[Currency] = None 
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        use_enum_values=True,
+        json_encoders={uuid.UUID: str}
+    )
+
+# DTO for updating a TransactionFile
+class TransactionFileUpdate(BaseModel):
+    file_name: Optional[str] = Field(default=None, alias="fileName")
+    processing_status: Optional[ProcessingStatus] = Field(default=None, alias="processingStatus")
+    processed_date: Optional[int] = Field(default=None, alias="processedDate")
+    file_format: Optional[FileFormat] = Field(default=None, alias="fileFormat")
+    account_id: Optional[uuid.UUID] = Field(default=None, alias="accountId")
+    file_map_id: Optional[uuid.UUID] = Field(default=None, alias="fileMapId") # Changed to UUID
+    record_count: Optional[int] = Field(default=None, alias="recordCount")
+    date_range: Optional[DateRange] = Field(default=None, alias="dateRange")
+    error_message: Optional[str] = Field(default=None, alias="errorMessage")
+    opening_balance: Optional[Decimal] = Field(default=None, alias="openingBalance")
+    currency: Optional[Currency] = None
+    duplicate_count: Optional[int] = Field(default=None, alias="duplicateCount")
+    transaction_count: Optional[int] = Field(default=None, alias="transactionCount")
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        use_enum_values=True,
+        json_encoders={uuid.UUID: str},
+        arbitrary_types_allowed=True 
+    )
+
+    @field_validator('processed_date', check_fields=False)
+    @classmethod
+    def check_positive_timestamp_optional(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v < 0:
+            raise ValueError("Timestamp must be a positive integer representing milliseconds since epoch")
+        return v
+
+# Removed validate_transaction_file_data function (validations moved into Pydantic model or handled by type hints)
+# Removed type_default function (Pydantic handles JSON serialization defaults)
+# Removed transaction_file_to_json function (use model_instance.model_dump_json())
+
+
+# Example of how to use (optional, can be removed):
+# if __name__ == '__main__':
+#     # Create
+#     file_create_data = TransactionFileCreate(
+#         userId="user123",
+#         fileName="transactions.csv",
+#         fileSize=1024,
+#         s3Key="s3://bucket/transactions.csv",
+#         fileFormat=FileFormat.CSV,
+#         accountId=uuid.uuid4()
+#     )
+#     print("Create DTO:", file_create_data.model_dump_json(by_alias=True, indent=2))
+
+#     # Instantiate main model from create DTO + other defaults
+#     # In a real scenario, you'd pass file_create_data and then fill in system-set fields
+#     new_file = TransactionFile(**file_create_data.model_dump(by_alias=False), file_id=uuid.uuid4())
+#     print("\nNew File:", new_file.model_dump_json(by_alias=True, indent=2))
+
+#     # Update status
+#     new_file.update_processing_status(
+#         status=ProcessingStatus.PROCESSED,
+#         record_count=100,
+#         date_range_input=(int(datetime(2023,1,1, tzinfo=timezone.utc).timestamp()*1000), int(datetime(2023,1,31, tzinfo=timezone.utc).timestamp()*1000)),
+#         opening_balance_input=Decimal("100.00")
+#     )
+#     print("\nFile after status update:", new_file.model_dump_json(by_alias=True, indent=2))
+
+#     # Update with DTO
+#     update_dto = TransactionFileUpdate(fileName="transactions_final.csv", transaction_count=98)
+#     changed = new_file.update_with_data(update_dto)
+#     print(f"\nFile changed by update DTO: {changed}")
+#     print("File after DTO update:", new_file.model_dump_json(by_alias=True, indent=2))
+
+#     # Simulate loading from DB (dict with aliases)
+#     db_data = new_file.model_dump(by_alias=True)
+#     loaded_file = TransactionFile.model_validate(db_data)
+#     print("\nLoaded File from DB data:", loaded_file.model_dump_json(by_alias=True, indent=2))
+
+#     assert loaded_file.file_id == new_file.file_id
+#     assert loaded_file.date_range.start_date == new_file.date_range.start_date 

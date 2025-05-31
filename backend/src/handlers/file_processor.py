@@ -8,11 +8,12 @@ import os
 import urllib.parse
 import re
 import boto3
+import uuid
 from typing import Dict, Any, List, Tuple, Optional
 from decimal import Decimal
-from models.transaction_file import FileFormat, ProcessingStatus, TransactionFile
+from models.transaction_file import FileFormat, ProcessingStatus, TransactionFile, TransactionFileCreate
 from models.file_map import FileMap
-from services.file_processor_service import create_file, process_file
+from services.file_processor_service import create_file, process_file, FileProcessorResponse
 from utils.transaction_parser import parse_transactions, file_type_selector
 from models.transaction import Transaction
 from utils.file_analyzer import analyze_file_format
@@ -124,19 +125,28 @@ def handler(event, context):
             raise ValueError(f"Invalid S3 key format: {key}")
             
         user_id = key_parts[0]
-        file_id = key_parts[1]
+        # file_id from key is not used to create TransactionFile's file_id, as model has default_factory
         file_name = key_parts[2]
         
-        logger.info(f"Processing file upload - User: {user_id}, File: {file_id}, Name: {file_name}")
+        logger.info(f"Processing file upload - User: {user_id}, File S3 Key: {key}, Name: {file_name}")
 
         try:
             # Get object metadata first to check for account ID
             metadata = get_object_metadata(key, bucket)
             if metadata is None:
-                raise ValueError(f"Could not get metadata for file: {key}")
-                
-            account_id = metadata.get('metadata', {}).get('accountid')
-            logger.info(f"Found account ID in metadata: {account_id}")
+                # Changed to log error and potentially proceed, or handle as critical
+                logger.error(f"Could not get metadata for file: {key}. Proceeding without S3 metadata accountId.")
+                account_id_str = None
+            else:
+                account_id_str = metadata.get('metadata', {}).get('accountid')
+            
+            parsed_account_id: Optional[uuid.UUID] = None
+            if account_id_str:
+                try:
+                    parsed_account_id = uuid.UUID(account_id_str)
+                    logger.info(f"Found and parsed account ID in S3 metadata: {parsed_account_id}")
+                except ValueError:
+                    logger.warning(f"Invalid UUID format for accountId in S3 metadata: {account_id_str}. Proceeding without this account_id.")
 
             # Download file from S3
             logger.info(f"Attempting to download file from S3: {bucket}/{key}")
@@ -151,30 +161,47 @@ def handler(event, context):
             logger.info(f"Detected file format: {file_format}")
 
             # Create or update file metadata in DynamoDB
-            current_time = int(datetime.utcnow().timestamp())
-            transaction_file = TransactionFile(
-                file_id=file_id,
-                user_id=user_id,
-                file_name=file_name,
-                file_size=size,
-                upload_date=int(current_time),
-                s3_key=key,
-                file_format=file_format,
-                processing_status=ProcessingStatus.PENDING
-            )
-
-            # Add account ID if it was found in metadata
-            if account_id:
-                transaction_file.account_id = account_id
-                logger.info(f"Adding account ID to file metadata: {account_id}")
+            
+            dto_data = {
+                'user_id': user_id,
+                'file_name': file_name,
+                'file_size': int(size),
+                's3_key': key,
+                'file_format': file_format,
+                'currency': None, # Optional field in DTO, TransactionFile.currency is also Optional
+            }
+            if parsed_account_id:
+                dto_data['account_id'] = parsed_account_id
+            
+            transaction_file_create_dto = TransactionFileCreate(**dto_data)
+            
+            # Instantiate TransactionFile from DTO data.
+            # This uses default_factory for file_id, upload_date, processing_status, etc.
+            transaction_file = TransactionFile(**transaction_file_create_dto.model_dump())
+            
+            logger.info(f"Created TransactionFile object with file_id: {transaction_file.file_id}")
+            if transaction_file.account_id:
+                logger.info(f"TransactionFile associated with account_id: {transaction_file.account_id}")
 
             # Process the file
-            response = process_file(transaction_file)
-            logger.info(f"File processing complete: {json.dumps(response.to_dict())}")
+            file_processor_response: FileProcessorResponse = process_file(transaction_file)
+            logger.info(f"File processing via process_file service complete. Message: {file_processor_response.message}, Tx Count: {file_processor_response.transaction_count}")
+
+            # Re-fetch the transaction file to get its latest state for the response
+            updated_transaction_file = get_transaction_file(transaction_file.file_id)
+            if not updated_transaction_file:
+                logger.error(f"Failed to re-fetch transaction file {transaction_file.file_id} after processing.")
+                # Handle error, perhaps return the file_processor_response message or a generic error
+                return {
+                    'statusCode': 500,
+                    'body': json.dumps({'message': f"Error: File processing status unclear for {transaction_file.file_id}"})
+                }
             
+            logger.info(f"Re-fetched TransactionFile: ID {updated_transaction_file.file_id}, Status {updated_transaction_file.processing_status}")
+
             return {
                 'statusCode': 200,
-                'body': json.dumps(response.to_dict())
+                'body': json.dumps(updated_transaction_file.model_dump(by_alias=True))
             }
             
         except Exception as e:

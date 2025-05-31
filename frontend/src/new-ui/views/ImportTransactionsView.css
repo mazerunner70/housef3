@@ -151,4 +151,26 @@
   color: white;
   font-size: 20px;
   z-index: 1000;
+}
+
+.history-table tr.selected-row td {
+  background-color: #e0e0e0; /* A light grey, can be themed */
+}
+
+.button-danger {
+  background-color: #dc3545;
+  color: white;
+  border-color: #dc3545;
+}
+
+.button-danger:disabled {
+  background-color: #f8d7da;
+  border-color: #f5c6cb;
+  color: #721c24;
+  cursor: not-allowed;
+}
+
+.button-danger:hover:not(:disabled) {
+  background-color: #c82333;
+  border-color: #bd2130;
 } 

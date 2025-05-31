@@ -6,7 +6,6 @@ from .account import (
     Account, 
     AccountType,
     Currency,
-    validate_account_data
 )
 
 from .transaction import Transaction
@@ -16,13 +15,26 @@ from .transaction_file import (
     FileFormat,
     ProcessingStatus,
     DateRange,
-    validate_transaction_file_data
+    TransactionFileCreate,
+    TransactionFileUpdate
 )
 
 from .file_map import (
     FileMap,
-    FieldMapping
+    FieldMapping,
+    FileMapCreate,
+    FileMapUpdate
 )
+
+from .category import (
+    Category,
+    CategoryType,
+    CategoryRule,
+    CategoryCreate,
+    CategoryUpdate
+)
+
+from .money import Money
 
 __all__ = [
     'Account',
@@ -33,9 +45,28 @@ __all__ = [
     'FileFormat',
     'ProcessingStatus',
     'DateRange',
-    'validate_account_data',
-    'validate_transaction_data',
-    'validate_transaction_file_data',
     'FieldMapping',
-    'FileMap'
-] 
+    'FileMap',
+    'Money',
+    'TransactionFileCreate',
+    'TransactionFileUpdate',
+    'FileMapCreate',
+    'FileMapUpdate',
+    'Category',
+    'CategoryType',
+    'CategoryRule',
+    'CategoryCreate',
+    'CategoryUpdate',
+]
+
+from .account import AccountCreate, AccountUpdate
+from .transaction import TransactionCreate, TransactionUpdate
+
+__all__.extend([
+    'AccountCreate',
+    'AccountUpdate',
+    'TransactionCreate',
+    'TransactionUpdate',
+])
+
+__all__ = sorted(list(set(__all__))) 

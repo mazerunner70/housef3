@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+import uuid
 from models.transaction_file import TransactionFile
 from utils.db_utils import get_file_map, list_account_files, list_user_files
 
@@ -11,7 +12,7 @@ FIELD_MAP = {
     'dateRange': 'date_range'
 }
 
-def get_files_for_user(user_id: str, account_id: Optional[str] = None) -> List[TransactionFile]:
+def get_files_for_user(user_id: str, account_id: Optional[uuid.UUID] = None) -> List[TransactionFile]:
     """
     Retrieve files for a user, optionally filtered by account.
     """
@@ -20,7 +21,7 @@ def get_files_for_user(user_id: str, account_id: Optional[str] = None) -> List[T
     else:
         return list_user_files(user_id)
 
-def get_files_for_account(account_id: str) -> List[TransactionFile]:
+def get_files_for_account(account_id: uuid.UUID) -> List[TransactionFile]:
     """
     Retrieve files for an account.
     """
@@ -30,7 +31,7 @@ def format_file_metadata(file: TransactionFile) -> Dict[str, Any]:
     """
     Format a file record from DynamoDB into API response format, including field map details if present.
     """
-    formatted = file.to_dict()
+    formatted = file.to_dynamodb_item()
     # Add optional fields    
     for camel, snake in FIELD_MAP.items():
         value = getattr(file, snake, None)
@@ -39,7 +40,7 @@ def format_file_metadata(file: TransactionFile) -> Dict[str, Any]:
 
     # Override openingBalance with just the numeric amount for frontend compatibility
     if file.opening_balance:
-        formatted['openingBalance'] = float(file.opening_balance.amount)
+        formatted['openingBalance'] = float(file.opening_balance)
     
     if file.file_map_id:
         field_map = get_file_map(file.file_map_id)

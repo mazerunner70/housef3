@@ -84,7 +84,7 @@ def list_categories_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
         
         # Use new DB util function
         if parent_category_id is not None:
-             categories = list_categories_by_user_from_db(user_id, parent_category_id=parent_category_id)
+             categories = list_categories_by_user_from_db(user_id, parent_category_id=uuid.UUID(parent_category_id))
         else: 
              categories = list_categories_by_user_from_db(user_id, top_level_only=top_level_only)
         return create_response(200, [cat.model_dump() for cat in categories])
@@ -100,7 +100,7 @@ def get_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
         category_id = mandatory_path_parameter(event, 'categoryId')
         # No need for: if category_id is None: as mandatory_path_parameter raises ValueError
         # Use new DB util function
-        category = get_category_by_id_from_db(category_id, user_id)
+        category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
         if category:
             return create_response(200, category.model_dump())
         else:
@@ -137,7 +137,7 @@ def update_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
             return create_response(400, {"error": "Update payload is empty. No fields to update."})
 
         # Use new DB util function
-        updated_category = update_category_in_db(category_id, user_id, update_payload)
+        updated_category = update_category_in_db(uuid.UUID(category_id), user_id, update_payload)
         if updated_category:
             return create_response(200, updated_category.model_dump())
         else:
@@ -162,7 +162,7 @@ def delete_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
         category_id = mandatory_path_parameter(event, 'categoryId')
         # No need for: if category_id is None:
         # Use new DB util function
-        if delete_category_from_db(category_id, user_id):
+        if delete_category_from_db(uuid.UUID(category_id), user_id):
             return create_response(204, {})
         else:
             return create_response(404, {"error": "Category not found or access denied"})

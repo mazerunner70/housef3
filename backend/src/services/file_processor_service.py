@@ -17,7 +17,7 @@ from handlers.account_operations import create_response
 from models import account
 from models.account import Account, Currency
 from models.money import Money
-from models.transaction_file import FileFormat, ProcessingStatus, TransactionFile, transaction_file_to_json
+from models.transaction_file import DateRange, FileFormat, ProcessingStatus, TransactionFile
 from models.file_map import FileMap
 from models.transaction import Transaction
 from utils.lambda_utils import handle_error
@@ -79,7 +79,7 @@ class FileProcessorResponse:
 
 # Common utility functions
 
-def prepare_file_processing(file_id: str, user_id: str) -> TransactionFile:
+def prepare_file_processing(file_id: uuid.UUID, user_id: str) -> TransactionFile:
     """
     Retrieve file record and validate it exists and belongs to the specified user.
     
@@ -221,7 +221,7 @@ def parse_file_transactions(
         raise
 
 
-def calculate_running_balances(transactions: List[Transaction], opening_balance: Optional[Money]) -> None:
+def calculate_running_balances(transactions: List[Transaction], opening_balance: Optional[Decimal]) -> None:
     """
     Update running balances for all transactions in the list.
     Modifies the transactions in place.
@@ -276,8 +276,8 @@ def create_transactions(
         for transaction in transactions:
             try:
                 # Add the file_id and user_id to each transaction
-                transaction.file_id = uuid.UUID(transaction_file.file_id) if isinstance(transaction_file.file_id, str) else transaction_file.file_id
-                transaction.user_id = uuid.UUID(transaction_file.user_id) if isinstance(transaction_file.user_id, str) else transaction_file.user_id
+                transaction.file_id = transaction_file.file_id
+                transaction.user_id = transaction_file.user_id
                                 
                 # Create and save the transaction
                 create_transaction(transaction)
@@ -313,12 +313,11 @@ def update_file_status(
         transaction_file.processing_status = ProcessingStatus.PROCESSED
         transaction_file.processed_date = int(datetime.now().timestamp() * 1000)
         transaction_file.transaction_count = len(transactions)
-        transaction_file.date_range_start = transactions[0].date
-        transaction_file.date_range_end = transactions[-1].date
+        transaction_file.date_range = DateRange(startDate=transactions[0].date, endDate=transactions[-1].date)
         transaction_file.opening_balance = (transactions[0].balance  - transactions[0].amount ) if transactions[0].balance and transactions[0].amount else None
 
             
-        updated_file = update_transaction_file(transaction_file.file_id, transaction_file.user_id, transaction_file.to_dict())
+        updated_file = update_transaction_file(transaction_file.file_id, transaction_file.user_id, transaction_file.to_dynamodb_item())
         logger.info(f"Updated file status for {transaction_file.file_id} to PROCESSED")
         return updated_file
     except Exception as e:
@@ -357,7 +356,7 @@ def update_transaction_duplicates(
         logger.error(f"Error in duplicate detection: {str(e)}")
         return 0
     
-def determine_opening_balance_from_transaction_overlap(transactions: List[Transaction], currency: Optional[Currency]) -> Optional[Money]:
+def determine_opening_balance_from_transaction_overlap(transactions: List[Transaction]) -> Optional[Decimal]:
     """
     Determine the opening balance for a new file based on the overlap with existing transactions.
     
@@ -370,8 +369,6 @@ def determine_opening_balance_from_transaction_overlap(transactions: List[Transa
     try:
         if not transactions:
             return None
-        if not currency:
-            return None
         logger.info(f"Determining opening balance from transaction overlap")
             
         first_transaction = min(transactions, key=lambda tx: tx.import_order or 0)
@@ -383,15 +380,15 @@ def determine_opening_balance_from_transaction_overlap(transactions: List[Transa
             if matching_transaction and matching_transaction.balance and matching_transaction.amount:
                 logger.info(f"First transaction is duplicate, using balance {matching_transaction.balance} - amount {matching_transaction.amount}")
                 money = matching_transaction.balance - matching_transaction.amount
-                return money if money.currency else Money(Decimal(money.amount), currency)
+                return money
                 
         if last_transaction.status == 'duplicate':
             matching_transaction = get_transaction_by_account_and_hash(last_transaction.account_id, last_transaction.transaction_hash if last_transaction.transaction_hash else 1)
             if matching_transaction and matching_transaction.balance:
-                total_amount = sum([tx.amount for tx in transactions], Money(Decimal(0), currency)) 
+                total_amount = sum([tx.amount for tx in transactions]) 
                 logger.info(f"Last transaction is duplicate, using balance {matching_transaction.balance} - amount {total_amount}")
                 money = matching_transaction.balance - total_amount
-                return money if money.currency else Money(Decimal(money.amount), currency)
+                return money
         logger.info(f"No opening balance found from transaction overlap")        
         return None
     except Exception as e:
@@ -421,12 +418,12 @@ def process_new_file(transaction_file: TransactionFile, content_bytes: bytes) ->
         content_bytes
     ) if transaction_file.file_format and transaction_file.file_map_id  and transaction_file.account_id and transaction_file.opening_balance else None
     if transactions:
-        transaction_file.currency = transactions[0].amount.currency
+        transaction_file.currency = transactions[0].currency
         update_transaction_duplicates(transactions)
         if not transaction_file.currency:
             raise ValueError("Currency is required")
         # Determine opening balance from transaction overlap
-        opening_balance = determine_opening_balance_from_transaction_overlap(transactions, transaction_file.currency)
+        opening_balance = determine_opening_balance_from_transaction_overlap(transactions)
         transaction_file.opening_balance = opening_balance if opening_balance else transaction_file.opening_balance
         # Calculate running balances
         if transaction_file.opening_balance:
@@ -476,7 +473,7 @@ def update_file_mapping(old_transaction_file: TransactionFile, new_transaction_f
                 new_transaction_file,
                 content_bytes
             )
-            currency = transactions[0].amount.currency if transactions else new_transaction_file.currency 
+            currency = transactions[0].currency if transactions else new_transaction_file.currency 
             if not currency:
                 raise ValueError("Currency is required")
             logger.info(f"Processing with new mapping for file {new_transaction_file.file_id} and currency {currency}")
@@ -484,7 +481,7 @@ def update_file_mapping(old_transaction_file: TransactionFile, new_transaction_f
                 duplicate_count = update_transaction_duplicates(transactions)
                 logger.info(f"Duplicate count: {duplicate_count}")
                 # Determine opening balance from transaction overlap
-                opening_balance = determine_opening_balance_from_transaction_overlap(transactions, currency)
+                opening_balance = determine_opening_balance_from_transaction_overlap(transactions)
                 logger.info(f"Opening balance: {opening_balance}")
                 new_transaction_file.opening_balance = opening_balance if opening_balance else new_transaction_file.opening_balance
                 # Calculate running balances
@@ -589,7 +586,7 @@ def change_file_account(transaction_file: TransactionFile) -> FileProcessorRespo
     if transactions:
         update_transaction_duplicates(transactions)
         # Determine opening balance from transaction overlap
-        opening_balance = determine_opening_balance_from_transaction_overlap(transactions, transaction_file.currency)
+        opening_balance = determine_opening_balance_from_transaction_overlap(transactions)
         transaction_file.opening_balance = opening_balance if opening_balance else transaction_file.opening_balance
         # Calculate running balances
         if transaction_file.opening_balance:
@@ -620,7 +617,7 @@ def create_file(transaction_file: TransactionFile) -> FileProcessorResponse:
 
     # Create the file record
     create_transaction_file(transaction_file)
-    logger.info(f"Created file metadata in DynamoDB: {json.dumps(transaction_file_to_json(transaction_file))}")
+    logger.info(f"Created file metadata in DynamoDB: {json.dumps(transaction_file.to_dynamodb_item())}")
     content_bytes = get_file_content(transaction_file.file_id)
     if not content_bytes:
         raise NotFound("File content not found")
@@ -658,8 +655,7 @@ def update_file_object(transaction_file: TransactionFile, transations: List[Tran
     """
     Update the transaction file object with new metadata, eg, start end date, transactioncount, opening balance, currency
     """
-    transaction_file.date_range_start = transations[0].date
-    transaction_file.date_range_end = transations[-1].date
+    transaction_file.date_range = DateRange(startDate=transations[0].date, endDate=transations[-1].date)
     transaction_file.transaction_count = len(transations)
     return transaction_file
 
@@ -690,7 +686,7 @@ def update_file(old_transaction_file: Optional[TransactionFile], transaction_fil
         if transactions:
             transaction_file.duplicate_count = update_transaction_duplicates(transactions)
             if transaction_file.duplicate_count > 0:
-                opening_balance = determine_opening_balance_from_transaction_overlap(transactions, transaction_file.currency)
+                opening_balance = determine_opening_balance_from_transaction_overlap(transactions)
                 transaction_file.opening_balance = opening_balance if opening_balance else transaction_file.opening_balance
                 calculate_running_balances(transactions, transaction_file.opening_balance)
             update_file_object(transaction_file, transactions)

@@ -1,0 +1,24 @@
+.accounts-view-container {
+    padding: 20px;
+    font-family: 'Arial', sans-serif; /* Example font */
+}
+
+.accounts-view-container h1 {
+    color: #333;
+    margin-bottom: 20px;
+}
+
+.add-account-button {
+    background-color: #007bff;
+    color: white;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-bottom: 20px;
+}
+
+.add-account-button:hover {
+    background-color: #0056b3;
+} 

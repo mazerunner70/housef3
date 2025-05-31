@@ -1,3 +1,4 @@
+import Decimal from 'decimal.js';
 import { getCurrentUser, refreshToken, isAuthenticated } from './AuthService';
 import { FileMetadata } from './FileService';
 
@@ -31,13 +32,13 @@ export interface Account {
   accountName: string;
   accountType: AccountType;
   institution: string;
-  balance: number;
+  balance: Decimal;
   currency: Currency;
   notes?: string;
   isActive: boolean;
   defaultFieldMapId?: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface AccountListResponse {
@@ -237,6 +238,21 @@ export const createAccount = async (accountData: Partial<Account>): Promise<{ ac
   }
 };
 
+// Update an existing account
+export const updateAccount = async (accountId: string, accountData: Partial<Account>): Promise<{ account: Account }> => {
+  try {
+    const response = await authenticatedRequest(`${API_ENDPOINT}/${accountId}`, {
+      method: 'PUT',
+      body: JSON.stringify(accountData)
+    });
+    const data: { account: Account } = await response.json();
+    return data;
+  } catch (error) {
+    console.error(`Error updating account ${accountId}:`, error);
+    throw error;
+  }
+};
+
 interface TimelineResponse {
   timeline: FileMetadata[];
   accountId: string;
@@ -260,5 +276,6 @@ export default {
   listAccountFiles,
   getAccountFileUploadUrl,
   deleteAccount,
-  createAccount
+  createAccount,
+  updateAccount
 }; 

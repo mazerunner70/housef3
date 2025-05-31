@@ -2,6 +2,7 @@
 Authorization check functions.
 """
 from typing import Optional
+import uuid
 
 from models.account import Account
 from models.file_map import FileMap
@@ -14,7 +15,7 @@ from utils.db_utils import (
 )
 from utils.auth import NotAuthorized, NotFound
 
-def checked_mandatory_account(account_id: Optional[str], user_id: str) -> Account:
+def checked_mandatory_account(account_id: Optional[uuid.UUID], user_id: str) -> Account:
     """
     Check if an account exists and the user has access to it.
     
@@ -41,7 +42,7 @@ def checked_mandatory_account(account_id: Optional[str], user_id: str) -> Accoun
         
     return account
 
-def checked_optional_account(account_id: Optional[str], user_id: str) -> Optional[Account]:
+def checked_optional_account(account_id: Optional[uuid.UUID], user_id: str) -> Optional[Account]:
     """Check if account exists and user has access to it, allowing None."""
     if not account_id:
         return None
@@ -52,7 +53,7 @@ def checked_optional_account(account_id: Optional[str], user_id: str) -> Optiona
         raise NotAuthorized("Not authorized to access this account")
     return account
 
-def checked_mandatory_transaction_file(file_id: str, user_id: str) -> TransactionFile:
+def checked_mandatory_transaction_file(file_id: uuid.UUID, user_id: str) -> TransactionFile:
     """
     Check if a transaction file exists and the user has access to it.
     
@@ -79,7 +80,7 @@ def checked_mandatory_transaction_file(file_id: str, user_id: str) -> Transactio
         
     return file
 
-def checked_optional_transaction_file(file_id: Optional[str], user_id: str) -> Optional[TransactionFile]:
+def checked_optional_transaction_file(file_id: Optional[uuid.UUID], user_id: str) -> Optional[TransactionFile]:
     """
     Check if a transaction file exists and the user has access to it, but allow it to not exist.
     
@@ -105,7 +106,7 @@ def checked_optional_transaction_file(file_id: Optional[str], user_id: str) -> O
         
     return file
 
-def checked_optional_file_map(file_map_id: Optional[str], user_id: str) -> Optional[FileMap]:
+def checked_optional_file_map(file_map_id: Optional[uuid.UUID], user_id: str) -> Optional[FileMap]:
     """
     Check if a file map exists and the user has access to it, but allow it to not exist.
     

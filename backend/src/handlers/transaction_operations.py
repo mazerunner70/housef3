@@ -128,7 +128,7 @@ def delete_transaction_handler(event: Dict[str, Any], user_id: str) -> Dict[str,
         if 'Item' not in response:
             return create_response(404, {"message": "Transaction not found"})
         
-        transaction = Transaction.from_flat_dict(response['Item'])
+        transaction = Transaction.from_dynamodb_item(response['Item'])
         if transaction.user_id != user_id:
             return create_response(403, {"message": "Unauthorized to delete this transaction"})
         

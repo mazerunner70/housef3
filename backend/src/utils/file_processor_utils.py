@@ -4,6 +4,7 @@ Utility functions for processing transaction files.
 import logging
 import os
 import re
+import uuid
 from models.transaction import Transaction
 import boto3
 from boto3.dynamodb.conditions import Key
@@ -48,7 +49,7 @@ def create_composite_key(user_id: str, transaction: Dict[str, Any]) -> str:
     amount = transaction['amount']
     return f"{user_id}#{transaction['date']}#{amount}#{transaction['description']}"
 
-def get_file_content(file_id: str, s3_client: Any = None) -> Optional[bytes]:
+def get_file_content(file_id: uuid.UUID, s3_client: Any = None) -> Optional[bytes]:
     """
     Get file content from S3.
     
@@ -234,7 +235,7 @@ def calculate_opening_balance_from_duplicates(transactions: List[Transaction]) -
         if check_duplicate_transaction(first_tx) and first_tx.balance:
             # If first transaction is duplicate, use its balance
             logger.info(f"First transaction is duplicate, using balance: {first_tx.balance}")
-            return Decimal(str(first_tx.balance.amount))
+            return first_tx.balance
             
         # Check last transaction
         last_tx = transactions[-1]
@@ -242,8 +243,8 @@ def calculate_opening_balance_from_duplicates(transactions: List[Transaction]) -
         if check_duplicate_transaction(last_tx) and last_tx.balance and all(tx.amount for tx in transactions):
             # If last transaction is duplicate, calculate opening balance
             # by subtracting all transaction amounts from the matched balance
-            total_amount = sum(tx.amount.amount for tx in transactions)
-            res = Decimal(str(last_tx.balance.amount)) - total_amount
+            total_amount = sum(tx.amount for tx in transactions)
+            res = last_tx.balance - total_amount
             logger.info(f"Last transaction is duplicate, calculated opening balance: {res}")
             return res
         return None

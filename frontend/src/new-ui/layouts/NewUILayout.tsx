@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import './NewUILayout.css'; // We'll create this for basic styling
 import TransactionsView from '../views/TransactionsView'; // Import TransactionsView
+import AccountsView from '../views/AccountsView'; // Import AccountsView
 
 interface NewUILayoutProps {
   onSignOut: () => void;
@@ -19,7 +20,7 @@ const NewUILayout: React.FC<NewUILayoutProps> = ({ onSignOut }) => {
       case 'Transactions':
         return <TransactionsView />;
       case 'Accounts':
-        return <p>Accounts Management will appear here.</p>;
+        return <AccountsView />;
       case 'Analytics':
         return <p>Analytics & Reports will appear here.</p>;
       default:

@@ -21,19 +21,18 @@ class FieldMapping(BaseModel):
 class FileMap(BaseModel):
     """Represents a field mapping configuration for transaction files using Pydantic."""
     file_map_id: uuid.UUID = Field(default_factory=uuid.uuid4, alias="fileMapId")
-    user_id: uuid.UUID = Field(alias="userId")
+    user_id: str = Field(alias="userId")
     name: str = Field(min_length=1, max_length=255)
     mappings: List[FieldMapping]
     account_id: Optional[uuid.UUID] = Field(default=None, alias="accountId")
     description: Optional[str] = Field(default=None, max_length=1000)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), alias="createdAt")
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), alias="updatedAt")
+    created_at: int = Field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000), alias="createdAt")
+    updated_at: int = Field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000), alias="updatedAt")
 
     model_config = ConfigDict(
         populate_by_name=True,
         json_encoders={
-            uuid.UUID: str,
-            datetime: lambda dt: dt.isoformat().replace("+00:00", "Z")
+            uuid.UUID: str
         },
         extra='forbid'
     )
@@ -44,6 +43,28 @@ class FileMap(BaseModel):
         if not v:
             raise ValueError("Mappings list cannot be empty")
         return v
+
+    @field_validator('created_at', 'updated_at')
+    @classmethod
+    def check_positive_timestamp(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("Timestamp must be a positive integer representing milliseconds since epoch")
+        return v
+
+    def to_dynamodb_item(self) -> Dict[str, Any]:
+        """Serializes FileMap to a flat dictionary for DynamoDB."""
+        data = self.model_dump(by_alias=True, exclude_none=True)
+        # mappings should already be a list of dicts due to FieldMapping being a BaseModel
+        # UUIDs are handled by json_encoders in model_config
+        # Timestamps are already ints (milliseconds)
+        return data
+
+    @classmethod
+    def from_dynamodb_item(cls, data: Dict[str, Any]) -> "FileMap":
+        """Deserializes a dictionary from DynamoDB to a FileMap instance."""
+        # Pydantic should handle reconstruction of FieldMapping objects within the list
+        # and UUID string conversion if type hints and config are correct.
+        return cls(**data)
 
 class FileMapCreate(BaseModel):
     """DTO for creating a new FileMap."""

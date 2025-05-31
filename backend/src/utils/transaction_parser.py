@@ -275,11 +275,11 @@ def parse_csv_transactions(transaction_file: TransactionFile, content: bytes) ->
     Returns:
         List of Transaction objects
     """
-    def process_amount(amount: Decimal, currency: Optional[Currency], debit_credit: Optional[str] = None) -> Money:
+    def process_amount(amount: Decimal, debit_credit: Optional[str] = None) -> Decimal:
         """Process amount based on debit/credit indicator."""
         if debit_credit and debit_credit.upper() == 'DBIT':
-            return Money(-abs(amount), currency)
-        return Money(amount, currency)
+            return -abs(amount)
+        return amount
     
     try:
         if not transaction_file.file_map_id:
@@ -345,10 +345,8 @@ def parse_csv_transactions(transaction_file: TransactionFile, content: bytes) ->
             raise ValueError("User ID is required")
         if not transaction_file.file_id:
             raise ValueError("File ID is required")
-        currency = transaction_file.currency 
-        if transaction_file.opening_balance and currency != transaction_file.opening_balance.currency:
-            raise ValueError(f"Currency mismatch: {currency} != {transaction_file.opening_balance.currency}")
-        balance: Money = transaction_file.opening_balance if transaction_file.opening_balance else Money(Decimal(0), currency)
+        currency: Optional[Currency] = transaction_file.currency 
+        balance = transaction_file.opening_balance if transaction_file.opening_balance else Decimal(0)
         # Process each row
         transactions = []
         for i, row in enumerate(rows):
@@ -367,15 +365,13 @@ def parse_csv_transactions(transaction_file: TransactionFile, content: bytes) ->
                 continue
             logger.info(f"in: Row: {row}")
             logger.info(f"out: Row data: {row_data}")    
-            if balance.currency and row_data.get('currency') != balance.currency:
-                raise ValueError(f"Currency mismatch: {row_data.get('currency')} != {balance.currency}")
             # Process the amount
-            currency = row_data.get('currency') if row_data.get('currency') else currency
+            currency = row_data.get('currency') if row_data.get('currency') else currency if currency else None
             try:
                 logger.info(f"Processing amount: {row_data['amount']}")
                 raw_amount = Decimal(str(row_data['amount']))
                 logger.info(f"Raw amount: {raw_amount}")
-                processed_amount = process_amount(raw_amount, balance.currency, row_data.get('debitOrCredit'))
+                processed_amount = process_amount(raw_amount, row_data.get('debitOrCredit'))
                 logger.info(f"Processed amount: {processed_amount}")
             except (decimal.InvalidOperation, KeyError) as e:
                 logger.error(f"Error processing amount: {str(e)}")
@@ -392,6 +388,7 @@ def parse_csv_transactions(transaction_file: TransactionFile, content: bytes) ->
                 date=parse_date(row_data['date']),
                 description=row_data['description'].strip(),
                 amount=processed_amount,  
+                currency=currency,
                 balance=balance,  
                 import_order=i + 1,  # Add 1-based import order
                 transaction_type= row_data.get('debitOrCredit'),  # Use debitOrCredit value for transaction_type
@@ -417,7 +414,7 @@ def parse_ofx_colon_separated(text_content: str, transaction_file: TransactionFi
     transactions: List[Transaction] = []
     if not transaction_file.opening_balance:
         raise ValueError("Opening balance is required")
-    balance: Money = transaction_file.opening_balance
+    balance = transaction_file.opening_balance
     current_transaction: Dict[str, str] = {}
     in_transaction: bool = False
     import_order: int = 1
@@ -477,7 +474,7 @@ def parse_ofx_colon_separated(text_content: str, transaction_file: TransactionFi
     logger.info(f"Found {len(transactions)} transactions")
     return transactions
 
-def create_transaction_from_ofx(transaction_file: TransactionFile, data: Dict[str, str], balance: Money, import_order: int) -> Transaction:
+def create_transaction_from_ofx(transaction_file: TransactionFile, data: Dict[str, str], balance: Decimal, import_order: int) -> Transaction:
     """Create a transaction dictionary from OFX data."""
     try:
         # Get required fields
@@ -489,9 +486,8 @@ def create_transaction_from_ofx(transaction_file: TransactionFile, data: Dict[st
             
         # Get amount
         amount_str = data.get('TRNAMT', '0').replace(',', '')
-        if data.get('CURRENCY') != balance.currency:
-            raise ValueError(f"Currency mismatch: {data.get('CURRENCY')} != {balance.currency}")
-        amount = Money(Decimal(amount_str), balance.currency)
+        currency: Optional[Currency] = Currency(data.get('CURRENCY')) if data.get('CURRENCY') else transaction_file.currency if transaction_file.currency else None
+        amount = Decimal(amount_str)
         
         # Get description from n tag, NAME, or MEMO
         description = data.get('n') or data.get('NAME') or data.get('MEMO', '')
@@ -510,6 +506,7 @@ def create_transaction_from_ofx(transaction_file: TransactionFile, data: Dict[st
             date=date_ms,
             description=description.strip(),
             amount=amount,
+            currency=currency,
             balance=balance + amount,
             import_order=import_order,
             transaction_type=data.get('TRNTYPE', '').strip().upper() if data.get('TRNTYPE') else None
@@ -539,7 +536,7 @@ def parse_ofx_transactions(transaction_file: TransactionFile, content: bytes) ->
             transactions = []
             if not transaction_file.opening_balance:
                 raise ValueError("Opening balance is required")
-            balance: Money = transaction_file.opening_balance
+            balance = transaction_file.opening_balance
             
             # Find all transaction elements
             for i, stmttrn in enumerate(root.findall('.//STMTTRN'), 1):

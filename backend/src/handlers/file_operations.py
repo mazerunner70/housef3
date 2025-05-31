@@ -29,7 +29,7 @@ from utils.db_utils import (
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Union
 from decimal import Decimal
-from models.transaction_file import FileFormat, ProcessingStatus, DateRange, validate_transaction_file_data, transaction_file_to_json
+from models.transaction_file import FileFormat, ProcessingStatus, DateRange
 from models.transaction import Transaction
 from utils.transaction_parser import file_type_selector, parse_transactions
 from utils.s3_dao import (
@@ -41,7 +41,7 @@ from utils.s3_dao import (
 )
 from handlers.file_processor import create_file
 from services.file_service import get_files_for_user, format_file_metadata, get_files_for_account
-from utils.lambda_utils import create_response, mandatory_body_parameter, mandatory_path_parameter, handle_error, optional_body_parameter, optional_query_parameter 
+from utils.lambda_utils import create_response, mandatory_body_parameter, mandatory_path_parameter, handle_error, mandatory_query_parameter, optional_body_parameter, optional_query_parameter 
 
 # Configure logging
 logger = logging.getLogger()
@@ -61,7 +61,7 @@ try:
         sys.path.insert(0, parent_dir)
     
     # Now try the imports
-    from models.transaction_file import TransactionFile, FileFormat, ProcessingStatus, DateRange, validate_transaction_file_data
+    from models.transaction_file import TransactionFile, FileFormat, ProcessingStatus, DateRange
     from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_file_metadata
     from utils.db_utils import get_account
     
@@ -72,7 +72,7 @@ except ImportError as e:
     logger.error(f"Current sys.path: {sys.path}")
     # Last resort, try relative import
     try:
-        from ..models.transaction_file import TransactionFile, FileFormat, ProcessingStatus, DateRange, validate_transaction_file_data
+        from ..models.transaction_file import TransactionFile, FileFormat, ProcessingStatus, DateRange
         from ..utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_file_metadata
         from ..utils.db_utils import get_account
         logger.info("Successfully imported modules using relative imports")
@@ -117,16 +117,20 @@ def generate_file_id() -> str:
 
 
 
-def list_files_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+def list_files_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """List files for the current user."""
     try:
-        logger.info(f"Listing files for user: {user['id']}")
-        account = checked_optional_account(optional_query_parameter(event, 'accountId'), user['id'])
-        files = get_files_for_user(user['id'], account.account_id if account else None)
+        logger.info(f"Listing files for user: {user_id}")
+        account_id = optional_query_parameter(event, 'accountId')
+        if account_id:
+            account = checked_optional_account(uuid.UUID(account_id), user_id)
+        else:
+            account = None
+        files = get_files_for_user(user_id, account.account_id if account else None)
         formatted_files = [format_file_metadata(file) for file in files]
         return create_response(200, {
             'files': formatted_files,
-            'user': user,
+            'user': user_id,
             'metadata': {
                 'totalFiles': len(formatted_files),
                 'timestamp': datetime.utcnow().isoformat()
@@ -137,16 +141,16 @@ def list_files_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str,
         logger.error(traceback.format_exc())
         return create_response(500, {"message": "Error listing files"})
 
-def get_files_by_account_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+def get_files_by_account_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """List files for a specific account, with authorization and formatting."""
     try:
-        account_id = mandatory_path_parameter(event, 'accountId')
-        checked_mandatory_account(account_id, user['id'])
+        account_id = uuid.UUID(mandatory_query_parameter(event, 'accountId'))
+        checked_mandatory_account(account_id, user_id)
         files = get_files_for_account(account_id)
         formatted_files = [format_file_metadata(file) for file in files]
         return create_response(200, {
             'files': formatted_files,
-            'user': user,
+            'user': user_id,
             'metadata': {
                 'totalFiles': len(formatted_files),
                 'timestamp': datetime.utcnow().isoformat(),
@@ -161,7 +165,7 @@ def get_files_by_account_handler(event: Dict[str, Any], user: Dict[str, Any]) ->
         logger.error(f"Error listing files for account: {str(e)}, Exception type: {type(e).__name__}")
         return create_response(500, {"message": "Error listing files for account"})
 
-def get_upload_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+def get_upload_url_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Generate a presigned URL for direct S3 upload without creating metadata."""
     try:
         # Parse request body
@@ -170,13 +174,13 @@ def get_upload_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
         account_id = optional_body_parameter(event, 'accountId')
         
         # Validate the key starts with the user's ID for security
-        if not key.startswith(f"{user['id']}/"):
+        if not key.startswith(f"{user_id}/"):
             return create_response(403, {'message': 'Invalid key prefix'})
             
         # If account_id is provided, verify user has access to it
         if account_id:
             try:
-                checked_mandatory_account(account_id, user['id'])
+                checked_mandatory_account(uuid.UUID(account_id) if account_id else None, user_id)
             except ValueError as e:
                 return create_response(403, {'message': str(e)})
             
@@ -189,7 +193,7 @@ def get_upload_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
         # Define policy conditions using AWS-documented format
         conditions = [
             ['starts-with', '$Content-Type', ''],
-            ['starts-with', '$key', f"{user['id']}/"]  # Ensure key starts with user ID
+            ['starts-with', '$key', f"{user_id}/"]  # Ensure key starts with user ID
         ]
         
         # If account_id is provided, add metadata field and condition
@@ -229,14 +233,14 @@ def get_upload_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
         return handle_error(500, "Error generating S3 upload URL")
 
 
-def get_download_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+def get_download_url_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Generate a presigned URL for file download."""
     try:
         # Get file ID from path parameters
-        file_id = mandatory_path_parameter(event, 'id')
+        file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
             
         # Get file metadata from DynamoDB
-        file = checked_mandatory_transaction_file(file_id, user['id'])
+        file = checked_mandatory_transaction_file(file_id, user_id)
     
         # Generate presigned URL for download
         download_url = get_presigned_url_simple(FILE_STORAGE_BUCKET, file.s3_key, 'get')
@@ -255,7 +259,7 @@ def get_download_url_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dic
         logger.error(f"Error generating download URL: {str(e)}")
         return handle_error(500, "Error generating download URL")
 
-def delete_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+def delete_file_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Delete a file and all its associated data.
     
     This handler performs the following operations in sequence:
@@ -276,13 +280,13 @@ def delete_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str
         # Step 1: Request validation and authorization
         # Extract file ID from the request path parameters
         logger.info(f"Deleting file {event}")
-        file_id = mandatory_path_parameter(event, 'id')
+        file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
             
         # Retrieve file metadata to verify existence and ownership
-        file = checked_mandatory_transaction_file(file_id, user['id'])
+        file = checked_mandatory_transaction_file(file_id, user_id)
             
         # Ensure the file belongs to the requesting user
-        if file.user_id != user['id']:
+        if file.user_id != user_id:
             return create_response(403, {"message": "Access denied"})
         
         # Step 2: Handle account association cleanup
@@ -354,25 +358,25 @@ def delete_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str
         logger.error(f"Error deleting file: {str(e)}", exc_info=True)
         return create_response(500, {"message": "Error deleting file"})
 
-def unassociate_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+def unassociate_file_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Remove account association from a file."""
     try:
         # Get file ID from path parameters
         logger.info(f"Unassociating file {event}")
-        file_id = mandatory_path_parameter(event, 'id')
+        file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
            
         # Get file metadata from DynamoDB
-        file = checked_mandatory_transaction_file(file_id, user['id'])
+        file = checked_mandatory_transaction_file(file_id, user_id)
         
         # Check if file is associated with an account
         if not file.account_id:
             raise ValueError("File is not associated with any account")
         
-        checked_mandatory_account(file.account_id, user['id'])
+        checked_mandatory_account(file.account_id, user_id)
         
         # Update the file to remove account association
         logger.info(f"Removing association between file {file_id} and account {file.account_id}")
-        update_transaction_file(file_id, user['id'], {'account_id': None})          
+        update_transaction_file(file_id, user_id, {'account_id': None})          
         return create_response(200, {
             "message": "File successfully unassociated from account",
             "fileId": file_id,
@@ -388,20 +392,20 @@ def unassociate_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dic
         logger.error(f"Error unassociating file: {str(e)}")
         return create_response(500, {"message": "Error handling unassociate request"})
 
-def associate_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+def associate_file_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Associate a file with an account."""
     try:
         # Get file ID from path parameters
-        file_id = mandatory_path_parameter(event, 'id')
+        file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
         
         # Get account ID from request body
-        account_id = mandatory_body_parameter(event, 'accountId')
+        account_id = uuid.UUID(mandatory_body_parameter(event, 'accountId'))
                 
         # Get the file to verify it exists and belongs to the user
-        file = checked_mandatory_transaction_file(file_id, user['id'])
+        file = checked_mandatory_transaction_file(file_id, user_id)
                  
         # Verify that the account exists and belongs to the user
-        account = checked_mandatory_account(account_id, user['id'])
+        account = checked_mandatory_account(account_id, user_id)
             
         # Update the file to add account association
         logger.info(f"Associating file {file_id} with account {account_id}")
@@ -412,20 +416,20 @@ def associate_file_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[
         logger.error(f"Error associating file: {str(e)}")
         return create_response(500, {"message": "Error handling associate request"})
 
-def update_file_balance_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+def update_file_balance_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Update a file's opening balance."""
     try:
         # Get file ID from path parameters
-        file_id = mandatory_path_parameter(event, 'id')
+        file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
             
         # Get file metadata from DynamoDB
-        file = checked_mandatory_transaction_file(file_id, user['id'])
+        file = checked_mandatory_transaction_file(file_id, user_id)
         
         # Parse the request body to get the opening balance
         amount = Decimal(mandatory_body_parameter(event, 'openingBalance'))
         currency = optional_body_parameter(event, 'currency') 
         currency = Currency(currency) if currency else file.currency
-        file.opening_balance = Money(amount, currency)
+        file.opening_balance = amount
         response: FileProcessorResponse = process_file(file)
 
         return create_response(200, response.to_dict())
@@ -443,17 +447,17 @@ def update_file_balance_handler(event: Dict[str, Any], user: Dict[str, Any]) -> 
         logger.error(traceback.format_exc())
         return create_response(500, {"message": "Error handling update balance request"})
 
-def get_file_metadata_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+def get_file_metadata_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Get metadata for a single file by ID."""
     try:
         # Get file ID from path parameters
-        file_id = mandatory_path_parameter(event, 'id') 
+        file_id = uuid.UUID(mandatory_path_parameter(event, 'id')) 
         
         # Get file metadata from DynamoDB
-        file = checked_mandatory_transaction_file(file_id, user['id'])
+        file = checked_mandatory_transaction_file(file_id, user_id)
         
         # Convert to JSON-friendly format with proper type handling
-        file_json = json.loads(transaction_file_to_json(file))
+        file_json = file.model_dump(by_alias=True)
         
         # Add field map information if it exists
         if 'fieldMapId' in file_json:
@@ -470,19 +474,19 @@ def get_file_metadata_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Di
         logger.error(f"Error getting file metadata: {str(e)}")
         return create_response(500, {"message": "Error getting file metadata"})
 
-def get_file_transactions_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+def get_file_transactions_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Get all transactions for a specific file."""
     try:
         # Get file ID from path parameters
-        file_id = mandatory_path_parameter(event, 'id') 
+        file_id = uuid.UUID(mandatory_path_parameter(event, 'id')) 
 
             
         # Get file metadata to verify ownership
-        file = checked_mandatory_transaction_file(file_id, user['id'])
+        file = checked_mandatory_transaction_file(file_id, user_id)
         
         # Get transactions for the file
         try:
-            transactions = list_file_transactions(file_id)
+            transactions = list_file_transactions(file.file_id)
 
             
             # Sort transactions by date
@@ -504,14 +508,14 @@ def get_file_transactions_handler(event: Dict[str, Any], user: Dict[str, Any]) -
         logger.error(f"Error in get_file_transactions_handler: {str(e)}")
         return create_response(500, {"message": "Internal server error"})
 
-def delete_file_transactions_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+def delete_file_transactions_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Delete all transactions for a specific file."""
     try:
         # Get file ID from path parameters
-        file_id = mandatory_path_parameter(event, 'id')
+        file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
             
         # Get file metadata to verify ownership
-        file = checked_mandatory_transaction_file(file_id, user['id'])
+        file = checked_mandatory_transaction_file(file_id, user_id)
         
         # Delete all transactions for the file
 
@@ -529,14 +533,14 @@ def delete_file_transactions_handler(event: Dict[str, Any], user: Dict[str, Any]
         logger.error(f"Error in delete_file_transactions_handler: {str(e)}")
         return create_response(500, {"message": "Internal server error"})
 
-def get_file_content_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+def get_file_content_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Get the content of a file by ID."""
     try:
         # Get file ID from path parameters
-        file_id = mandatory_path_parameter(event, 'id')
+        file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
   
         # Get file metadata from DynamoDB
-        file = checked_mandatory_transaction_file(file_id, user['id'])
+        file = checked_mandatory_transaction_file(file_id, user_id)
         
         # Get the file content from S3 using S3 DAO
         content = get_object_content(file.s3_key)
@@ -554,17 +558,17 @@ def get_file_content_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dic
         logger.error(f"Error getting file content: {str(e)}")
         return create_response(500, {"message": "Error getting file content"})
 
-def update_file_field_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+def update_file_field_map_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Update a file's field map.""" 
     try:
         # Get file ID from path parameters
-        file_id = mandatory_path_parameter(event, 'id')
+        file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
         
         # Get the field map ID from the request body
-        field_map_id = mandatory_body_parameter(event, 'fileMapId')
+        field_map_id = uuid.UUID(mandatory_body_parameter(event, 'fileMapId'))
             
         # Get file metadata from DynamoDB
-        file = checked_mandatory_transaction_file(file_id, user['id'])
+        file = checked_mandatory_transaction_file(file_id, user_id)
         
         # Get field map
         field_map = get_file_map(field_map_id)
@@ -582,11 +586,11 @@ def update_file_field_map_handler(event: Dict[str, Any], user: Dict[str, Any]) -
         logger.error(f"Error updating file field map: {str(e)}", exc_info=True)
         return create_response(500, {"message": "Error updating file field map"})
 
-def get_file_preview_handler(event: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+def get_file_preview_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Get a preview of a file, specifically for CSVs."""
     try:
-        file_id = mandatory_path_parameter(event, 'id')
-        file = checked_mandatory_transaction_file(file_id, user['id'])
+        file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
+        file = checked_mandatory_transaction_file(file_id, user_id)
 
         if file.file_format == FileFormat.CSV:
             content_bytes = get_object_content(file.s3_key)
@@ -665,38 +669,38 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         user = get_user_from_event(event)
         if not user:
             return create_response(401, {"message": "Unauthorized"})
-            
-        logger.info(f"Processing {route} request for user {user.get('id')}")
+        user_id = user.get('id')
+        if not user_id:
+            return create_response(401, {"message": "Unauthorized"})
+        logger.info(f"Processing {route} request for user {user_id}")
         
         # Handle based on route
         if route == "GET /files":
-            return list_files_handler(event, user)
+            return list_files_handler(event, user_id)
         elif route == "GET /files/account/{accountId}":
-            return get_files_by_account_handler(event, user)
+            return get_files_by_account_handler(event, user_id)
         elif route == "GET /files/{id}/metadata":
-            return get_file_metadata_handler(event, user)
+            return get_file_metadata_handler(event, user_id)
         elif route == "GET /files/{id}/content":
-            return get_file_content_handler(event, user)
+            return get_file_content_handler(event, user_id)
         elif route == "GET /files/{id}/download":
-            return get_download_url_handler(event, user)
+            return get_download_url_handler(event, user_id)
         elif route == "GET /files/{id}/transactions":
-            return get_file_transactions_handler(event, user)
+            return get_file_transactions_handler(event, user_id)
         elif route == "GET /files/{id}/preview":
-            return get_file_preview_handler(event, user)
+            return get_file_preview_handler(event, user_id)
         elif route == "DELETE /files/{id}/transactions":
-            return delete_file_transactions_handler(event, user)
+            return delete_file_transactions_handler(event, user_id)
         elif route == "DELETE /files/{id}":
-            return delete_file_handler(event, user)
+            return delete_file_handler(event, user_id)
         elif route == "POST /files/{id}/unassociate":
-            return unassociate_file_handler(event, user)
+            return unassociate_file_handler(event, user_id)
         elif route == "POST /files/{id}/associate":
-            return associate_file_handler(event, user)
-        elif route == "POST /files/{id}/balance":
-            return update_file_balance_handler(event, user)
+            return associate_file_handler(event, user_id)
         elif route == "PUT /files/{id}/file-map":
-            return update_file_field_map_handler(event, user)
+            return update_file_field_map_handler(event, user_id)
         elif route == "POST /files/upload":
-            return get_upload_url_handler(event, user)
+            return get_upload_url_handler(event, user_id)
         else:
             return create_response(400, {"message": f"Unsupported route: {route}"})
     except Exception as e:

@@ -1,0 +1,14 @@
+.account-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); /* Responsive grid */
+    gap: 20px;
+}
+
+.no-accounts-message {
+    font-style: italic;
+    color: #666;
+    padding: 20px;
+    text-align: center;
+    border: 1px dashed #ccc;
+    border-radius: 5px;
+} 

@@ -17,15 +17,16 @@ from pydantic import BaseModel
 from models import (
     Account, 
     TransactionFile,
-    validate_account_data,
-    validate_transaction_file_data,
     AccountType,
-    Currency
+    Currency,
+    AccountCreate,
+    AccountUpdate
 )
 from models.category import Category, CategoryType, CategoryUpdate
-from models.transaction import Transaction
+from models.transaction import Transaction, TransactionCreate, TransactionUpdate
+from models.transaction_file import TransactionFileCreate, TransactionFileUpdate
 from boto3.dynamodb.conditions import Key, Attr
-from models.file_map import FileMap
+from models.file_map import FileMap, FileMapCreate, FileMapUpdate
 from utils.transaction_utils import generate_transaction_hash
 
 # Configure logging
@@ -64,7 +65,7 @@ def check_user_owns_resource(resource_user_id: str, requesting_user_id: str) -> 
     if resource_user_id != requesting_user_id:
         raise NotAuthorized("Not authorized to access this resource")
 
-def checked_mandatory_account(account_id: Optional[str], user_id: str) -> Account:
+def checked_mandatory_account(account_id: Optional[uuid.UUID], user_id: str) -> Account:
     """Check if account exists and user has access to it."""
     if not account_id:
         raise NotFound("Account ID is required")
@@ -74,7 +75,7 @@ def checked_mandatory_account(account_id: Optional[str], user_id: str) -> Accoun
     check_user_owns_resource(account.user_id, user_id)
     return account
 
-def checked_optional_account(account_id: Optional[str], user_id: str) -> Optional[Account]:
+def checked_optional_account(account_id: Optional[uuid.UUID], user_id: str) -> Optional[Account]:
     """Check if account exists and user has access to it, allowing None."""
     if not account_id:
         return None
@@ -84,7 +85,7 @@ def checked_optional_account(account_id: Optional[str], user_id: str) -> Optiona
     check_user_owns_resource(account.user_id, user_id)
     return account
 
-def checked_mandatory_transaction_file(file_id: str, user_id: str) -> TransactionFile:
+def checked_mandatory_transaction_file(file_id: uuid.UUID, user_id: str) -> TransactionFile:
     """Check if file exists and user has access to it."""
     file = get_transaction_file(file_id)
     if not file:
@@ -92,7 +93,7 @@ def checked_mandatory_transaction_file(file_id: str, user_id: str) -> Transactio
     check_user_owns_resource(file.user_id, user_id)
     return file
 
-def checked_optional_transaction_file(file_id: Optional[str], user_id: str) -> Optional[TransactionFile]:
+def checked_optional_transaction_file(file_id: Optional[uuid.UUID], user_id: str) -> Optional[TransactionFile]:
     """Check if file exists and user has access to it, allowing None."""
     if not file_id:
         return None
@@ -102,22 +103,24 @@ def checked_optional_transaction_file(file_id: Optional[str], user_id: str) -> O
     check_user_owns_resource(file.user_id, user_id)
     return file
 
-def checked_mandatory_file_map(file_map_id: Optional[str], user_id: str) -> FileMap:
+def checked_mandatory_file_map(file_map_id: Optional[uuid.UUID], user_id: str) -> FileMap:
     """Check if file map exists and user has access to it."""
+    if not file_map_id:
+        raise NotFound("FileMap ID is required")
     file_map = get_file_map(file_map_id)
     if not file_map:
         raise NotFound("File map not found")
-    check_user_owns_resource(str(file_map.user_id), user_id)
+    check_user_owns_resource(file_map.user_id, user_id)
     return file_map
 
-def checked_optional_file_map(file_map_id: Optional[str], user_id: str) -> Optional[FileMap]:
+def checked_optional_file_map(file_map_id: Optional[uuid.UUID], user_id: str) -> Optional[FileMap]:
     """Check if file map exists and user has access to it, allowing None."""
     if not file_map_id:
         return None
     file_map = get_file_map(file_map_id)
     if not file_map:
         return None
-    check_user_owns_resource(str(file_map.user_id), user_id)
+    check_user_owns_resource(file_map.user_id, user_id)
     return file_map
 
 def get_accounts_table() -> Any:
@@ -148,7 +151,7 @@ def get_file_maps_table() -> Any:
         _file_maps_table = dynamodb.Table(FILE_MAPS_TABLE)
     return _file_maps_table
 
-def get_account(account_id: str) -> Optional[Account]:
+def get_account(account_id: uuid.UUID) -> Optional[Account]:
     """
     Retrieve an account by ID.
     
@@ -159,13 +162,13 @@ def get_account(account_id: str) -> Optional[Account]:
         Account object if found, None otherwise
     """
     try:
-        response = get_accounts_table().get_item(Key={'accountId': account_id})
+        response = get_accounts_table().get_item(Key={'accountId': str(account_id)})
 
         if 'Item' in response:
-            return Account.from_flat_dict(response['Item'])
+            return Account.from_dynamodb_item(response['Item'])
         return None
     except ClientError as e:
-        logger.error(f"Error retrieving account {account_id}: {str(e)}")
+        logger.error(f"Error retrieving account {str(account_id)}: {str(e)}")
         raise
 
 
@@ -190,13 +193,12 @@ def list_user_accounts(user_id: str) -> List[Account]:
         for item in response.get('Items', []):
             # Check and fix balance format if needed
             try:
-                account = Account.from_flat_dict(item)
+                account = Account.from_dynamodb_item(item)
                 accounts.append(account)
             except Exception as e:
                 logger.error(f"Error creating Account from item: {str(e)}")
                 logger.error(f"Problematic item: {item}")
-                # Continue with other accounts
-                continue
+                raise
         logger.info(f"Listed {len(accounts)} accounts for user {user_id}")    
         return accounts
     except ClientError as e:
@@ -214,17 +216,18 @@ def create_account(account: Account):
     """
 
     # Save to DynamoDB
-    get_accounts_table().put_item(Item=account.to_flat_dict())
+    get_accounts_table().put_item(Item=account.to_dynamodb_item())
 
 
 
 
-def update_account(account_id: str, user_id: str, update_data: Dict[str, Any]) -> Account:
+def update_account(account_id: uuid.UUID, user_id: str, update_data: Dict[str, Any]) -> Account:
     """
     Update an existing account.
     
     Args:
         account_id: The unique identifier of the account to update
+        user_id: The ID of the user making the request
         update_data: Dictionary containing fields to update
         
     Returns:
@@ -233,57 +236,67 @@ def update_account(account_id: str, user_id: str, update_data: Dict[str, Any]) -
     # Retrieve the existing account
     account = checked_mandatory_account(account_id, user_id)
     
-    account.update(**update_data)
-    account.validate()
+    # Create an AccountUpdate DTO from the update_data
+    account_update_dto = AccountUpdate(**update_data)
+    
+    # Use the model's method to update details
+    account.update_account_details(account_update_dto)
     
     # Save updates to DynamoDB
-    get_accounts_table().put_item(Item=account.to_flat_dict())
+    get_accounts_table().put_item(Item=account.to_dynamodb_item())
     
     return account
 
 
 
-def delete_account(account_id: str) -> bool:
+def delete_account(account_id: uuid.UUID, user_id: str) -> bool: # Added user_id for authorization
     """
     Delete an account and handle any associated files.
     
     Args:
         account_id: The unique identifier of the account to delete
+        user_id: The ID of the user making the request
         
     Returns:
         True if deleted successfully
     """
     try:
-        # Check if the account exists
-        account = get_account(account_id)
-        if not account:
-            raise ValueError(f"Account {account_id} not found")
+        # Check if the account exists and user has access
+        account = checked_mandatory_account(account_id, user_id)
         
         # Get all files associated with this account
-        associated_files = list_account_files(account_id)
-        logger.info(f"Found {len(associated_files)} files associated with account {account_id}")
+        associated_files = list_account_files(account_id) # This function doesn't currently check user_id for files
+        logger.info(f"Found {len(associated_files)} files associated with account {str(account_id)}")
         
         # Delete each associated file and its transactions
-        for file in associated_files:
+        for file_item in associated_files:
+            # Ensure user owns the file before deleting (important if list_account_files doesn't filter by user)
+            # checked_mandatory_transaction_file(str(file_item.file_id), user_id) # This would re-fetch, maybe optimize
+            if file_item.user_id != user_id:
+                logger.warning(f"Skipping deletion of file {str(file_item.file_id)} as it's not owned by user {user_id}")
+                continue
             try:
                 # Delete the file and its transactions
-                delete_transaction_file(file.file_id)
-                logger.info(f"Deleted file {file.file_id} and its transactions")
+                delete_transaction_file(file_item.file_id, user_id) # Pass user_id, file_item.file_id is UUID
+                logger.info(f"Deleted file {str(file_item.file_id)} and its transactions")
             except Exception as file_error:
-                logger.error(f"Error deleting file {file.file_id}: {str(file_error)}")
+                logger.error(f"Error deleting file {str(file_item.file_id)}: {str(file_error)}")
                 # Continue with other files
         
         # Delete the account
-        get_accounts_table().delete_item(Key={'accountId': account_id})
-        logger.info(f"Account {account_id} deleted successfully")
+        get_accounts_table().delete_item(Key={'accountId': str(account_id)})
+        logger.info(f"Account {str(account_id)} deleted successfully")
         
         return True
     except ClientError as e:
-        logger.error(f"Error deleting account {account_id}: {str(e)}")
+        logger.error(f"Error deleting account {str(account_id)}: {str(e)}")
+        raise
+    except NotAuthorized as e:
+        logger.error(f"Authorization error deleting account {str(account_id)}: {str(e)}")
         raise
 
 
-def get_transaction_file(file_id: str) -> Optional[TransactionFile]:
+def get_transaction_file(file_id: uuid.UUID) -> Optional[TransactionFile]:
     """
     Retrieve a transaction file by ID.
     
@@ -294,17 +307,17 @@ def get_transaction_file(file_id: str) -> Optional[TransactionFile]:
         TransactionFile object if found, None otherwise
     """
     try:
-        response = get_files_table().get_item(Key={'fileId': file_id})
+        response = get_files_table().get_item(Key={'fileId': str(file_id)})
         
         if 'Item' in response:
-            return TransactionFile.from_flat_dict(response['Item'])
+            return TransactionFile.from_dynamodb_item(response['Item'])
         return None
     except ClientError as e:
-        logger.error(f"Error retrieving file {file_id}: {str(e)}")
+        logger.error(f"Error retrieving file {str(file_id)}: {str(e)}")
         raise
 
 
-def list_account_files(account_id: str) -> List[TransactionFile]:
+def list_account_files(account_id: uuid.UUID) -> List[TransactionFile]:
     """
     List all files for a specific account.
     
@@ -318,16 +331,16 @@ def list_account_files(account_id: str) -> List[TransactionFile]:
         # Query using GSI for accountId
         response = get_files_table().query(
             IndexName='AccountIdIndex',
-            KeyConditionExpression=Key('accountId').eq(account_id)
+            KeyConditionExpression=Key('accountId').eq(str(account_id))
         )
         
         files = []
         for item in response.get('Items', []):
-            files.append(TransactionFile.from_flat_dict(item))
+            files.append(TransactionFile.from_dynamodb_item(item))
             
         return files
     except ClientError as e:
-        logger.error(f"Error listing files for account {account_id}: {str(e)}")
+        logger.error(f"Error listing files for account {str(account_id)}: {str(e)}")
         raise
 
 
@@ -351,7 +364,7 @@ def list_user_files(user_id: str) -> List[TransactionFile]:
         files = []
         for item in response.get('Items', []):
             try:
-                files.append(TransactionFile.from_flat_dict(item))
+                files.append(TransactionFile.from_dynamodb_item(item))
             except Exception as e:
                 logger.error(f"Error creating TransactionFile from item: {str(e)}")
                 logger.error(f"Problematic item: {item}")
@@ -372,12 +385,8 @@ def create_transaction_file(transaction_file: TransactionFile):
         
     """
     try:
-        # Validate the input data
-        validate_transaction_file_data(transaction_file)
-    
-        
         # Save to DynamoDB
-        get_files_table().put_item(Item=transaction_file.to_flat_dict())
+        get_files_table().put_item(Item=transaction_file.to_dynamodb_item())
         
     except ValueError as e:
         logger.error(f"Validation error creating file: {str(e)}")
@@ -390,7 +399,7 @@ def create_transaction_file(transaction_file: TransactionFile):
         raise
 
 
-def update_transaction_file(file_id: str, user_id: str, updates: Dict[str, Any]):
+def update_transaction_file(file_id: uuid.UUID, user_id: str, updates: Dict[str, Any]):
     """
     Update a transaction file record in DynamoDB.
     
@@ -403,56 +412,63 @@ def update_transaction_file(file_id: str, user_id: str, updates: Dict[str, Any])
     """
     try:
         transaction_file = checked_mandatory_transaction_file(file_id, user_id)
-        transaction_file.update(**updates)
-        transaction_file.validate()
-        get_files_table().put_item(Item=transaction_file.to_flat_dict())
+        
+        # Create TransactionFileUpdate DTO
+        update_dto = TransactionFileUpdate(**updates)
+        
+        # Use the model's method to update details
+        transaction_file.update_with_data(update_dto)
+        
+        get_files_table().put_item(Item=transaction_file.to_dynamodb_item())
     except Exception as e:
-        logger.error(f"Error updating transaction file {file_id}: {str(e)}")
-        logger.error(traceback.format_exc())
-        logger.error(f"Transaction file object: {transaction_file}")
-        logger.error(f"Updates: {updates}")
-        raise
+        logger.error(f"Error updating transaction file {str(file_id)}: {str(e)}")
 
 def update_transaction_file_object(transaction_file: TransactionFile):
     """
     Update a transaction file object in DynamoDB.
     """
     try:
-        get_files_table().put_item(Item=transaction_file.to_flat_dict())
+        get_files_table().put_item(Item=transaction_file.to_dynamodb_item())
     except Exception as e:
-        logger.error(f"Error updating transaction file object {transaction_file.file_id}: {str(e)}")
+        logger.error(f"Error updating transaction file object {str(transaction_file.file_id)}: {str(e)}")
 
-def delete_transaction_file(file_id: str) -> bool:
+def delete_transaction_file(file_id: uuid.UUID, user_id: str) -> bool: # Added user_id
     """
     Delete a transaction file and all its associated transactions.
     
     Args:
         file_id: The unique identifier of the file to delete
+        user_id: The ID of the user requesting the deletion
         
     Returns:
         True if deleted successfully
     """
     try:
-        # Check if the file exists
-        file = get_transaction_file(file_id)
-        if not file:
-            raise ValueError(f"File {file_id} not found")
+        # Check if the file exists and user owns it
+        file_to_delete = checked_mandatory_transaction_file(file_id, user_id)
         
         # First delete all associated transactions
+        # Note: delete_transactions_for_file does not currently perform user auth checks for each transaction
         transactions_deleted = delete_transactions_for_file(file_id)
-        logger.info(f"Deleted {transactions_deleted} transactions for file {file_id}")
+        logger.info(f"Deleted {transactions_deleted} transactions for file {str(file_id)}")
         
         # Then delete the file metadata
-        get_files_table().delete_item(Key={'fileId': file_id})
-        logger.info(f"Deleted file metadata for {file_id}")
+        get_files_table().delete_item(Key={'fileId': str(file_id)})
+        logger.info(f"Deleted file metadata for {str(file_id)}")
         
         return True
-    except ClientError as e:
-        logger.error(f"Error deleting file {file_id}: {str(e)}")
+    except NotAuthorized as e:
+        logger.error(f"Authorization error deleting file {str(file_id)}: {str(e)}")
         raise
+    except ClientError as e:
+        logger.error(f"Error deleting file {str(file_id)}: {str(e)}")
+        raise
+    except NotFound as e:
+        logger.error(f"File not found error during deletion for file {str(file_id)}: {str(e)}")
+        raise # Or return False, depending on desired behavior
 
 
-def list_file_transactions(file_id: str) -> List[Transaction]:
+def list_file_transactions(file_id: uuid.UUID) -> List[Transaction]:
     """
     List all transactions for a specific file.
     
@@ -465,11 +481,11 @@ def list_file_transactions(file_id: str) -> List[Transaction]:
     try:
         response = get_transactions_table().query(
             IndexName='FileIdIndex',
-            KeyConditionExpression=Key('fileId').eq(file_id)
+            KeyConditionExpression=Key('fileId').eq(str(file_id))
         )
-        return [Transaction.from_flat_dict(item) for item in response.get('Items', [])]
+        return [Transaction.from_dynamodb_item(item) for item in response.get('Items', [])]
     except ClientError as e:
-        logger.error(f"Error listing transactions for file {file_id}: {str(e)}")
+        logger.error(f"Error listing transactions for file {str(file_id)}: {str(e)}")
         raise
 
 
@@ -479,7 +495,7 @@ def list_user_transactions(
     last_evaluated_key: Optional[Dict[str, Any]] = None,
     start_date_ts: Optional[int] = None,
     end_date_ts: Optional[int] = None,
-    account_ids: Optional[List[str]] = None,
+    account_ids: Optional[List[uuid.UUID]] = None, # Changed to List[uuid.UUID]
     transaction_type: Optional[str] = None,
     search_term: Optional[str] = None,
     sort_order_date: str = 'desc',
@@ -520,7 +536,7 @@ def list_user_transactions(
             filter_expressions.append(Attr('date').lte(end_date_ts))
         
         if account_ids:
-            filter_expressions.append(Attr('accountId').is_in(account_ids))
+            filter_expressions.append(Attr('accountId').is_in([str(aid) for aid in account_ids])) # Convert UUIDs to strings
 
         if transaction_type and transaction_type.lower() != 'all':
             filter_expressions.append(Attr('transactionType').eq(transaction_type))
@@ -541,7 +557,7 @@ def list_user_transactions(
         logger.debug(f"DynamoDB query params: {query_params}")
         response = table.query(**query_params)
         
-        transactions = [Transaction.from_flat_dict(item) for item in response.get('Items', [])]
+        transactions = [Transaction.from_dynamodb_item(item) for item in response.get('Items', [])]
         new_last_evaluated_key = response.get('LastEvaluatedKey')
         
         # Count of items returned in this specific query response
@@ -572,7 +588,7 @@ def create_transaction(transaction: Transaction):
     """
     try:
         # Save to DynamoDB
-        get_transactions_table().put_item(Item=transaction.to_flat_dict())
+        get_transactions_table().put_item(Item=transaction.to_dynamodb_item())
         
         return transaction
     except Exception as e:
@@ -580,7 +596,7 @@ def create_transaction(transaction: Transaction):
         raise
 
 
-def delete_transactions_for_file(file_id: str) -> int:
+def delete_transactions_for_file(file_id: uuid.UUID) -> int:
     """
     Delete all transactions associated with a file.
     
@@ -599,18 +615,18 @@ def delete_transactions_for_file(file_id: str) -> int:
             # Delete transactions in batches of 25 (DynamoDB limit)
             table = get_transactions_table()
             with table.batch_writer() as batch:
-                for transaction in transactions:
-                    batch.delete_item(Key={'transactionId': transaction.transaction_id})
+                for transaction_item in transactions: # Renamed to avoid conflict
+                    batch.delete_item(Key={'transactionId': str(transaction_item.transaction_id)}) # transaction_item.transaction_id is UUID
             
-            logger.info(f"Deleted {count} transactions for file {file_id}")
+            logger.info(f"Deleted {count} transactions for file {str(file_id)}")
         
         return count
     except ClientError as e:
-        logger.error(f"Error deleting transactions for file {file_id}: {str(e)}")
+        logger.error(f"Error deleting transactions for file {str(file_id)}: {str(e)}")
         raise
 
 
-def delete_file_metadata(file_id: str) -> bool:
+def delete_file_metadata(file_id: uuid.UUID) -> bool:
     """
     Delete a file metadata record from the files table.
     
@@ -621,15 +637,15 @@ def delete_file_metadata(file_id: str) -> bool:
         True if successful, False otherwise
     """
     try:
-        get_files_table().delete_item(Key={'fileId': file_id})
-        logger.info(f"Deleted file metadata for {file_id}")
+        get_files_table().delete_item(Key={'fileId': str(file_id)})
+        logger.info(f"Deleted file metadata for {str(file_id)}")
         return True
     except ClientError as e:
-        logger.error(f"Error deleting file metadata {file_id}: {str(e)}")
+        logger.error(f"Error deleting file metadata {str(file_id)}: {str(e)}")
         raise
 
 
-def get_file_map(file_map_id: Optional[str] = None) -> Optional[FileMap]:
+def get_file_map(file_map_id: Optional[uuid.UUID] = None) -> Optional[FileMap]:
     """
     Retrieve a file map by ID.
     
@@ -646,17 +662,17 @@ def get_file_map(file_map_id: Optional[str] = None) -> Optional[FileMap]:
         if not table:
             logger.error("File maps table not initialized.")
             return None
-        response = table.get_item(Key={'fileMapId': file_map_id})
+        response = table.get_item(Key={'fileMapId': str(file_map_id)})
 
         if 'Item' in response:
-            return FileMap.model_validate(response['Item'])
+            return FileMap.from_dynamodb_item(response['Item'])
         return None
     except ClientError as e:
-        logger.error(f"Error retrieving file map {file_map_id}: {str(e)}")
+        logger.error(f"Error retrieving file map {str(file_map_id)}: {str(e)}")
         raise
 
 
-def get_account_default_file_map(account_id: str) -> Optional[FileMap]:
+def get_account_default_file_map(account_id: uuid.UUID) -> Optional[FileMap]:
     """
     Get the default file map for an account.
     
@@ -668,22 +684,20 @@ def get_account_default_file_map(account_id: str) -> Optional[FileMap]:
     """
     try:
         # Get the account record
-        response = get_accounts_table().get_item(
-            Key={'accountId': account_id}
-        )
-        
-        if 'Item' not in response:
+        account = get_account(account_id) 
+        if not account:
+            logger.warning(f"Account {str(account_id)} not found when trying to get default file map.")
             return None
             
         # Check for default field map
-        default_file_map_id = response['Item'].get('defaultFileMapId')
+        default_file_map_id = account.default_file_map_id 
         if not default_file_map_id:
             return None
             
         # Get the field map
-        return get_file_map(default_file_map_id)
+        return get_file_map(default_file_map_id) # default_file_map_id is already UUID from Account model
     except Exception as e:
-        logger.error(f"Error getting default file map for account {account_id}: {str(e)}")
+        logger.error(f"Error getting default file map for account {str(account_id)}: {str(e)}")
         return None
 
 
@@ -695,10 +709,10 @@ def create_file_map(file_map: FileMap) -> None:
         file_map: The FileMap object to create
     """
     try:
-        get_file_maps_table().put_item(Item=file_map.model_dump(by_alias=True))
-        logger.info(f"Successfully created file map {file_map.file_map_id}")
+        get_file_maps_table().put_item(Item=file_map.to_dynamodb_item())
+        logger.info(f"Successfully created file map {str(file_map.file_map_id)}")
     except ClientError as e:
-        logger.error(f"Error creating file map {file_map.file_map_id}: {str(e)}")
+        logger.error(f"Error creating file map {str(file_map.file_map_id)}: {str(e)}")
         raise
 
 
@@ -710,14 +724,14 @@ def update_file_map(file_map: FileMap) -> None:
         file_map: The FileMap object with updated details
     """
     try:
-        get_file_maps_table().put_item(Item=file_map.model_dump(by_alias=True))
-        logger.info(f"Successfully updated file map {file_map.file_map_id}")
+        get_file_maps_table().put_item(Item=file_map.to_dynamodb_item())
+        logger.info(f"Successfully updated file map {str(file_map.file_map_id)}")
     except ClientError as e:
-        logger.error(f"Error updating file map {file_map.file_map_id}: {str(e)}")
+        logger.error(f"Error updating file map {str(file_map.file_map_id)}: {str(e)}")
         raise
 
 
-def delete_file_map(file_map_id: str) -> bool:
+def delete_file_map(file_map_id: uuid.UUID) -> bool:
     """
     Delete a file map by ID.
     
@@ -729,7 +743,7 @@ def delete_file_map(file_map_id: str) -> bool:
     """
     try:
         get_file_maps_table().delete_item(
-            Key={'fileMapId': file_map_id}
+            Key={'fileMapId': str(file_map_id)}
         )
         return True
     except Exception as e:
@@ -752,7 +766,7 @@ def list_file_maps_by_user(user_id: str) -> List[FileMap]:
             IndexName='UserIdIndex',
             KeyConditionExpression=Key('userId').eq(user_id)
         )
-        return [FileMap.model_validate(item) for item in response.get('Items', [])]
+        return [FileMap.from_dynamodb_item(item) for item in response.get('Items', [])]
     except ClientError as e:
         logger.error(f"Error listing file maps for user {user_id}: {str(e)}")
         raise
@@ -772,11 +786,11 @@ def list_account_file_maps(account_id: str) -> List[FileMap]:
         # Query using GSI for accountId
         response = get_file_maps_table().query(
             IndexName='AccountIdIndex',
-            KeyConditionExpression=Key('accountId').eq(account_id)
+            KeyConditionExpression=Key('accountId').eq(str(account_id))
         )
-        return [FileMap.model_validate(item) for item in response.get('Items', [])]
+        return [FileMap.from_dynamodb_item(item) for item in response.get('Items', [])]
     except Exception as e:
-        logger.error(f"Error listing file maps for account {account_id}: {str(e)}")
+        logger.error(f"Error listing file maps for account {str(account_id)}: {str(e)}")
         raise
 
 
@@ -802,7 +816,7 @@ def list_account_transactions(account_id: str, limit: int = 50, last_evaluated_k
         # This will return transactions sorted by date
         query_params = {
             'IndexName': 'AccountDateIndex',
-            'KeyConditionExpression': Key('accountId').eq(account_id),
+            'KeyConditionExpression': Key('accountId').eq(str(account_id)),
             'FilterExpression': Attr('status').ne('duplicate'),
             'Limit': limit,
             'ScanIndexForward': True  # Sort in ascending order (oldest first)
@@ -814,7 +828,7 @@ def list_account_transactions(account_id: str, limit: int = 50, last_evaluated_k
         response = get_transactions_table().query(**query_params)
         
         # Convert items to Transaction objects
-        transactions = [Transaction.from_flat_dict(item) for item in response.get('Items', [])]
+        transactions = [Transaction.from_dynamodb_item(item) for item in response.get('Items', [])]
         
         # Sort by import order within each date
         transactions.sort(key=lambda x: (x.date, x.import_order or 0))
@@ -822,7 +836,7 @@ def list_account_transactions(account_id: str, limit: int = 50, last_evaluated_k
         return transactions
         
     except Exception as e:
-        logger.error(f"Error listing transactions for account {account_id}: {str(e)}")
+        logger.error(f"Error listing transactions for account {str(account_id)}: {str(e)}")
         raise
 
 
@@ -860,7 +874,8 @@ def update_transaction_statuses_by_status(old_status: str, new_status: str) -> i
                     batch.put_item(
                         Item={
                             **item,
-                            'status': new_status
+                            'status': new_status,
+                            'updatedAt': int(datetime.now(timezone.utc).timestamp() * 1000) # Also update updatedAt
                         }
                     )
                     count += 1
@@ -892,15 +907,15 @@ def update_file_account_id(file_id: str, account_id: str) -> None:
     """
     try:
         table = get_files_table()
-        update_expression = "SET accountId = :accountId"
-        expression_attribute_values = {":accountId": account_id}
+        update_expression = "SET accountId = :accountId, updatedAt = :updatedAt"
+        expression_attribute_values = {":accountId": str(account_id), ":updatedAt": int(datetime.now(timezone.utc).timestamp() * 1000)}
         table.update_item(
-            Key={'fileId': file_id},
+            Key={'fileId': str(file_id)},
             UpdateExpression=update_expression,
             ExpressionAttributeValues=expression_attribute_values
         )
     except Exception as e:
-        logger.error(f"Error updating accountId for file {file_id}: {str(e)}")
+        logger.error(f"Error updating accountId for file {str(file_id)}: {str(e)}")
         raise
 
 
@@ -913,15 +928,15 @@ def update_file_field_map(file_id: str, field_map_id: str) -> None:
     """
     try:
         table = get_files_table()
-        update_expression = "SET fieldMapId = :fieldMapId"
-        expression_attribute_values = {":fieldMapId": field_map_id}
+        update_expression = "SET fieldMapId = :fieldMapId, updatedAt = :updatedAt"
+        expression_attribute_values = {":fieldMapId": str(field_map_id), ":updatedAt": int(datetime.now(timezone.utc).timestamp() * 1000)}
         table.update_item(
-            Key={'fileId': file_id},
+            Key={'fileId': str(file_id)},
             UpdateExpression=update_expression,
             ExpressionAttributeValues=expression_attribute_values
         )
     except Exception as e:
-        logger.error(f"Error updating fieldMapId for file {file_id}: {str(e)}")
+        logger.error(f"Error updating fieldMapId for file {str(file_id)}: {str(e)}")
         raise
 
 
@@ -940,10 +955,10 @@ def get_transaction_by_account_and_hash(account_id: Union[str, uuid.UUID], trans
             KeyConditionExpression=Key('accountId').eq(str(account_id)) & Key('transactionHash').eq(transaction_hash)
         )
         if response.get('Items'):
-            return Transaction.model_validate(response['Items'][0])
+            return Transaction.from_dynamodb_item(response['Items'][0])
         return None
     except ClientError as e:
-        logger.error(f"Error retrieving transaction by account {account_id} and hash {transaction_hash}: {e}")
+        logger.error(f"Error retrieving transaction by account {str(account_id)} and hash {transaction_hash}: {e}")
         raise
 
 
@@ -984,9 +999,9 @@ def update_transaction(transaction: Transaction) -> None:
         bool: True if successful, False otherwise
     """
     try:
-        get_transactions_table().put_item(Item=transaction.to_flat_dict())
+        get_transactions_table().put_item(Item=transaction.to_dynamodb_item())
     except ClientError as e:
-        logger.error(f"Error updating transaction {transaction.transaction_id}: {str(e)}")
+        logger.error(f"Error updating transaction {str(transaction.transaction_id)}: {str(e)}")
         raise e
 
 def get_categories_table():
@@ -1009,45 +1024,41 @@ def create_category_in_db(category: Category) -> Category:
     
     try:
         # Category is already a Pydantic model, so use model_dump()
-        table.put_item(Item=category.model_dump())
-        logger.info(f"DB: Category {category.categoryId} created successfully for user {category.userId}.")
+        table.put_item(Item=category.to_dynamodb_item())
+        logger.info(f"DB: Category {str(category.categoryId)} created successfully for user {category.userId}.")
         return category
     except ClientError as e:
-        logger.error(f"DB: Error creating category {category.categoryId}: {str(e)}", exc_info=True)
+        logger.error(f"DB: Error creating category {str(category.categoryId)}: {str(e)}", exc_info=True)
         raise
     except Exception as e:
-        logger.error(f"DB: Unexpected error creating category {category.categoryId}: {str(e)}", exc_info=True)
+        logger.error(f"DB: Unexpected error creating category {str(category.categoryId)}: {str(e)}", exc_info=True)
         raise
 
-def get_category_by_id_from_db(category_id: str, user_id: str) -> Optional[Category]:
+def get_category_by_id_from_db(category_id: uuid.UUID, user_id: str) -> Optional[Category]:
     if not categories_table:
         logger.error("DB: Categories table not initialized for get_category_by_id_from_db")
         return None
-    logger.debug(f"DB: Getting category {category_id} for user {user_id}")
-    response = categories_table.get_item(Key={'categoryId': category_id})
+    logger.debug(f"DB: Getting category {str(category_id)} for user {user_id}")
+    response = categories_table.get_item(Key={'categoryId': str(category_id)})
     item = response.get('Item')
     if item and item.get('userId') == user_id:
-        return Category(**item)
+        return Category.from_dynamodb_item(item)
     elif item:
-        logger.warning(f"User {user_id} attempted to access category {category_id} owned by {item.get('userId')}")
+        logger.warning(f"User {user_id} attempted to access category {str(category_id)} owned by {item.get('userId')}")
         return None
     return None
 
-def list_categories_by_user_from_db(user_id: str, parent_category_id: Optional[str] = None, top_level_only: bool = False) -> List[Category]:
+def list_categories_by_user_from_db(user_id: str, parent_category_id: Optional[uuid.UUID] = None, top_level_only: bool = False) -> List[Category]:
     if not categories_table:
         logger.error("DB: Categories table not initialized for list_categories_by_user_from_db")
         return []
-    logger.debug(f"DB: Listing categories for user {user_id}, parent: {parent_category_id}, top_level: {top_level_only}")
+    logger.debug(f"DB: Listing categories for user {user_id}, parent: {str(parent_category_id) if parent_category_id else None}, top_level: {top_level_only}")
     params: Dict[str, Any] = {}
     filter_expressions = []
     if parent_category_id is not None:
-        if parent_category_id.lower() == "null" or parent_category_id == "": 
-            params['IndexName'] = 'UserIdIndex'
-            params['KeyConditionExpression'] = Key('userId').eq(user_id)
-            filter_expressions.append(Attr('parentCategoryId').not_exists())
-        else: 
-            params['IndexName'] = 'UserIdParentCategoryIdIndex'
-            params['KeyConditionExpression'] = Key('userId').eq(user_id) & Key('parentCategoryId').eq(parent_category_id)
+        # Removed check for parent_category_id.lower() == "null" as it's now UUID
+        params['IndexName'] = 'UserIdParentCategoryIdIndex' # Assumes this index exists with parentCategoryId as string
+        params['KeyConditionExpression'] = Key('userId').eq(user_id) & Key('parentCategoryId').eq(str(parent_category_id))
     else: 
         params['IndexName'] = 'UserIdIndex'
         params['KeyConditionExpression'] = Key('userId').eq(user_id)
@@ -1068,9 +1079,9 @@ def list_categories_by_user_from_db(user_id: str, parent_category_id: Optional[s
         if 'LastEvaluatedKey' not in response:
             break
         current_params['ExclusiveStartKey'] = response['LastEvaluatedKey']
-    return [Category(**item) for item in all_items_raw]
+    return [Category.from_dynamodb_item(item) for item in all_items_raw]
 
-def update_category_in_db(category_id: str, user_id: str, update_data: Dict[str, Any]) -> Optional[Category]:
+def update_category_in_db(category_id: uuid.UUID, user_id: str, update_data: Dict[str, Any]) -> Optional[Category]:
     """Update an existing category in DynamoDB using a dictionary of update fields."""
     table = get_categories_table()
     if not table:
@@ -1079,11 +1090,11 @@ def update_category_in_db(category_id: str, user_id: str, update_data: Dict[str,
 
     existing_category = get_category_by_id_from_db(category_id, user_id)
     if not existing_category:
-        logger.warning(f"DB: Category {category_id} not found or user {user_id} has no access.")
+        logger.warning(f"DB: Category {str(category_id)} not found or user {user_id} has no access.")
         return None
 
     if not update_data: 
-        logger.info(f"DB: No update data provided for category {category_id}. Returning existing.")
+        logger.info(f"DB: No update data provided for category {str(category_id)}. Returning existing.")
         return existing_category 
 
     update_expression_parts = []
@@ -1100,13 +1111,13 @@ def update_category_in_db(category_id: str, user_id: str, update_data: Dict[str,
             if key == "type" and isinstance(value, CategoryType):
                  expression_attribute_values[attr_val_placeholder] = value.value
             elif key == "parentCategoryId": 
-                 if value is None or value == "": # Treat empty string as null for parentCategoryId
+                 if value is None or value == "": # Treat empty string as null for parentCategoryId. UUID will not be empty string.
                     update_expression_parts[-1] = f"REMOVE {attr_key_placeholder}"
                     if attr_val_placeholder in expression_attribute_values: # only delete if it was added
                         del expression_attribute_values[attr_val_placeholder]
                     continue 
                  else:
-                    expression_attribute_values[attr_val_placeholder] = value
+                    expression_attribute_values[attr_val_placeholder] = str(value) # Convert UUID to string
             else:
                 expression_attribute_values[attr_val_placeholder] = value
     
@@ -1118,7 +1129,7 @@ def update_category_in_db(category_id: str, user_id: str, update_data: Dict[str,
         expression_attribute_values[attr_val_placeholder] = [rule.model_dump() if isinstance(rule, BaseModel) else rule for rule in update_data["rules"]]
 
     if not update_expression_parts:
-        logger.info(f"DB: No valid fields to update for category {category_id} after filtering.")
+        logger.info(f"DB: No valid fields to update for category {str(category_id)} after filtering.")
         return existing_category
 
     updated_at_key_placeholder = "#updatedAtAttr"
@@ -1129,42 +1140,42 @@ def update_category_in_db(category_id: str, user_id: str, update_data: Dict[str,
 
     update_expression = "SET " + ", ".join(update_expression_parts)
 
-    logger.debug(f"DB: Updating category {category_id}. Expression: {update_expression}, Values: {expression_attribute_values}, Names: {expression_attribute_names}")
+    logger.debug(f"DB: Updating category {str(category_id)}. Expression: {update_expression}, Values: {expression_attribute_values}, Names: {expression_attribute_names}")
 
     try:
         response = table.update_item(
-            Key={'categoryId': category_id, 'userId': user_id}, 
+            Key={'categoryId': str(category_id), 'userId': user_id}, 
             UpdateExpression=update_expression,
             ExpressionAttributeValues=expression_attribute_values,
             ExpressionAttributeNames=expression_attribute_names,
             ReturnValues="ALL_NEW"
         )
-        logger.info(f"DB: Category {category_id} updated successfully.")
-        return Category(**response['Attributes'])
+        logger.info(f"DB: Category {str(category_id)} updated successfully.")
+        return Category.from_dynamodb_item(response['Attributes'])
     except ClientError as e:
-        logger.error(f"DB: Error updating category {category_id}: {str(e)}", exc_info=True)
+        logger.error(f"DB: Error updating category {str(category_id)}: {str(e)}", exc_info=True)
         # Safer access to error details
         error_info = e.response.get('Error', {})
         error_code = error_info.get('Code')
         if error_code == "ConditionalCheckFailedException":
-            logger.warning(f"DB: Conditional check failed for category {category_id}. Item might not exist or condition not met.")
+            logger.warning(f"DB: Conditional check failed for category {str(category_id)}. Item might not exist or condition not met.")
             return None
         raise 
     except Exception as e:
-        logger.error(f"DB: Unexpected error updating category {category_id}: {str(e)}", exc_info=True)
+        logger.error(f"DB: Unexpected error updating category {str(category_id)}: {str(e)}", exc_info=True)
         raise
 
-def delete_category_from_db(category_id: str, user_id: str) -> bool:
+def delete_category_from_db(category_id: uuid.UUID, user_id: str) -> bool:
     if not categories_table:
         logger.error("DB: Categories table not initialized for delete_category_from_db")
         return False
-    logger.debug(f"DB: Deleting category {category_id} for user {user_id}")
+    logger.debug(f"DB: Deleting category {str(category_id)} for user {user_id}")
     category_to_delete = get_category_by_id_from_db(category_id, user_id) # Use the util version
     if not category_to_delete:
         return False
     child_categories = list_categories_by_user_from_db(user_id, parent_category_id=category_id) # Use the util version
     if child_categories:
-        logger.warning(f"Attempt to delete category {category_id} which has child categories.")
+        logger.warning(f"Attempt to delete category {str(category_id)} which has child categories.")
         raise ValueError("Cannot delete category: it has child categories.")
-    categories_table.delete_item(Key={'categoryId': category_id})
+    categories_table.delete_item(Key={'categoryId': str(category_id)})
     return True 

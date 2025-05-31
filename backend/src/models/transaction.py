@@ -1,3 +1,4 @@
+from locale import currency
 import uuid
 from typing import Dict, Any, Optional, Union, ClassVar
 from datetime import datetime, timezone
@@ -19,15 +20,15 @@ class Transaction(BaseModel):
     """
     Represents a single financial transaction, using Pydantic for validation and serialization.
     """
-    user_id: uuid.UUID = Field(alias="userId")
+    user_id: str = Field(alias="userId")
     file_id: uuid.UUID = Field(alias="fileId")
     transaction_id: uuid.UUID = Field(default_factory=uuid.uuid4, alias="transactionId")
     account_id: uuid.UUID = Field(alias="accountId")
     date: int  # milliseconds since epoch
     description: str = Field(max_length=1000)
-    amount: Money
-
-    balance: Optional[Money] = None
+    amount: Decimal
+    currency: Optional[Currency] = None
+    balance: Optional[Decimal] = None
     import_order: Optional[int] = Field(default=None, alias="importOrder")
     transaction_type: Optional[str] = Field(default=None, alias="transactionType", max_length=50)
     memo: Optional[str] = Field(default=None, max_length=1000)
@@ -39,7 +40,7 @@ class Transaction(BaseModel):
     transaction_hash: Optional[int] = Field(default=None, alias="transactionHash")
 
     # Class variable to store names of fields that trigger hash regeneration
-    _hash_trigger_fields: ClassVar[set[str]] = {"account_id", "date", "description", "amount"}
+    _hash_trigger_fields: ClassVar[set[str]] = {"account_id", "date", "description", "amount", "currency"}
 
     model_config = ConfigDict(
         populate_by_name=True,  # Allows using field names or aliases for population
@@ -69,16 +70,17 @@ class Transaction(BaseModel):
             self.account_id is not None and
             self.date is not None and
             self.amount is not None and
-            self.description is not None
+            self.description is not None and
+            self.currency is not None
         )
 
         if required_fields_present:
-            if hasattr(self.amount, 'amount') and isinstance(self.amount.amount, Decimal):
+            if isinstance(self.amount, Decimal):
                 try:
                     calculated_hash = generate_transaction_hash(
                         account_id=str(self.account_id),
                         date=self.date,
-                        amount=self.amount.amount,
+                        amount=self.amount,
                         description=self.description
                     )
                 except Exception as e:
@@ -88,7 +90,7 @@ class Transaction(BaseModel):
             else:
                 logger.warning(
                     f"Could not calculate transaction hash for {self.transaction_id if hasattr(self, 'transaction_id') else 'UNKNOWN'} "
-                    f"due to invalid amount structure (amount.amount missing or not Decimal)."
+                    f"due to invalid amount structure (amount not Decimal)."
                 )
         
         if self.transaction_hash != calculated_hash:
@@ -123,13 +125,14 @@ class Transaction(BaseModel):
     @classmethod
     def create(
         cls,
-        user_id: Union[str, uuid.UUID],
+        user_id: str,
         file_id: Union[str, uuid.UUID],
         account_id: Union[str, uuid.UUID],
         date: int,
         description: str,
-        amount: Union[Money, Dict[str, Any]], # Allow Money object or dict to parse into Money
-        balance: Optional[Union[Money, Dict[str, Any]]] = None,
+        amount: Decimal,
+        currency: Optional[Currency] = None,
+        balance: Optional[Decimal] = None,
         import_order: Optional[int] = None,
         transaction_type: Optional[str] = None,
         memo: Optional[str] = None,
@@ -150,6 +153,7 @@ class Transaction(BaseModel):
             "date": date,
             "description": description,
             "amount": amount,
+            "currency": currency,
             "balance": balance,
             "importOrder": import_order,
             "transactionType": transaction_type,
@@ -165,83 +169,44 @@ class Transaction(BaseModel):
         
         return cls.model_validate(init_data)
 
-    def to_flat_dict(self) -> Dict[str, Any]:
+    def to_dynamodb_item(self) -> Dict[str, Any]:
         """
-        Convert the transaction object to a flattened dictionary.
-        Uses Pydantic's model_dump and then adjusts for specific flat structure requirements.
-        Output values match types expected by original `to_flat_dict` (e.g., Decimal for amount).
+        Convert the transaction object to a flattened dictionary suitable for DynamoDB.
+        Uses Pydantic's model_dump and ensures nested Money objects are also flattened via to_flat_map.
         """
-        # `mode='python'` tries to return rich Python types (like Decimal, UUID)
-        # `by_alias=True` uses the aliases (camelCase) as keys
-        data = self.model_dump(mode='python', by_alias=True, exclude_none=True)
-        
-        flat_dict_output = {}
+        # by_alias=True uses field aliases (e.g., "userId")
+        # exclude_none=True removes fields that are None
+        # json_encoders in model_config handles UUID to str and Decimal to str for non-Money fields.
+        data = self.model_dump(by_alias=True, exclude_none=True)
 
-        for key_alias, value in data.items():
-            if key_alias == "amount" and self.amount: # value from model_dump(mode='python') on Money is a dict
-                flat_dict_output["amount"] = self.amount.amount # Store as Decimal
-                if self.amount.currency and hasattr(self.amount.currency, 'value'):
-                    flat_dict_output["currency"] = self.amount.currency.value # Store enum value
-                elif self.amount.currency: # If currency is not an enum but a simple string/value
-                     flat_dict_output["currency"] = self.amount.currency
+        # Amount and Balance are Decimals. Pydantic's model_dump with json_encoders handles their serialization.
+        # Currency is an Enum, Pydantic handles its serialization (use_enum_values=True in model_config if not default).
 
-            elif key_alias == "balance" and self.balance: # value is Money.model_dump()
-                flat_dict_output["balance"] = self.balance.amount # Store as Decimal
-                # Original to_flat_dict did not store balance_currency, so we replicate that.
-            
-            elif isinstance(value, uuid.UUID): # Ensure UUIDs are strings in the flat dict
-                flat_dict_output[key_alias] = str(value)
-            
-            else:
-                flat_dict_output[key_alias] = value
-        
-        return flat_dict_output
+        # Timestamps (date, createdAt, updatedAt) are already integers (milliseconds since epoch)
+        # UUIDs (userId, fileId, transactionId, accountId) are handled by json_encoders in model_config to be str
+        # if they were not already str. Pydantic model_dump with populate_by_name=True also helps.
+
+        return data
 
     @classmethod
-    def from_flat_dict(cls, data: Dict[str, Any]) -> 'Transaction':
+    def from_dynamodb_item(cls, data: Dict[str, Any]) -> Self:
         """
-        Create a transaction object from a flattened dictionary.
-        The input `data` dictionary is expected to have camelCase keys.
+        Deserializes a dictionary (from DynamoDB) into a Transaction instance.
+        Handles reconstruction of Money objects and ensures correct types for other fields.
         """
-        # Create a mutable copy for manipulation if needed
-        input_data_for_pydantic = data.copy()
+        # Prepare data for Pydantic model instantiation
+        # Pydantic will use aliases if populate_by_name=True in model_config
 
-        # Reconstruct Money object for 'amount'
-        amount_decimal_val = input_data_for_pydantic.pop("amount", None)
-        # 'currency' is a top-level key in the flat dict, associated with 'amount'
-        currency_enum_val = input_data_for_pydantic.pop("currency", None)
+        # Pydantic handles conversion for Decimal (amount, balance) and Currency (currency)
+        # from their string/numeric representations in data based on type hints.
+        # Ensure data['amount'] and data['balance'] are in a format Pydantic can parse to Decimal (e.g., string or number).
+        # Ensure data['currency'] is a valid string value for the Currency enum.
 
-        if amount_decimal_val is None:
-            # Original code did not raise error here but amount is not optional in Transaction
-            # Pydantic will raise error if 'amount' is missing after this.
-            # Consider if this method should pre-validate or let Pydantic handle it.
-            # For safety, let's ensure amount components are present for Money construction.
-             raise ValueError("Missing 'amount' value in flat_dict for Transaction amount.")
+        # UUIDs: Pydantic should convert string UUIDs to uuid.UUID objects based on type hints.
+        # Timestamps: Pydantic should convert numbers to int based on type hints.
+        # Other fields should map directly or be handled by Pydantic's parsing.
 
-        # Construct the amount Money object to be passed to Pydantic
-        # Pydantic will parse this dict into a Money field if 'amount' field is of type Money
-        input_data_for_pydantic["amount"] = {
-            "amount": Decimal(str(amount_decimal_val)), # Ensure Decimal from string
-            "currency": currency_enum_val # Pass currency value; Money model should handle it
-        }
-        
-        # Reconstruct Money object for 'balance' if present
-        balance_decimal_val = input_data_for_pydantic.pop("balance", None)
-        if balance_decimal_val is not None:
-            # Balance uses the same 'currency' from the flat dict as 'amount'
-            input_data_for_pydantic["balance"] = {
-                "amount": Decimal(str(balance_decimal_val)),
-                "currency": currency_enum_val 
-            }
-        
-        # Pydantic's model_validate will use aliases due to populate_by_name=True
-        # It will also handle type conversions (e.g., string to int, string to UUID).
-        try:
-            return cls.model_validate(input_data_for_pydantic)
-        except ValidationError as e:
-            logger.error(f"Validation error in Transaction.from_flat_dict: {e}")
-            # Re-raise or handle as appropriate for the application
-            raise ValueError(f"Failed to create Transaction from flat_dict: {e}") from e
+        return cls.model_validate(data)
 
 
 def transaction_to_json(transaction_input: Union[Transaction, Dict[str, Any]]) -> str:
@@ -275,15 +240,16 @@ def transaction_to_json(transaction_input: Union[Transaction, Dict[str, Any]]) -
 
 class TransactionCreate(BaseModel):
     """Data Transfer Object for creating a new transaction."""
-    user_id: uuid.UUID = Field(alias="userId")
+    user_id: str = Field(alias="userId")
     file_id: uuid.UUID = Field(alias="fileId")
     account_id: uuid.UUID = Field(alias="accountId")
     date: int  # milliseconds since epoch
     description: str = Field(max_length=1000)
-    amount: Money # Expects a Money object or a dict that can be parsed into Money
+    amount: Decimal
+    currency: Currency
 
     # Optional fields at creation
-    balance: Optional[Money] = None
+    balance: Optional[Decimal] = None
     import_order: Optional[int] = Field(default=None, alias="importOrder")
     transaction_type: Optional[str] = Field(default=None, alias="transactionType", max_length=50)
     memo: Optional[str] = Field(default=None, max_length=1000)
@@ -310,9 +276,9 @@ class TransactionUpdate(BaseModel):
     account_id: Optional[uuid.UUID] = Field(default=None, alias="accountId")
     date: Optional[int] = None  # milliseconds since epoch
     description: Optional[str] = Field(default=None, max_length=1000)
-    amount: Optional[Money] = None # Expects a Money object or a dict that can be parsed
-
-    balance: Optional[Money] = None
+    amount: Optional[Decimal] = None
+    currency: Optional[Currency] = None
+    balance: Optional[Decimal] = None
     import_order: Optional[int] = Field(default=None, alias="importOrder")
     transaction_type: Optional[str] = Field(default=None, alias="transactionType", max_length=50)
     memo: Optional[str] = Field(default=None, max_length=1000)

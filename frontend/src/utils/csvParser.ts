@@ -69,4 +69,56 @@ export const parseCSV = (content: string): ParsedCSV => {
   }).filter((row): row is Record<string, string> => row !== null); // Remove empty lines
 
   return { headers, data };
+};
+
+// Based on frontend/src/services/TransactionService.ts
+export const PREDEFINED_TRANSACTION_FIELDS = ['date', 'description', 'amount', 'debitOrCredit', 'currency'] as const;
+export type TransactionField = typeof PREDEFINED_TRANSACTION_FIELDS[number];
+export type ColumnMapTarget = TransactionField | 'skip'; // 'skip' means the column won't be imported
+
+export interface CsvColumnMapping {
+  [csvHeader: string]: ColumnMapTarget;
+}
+
+export const suggestColumnMappings = (csvHeaders: string[]): CsvColumnMapping => {
+  const suggestions: CsvColumnMapping = {};
+  const lowerCaseHeaders = csvHeaders.map(h => h.toLowerCase().trim());
+
+  const commonPatterns: Record<TransactionField, string[]> = {
+    date: ['date', 'transaction date', 'posting date', 'valuedate'],
+    description: ['description', 'details', 'memo', 'narrative', 'transaction details', 'payee', 'merchant'],
+    amount: ['amount', 'value', 'sum', 'total', 'price'],
+    debitOrCredit: ['type', 'transaction type', 'debit/credit', 'cr/dr', 'kind', 'credit', 'debit'],
+    currency: ['currency', 'ccy', 'curr.', 'transaction currency'],
+  };
+
+  lowerCaseHeaders.forEach((header, index) => {
+    let mappedField: ColumnMapTarget = 'skip'; // Default to skip
+    // Ensure all PREDEFINED_TRANSACTION_FIELDS are checked
+    for (const field of PREDEFINED_TRANSACTION_FIELDS) {
+      // Check if commonPatterns has an entry for the field before trying to access it
+      if (commonPatterns[field] && commonPatterns[field].some(pattern => header.includes(pattern))) {
+        mappedField = field;
+        break;
+      }
+    }
+    suggestions[csvHeaders[index]] = mappedField; // Use original header as key
+  });
+  return suggestions;
+};
+
+export const FIELD_VALIDATION_REGEXES: Partial<Record<TransactionField, RegExp>> = {
+  date: /^(0?[1-9]|1[0-2])[-/.](0?[1-9]|[12][0-9]|3[01])[-/.](\d{2}|\d{4})$|^\d{4}[-/](0?[1-9]|1[0-2])[-/](0?[1-9]|[12][0-9]|3[01])$/,
+  amount: /^-?\$?\s*\d{1,3}(?:,?\d{3})*(?:\.\d{1,2})?$/,
+  debitOrCredit: /^(debit|credit|dr|cr|d|c)$/i,
+  currency: /^[A-Z]{3}$/i,
+};
+
+export const isValidFieldData = (value: string, fieldType: TransactionField): boolean => {
+  if (!value) return true; // Allow empty optional fields
+  const regex = FIELD_VALIDATION_REGEXES[fieldType];
+  if (regex) {
+    return regex.test(value.trim());
+  }
+  return true; // Default to true if no regex (e.g., for description)
 }; 

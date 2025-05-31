@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
 // Use AccountService for fetching accounts
 import { listAccounts, Account as ServiceAccount } from '../../services/AccountService';
-import { getUploadUrl, uploadFileToS3, listFiles, FileMetadata } from '../../services/FileService'; // Import getUploadUrl and uploadFileToS3
+import { getUploadUrl, uploadFileToS3, listFiles, FileMetadata, deleteFile } from '../../services/FileService'; // Import deleteFile
+import { listFieldMaps, FieldMap } from '../../services/FieldMapService'; // Import FieldMapService
 import { getCurrentUser } from '../../services/AuthService'; // Import getCurrentUser
 import './ImportTransactionsView.css'; // Import the CSS file
 
@@ -25,6 +26,8 @@ const ImportTransactionsView: React.FC = () => {
   const [accounts, setAccounts] = useState<ViewAccount[]>([]); // Use local ViewAccount type
   const [currentFileId, setCurrentFileId] = useState<string | null>(null); // To store fileId after getting upload URL
   const [importHistory, setImportHistory] = useState<FileMetadata[]>([]); // State for import history
+  const [selectedHistoryFileId, setSelectedHistoryFileId] = useState<string | null>(null); // State for selected history file
+  const [fieldMapsData, setFieldMapsData] = useState<Record<string, string>>({}); // State for field maps (ID -> Name)
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(false); // Separate loading for history
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -32,44 +35,57 @@ const ImportTransactionsView: React.FC = () => {
   // Other state variables (importHistory, filePreviewData, etc.) are commented out for now
   // and will be re-introduced step-by-step.
 
-  // Fetch accounts when the component mounts or currentStep becomes 1
+  // Fetch accounts and history when the component mounts or currentStep becomes 1
+  const fetchInitialData = useCallback(async () => {
+    setIsLoading(true);
+    setIsLoadingHistory(true);
+    setErrorMessage(null);
+    setSelectedHistoryFileId(null); // Reset selection when refetching
+
+    try {
+      const [accountsResponse, filesResponse, fieldMapsResponse] = await Promise.all([
+        listAccounts(),
+        listFiles(),
+        listFieldMaps()
+      ]);
+
+      const viewAccounts = accountsResponse.accounts.map(acc => ({
+        id: acc.accountId,
+        name: acc.accountName,
+      }));
+      setAccounts(viewAccounts);
+
+      const sortedHistory = filesResponse.files.sort((a, b) =>
+        new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime()
+      );
+      setImportHistory(sortedHistory);
+
+      const mapsData: Record<string, string> = {};
+      fieldMapsResponse.fieldMaps.forEach(fm => {
+        mapsData[fm.fileMapId] = fm.name;
+      });
+      setFieldMapsData(mapsData);
+
+    } catch (error: any) {
+      console.error("Error fetching initial data for Step 1:", error);
+      setErrorMessage(error.message || "Failed to load initial data. Please try again.");
+    } finally {
+      setIsLoading(false);
+      setIsLoadingHistory(false);
+    }
+  }, []); // Empty dependency array if it should only run on mount or be called manually
+
   useEffect(() => {
     if (currentStep === 1) {
-      setIsLoading(true);
-      setIsLoadingHistory(true);
-      setErrorMessage(null);
-
-      Promise.all([
-        listAccounts(),
-        listFiles()
-      ]).then(([accountsResponse, filesResponse]) => {
-        // Map ServiceAccount to ViewAccount
-        const viewAccounts = accountsResponse.accounts.map(acc => ({
-          id: acc.accountId,
-          name: acc.accountName,
-        }));
-        setAccounts(viewAccounts);
-
-        // Sort files by uploadDate in descending order
-        const sortedHistory = filesResponse.files.sort((a, b) => 
-          new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime()
-        );
-        setImportHistory(sortedHistory);
-
-      }).catch(error => {
-        console.error("Error fetching initial data for Step 1:", error);
-        setErrorMessage(error.message || "Failed to load initial data. Please try again.");
-      }).finally(() => {
-        setIsLoading(false);
-        setIsLoadingHistory(false);
-      });
+      fetchInitialData();
     }
-  }, [currentStep]);
+  }, [currentStep, fetchInitialData]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       setSelectedFile(event.target.files[0]);
-      setErrorMessage(null); 
+      setErrorMessage(null);
+      setSelectedHistoryFileId(null); // Clear history selection
       console.log("File selected:", event.target.files[0]);
     }
   };
@@ -80,6 +96,7 @@ const ImportTransactionsView: React.FC = () => {
     if (event.dataTransfer.files && event.dataTransfer.files[0]) {
       setSelectedFile(event.dataTransfer.files[0]);
       setErrorMessage(null);
+      setSelectedHistoryFileId(null); // Clear history selection when new file is dropped
       console.log("File dropped:", event.dataTransfer.files[0]);
     }
   }, []);
@@ -88,6 +105,53 @@ const ImportTransactionsView: React.FC = () => {
     event.preventDefault();
     event.stopPropagation();
   }, []);
+
+  const handleHistoryRowClick = (fileId: string) => {
+    setSelectedHistoryFileId(prev => (prev === fileId ? null : fileId));
+    setSelectedFile(null); // Clear new file selection when history item is clicked
+    setErrorMessage(null);
+  };
+
+  const handleDeleteHistoryFile = async () => {
+    if (!selectedHistoryFileId) {
+      setErrorMessage("No file selected from history to delete.");
+      return;
+    }
+
+    const fileToDelete = importHistory.find(f => f.fileId === selectedHistoryFileId);
+    if (!fileToDelete) {
+      setErrorMessage("Selected file not found in history.");
+      return;
+    }
+
+    if (window.confirm(`Are you sure you want to delete "${fileToDelete.fileName}"? This action cannot be undone.`)) {
+      setIsLoadingHistory(true); // Use history loader for this action
+      setErrorMessage(null);
+      try {
+        await deleteFile(selectedHistoryFileId);
+        alert(`File "${fileToDelete.fileName}" deleted successfully.`);
+        setSelectedHistoryFileId(null);
+        // Refresh history
+        await fetchInitialData(); // Re-fetch all initial data which includes history
+      } catch (error: any) {
+        console.error("Error deleting file:", error);
+        setErrorMessage(error.message || `Failed to delete file "${fileToDelete.fileName}". Please try again.`);
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    }
+  };
+  
+  const handleProceedWithSelectedHistoryFile = () => {
+    if (!selectedHistoryFileId) {
+      alert("Please select a file from the history to proceed.");
+      return;
+    }
+    // For now, just alert. This can be expanded to go to a specific step or action.
+    alert(`Proceeding with selected history file: ${selectedHistoryFileId}`);
+    // Example: setCurrentStep(2); // or some other logic
+    // You might want to fetch details for this fileId and populate selectedFile or other states
+  };
 
   const proceedToStep2 = async () => {
     if (!selectedFile) {
@@ -221,7 +285,7 @@ const ImportTransactionsView: React.FC = () => {
             disabled={!selectedFile || isLoading || isLoadingHistory}
             className="button-common button-primary"
           >
-            {(isLoading || isLoadingHistory) && currentStep === 1 ? 'Loading Data...' : 'Next: Preview & Map'}
+            {(isLoading && currentStep === 1 && !isLoadingHistory) ? 'Uploading...' : (isLoadingHistory && currentStep === 1) ? 'Loading Data...' : 'Upload & Continue'}
           </button>
 
           <div style={{marginTop: '30px'}}>
@@ -229,31 +293,58 @@ const ImportTransactionsView: React.FC = () => {
             {isLoadingHistory && <p>Loading history...</p>}
             {!isLoadingHistory && importHistory.length === 0 && <p>No import history found.</p>}
             {importHistory.length > 0 && (
-              <table className="history-table">
-                <thead>
-                  <tr>
-                    <th className="history-th-td">File Name</th>
-                    <th className="history-th-td">Account</th>
-                    <th className="history-th-td">Upload Date</th>
-                    <th className="history-th-td">Status</th>
-                    <th className="history-th-td">Format</th>
-                    <th className="history-th-td">Size (KB)</th>
-                    {/* Add more columns as needed, e.g., Transaction Count */}
-                  </tr>
-                </thead>
-                <tbody>
-                  {importHistory.map(file => (
-                    <tr key={file.fileId}>
-                      <td className="history-th-td">{file.fileName}</td>
-                      <td className="history-th-td">{file.accountName || 'N/A'}</td>
-                      <td className="history-th-td">{new Date(file.uploadDate).toLocaleDateString()}</td>
-                      <td className="history-th-td">{file.processingStatus || 'N/A'}</td>
-                      <td className="history-th-td">{file.fileFormat || 'N/A'}</td>
-                      <td className="history-th-td">{(file.fileSize / 1024).toFixed(1)}</td>
+              <>
+                <table className="history-table">
+                  <thead>
+                    <tr>
+                      <th className="history-th-td">File Name</th>
+                      <th className="history-th-td">Account</th>
+                      <th className="history-th-td">Upload Date</th>
+                      <th className="history-th-td">Mapping</th>
+                      <th className="history-th-td">Format</th>
+                      <th className="history-th-td">Size (KB)</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {importHistory.map(file => (
+                      <tr 
+                        key={file.fileId} 
+                        onClick={() => handleHistoryRowClick(file.fileId)}
+                        className={selectedHistoryFileId === file.fileId ? 'selected-row' : ''}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <td className="history-th-td">{file.fileName}</td>
+                        <td className="history-th-td">{file.accountName || 'N/A'}</td>
+                        <td className="history-th-td">{new Date(file.uploadDate).toLocaleDateString()}</td>
+                        <td className="history-th-td">
+                          {file.fieldMap?.fileMapId && fieldMapsData[file.fieldMap.fileMapId] 
+                            ? fieldMapsData[file.fieldMap.fileMapId] 
+                            : file.fieldMap?.name || '--'}
+                        </td>
+                        <td className="history-th-td">{file.fileFormat || 'N/A'}</td>
+                        <td className="history-th-td">{(file.fileSize / 1024).toFixed(1)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ marginTop: '10px' }}>
+                  <button
+                    onClick={handleProceedWithSelectedHistoryFile}
+                    disabled={!selectedHistoryFileId || isLoadingHistory}
+                    className="button-common button-primary"
+                    style={{ marginRight: '10px' }}
+                  >
+                    Next (Selected History)
+                  </button>
+                  <button
+                    onClick={handleDeleteHistoryFile}
+                    disabled={!selectedHistoryFileId || isLoadingHistory}
+                    className="button-common button-danger"
+                  >
+                    Delete Selected
+                  </button>
+                </div>
+              </>
             )}
           </div>
         </div>
