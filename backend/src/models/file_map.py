@@ -53,9 +53,9 @@ class FileMap(BaseModel):
 
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Serializes FileMap to a flat dictionary for DynamoDB."""
-        data = self.model_dump(by_alias=True, exclude_none=True)
+        data = self.model_dump(mode='json', by_alias=True, exclude_none=True)
         # mappings should already be a list of dicts due to FieldMapping being a BaseModel
-        # UUIDs are handled by json_encoders in model_config
+        # UUIDs are handled by json_encoders in model_config (when mode='json')
         # Timestamps are already ints (milliseconds)
         return data
 

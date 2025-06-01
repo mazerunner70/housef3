@@ -2,11 +2,20 @@ import React, { useState, useCallback, useEffect } from 'react';
 // Use AccountService for fetching accounts
 import { listAccounts, Account as ServiceAccount } from '../../services/AccountService';
 import { getUploadUrl, uploadFileToS3, listFiles, FileMetadata, deleteFile, parseFile } from '../../services/FileService'; // Added parseFile
-import { listFieldMaps, FieldMap, getFieldMap } from '../../services/FileMapService'; // Import getFieldMap
+import { listFieldMaps, getFieldMap, createFieldMap, updateFieldMap, FieldMap } from '../../services/FileMapService'; // Import more from FileMapService
 import { getCurrentUser } from '../../services/AuthService'; // Import getCurrentUser
 import ImportStep2Preview from '../components/ImportStep2Preview'; // Import the new component
 import type { TransactionRow, ColumnMapping } from '../components/ImportStep2Preview'; // Import types
 import './ImportTransactionsView.css'; // Import the CSS file
+
+// Define TARGET_TRANSACTION_FIELDS (should match what ImportStep2Preview expects)
+const TARGET_TRANSACTION_FIELDS = [
+  { field: 'date', label: 'Transaction Date', regex: '^\\d{4}-\\d{2}-\\d{2}$' }, // YYYY-MM-DD
+  { field: 'description', label: 'Description', regex: '.+' }, // Any non-empty string
+  { field: 'amount', label: 'Amount', regex: '^-?(\\d+|\\d{1,3}(,\\d{3})*)(\\.\\d+)?$' }, // Number, allows commas, optional negative/decimal
+  { field: 'debitOrCredit', label: 'Debit/Credit', regex: '^(debit|credit|CRDT|DBIT|DR|CR)$' }, // Specific values
+  { field: 'currency', label: 'Currency', regex: '^[A-Z]{3}$' }, // 3 uppercase letters
+];
 
 // Define a local Account type for the component if its structure differs from ServiceAccount
 // or if we want to add/omit properties for the view layer.
@@ -21,14 +30,11 @@ interface CsvColumnMapping {
   [header: string]: 'date' | 'description' | 'amount' | 'debitOrCredit' | 'currency' | 'skip';
 }
 
-// Define target transaction fields for mapping
-const TARGET_TRANSACTION_FIELDS = [
-  { field: 'date', label: 'Date', regex: '^\\d{4}-\\d{2}-\\d{2}$|^\\d{2}/\\d{2}/\\d{4}$' },
-  { field: 'description', label: 'Description', regex: '.+' },
-  { field: 'amount', label: 'Amount', regex: '^-?([0-9]{1,3}(,[0-9]{3})*(\\.[0-9]+)?|[0-9]+(\\.[0-9]+)?)$' },
-  { field: 'debitOrCredit', label: 'Type (Debit/Credit)', regex: '.+' },
-  { field: 'currency', label: 'Currency', regex: '^[A-Z]{3}$' },
-];
+// Type for available field maps in dropdown
+interface AvailableMapInfo {
+  id: string;
+  name: string;
+}
 
 const ImportTransactionsView: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<number>(1);
@@ -49,18 +55,25 @@ const ImportTransactionsView: React.FC = () => {
   const [fileTypeForStep2, setFileTypeForStep2] = useState<'csv' | 'ofx' | 'qfx'>('csv');
   const [existingMappingsForStep2, setExistingMappingsForStep2] = useState<ColumnMapping[] | undefined>(undefined); // Re-introduced
 
+  // New state for named field map management
+  const [availableFieldMaps, setAvailableFieldMaps] = useState<AvailableMapInfo[]>([]);
+  const [currentlyLoadedFieldMapDetails, setCurrentlyLoadedFieldMapDetails] = useState<ColumnMapping[] | undefined>(undefined);
+  const [initialFieldMapForStep2, setInitialFieldMapForStep2] = useState<{id: string, name: string} | undefined>(undefined);
+  const [isLoadingFieldMaps, setIsLoadingFieldMaps] = useState<boolean>(false); // Optional: for loading state
+
   // Fetch accounts and history when the component mounts or currentStep becomes 1
   const fetchInitialData = useCallback(async () => {
     setIsLoading(true);
     setIsLoadingHistory(true);
+    setIsLoadingFieldMaps(true); // For named maps
     setErrorMessage(null);
     setSelectedHistoryFileId(null); // Reset selection when refetching
 
     try {
-      const [accountsResponse, filesResponse, fieldMapsResponse] = await Promise.all([
+      const [accountsResponse, filesResponse, fieldMapsListResponse] = await Promise.all([
         listAccounts(),
         listFiles(),
-        listFieldMaps()
+        listFieldMaps() // Fetch available field maps
       ]);
 
       const viewAccounts = accountsResponse.accounts.map(acc => ({
@@ -75,7 +88,7 @@ const ImportTransactionsView: React.FC = () => {
       setImportHistory(sortedHistory);
 
       const mapsData: Record<string, string> = {};
-      fieldMapsResponse.fieldMaps.forEach(fm => {
+      fieldMapsListResponse.fieldMaps.forEach(fm => {
         // Guard against undefined fileMapId if it can be optional in FieldMap type
         if (fm.fileMapId) {
           mapsData[fm.fileMapId] = fm.name;
@@ -83,12 +96,21 @@ const ImportTransactionsView: React.FC = () => {
       });
       setFieldMapsData(mapsData);
 
+      // Populate availableFieldMaps for the dropdown
+      const mapsForDropdown = fieldMapsListResponse.fieldMaps.map(fm => ({
+        id: fm.fileMapId!, // Assuming fileMapId is always present for listed maps
+        name: fm.name,
+      }));
+      setAvailableFieldMaps(mapsForDropdown);
+      console.log("[ImportTransactionsView] Fetched available field maps:", mapsForDropdown);
+
     } catch (error: any) {
       console.error("Error fetching initial data for Step 1:", error);
       setErrorMessage(error.message || "Failed to load initial data. Please try again.");
     } finally {
       setIsLoading(false);
       setIsLoadingHistory(false);
+      setIsLoadingFieldMaps(false);
     }
   }, []); 
 
@@ -101,6 +123,8 @@ const ImportTransactionsView: React.FC = () => {
       setFileTypeForStep2('csv');
       setCurrentFileId(null);
       setExistingMappingsForStep2(undefined); // Reset this too
+      setCurrentlyLoadedFieldMapDetails(undefined); // Reset loaded map details
+      setInitialFieldMapForStep2(undefined); // Reset initial map to load
     }
   }, [currentStep, fetchInitialData]);
 
@@ -109,6 +133,8 @@ const ImportTransactionsView: React.FC = () => {
       setSelectedFile(event.target.files[0]);
       setErrorMessage(null);
       setSelectedHistoryFileId(null); // Clear history selection
+      setInitialFieldMapForStep2(undefined); // Reset for new file
+      setCurrentlyLoadedFieldMapDetails(undefined);
       console.log("File selected:", event.target.files[0]);
     }
   };
@@ -120,6 +146,8 @@ const ImportTransactionsView: React.FC = () => {
       setSelectedFile(event.dataTransfer.files[0]);
       setErrorMessage(null);
       setSelectedHistoryFileId(null); // Clear history selection when new file is dropped
+      setInitialFieldMapForStep2(undefined); // Reset for new file
+      setCurrentlyLoadedFieldMapDetails(undefined);
       console.log("File dropped:", event.dataTransfer.files[0]);
     }
   }, []);
@@ -133,6 +161,9 @@ const ImportTransactionsView: React.FC = () => {
     setSelectedHistoryFileId(prev => (prev === fileId ? null : fileId));
     setSelectedFile(null); // Clear new file selection when history item is clicked
     setErrorMessage(null);
+    // Initial map will be determined when proceeding with this history file
+    setInitialFieldMapForStep2(undefined);
+    setCurrentlyLoadedFieldMapDetails(undefined);
   };
 
   const handleDeleteHistoryFile = async () => {
@@ -170,37 +201,31 @@ const ImportTransactionsView: React.FC = () => {
       alert("Please select a file from the history to proceed.");
       return;
     }
-
     const historyFileMeta = importHistory.find(f => f.fileId === selectedHistoryFileId);
     if (!historyFileMeta) {
       setErrorMessage("Selected history file metadata not found.");
       return;
     }
-
     setIsLoading(true);
     setErrorMessage(null);
     setCurrentFileId(selectedHistoryFileId);
-
     try {
       console.log(`Parsing history file with ID: ${selectedHistoryFileId}`);
       const parseResult = await parseFile(selectedHistoryFileId);
-
       if (parseResult.error) {
         setErrorMessage(`Error parsing file: ${parseResult.error}`);
         setIsLoading(false);
         return;
       }
-
       const rawFileFormat = historyFileMeta.fileFormat?.toLowerCase() || parseResult.file_format || 'csv';
-       if (rawFileFormat === 'csv' || rawFileFormat === 'ofx' || rawFileFormat === 'qfx') {
-            setFileTypeForStep2(rawFileFormat as 'csv' | 'ofx' | 'qfx');
-        } else {
-            setErrorMessage(`Cannot process history file: unsupported or unknown format (${rawFileFormat})`);
-            setIsLoading(false);
-            return;
-        }
-
-      if (fileTypeForStep2 === 'csv') {
+      if (rawFileFormat === 'csv' || rawFileFormat === 'ofx' || rawFileFormat === 'qfx') {
+        setFileTypeForStep2(rawFileFormat as 'csv' | 'ofx' | 'qfx');
+      } else {
+        setErrorMessage(`Cannot process history file: unsupported or unknown format (${rawFileFormat})`);
+        setIsLoading(false);
+        return;
+      }
+      if (rawFileFormat === 'csv') {
         if (!parseResult.headers || !parseResult.data) {
           setErrorMessage("CSV parsing did not return headers or data.");
           setIsLoading(false);
@@ -209,9 +234,9 @@ const ImportTransactionsView: React.FC = () => {
         setCsvHeaders(parseResult.headers);
         const transactions = parseResult.data.map((item: any, index: number) => ({ id: item.id || `csv-hist-${index}`, ...item }));
         setParsedTransactionData(transactions);
-      } else { // OFX, QFX
+      } else { 
          if (!parseResult.data) {
-          setErrorMessage(`${fileTypeForStep2.toUpperCase()} parsing did not return data.`);
+          setErrorMessage(`${rawFileFormat.toUpperCase()} parsing did not return data.`);
           setIsLoading(false);
           return;
         }
@@ -219,33 +244,8 @@ const ImportTransactionsView: React.FC = () => {
         setParsedTransactionData(transactions);
         setCsvHeaders([]); 
       }
-
-      // Fetch existing mapping if fileMapId exists
-      if (historyFileMeta.fieldMap?.fileMapId) {
-        console.log("Fetching existing mapping for ID:", historyFileMeta.fieldMap.fileMapId);
-        try {
-          const map = await getFieldMap(historyFileMeta.fieldMap.fileMapId);
-          if (map && map.mappings) {
-            const loadedMappings = map.mappings.map((m: any) => ({ 
-              csvColumn: m.sourceField, 
-              targetField: m.targetField, 
-              isValid: undefined // Let ImportStep2Preview validate initially
-            }));
-            setExistingMappingsForStep2(loadedMappings);
-            console.log("Loaded existing mappings:", loadedMappings);
-          }
-        } catch (mapError: any) {
-          console.error("Error fetching existing field map:", mapError);
-          setErrorMessage("Could not load saved mapping for this file. Proceeding without it.");
-          setExistingMappingsForStep2(undefined); // Ensure it's undefined on error
-        }
-      } else {
-        setExistingMappingsForStep2(undefined); // No map ID, so no existing map
-      }
-      
-      console.log("History file processed, proceeding to Step 2 (Preview/Mapping)");
-      setCurrentStep(2);
-
+      // Now call the common logic to set up for step 2, including field map determination
+      await proceedToStep2Logic(historyFileMeta);
     } catch (error: any) {
       console.error("Error processing history file:", error);
       setErrorMessage(error.message || "Failed to process history file. Please try again.");
@@ -255,16 +255,35 @@ const ImportTransactionsView: React.FC = () => {
     }
   };
 
+  const proceedToStep2Logic = async (fileMetaForMapLookup?: FileMetadata) => {
+    // 1. Determine initialFieldMapForStep2
+    let initialMap: {id: string, name: string} | undefined = undefined;
+    if (fileMetaForMapLookup?.fieldMap?.fileMapId && fileMetaForMapLookup?.fieldMap?.name) {
+        initialMap = { 
+            id: fileMetaForMapLookup.fieldMap.fileMapId, 
+            name: fileMetaForMapLookup.fieldMap.name 
+        };
+        console.log("[ImportTransactionsView] Found initial field map for Step 2 from file metadata:", initialMap);
+        setInitialFieldMapForStep2(initialMap);
+        // Pre-load its details
+        if (initialMap) {
+            await handleLoadFieldMapDetails(initialMap.id); // This will set currentlyLoadedFieldMapDetails
+        }
+    } else {
+        console.log("[ImportTransactionsView] No initial field map found for this file for Step 2.");
+        setInitialFieldMapForStep2(undefined);
+        setCurrentlyLoadedFieldMapDetails(undefined);
+    }
+    setCurrentStep(2);
+  };
+
   const proceedToStep2 = async () => {
-    if (!selectedFile) { // Simplified: only handles new file upload for now
+    if (!selectedFile) {
       setErrorMessage('Please select a file to upload.');
       return;
     }
-
     setIsLoading(true);
     setErrorMessage(null);
-    // setCurrentFileId(null); // currentFileId will be set after successful upload
-
     try {
       const currentUser = getCurrentUser();
       if (!currentUser) {
@@ -272,37 +291,20 @@ const ImportTransactionsView: React.FC = () => {
         setIsLoading(false);
         return;
       }
-
-      console.log(`Step 1: Requesting upload URL for ${selectedFile.name}, account: ${selectedAccount || 'None'}`);
       const presignedData = await getUploadUrl(
-        selectedFile.name,
-        selectedFile.type,
-        selectedFile.size,
-        currentUser.id, 
-        selectedAccount || undefined
+        selectedFile.name, selectedFile.type, selectedFile.size, currentUser.id, selectedAccount || undefined
       );
-
-      console.log("Received presigned data, fileId:", presignedData.fileId);
-      const newFileId = presignedData.fileId; // Use a new const for clarity
-      setCurrentFileId(newFileId); 
-
-      console.log(`Step 2: Uploading ${selectedFile.name} to S3.`);
+      const newFileId = presignedData.fileId;
+      setCurrentFileId(newFileId);
       await uploadFileToS3(presignedData, selectedFile, selectedAccount || undefined);
-      console.log("File upload to S3 successful:", selectedFile.name);
-      
-      // Step 3: Parse the uploaded file
-      console.log(`Parsing file with ID: ${newFileId}`);
-      const parseResult = await parseFile(newFileId); // Call new parseFile service
-
+      const parseResult = await parseFile(newFileId);
       if (parseResult.error) {
         setErrorMessage(`Error parsing file: ${parseResult.error}`);
         setIsLoading(false);
         return;
       }
-      
-      const determinedFileType = parseResult.file_format || 'csv'; // Default to csv if not returned
+      const determinedFileType = parseResult.file_format || 'csv';
       setFileTypeForStep2(determinedFileType);
-
       if (determinedFileType === 'csv') {
         if (!parseResult.headers || !parseResult.data) {
           setErrorMessage("CSV parsing did not return headers or data.");
@@ -312,7 +314,7 @@ const ImportTransactionsView: React.FC = () => {
         setCsvHeaders(parseResult.headers);
         const transactions = parseResult.data.map((item: any, index: number) => ({ id: item.id || `csv-${index}`, ...item }));
         setParsedTransactionData(transactions);
-      } else { // OFX, QFX
+      } else { 
          if (!parseResult.data) {
           setErrorMessage(`${determinedFileType.toUpperCase()} parsing did not return data.`);
           setIsLoading(false);
@@ -322,12 +324,17 @@ const ImportTransactionsView: React.FC = () => {
         setParsedTransactionData(transactions);
         setCsvHeaders([]); 
       }
-      
-      setExistingMappingsForStep2(undefined); // No existing mapping for new uploads initially
-      console.log("File parsed, proceeding to Step 2 (Preview/Mapping)");
-      setCurrentStep(2);
-      // setSelectedFile(null); // Reset selected file after processing for Step 2
-
+      // For new files, fieldMap association would likely happen after save in Step2, or if backend auto-applies one.
+      // For now, assume no initial map. If backend provides it in parseResult.file_metadata, use it.
+      let newFileMetaForMapLookup: FileMetadata | undefined = undefined;
+      // Safely access file_metadata, assuming parseResult might not always have it or it might not have fieldMap
+      if (parseResult && typeof parseResult === 'object' && 'file_metadata' in parseResult) {
+        const meta = (parseResult as any).file_metadata as FileMetadata; // Cast to any then FileMetadata
+        if (meta && meta.fieldMap) {
+            newFileMetaForMapLookup = meta;
+        }
+      }
+      await proceedToStep2Logic(newFileMetaForMapLookup);
     } catch (error: any) {
       console.error("Error during file upload and parse process:", error);
       setErrorMessage(error.message || "Failed to process file. Please try again.");
@@ -377,6 +384,82 @@ const ImportTransactionsView: React.FC = () => {
     setErrorMessage(null);
     // Resetting other states (filePreviewData, importResult, etc.) will be handled when they are re-introduced
   };
+
+  // Callback for ImportStep2Preview to load details of a selected field map
+  const handleLoadFieldMapDetails = useCallback(async (fieldMapId: string): Promise<ColumnMapping[] | undefined> => {
+    console.log("[ImportTransactionsView] Attempting to load field map details for ID:", fieldMapId);
+    try {
+      const fieldMapData = await getFieldMap(fieldMapId);
+      if (fieldMapData && fieldMapData.mappings) {
+        // Transform FileMapService's mapping format to ColumnMapping[] for Step2Preview
+        const transformedMappings: ColumnMapping[] = fieldMapData.mappings.map(m => ({
+          csvColumn: m.sourceField, // In FileMapService, it's sourceField
+          targetField: m.targetField,
+          isValid: undefined, // Validity will be re-calculated by ImportStep2Preview
+        }));
+        console.log("[ImportTransactionsView] Transformed mappings for Step2:", transformedMappings);
+        setCurrentlyLoadedFieldMapDetails(transformedMappings); // Update state to pass as prop
+        return transformedMappings;
+      }
+      setCurrentlyLoadedFieldMapDetails(undefined); // Clear if not found or no mappings
+      return undefined;
+    } catch (error) {
+      console.error("[ImportTransactionsView] Error loading field map details:", fieldMapId, error);
+      setCurrentlyLoadedFieldMapDetails(undefined); // Clear on error
+      throw error; // Re-throw so ImportStep2Preview can catch and display message
+    }
+  }, []);
+
+  // Callback for ImportStep2Preview to save or update a field map
+  const handleSaveOrUpdateFieldMap = useCallback(async (
+    params: {
+      mapIdToUpdate?: string;
+      name: string;
+      mappingsToSave: Array<{ csvColumn: string; targetField: string }>;
+    }
+  ): Promise<{ newMapId?: string; newName?: string; success: boolean; message?: string }> => {
+    const { mapIdToUpdate, name, mappingsToSave } = params;
+    console.log(`[ImportTransactionsView] Saving/Updating map. ID: ${mapIdToUpdate}, Name: ${name}`);
+    try {
+      let serviceResponse: FieldMap;
+      const preparedMappings = mappingsToSave.map(m => ({ sourceField: m.csvColumn, targetField: m.targetField }));
+
+      if (mapIdToUpdate) {
+        // updateFieldMap expects fileMapId and a Partial<FieldMap> object for updates
+        serviceResponse = await updateFieldMap(mapIdToUpdate, { name, mappings: preparedMappings });
+      } else {
+        // createFieldMap expects an Omit<FieldMap, 'fileMapId' | 'createdAt' | 'updatedAt'> object
+        serviceResponse = await createFieldMap({
+            name,
+            mappings: preparedMappings,
+            // Optionally include accountId if relevant and available
+            // accountId: selectedAccount || undefined, 
+            // description can also be added if there's a UI for it
+        });
+      }
+      // After successful save/update, refresh the list of available maps
+      const fieldMapsListResponse = await listFieldMaps();
+      const mapsForDropdown = fieldMapsListResponse.fieldMaps.map(fm => ({ id: fm.fileMapId!, name: fm.name }));
+      setAvailableFieldMaps(mapsForDropdown);
+      console.log("[ImportTransactionsView] Refreshed available field maps after save/update.");
+
+      // If this was a new save or an update to the map currently associated with the file,
+      // update initialFieldMapForStep2 so the child component reflects it.
+      if (serviceResponse.fileMapId && (!mapIdToUpdate || mapIdToUpdate === initialFieldMapForStep2?.id)) {
+        setInitialFieldMapForStep2({ id: serviceResponse.fileMapId, name: serviceResponse.name });
+        // And if it was the initial map, also update currentlyLoadedFieldMapDetails as it might have changed (e.g. name)
+        if (mapIdToUpdate && mapIdToUpdate === initialFieldMapForStep2?.id) {
+            const transformed = serviceResponse.mappings.map(m => ({csvColumn: m.sourceField, targetField: m.targetField, isValid: undefined}));
+            setCurrentlyLoadedFieldMapDetails(transformed);
+        }
+      }
+      
+      return { success: true, newMapId: serviceResponse.fileMapId, newName: serviceResponse.name, message: mapIdToUpdate ? 'Updated' : 'Saved' };
+    } catch (error: any) {
+      console.error("[ImportTransactionsView] Error saving/updating field map:", error);
+      return { success: false, message: error.message || "Failed to save/update mapping." };
+    }
+  }, [currentFileId, selectedAccount, initialFieldMapForStep2?.id]); // Add initialFieldMapForStep2.id to dependencies
 
   if (isLoading && accounts.length === 0 && currentStep === 1) {
       return <div className="loading-overlay">Loading accounts...</div>;
@@ -505,10 +588,15 @@ const ImportTransactionsView: React.FC = () => {
           parsedData={parsedTransactionData}
           fileType={fileTypeForStep2}
           csvHeaders={csvHeaders}
-          existingMapping={existingMappingsForStep2} // Pass existingMappingsForStep2
+          existingMapping={currentlyLoadedFieldMapDetails} // Pass the loaded details
           onCompleteImport={handleCompleteImportStep2}
           onCancel={handleCancelStep2}
           targetTransactionFields={TARGET_TRANSACTION_FIELDS}
+          // New Props for named field map management
+          availableFieldMaps={availableFieldMaps}
+          initialFieldMapToLoad={initialFieldMapForStep2}
+          onLoadFieldMapDetails={handleLoadFieldMapDetails}
+          onSaveOrUpdateFieldMap={handleSaveOrUpdateFieldMap}
         />
       )}
 

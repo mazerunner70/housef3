@@ -68,9 +68,11 @@ def create_file_map_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
         
     except ClientError as e:
         logger.error(f"DynamoDB error creating file map: {str(e)}")
+        logger.error(f"stack trace: {traceback.format_exc()}")
         return handle_error(500, "Error creating file map: Database operation failed.")
     except Exception as e: # Catch any other unexpected errors
         logger.error(f"Unexpected error creating file map: {str(e)}", exc_info=True)
+        logger.error(f"stack trace: {traceback.format_exc()}")
         return handle_error(500, f"Error creating file map: {str(e)}")
 
 def get_file_map_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
@@ -105,6 +107,7 @@ def get_file_map_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
         
     except ClientError as e:
         logger.error(f"DynamoDB error getting file map: {str(e)}")
+        logger.error(f"stack trace: {traceback.format_exc()}")
         return handle_error(500, "Error retrieving file map")
 
 def list_file_maps_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
@@ -148,6 +151,7 @@ def list_file_maps_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any
         
     except ClientError as e:
         logger.error(f"DynamoDB error listing file maps: {str(e)}")
+        logger.error(f"stack trace: {traceback.format_exc()}")
         return handle_error(500, "Error listing file maps")
 
 def update_file_map_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
@@ -213,6 +217,7 @@ def update_file_map_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
         return handle_error(400, str(e))
     except ClientError as e:
         logger.error(f"DynamoDB error updating file map: {str(e)}")
+        logger.error(f"stack trace: {traceback.format_exc()}")
         return handle_error(500, "Error updating file map")
 
 def delete_file_map_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
@@ -250,6 +255,7 @@ def delete_file_map_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
         
     except ClientError as e:
         logger.error(f"DynamoDB error deleting file map: {str(e)}")
+        logger.error(f"stack trace: {traceback.format_exc()}")
         return handle_error(500, "Error deleting file map")
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:

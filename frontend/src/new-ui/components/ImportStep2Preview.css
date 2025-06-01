@@ -111,4 +111,106 @@
 .csv-mapping-item-success-message {
   color: #16a34a; /* Replaces text-green-600 */
   /* margin-bottom: 0.25rem; */ /* This is now in the combined rule */
+}
+
+/* Styles for the Named Mapping Section */
+.named-mapping-section {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  border: 1px solid #d1d5db; /* Lighter border than main container */
+  border-radius: 0.375rem;
+  background-color: #f9fafb; /* Slight off-white background */
+}
+
+.named-mapping-header {
+  font-size: 0.9rem; /* Slightly smaller than the main mapping header */
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: #1f2937;
+}
+
+.mapping-save-message {
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  border-radius: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.message-success {
+  background-color: #ecfdf5; /* Green-ish background */
+  color: #065f46; /* Dark green text */
+  border: 1px solid #a7f3d0;
+}
+
+.message-error {
+  background-color: #fff1f2; /* Red-ish background */
+  color: #991b1b; /* Dark red text */
+  border: 1px solid #fecaca;
+}
+
+.named-mapping-controls {
+  display: flex;
+  flex-direction: column; /* Stack controls vertically on small screens */
+  gap: 0.75rem;
+}
+
+.named-mapping-control-item {
+  display: flex;
+  flex-direction: column; /* Label above input/select */
+  flex-grow: 1;
+}
+
+.named-mapping-label {
+  font-size: 0.75rem;
+  color: #4b5563;
+  margin-bottom: 0.2rem;
+}
+
+.named-mapping-select,
+.named-mapping-input {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  width: 100%; /* Make them take full width of their container */
+  box-sizing: border-box; /* Include padding and border in the element's total width and height */
+}
+
+.named-mapping-select:disabled,
+.named-mapping-input:disabled {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
+}
+
+.named-mapping-button {
+  padding: 0.5rem 0.8rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: white;
+  background-color: #2563eb; /* Blue */
+  border: none;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  text-align: center;
+}
+
+.named-mapping-button:hover {
+  background-color: #1d4ed8;
+}
+
+.named-mapping-button:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+}
+
+/* Responsive adjustments for controls if needed */
+@media (min-width: 640px) { /* sm breakpoint or similar */
+  .named-mapping-controls {
+    flex-direction: row; /* Align items in a row on larger screens */
+    align-items: flex-end; /* Align items to the bottom (button aligns nicely) */
+  }
+  .named-mapping-button {
+    white-space: nowrap; /* Prevent button text from wrapping */
+    flex-shrink: 0; /* Prevent button from shrinking if space is tight */
+  }
 } 
