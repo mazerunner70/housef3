@@ -12,7 +12,7 @@ export interface FileMetadata {
   accountId?: string;
   accountName?: string;
   fileFormat?: 'csv' | 'ofx' | 'qfx' | 'pdf' | 'xlsx' | 'other';
-  processingStatus?: 'pending' | 'processing' | 'processed' | 'error';
+  processingStatus?: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'ERROR' | 'PROCESSED';
   errorMessage?: string;
   openingBalance?: number;
   currency?: string;
@@ -573,6 +573,94 @@ export const parseFile = async (fileId: string): Promise<{ data?: any[], headers
     }
 };
 
+export interface FileProcessResult { // Based on backend FileProcessorResponse
+  fileId: string;
+  fileName: string;
+  statusCode: number; // HTTP status from the API call itself, or derived from processingStatus
+  message: string;    // Message from backend processor
+  processingStatus: string; // e.g., "COMPLETED", "FAILED", "PENDING", "PROCESSING"
+  transactionCount?: number;
+  accountName?: string;
+}
+
+function adaptBackendFileMetaToProcessResult(meta: FileMetadata, httpStatusCode: number = 200): FileProcessResult {
+  // Determine overall success based on processingStatus
+  // Using uppercase for status strings based on the updated FileMetadata interface
+  const isSuccessStatus = meta.processingStatus === 'COMPLETED' || meta.processingStatus === 'PROCESSED';
+
+  return {
+    fileId: meta.fileId,
+    fileName: meta.fileName,
+    statusCode: httpStatusCode, 
+    message: meta.errorMessage || `File status: ${meta.processingStatus || 'UNKNOWN'}`,
+    processingStatus: meta.processingStatus || 'UNKNOWN',
+    transactionCount: meta.transactionCount, 
+    accountName: meta.accountName, 
+  };
+}
+
+/**
+ * Associates a field map with a file and triggers processing.
+ * Corresponds to PUT /files/{fileId}/file-map
+ * The backend for this endpoint is expected to return a FileProcessorResponse structure.
+ */
+export async function updateFileFieldMapAssociation(fileId: string, fileMapId: string): Promise<FileProcessResult> {
+  console.log(`FileService: Associating map ${fileMapId} with file ${fileId} and triggering processing.`);
+  try {
+    const response = await authenticatedRequest(`${FILES_API_ENDPOINT}/${fileId}/file-map`, {
+      method: 'PUT',
+      body: JSON.stringify({ fileMapId: fileMapId }), 
+    });
+    const data = await response.json(); 
+
+    return {
+      fileId: data.fileId || fileId, 
+      fileName: data.fileName,
+      statusCode: response.status,
+      message: data.message || (response.ok ? 'Map associated, processing triggered.' : 'Failed to associate map.'),
+      // Ensure these statuses align with what your backend PUT /files/{id}/file-map actually returns in FileProcessorResponse
+      processingStatus: data.processingStatus || (response.ok ? 'PROCESSING' : 'ERROR'), 
+      transactionCount: data.transactionCount,
+      accountName: data.accountName,
+    };
+
+  } catch (error: any) {
+    console.error('Error associating field map or processing file:', error);
+    return {
+      fileId,
+      fileName: 'Unknown',
+      statusCode: error.response?.status || 500,
+      message: error.message || 'Failed to associate map and trigger processing.',
+      processingStatus: 'ERROR',
+      transactionCount: 0,
+    };
+  }
+}
+
+/**
+ * Gets detailed metadata for a single file and adapts it to FileProcessResult.
+ * Corresponds to GET /files/{fileId}/metadata.
+ */
+export async function getProcessedFileMetadata(fileId: string): Promise<FileProcessResult> {
+  console.log(`FileService: Getting processed metadata for file ${fileId}.`);
+  try {
+    const response = await authenticatedRequest(`${FILES_API_ENDPOINT}/${fileId}/metadata`);
+    const fileMeta: FileMetadata = await response.json(); 
+    return adaptBackendFileMetaToProcessResult(fileMeta, response.status);
+  } catch (error: any) {
+    console.error('Error getting processed file metadata:', error);
+    return {
+      fileId,
+      fileName: 'Unknown', 
+      statusCode: error.response?.status || 500,
+      message: error.message || 'Failed to retrieve file processing status.',
+      processingStatus: 'ERROR',
+      transactionCount: undefined,
+      accountName: undefined,
+    };
+  }
+}
+
 export default {
   listFiles,
   getUploadUrl,
@@ -582,12 +670,14 @@ export default {
   unassociateFileFromAccount,
   associateFileWithAccount,
   updateFileBalance,
-  associateFieldMap,
-  getFileMetadata,
+  associateFieldMap, 
+  getFileMetadata,   
   getFileContent,
   listAssociatedFiles,
   listUnlinkedFiles,
   linkFileToAccount,
   unlinkFileFromAccount,
-  parseFile
+  parseFile,
+  updateFileFieldMapAssociation,
+  getProcessedFileMetadata
 }; 

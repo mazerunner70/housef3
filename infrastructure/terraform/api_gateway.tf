@@ -127,7 +127,7 @@ resource "aws_apigatewayv2_route" "delete_file" {
 # File unassociate route
 resource "aws_apigatewayv2_route" "unassociate_file" {
   api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /files/{id}/unassociate"
+  route_key          = "PUT /files/{id}/unassociate"
   target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
@@ -136,7 +136,7 @@ resource "aws_apigatewayv2_route" "unassociate_file" {
 # File associate route
 resource "aws_apigatewayv2_route" "associate_file" {
   api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /files/{id}/associate"
+  route_key          = "PUT /files/{id}/associate"
   target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id

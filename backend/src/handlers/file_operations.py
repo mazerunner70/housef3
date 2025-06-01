@@ -695,9 +695,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return delete_file_transactions_handler(event, user_id)
         elif route == "DELETE /files/{id}":
             return delete_file_handler(event, user_id)
-        elif route == "POST /files/{id}/unassociate":
+        elif route == "PUT /files/{id}/unassociate":
             return unassociate_file_handler(event, user_id)
-        elif route == "POST /files/{id}/associate":
+        elif route == "PUT /files/{id}/associate":
             return associate_file_handler(event, user_id)
         elif route == "PUT /files/{id}/file-map":
             return update_file_field_map_handler(event, user_id)

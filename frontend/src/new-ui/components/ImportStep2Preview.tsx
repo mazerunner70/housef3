@@ -25,7 +25,11 @@ interface ImportStep2PreviewProps {
   csvHeaders?: string[];
   // Pre-existing mapping configuration, if any
   existingMapping?: ColumnMapping[];
-  onCompleteImport: (mappedData: TransactionRow[], mappingConfig?: ColumnMapping[]) => void;
+  onCompleteImport: (
+    mappedData: TransactionRow[], 
+    // Changed: now expects an object with id and name of the field map to associate, or undefined
+    finalFieldMapToAssociate?: { id: string; name: string }
+  ) => void;
   onCancel: () => void;
   // Target fields that the user can map CSV columns to
   targetTransactionFields: { field: string; label: string; regex?: string }[];
@@ -464,6 +468,20 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
     );
   };
 
+  const handleCompleteImportClick = () => {
+    let fieldMapToAssociate: { id: string; name: string } | undefined = undefined;
+    if (fileType === 'csv' && selectedFieldMapId && fieldMapNameInput.trim()) {
+      // Only pass if a map is selected AND has a name (could be an existing one or a newly named one)
+      // This assumes that if `selectedFieldMapId` is set, `fieldMapNameInput` also reflects its name
+      // or the new name if it was just typed in for a new save.
+      fieldMapToAssociate = { id: selectedFieldMapId, name: fieldMapNameInput.trim() };
+    }
+    // If it's not a CSV, or if no map is actively selected/named, pass undefined.
+    // The parent (ImportTransactionsView) will decide if it needs to fetch latest metadata
+    // or proceed with a map association.
+    onCompleteImport(transactionData, fieldMapToAssociate);
+  };
+
   return (
     <div className="import-step2-preview-container">
       <h2 className="step2-main-header">Step 2: Preview, Map Columns (if CSV), and Confirm</h2>
@@ -483,7 +501,7 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
           Cancel
         </button>
         <button
-          onClick={() => onCompleteImport(transactionData, fileType === 'csv' ? columnMappings : undefined)}
+          onClick={handleCompleteImportClick}
           disabled={!isMappingValid}
           className="button-confirm"
         >

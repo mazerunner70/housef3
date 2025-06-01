@@ -1,12 +1,13 @@
 import React, { useState, useCallback, useEffect } from 'react';
 // Use AccountService for fetching accounts
 import { listAccounts, Account as ServiceAccount } from '../../services/AccountService';
-import { getUploadUrl, uploadFileToS3, listFiles, FileMetadata, deleteFile, parseFile } from '../../services/FileService'; // Added parseFile
+import { getUploadUrl, uploadFileToS3, listFiles, FileMetadata, deleteFile, parseFile, updateFileFieldMapAssociation, getProcessedFileMetadata, FileProcessResult } from '../../services/FileService'; // Added parseFile
 import { listFieldMaps, getFieldMap, createFieldMap, updateFieldMap, FieldMap } from '../../services/FileMapService'; // Import more from FileMapService
 import { getCurrentUser } from '../../services/AuthService'; // Import getCurrentUser
 import ImportStep2Preview from '../components/ImportStep2Preview'; // Import the new component
 import type { TransactionRow, ColumnMapping } from '../components/ImportStep2Preview'; // Import types
 import './ImportTransactionsView.css'; // Import the CSS file
+import ImportCompletionView from './ImportCompletionView'; // Import the new component
 
 // Define TARGET_TRANSACTION_FIELDS (should match what ImportStep2Preview expects)
 const TARGET_TRANSACTION_FIELDS = [
@@ -36,6 +37,15 @@ interface AvailableMapInfo {
   name: string;
 }
 
+interface ImportResultForView {
+  success: boolean;
+  message?: string;
+  transactionCount?: number;
+  fileName?: string;
+  accountName?: string;
+  errorDetails?: string;
+}
+
 const ImportTransactionsView: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -60,6 +70,9 @@ const ImportTransactionsView: React.FC = () => {
   const [currentlyLoadedFieldMapDetails, setCurrentlyLoadedFieldMapDetails] = useState<ColumnMapping[] | undefined>(undefined);
   const [initialFieldMapForStep2, setInitialFieldMapForStep2] = useState<{id: string, name: string} | undefined>(undefined);
   const [isLoadingFieldMaps, setIsLoadingFieldMaps] = useState<boolean>(false); // Optional: for loading state
+
+  // New state for import results
+  const [importResult, setImportResult] = useState<ImportResultForView | null>(null);
 
   // Fetch accounts and history when the component mounts or currentStep becomes 1
   const fetchInitialData = useCallback(async () => {
@@ -344,26 +357,60 @@ const ImportTransactionsView: React.FC = () => {
     }
   };
 
-  const handleCompleteImportStep2 = async (mappedData: TransactionRow[], mappingConfig?: ColumnMapping[]) => {
-    console.log("Step 2 Complete. Data to import:", mappedData);
-    if (mappingConfig) {
-        console.log("Mapping configuration received (deferring save):", mappingConfig);
-        // Placeholder for future: await saveFieldMap(mappingConfig, currentFileId, selectedAccount || undefined);
-        // alert("Mapping would be saved here.");
+  const handleCompleteImportStep2 = async (
+    mappedData: TransactionRow[], // Currently unused as backend does processing
+    finalFieldMapToAssociate?: { id: string; name: string } // Passed from ImportStep2Preview
+  ) => {
+    if (!currentFileId) {
+      setErrorMessage("No current file to process for final import step.");
+      setIsLoading(false);
+      return;
     }
-    
+
     setIsLoading(true);
-    console.log("Simulating final import API call with mapped data...");
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
-    setIsLoading(false);
-    console.log("Simulated final import successful.");
-    
-    // Reset relevant states after successful import and before going to step 3
-    setSelectedFile(null); 
-    // Optionally clear selectedAccount or other relevant states from step 1 / 2
-    // setCurrentFileId(null); // currentFileId might be needed for step 3 summary or can be cleared
-    
-    proceedToStep3();
+    setErrorMessage(null);
+    setImportResult(null); // Clear previous results
+
+    const historyFile = importHistory.find(f => f.fileId === currentFileId);
+    let preliminaryFileName = selectedFile?.name || historyFile?.fileName || 'Unknown File';
+    let preliminaryAccountName = accounts.find(a => a.id === selectedAccount)?.name || historyFile?.accountName || 'Unassigned';
+
+    try {
+      let processApiResult: FileProcessResult;
+
+      if (fileTypeForStep2 === 'csv' && finalFieldMapToAssociate?.id) {
+        console.log(`[ImportTransactionsView] Associating map '${finalFieldMapToAssociate.name}' (${finalFieldMapToAssociate.id}) with file ${currentFileId} and processing.`);
+        processApiResult = await updateFileFieldMapAssociation(currentFileId, finalFieldMapToAssociate.id);
+      } else {
+        console.log(`[ImportTransactionsView] Finalizing import for non-CSV or CSV without explicit map association. File ID: ${currentFileId}. Fetching latest metadata.`);
+        processApiResult = await getProcessedFileMetadata(currentFileId);
+      }
+
+      const success = processApiResult.statusCode === 200;
+
+      setImportResult({
+        success: success,
+        message: processApiResult.message,
+        transactionCount: processApiResult.transactionCount,
+        fileName: processApiResult.fileName || preliminaryFileName,
+        accountName: processApiResult.accountName || preliminaryAccountName,
+        errorDetails: !success ? (processApiResult.message || 'Processing failed.') : undefined,
+      });
+      setCurrentStep(3);
+
+    } catch (error: any) {
+      console.error("[ImportTransactionsView] Error completing import step 2 (finalization):", error);
+      setImportResult({
+        success: false,
+        message: "Import Finalization Failed",
+        errorDetails: error.message || "An unexpected error occurred during final processing.",
+        fileName: preliminaryFileName,
+        accountName: preliminaryAccountName,
+      });
+      setCurrentStep(3); 
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleCancelStep2 = () => {
@@ -372,11 +419,6 @@ const ImportTransactionsView: React.FC = () => {
     // States like selectedFile, selectedAccount are reset by useEffect for currentStep === 1
   };
   
-  const proceedToStep3 = async () => {
-    alert("Proceed to Step 3 - Complete import logic to be implemented with real API call.");
-    // Further logic for step 3 will be added later
-  };
-
   const resetProcess = () => {
     setCurrentStep(1);
     setSelectedFile(null);
@@ -562,7 +604,7 @@ const ImportTransactionsView: React.FC = () => {
                 </table>
                 <div style={{ marginTop: '10px' }}>
                   <button
-                    onClick={handleProceedWithSelectedHistoryFile} // This now triggers full Step 2 logic
+                    onClick={handleProceedWithSelectedHistoryFile} 
                     disabled={!selectedHistoryFileId || isLoading || isLoadingHistory}
                     className="button-common button-primary"
                     style={{ marginRight: '10px' }}
@@ -588,11 +630,10 @@ const ImportTransactionsView: React.FC = () => {
           parsedData={parsedTransactionData}
           fileType={fileTypeForStep2}
           csvHeaders={csvHeaders}
-          existingMapping={currentlyLoadedFieldMapDetails} // Pass the loaded details
+          existingMapping={currentlyLoadedFieldMapDetails}
           onCompleteImport={handleCompleteImportStep2}
           onCancel={handleCancelStep2}
           targetTransactionFields={TARGET_TRANSACTION_FIELDS}
-          // New Props for named field map management
           availableFieldMaps={availableFieldMaps}
           initialFieldMapToLoad={initialFieldMapForStep2}
           onLoadFieldMapDetails={handleLoadFieldMapDetails}
@@ -600,14 +641,24 @@ const ImportTransactionsView: React.FC = () => {
         />
       )}
 
-      {currentStep === 3 && (
-        <div className="step-container">
-            <h3 className="import-header">Step 3: Completion Summary</h3>
-            <p><i>Import results will be displayed here.</i></p>
-            <button onClick={resetProcess} className="button-common button-primary" style={{ display: 'block', margin: '20px auto 0'}}>
-                Import Another File
-            </button>
-        </div>
+      {currentStep === 3 && importResult && (
+        <ImportCompletionView
+          success={importResult.success}
+          message={importResult.message}
+          transactionCount={importResult.transactionCount}
+          fileName={importResult.fileName}
+          accountName={importResult.accountName}
+          errorDetails={importResult.errorDetails}
+          onViewTransactions={() => {
+            alert('Navigate to transactions list (pre-filtered for this import if possible).');
+            setCurrentStep(1); 
+          }}
+          onImportAnother={() => setCurrentStep(1)}
+          onGoToStatements={() => {
+            alert('Navigate to Statements & Imports main tab/view.');
+            setCurrentStep(1); 
+          }}
+        />
       )}
     </div>
   );

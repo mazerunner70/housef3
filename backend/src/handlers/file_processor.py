@@ -36,7 +36,7 @@ from utils.file_processor_utils import (
     get_file_content,
     calculate_opening_balance_from_duplicates
 )
-from datetime import datetime
+from datetime import datetime, date
 import time
 from utils.s3_dao import get_object_content, get_object_metadata
 import traceback
@@ -90,7 +90,15 @@ FIELD_MAPS_TABLE = os.environ.get('FIELD_MAPS_TABLE', 'field-maps')
 transaction_table = dynamodb.Table(TRANSACTIONS_TABLE)
 field_maps_table = dynamodb.Table(FIELD_MAPS_TABLE)
 
-
+def json_serial(obj: Any) -> str:
+    """JSON serializer for objects not serializable by default json code."""
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    if isinstance(obj, Decimal):
+        return str(obj)
+    if isinstance(obj, uuid.UUID):
+        return str(obj)
+    raise TypeError(f"Type {type(obj)} not serializable")
 
 def handler(event, context):
     """
@@ -201,7 +209,7 @@ def handler(event, context):
 
             return {
                 'statusCode': 200,
-                'body': updated_transaction_file.model_dump_json(by_alias=True)
+                'body': json.dumps(updated_transaction_file.model_dump(by_alias=True), default=json_serial)
             }
             
         except Exception as e:

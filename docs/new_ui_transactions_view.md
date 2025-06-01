@@ -111,8 +111,26 @@ This tab centralizes file import operations and history.
     *   **Clean Table Preview:** Preview of Parsed transactions shown in a clear table.
     *   **Intuitive CSV Mapping:** If CSV, an interactive interface to map columns. Visual cues for matched/unmatched columns. Option to save mapping for the source. Check for existing mapping from metadata or the associated account if any. have a suitable regex for each target mapping and provide green visual cue if the proposed mapping is correct
     *   `[Complete Import]`, `[Cancel]` buttons. only enable complete if all mapping in place.
-*   **Step 3: Completion Summary**
-    *   Clear success/error message. Link to view imported transactions.
+*   **Step 3: Post-Import Actions & Completion Summary**
+    *   **Trigger:** Occurs after the user clicks `[Complete Import]` in Step 2, and all prerequisite client-side validations (like mapping completion) have passed.
+    *   **Actions on `[Complete Import]` click:**
+        1.  **(If CSV and mapping is new/modified):** The frontend makes an API call to save the column mapping configuration (e.g., `POST /file-maps` or `PUT /file-maps/{id}`). This call returns a `mapping_id`.
+        2.  **Associate Mapping with File:** The frontend then makes an API call to associate this `mapping_id` (or an existing one if the user selected a pre-saved map) with the metadata of the currently imported file.
+            *   **Endpoint Example:** `PUT /files/{id}/file-map` (for updates)
+            *   **Request Body:** `{ "fileMapId": "retrieved_or_existing_map_id" }`
+            *   **Purpose:** To store the chosen mapping preference for this specific file instance (where `{id}` is the file\'s unique identifier). Associating this map may trigger backend processing of the file.
+        3.  **Finalize Transaction Import (Triggered by previous steps or S3 upload):** File processing, including transaction creation, is typically handled by the backend automatically upon file upload (via S3 event triggers to `file_processor.py`) 
+            *   The `process_file` service, called by these handlers, processes the file identified by its ID, creates transaction records, and applies any relevant auto-categorization rules.
+    *   **Displaying the Summary:**
+        *   Upon successful completion of the backend import process:
+            *   A clear success message is displayed: e.g., "Import Successful! **[Number]** transactions from **'[File Name]'** have been added to **'[Account Name]'**."
+            *   A button/link: `[View Imported Transactions]` (navigates to the "Transactions List" tab, pre-filtered to show these newly imported transactions for the selected account and date range of import).
+            *   A button: `[Import Another File]` (returns to Step 1 of the import workflow, possibly clearing previous file/account selections).
+            *   A button: `[Go to Statements]` (navigates back to the main "Statements & Imports" tab view).
+        *   If errors occurred during the transaction creation phase (even if mapping association was successful):
+            *   A detailed error message or summary of issues is displayed (e.g., "Import completed with some issues: 2 out of 100 transactions failed to import. [View Details/Download Report]").
+            *   Option to download an error report if applicable.
+        *   A general `[Close]` or `[Done]` button might also be present to dismiss the summary.
 
 ### 5.2. Import History
 
@@ -139,31 +157,24 @@ This section outlines the backend API endpoints required to support the "Transac
 ### 8.1. Data for Filtering Controls
 
 *   **Account Filter:**
-    *   **Endpoint:** `GET /api/accounts`
+    *   **Endpoint:** `GET /accounts`
     *   **Purpose:** Fetch a list of the user's financial accounts (ID and name).
     *   **Example Response:** `[{ "id": "acc_123", "name": "Checking Account" }, ...]`
 *   **Category Filter:**
-    *   **Endpoint:** `GET /api/categories`
+    *   **Endpoint:** `GET /categories`
     *   **Purpose:** Fetch a list of all available transaction categories (ID and name).
     *   **Example Response:** `[{ "id": "cat_abc", "name": "Groceries" }, ...]`
 
 ### 8.2. Main Transaction Data & Operations
 
 *   **Fetching Transactions (with Filtering, Sorting, Pagination):**
-    *   **Endpoint:** `GET /api/transactions_for_user` (or `/api/transactions`)
-    *   **Purpose:** Fetch the list of transactions based on user-selected criteria.
-    *   **Key Parameters:**
-        *   `page` (integer, e.g., 1)
-        *   `pageSize` (integer, e.g., 25)
-        *   `startDate` (date string, e.g., "2023-01-01")
-        *   `endDate` (date string, e.g., "2023-01-31")
-        *   `accountIds` (comma-separated string, e.g., "acc_123,acc_456")
-        *   `categoryIds` (comma-separated string, e.g., "cat_abc,cat_xyz")
-        *   `transactionType` (string, e.g., "income", "expense", "transfer", "all")
-        *   `searchTerm` (string, e.g., "coffee shop")
-        *   `sortBy` fixed to date
-        *   `sortOrder` (string, e.g., "asc", "desc")
-    *   **Example Response Structure:**
+    *   **Endpoint:** `GET /accounts/{id}/transactions` (Note: This is per-account. A general `/transactions` endpoint for all user transactions with complex filtering is not currently implemented.)
+    *   **Purpose:** Fetch the list of transactions for a specific account, with support for some filtering criteria passed as query parameters.
+    *   **Key Parameters (Supported by `GET /accounts/{id}/transactions`):**
+        *   `limit` (integer, e.g., 25)
+        *   `lastEvaluatedKey` (string, for pagination)
+        *   (Other parameters like `startDate`, `endDate`, `categoryIds`, `transactionType`, `searchTerm`, `sortBy`, `sortOrder` as described in the original doc would require enhancements to the existing `/accounts/{id}/transactions` handler or a new dedicated transaction searching endpoint.)
+    *   **Example Response Structure (for `GET /accounts/{id}/transactions`):**
         ```json
         {
           "transactions": [
@@ -171,41 +182,31 @@ This section outlines the backend API endpoints required to support the "Transac
               "id": "txn_789",
               "date": "2023-10-26",
               "description": "Starbucks",
-              "payee": "Starbucks #123",
-              "category": { "id": "cat_food", "name": "Food & Drink" },
-              "account": { "id": "acc_123", "name": "Checking Account" },
-              "amount": -5.75,
-              "currency": "USD",
-              "type": "expense",
-              "notes": "Morning coffee",
-              "isSplit": false
-            },
-            // ... more transactions
+              // ... other transaction fields ...
+            }
           ],
-          "pagination": {
-            "currentPage": 1,
-            "pageSize": 25,
-            "totalItems": 150,
-            "totalPages": 6
+          "metadata": {
+            "totalTransactions": 25, // Number of transactions in this page
+            "accountId": "acc_123",
+            // ... other metadata like lastEvaluatedKey ...
           }
         }
         ```
-
 *   **Quick Category Update (Inline Edit):**
-    *   **Endpoint:** `PUT /api/transactions/{transactionId}/category`
+    *   **Endpoint:** (TODO: No specific `PUT /api/transactions/{transactionId}/category` handler. This would likely be part of a general `PUT /transactions/{transactionId}` if implemented.)
     *   **Purpose:** Update the category of a single transaction.
     *   **Request Body:** `{ "categoryId": "new_cat_id" }`
     *   **Response:** The updated transaction object or a success status.
 
 ### 8.3. Related Endpoints (for Add/Edit/Delete Modals via Table Actions)
 
-While the full "Edit Transaction Dialog" (3.3) and "Add Transaction" functionality are separate, actions from the transaction table will invoke these:
+While the full "Edit Transaction Dialog" (3.3) and "Add Transaction" functionality are separate, actions from the transaction table will invoke these (TODO: The following transaction-specific handlers are not currently implemented in the provided backend files):
 
 *   **Fetch Full Transaction Details (for Edit Modal):**
-    *   **Endpoint:** `GET /api/transactions/{transactionId}`
+    *   **Endpoint:** `GET /transactions/{transactionId}` (TODO: Not Implemented)
 *   **Add New Transaction:**
-    *   **Endpoint:** `POST /api/transactions`
+    *   **Endpoint:** `POST /transactions` (TODO: Not Implemented)
 *   **Update Full Transaction (from Edit Modal):**
-    *   **Endpoint:** `PUT /api/transactions/{transactionId}`
+    *   **Endpoint:** `PUT /transactions/{transactionId}` (TODO: Not Implemented)
 *   **Delete Transaction:**
-    *   **Endpoint:** `DELETE /api/transactions/{transactionId}` 
+    *   **Endpoint:** `DELETE /transactions/{transactionId}` (TODO: Not Implemented)
