@@ -1,24 +1,98 @@
 .accounts-view-container {
-    padding: 20px;
-    font-family: 'Arial', sans-serif; /* Example font */
+    padding: var(--spacing-xl); /* Use theme spacing */
+    /* Font will be inherited from body (var(--font-primary)) set in global.css */
 }
 
 .accounts-view-container h1 {
-    color: #333;
-    margin-bottom: 20px;
+    color: var(--color-text-primary); /* Use theme text color */
+    font-size: var(--font-size-h1); /* Use theme heading size */
+    font-weight: var(--font-weight-bold); /* Use theme heading weight */
+    margin-bottom: var(--spacing-l); /* Use theme spacing */
 }
 
+/* Style the .add-account-button to match the theme's primary button */
 .add-account-button {
-    background-color: #007bff;
-    color: white;
-    padding: 10px 15px;
-    border: none;
-    border-radius: 5px;
+    /* From .btn in Button.css */
+    font-family: var(--font-primary);
+    font-weight: var(--font-weight-semibold);
+    border-radius: var(--border-radius-small);
     cursor: pointer;
-    font-size: 16px;
-    margin-bottom: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    border: var(--border-width) solid transparent;
+    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    width: auto; /* Explicitly set width to auto */
+
+    /* From .btn--standard in Button.css */
+    padding: var(--button-padding-standard-vertical) var(--button-padding-standard-horizontal);
+    font-size: var(--font-size-button);
+    min-height: var(--button-height-standard);
+
+    /* From .btn--primary in Button.css */
+    background-color: var(--color-primary-brand);
+    color: var(--color-white);
+    border-color: var(--color-primary-brand);
+    
+    margin-bottom: var(--spacing-l); /* Use theme spacing */
 }
 
 .add-account-button:hover {
-    background-color: #0056b3;
+    background-color: hsl(from var(--color-primary-brand) h s calc(l - 7%)); /* Darken primary slightly more for standalone button */
+    border-color: hsl(from var(--color-primary-brand) h s calc(l - 7%));
+}
+
+.add-account-button:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px hsl(from var(--color-primary-brand) h s l / 0.4);
+}
+
+/* Style for the .back-button (if present and used by selectedAccount logic) */
+.back-button {
+    /* Similar to a tertiary or secondary button */
+    font-family: var(--font-primary);
+    font-weight: var(--font-weight-medium);
+    border-radius: var(--border-radius-small);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    padding: var(--button-padding-compact-vertical) var(--button-padding-compact-horizontal);
+    font-size: var(--font-size-small);
+    min-height: var(--button-height-compact);
+    background-color: transparent;
+    color: var(--color-secondary-brand);
+    border: var(--border-width) solid var(--color-secondary-brand);
+    margin-bottom: var(--spacing-l);
+    transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+}
+
+.back-button:hover {
+    background-color: hsl(from var(--color-secondary-brand) h s 90%); /* Light hover for secondary */
+    color: var(--color-primary-brand);
+    border-color: var(--color-primary-brand);
+}
+
+/* Styles for loading and error states using theme variables */
+.accounts-view-container p[style*="color: red"] { /* Targeting the inline styled error message */
+    color: var(--color-error-danger) !important; /* Override inline style */
+    background-color: hsl(from var(--color-error-danger) h s 90%); /* Light error background */
+    padding: var(--spacing-m);
+    border-radius: var(--border-radius-small);
+    border: var(--border-width) solid var(--color-error-danger);
+}
+
+.accounts-view-container p[style*="color: red"] button {
+    margin-left: var(--spacing-m);
+    /* Basic button styling for the clear error button */
+    background-color: var(--color-error-danger);
+    color: var(--color-white);
+    border: none;
+    padding: var(--spacing-xs) var(--spacing-s);
+    border-radius: var(--border-radius-small);
+    cursor: pointer;
+}
+
+.accounts-view-container p[style*="color: red"] button:hover {
+    background-color: hsl(from var(--color-error-danger) h s calc(l - 7%));
 } 

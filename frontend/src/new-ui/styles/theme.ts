@@ -65,8 +65,8 @@ export const forms = {
 };
 
 export const buttons = {
-  paddingStandard: `${spacing.s} ${spacing.l}`, // 8px 16px
-  paddingCompact: `6px ${spacing.m}`,       // 6px 12px
+  paddingStandard: `${spacing.s} ${spacing.xl}`, // 8px 24px
+  paddingCompact: `6px ${spacing.l}`,       // 6px 16px
   heightStandard: "40px",
   heightCompact: "36px",
 };

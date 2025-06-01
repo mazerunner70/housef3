@@ -1,9 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react';
 // Use AccountService for fetching accounts
 import { listAccounts, Account as ServiceAccount } from '../../services/AccountService';
-import { getUploadUrl, uploadFileToS3, listFiles, FileMetadata, deleteFile } from '../../services/FileService'; // Import deleteFile
-import { listFieldMaps, FieldMap } from '../../services/FieldMapService'; // Import FieldMapService
+import { getUploadUrl, uploadFileToS3, listFiles, FileMetadata, deleteFile, parseFile } from '../../services/FileService'; // Added parseFile
+import { listFieldMaps, FieldMap, getFieldMap } from '../../services/FileMapService'; // Import getFieldMap
 import { getCurrentUser } from '../../services/AuthService'; // Import getCurrentUser
+import ImportStep2Preview from '../components/ImportStep2Preview'; // Import the new component
+import type { TransactionRow, ColumnMapping } from '../components/ImportStep2Preview'; // Import types
 import './ImportTransactionsView.css'; // Import the CSS file
 
 // Define a local Account type for the component if its structure differs from ServiceAccount
@@ -16,8 +18,17 @@ interface ViewAccount {
 
 // Define your column mapping state structure for CSVs (will be used later)
 interface CsvColumnMapping {
-  [header: string]: 'date' | 'description' | 'amount' | 'payee' | 'notes' | 'skip';
+  [header: string]: 'date' | 'description' | 'amount' | 'debitOrCredit' | 'currency' | 'skip';
 }
+
+// Define target transaction fields for mapping
+const TARGET_TRANSACTION_FIELDS = [
+  { field: 'date', label: 'Date', regex: '^\\d{4}-\\d{2}-\\d{2}$|^\\d{2}/\\d{2}/\\d{4}$' },
+  { field: 'description', label: 'Description', regex: '.+' },
+  { field: 'amount', label: 'Amount', regex: '^-?([0-9]{1,3}(,[0-9]{3})*(\\.[0-9]+)?|[0-9]+(\\.[0-9]+)?)$' },
+  { field: 'debitOrCredit', label: 'Type (Debit/Credit)', regex: '.+' },
+  { field: 'currency', label: 'Currency', regex: '^[A-Z]{3}$' },
+];
 
 const ImportTransactionsView: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<number>(1);
@@ -32,8 +43,11 @@ const ImportTransactionsView: React.FC = () => {
   const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(false); // Separate loading for history
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Other state variables (importHistory, filePreviewData, etc.) are commented out for now
-  // and will be re-introduced step-by-step.
+  // State for Step 2
+  const [parsedTransactionData, setParsedTransactionData] = useState<TransactionRow[]>([]);
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [fileTypeForStep2, setFileTypeForStep2] = useState<'csv' | 'ofx' | 'qfx'>('csv');
+  const [existingMappingsForStep2, setExistingMappingsForStep2] = useState<ColumnMapping[] | undefined>(undefined); // Re-introduced
 
   // Fetch accounts and history when the component mounts or currentStep becomes 1
   const fetchInitialData = useCallback(async () => {
@@ -62,7 +76,10 @@ const ImportTransactionsView: React.FC = () => {
 
       const mapsData: Record<string, string> = {};
       fieldMapsResponse.fieldMaps.forEach(fm => {
-        mapsData[fm.fileMapId] = fm.name;
+        // Guard against undefined fileMapId if it can be optional in FieldMap type
+        if (fm.fileMapId) {
+          mapsData[fm.fileMapId] = fm.name;
+        }
       });
       setFieldMapsData(mapsData);
 
@@ -73,11 +90,17 @@ const ImportTransactionsView: React.FC = () => {
       setIsLoading(false);
       setIsLoadingHistory(false);
     }
-  }, []); // Empty dependency array if it should only run on mount or be called manually
+  }, []); 
 
   useEffect(() => {
     if (currentStep === 1) {
       fetchInitialData();
+      // Reset Step 2 specific states
+      setParsedTransactionData([]);
+      setCsvHeaders([]);
+      setFileTypeForStep2('csv');
+      setCurrentFileId(null);
+      setExistingMappingsForStep2(undefined); // Reset this too
     }
   }, [currentStep, fetchInitialData]);
 
@@ -142,26 +165,105 @@ const ImportTransactionsView: React.FC = () => {
     }
   };
   
-  const handleProceedWithSelectedHistoryFile = () => {
+  const handleProceedWithSelectedHistoryFile = async () => {
     if (!selectedHistoryFileId) {
       alert("Please select a file from the history to proceed.");
       return;
     }
-    // For now, just alert. This can be expanded to go to a specific step or action.
-    alert(`Proceeding with selected history file: ${selectedHistoryFileId}`);
-    // Example: setCurrentStep(2); // or some other logic
-    // You might want to fetch details for this fileId and populate selectedFile or other states
+
+    const historyFileMeta = importHistory.find(f => f.fileId === selectedHistoryFileId);
+    if (!historyFileMeta) {
+      setErrorMessage("Selected history file metadata not found.");
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMessage(null);
+    setCurrentFileId(selectedHistoryFileId);
+
+    try {
+      console.log(`Parsing history file with ID: ${selectedHistoryFileId}`);
+      const parseResult = await parseFile(selectedHistoryFileId);
+
+      if (parseResult.error) {
+        setErrorMessage(`Error parsing file: ${parseResult.error}`);
+        setIsLoading(false);
+        return;
+      }
+
+      const rawFileFormat = historyFileMeta.fileFormat?.toLowerCase() || parseResult.file_format || 'csv';
+       if (rawFileFormat === 'csv' || rawFileFormat === 'ofx' || rawFileFormat === 'qfx') {
+            setFileTypeForStep2(rawFileFormat as 'csv' | 'ofx' | 'qfx');
+        } else {
+            setErrorMessage(`Cannot process history file: unsupported or unknown format (${rawFileFormat})`);
+            setIsLoading(false);
+            return;
+        }
+
+      if (fileTypeForStep2 === 'csv') {
+        if (!parseResult.headers || !parseResult.data) {
+          setErrorMessage("CSV parsing did not return headers or data.");
+          setIsLoading(false);
+          return;
+        }
+        setCsvHeaders(parseResult.headers);
+        const transactions = parseResult.data.map((item: any, index: number) => ({ id: item.id || `csv-hist-${index}`, ...item }));
+        setParsedTransactionData(transactions);
+      } else { // OFX, QFX
+         if (!parseResult.data) {
+          setErrorMessage(`${fileTypeForStep2.toUpperCase()} parsing did not return data.`);
+          setIsLoading(false);
+          return;
+        }
+        const transactions = parseResult.data.map((item: any, index: number) => ({ id: item.id || `parsed-hist-${index}`, ...item }));
+        setParsedTransactionData(transactions);
+        setCsvHeaders([]); 
+      }
+
+      // Fetch existing mapping if fileMapId exists
+      if (historyFileMeta.fieldMap?.fileMapId) {
+        console.log("Fetching existing mapping for ID:", historyFileMeta.fieldMap.fileMapId);
+        try {
+          const map = await getFieldMap(historyFileMeta.fieldMap.fileMapId);
+          if (map && map.mappings) {
+            const loadedMappings = map.mappings.map((m: any) => ({ 
+              csvColumn: m.sourceField, 
+              targetField: m.targetField, 
+              isValid: undefined // Let ImportStep2Preview validate initially
+            }));
+            setExistingMappingsForStep2(loadedMappings);
+            console.log("Loaded existing mappings:", loadedMappings);
+          }
+        } catch (mapError: any) {
+          console.error("Error fetching existing field map:", mapError);
+          setErrorMessage("Could not load saved mapping for this file. Proceeding without it.");
+          setExistingMappingsForStep2(undefined); // Ensure it's undefined on error
+        }
+      } else {
+        setExistingMappingsForStep2(undefined); // No map ID, so no existing map
+      }
+      
+      console.log("History file processed, proceeding to Step 2 (Preview/Mapping)");
+      setCurrentStep(2);
+
+    } catch (error: any) {
+      console.error("Error processing history file:", error);
+      setErrorMessage(error.message || "Failed to process history file. Please try again.");
+      setCurrentFileId(null); 
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const proceedToStep2 = async () => {
-    if (!selectedFile) {
+    if (!selectedFile) { // Simplified: only handles new file upload for now
       setErrorMessage('Please select a file to upload.');
       return;
     }
 
     setIsLoading(true);
     setErrorMessage(null);
-    setCurrentFileId(null);
+    // setCurrentFileId(null); // currentFileId will be set after successful upload
 
     try {
       const currentUser = getCurrentUser();
@@ -172,47 +274,95 @@ const ImportTransactionsView: React.FC = () => {
       }
 
       console.log(`Step 1: Requesting upload URL for ${selectedFile.name}, account: ${selectedAccount || 'None'}`);
-      // Step 1: Get the presigned URL
       const presignedData = await getUploadUrl(
         selectedFile.name,
         selectedFile.type,
         selectedFile.size,
-        currentUser.id, // Pass userId
-        selectedAccount || undefined // Pass selectedAccount if it exists, otherwise undefined
+        currentUser.id, 
+        selectedAccount || undefined
       );
 
       console.log("Received presigned data, fileId:", presignedData.fileId);
-      setCurrentFileId(presignedData.fileId); // Store fileId
+      const newFileId = presignedData.fileId; // Use a new const for clarity
+      setCurrentFileId(newFileId); 
 
-      // Step 2: Upload the file to S3
       console.log(`Step 2: Uploading ${selectedFile.name} to S3.`);
-      await uploadFileToS3(
-        presignedData,
-        selectedFile,
-        selectedAccount || undefined // Pass selectedAccount to S3 metadata if present
-      );
-
+      await uploadFileToS3(presignedData, selectedFile, selectedAccount || undefined);
       console.log("File upload to S3 successful:", selectedFile.name);
-      alert(`File '${selectedFile.name}' uploaded successfully! File ID: ${presignedData.fileId}. Backend will process it. Next step would show preview/mapping if applicable.`);
       
-      // TODO: Potentially refresh import history here or wait for a signal
-      // For now, we will not automatically navigate to step 2.
-      // User might want to upload multiple files or see it in history first.
-      // setCurrentStep(2); 
-      // setFilePreviewData(previewData); // This would be the next step
+      // Step 3: Parse the uploaded file
+      console.log(`Parsing file with ID: ${newFileId}`);
+      const parseResult = await parseFile(newFileId); // Call new parseFile service
 
-      // Reset file input for next upload
-      setSelectedFile(null);
-      // Optionally clear selected account or keep it for subsequent uploads
-      // setSelectedAccount(''); 
+      if (parseResult.error) {
+        setErrorMessage(`Error parsing file: ${parseResult.error}`);
+        setIsLoading(false);
+        return;
+      }
+      
+      const determinedFileType = parseResult.file_format || 'csv'; // Default to csv if not returned
+      setFileTypeForStep2(determinedFileType);
+
+      if (determinedFileType === 'csv') {
+        if (!parseResult.headers || !parseResult.data) {
+          setErrorMessage("CSV parsing did not return headers or data.");
+          setIsLoading(false);
+          return;
+        }
+        setCsvHeaders(parseResult.headers);
+        const transactions = parseResult.data.map((item: any, index: number) => ({ id: item.id || `csv-${index}`, ...item }));
+        setParsedTransactionData(transactions);
+      } else { // OFX, QFX
+         if (!parseResult.data) {
+          setErrorMessage(`${determinedFileType.toUpperCase()} parsing did not return data.`);
+          setIsLoading(false);
+          return;
+        }
+        const transactions = parseResult.data.map((item: any, index: number) => ({ id: item.id || `parsed-${index}`, ...item }));
+        setParsedTransactionData(transactions);
+        setCsvHeaders([]); 
+      }
+      
+      setExistingMappingsForStep2(undefined); // No existing mapping for new uploads initially
+      console.log("File parsed, proceeding to Step 2 (Preview/Mapping)");
+      setCurrentStep(2);
+      // setSelectedFile(null); // Reset selected file after processing for Step 2
 
     } catch (error: any) {
-      console.error("Error during file upload process:", error);
-      setErrorMessage(error.message || "Failed to upload file. Please try again.");
-      setCurrentFileId(null);
+      console.error("Error during file upload and parse process:", error);
+      setErrorMessage(error.message || "Failed to process file. Please try again.");
+      setCurrentFileId(null); 
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleCompleteImportStep2 = async (mappedData: TransactionRow[], mappingConfig?: ColumnMapping[]) => {
+    console.log("Step 2 Complete. Data to import:", mappedData);
+    if (mappingConfig) {
+        console.log("Mapping configuration received (deferring save):", mappingConfig);
+        // Placeholder for future: await saveFieldMap(mappingConfig, currentFileId, selectedAccount || undefined);
+        // alert("Mapping would be saved here.");
+    }
+    
+    setIsLoading(true);
+    console.log("Simulating final import API call with mapped data...");
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
+    setIsLoading(false);
+    console.log("Simulated final import successful.");
+    
+    // Reset relevant states after successful import and before going to step 3
+    setSelectedFile(null); 
+    // Optionally clear selectedAccount or other relevant states from step 1 / 2
+    // setCurrentFileId(null); // currentFileId might be needed for step 3 summary or can be cleared
+    
+    proceedToStep3();
+  };
+
+  const handleCancelStep2 = () => {
+    console.log("Step 2 Cancelled. Returning to Step 1.");
+    setCurrentStep(1); 
+    // States like selectedFile, selectedAccount are reset by useEffect for currentStep === 1
   };
   
   const proceedToStep3 = async () => {
@@ -285,7 +435,7 @@ const ImportTransactionsView: React.FC = () => {
             disabled={!selectedFile || isLoading || isLoadingHistory}
             className="button-common button-primary"
           >
-            {(isLoading && currentStep === 1 && !isLoadingHistory) ? 'Uploading...' : (isLoadingHistory && currentStep === 1) ? 'Loading Data...' : 'Upload & Continue'}
+            {(isLoading && currentStep === 1 && !isLoadingHistory && selectedFile) ? 'Uploading & Parsing...' : (isLoadingHistory && currentStep === 1) ? 'Loading Data...' : 'Upload & Continue'}
           </button>
 
           <div style={{marginTop: '30px'}}>
@@ -329,12 +479,12 @@ const ImportTransactionsView: React.FC = () => {
                 </table>
                 <div style={{ marginTop: '10px' }}>
                   <button
-                    onClick={handleProceedWithSelectedHistoryFile}
-                    disabled={!selectedHistoryFileId || isLoadingHistory}
+                    onClick={handleProceedWithSelectedHistoryFile} // This now triggers full Step 2 logic
+                    disabled={!selectedHistoryFileId || isLoading || isLoadingHistory}
                     className="button-common button-primary"
                     style={{ marginRight: '10px' }}
                   >
-                    Next (Selected History)
+                    {(isLoading && selectedHistoryFileId) ? 'Processing...' : 'Next (Selected History)'}
                   </button>
                   <button
                     onClick={handleDeleteHistoryFile}
@@ -350,15 +500,16 @@ const ImportTransactionsView: React.FC = () => {
         </div>
       )}
 
-      {currentStep === 2 && (
-        <div className="step-container">
-            <h3 className="import-header">Step 2: Preview, Mapping (CSV), & Confirmation</h3>
-            <p><i>Transaction preview and CSV mapping will appear here.</i></p>
-            <button onClick={() => setCurrentStep(1)} className="button-common" disabled={isLoading}>Back</button>
-            <button onClick={proceedToStep3} className="button-common button-primary" disabled={isLoading}>
-                {isLoading ? 'Importing...' : 'Complete Import'}
-            </button>
-        </div>
+      {currentStep === 2 && currentFileId && (
+        <ImportStep2Preview
+          parsedData={parsedTransactionData}
+          fileType={fileTypeForStep2}
+          csvHeaders={csvHeaders}
+          existingMapping={existingMappingsForStep2} // Pass existingMappingsForStep2
+          onCompleteImport={handleCompleteImportStep2}
+          onCancel={handleCancelStep2}
+          targetTransactionFields={TARGET_TRANSACTION_FIELDS}
+        />
       )}
 
       {currentStep === 3 && (

@@ -1,5 +1,5 @@
 import { getCurrentUser, refreshToken, isAuthenticated } from './AuthService';
-import { FieldMap } from './FieldMapService';
+import { FieldMap } from './FileMapService';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface FileMetadata {
@@ -523,6 +523,56 @@ export const unlinkFileFromAccount = async (fileId: string): Promise<void> => {
     // As above, not expecting a specific response body for void promise
 };
 
+// New mock parseFile function
+export const parseFile = async (fileId: string): Promise<{ data?: any[], headers?: string[], error?: string, file_format?: 'csv' | 'ofx' | 'qfx' }> => {
+    try {
+        const url = `${FILES_API_ENDPOINT}/${fileId}/preview`;
+        console.log(`Calling GET ${url} for parsing/previewing file.`);
+
+        // authenticatedRequest will throw an error for non-ok HTTP responses.
+        const response = await authenticatedRequest(url, { method: 'GET' }); 
+        
+        // We expect the backend for GET /api/files/{fileId}/preview to return a structure like:
+        // { data?: any[], columns?: string[], fileFormat?: 'csv' | 'ofx' | 'qfx', error?: string /* optional error in body */ }
+        // The 'fileType' field is crucial and assumed to be provided by this endpoint.
+        // The 'columns' field (from existing FilePreviewResponse) will be mapped to 'headers'.
+        const result: { 
+            data?: any[], 
+            columns?: string[], 
+            fileFormat?: 'csv' | 'ofx' | 'qfx', 
+            error?: string 
+        } = await response.json();
+
+        // Check if the response body itself contains an error message, even if HTTP status was 2xx.
+        if (result.error) {
+            console.error(`Error message in response body from ${url}:`, result.error);
+            return { error: result.error };
+        }
+
+        // Ensure essential fields are present for a successful parse, especially fileType.
+        if (!result.fileFormat) {
+            console.error(`'fileType' missing in response from ${url} for fileId: ${fileId}`);
+            return { error: `'fileType' is missing from the preview response. Cannot determine how to process the file.` };
+        }
+
+        return {
+            data: result.data,
+            headers: result.columns, // Mapping 'columns' from preview response to 'headers'
+            file_format: result.fileFormat,
+        };
+
+    } catch (err: any) {
+        // This catches errors from authenticatedRequest (network, non-ok HTTP status) 
+        // or errors from response.json() if the body isn't valid JSON.
+        console.error(`Error during parseFile (using GET ${FILES_API_ENDPOINT}/${fileId}/preview):`, err);
+        let errorMessage = 'An unexpected error occurred while trying to retrieve file preview data.';
+        if (err.message) {
+            errorMessage = err.message;
+        }
+        return { error: errorMessage };
+    }
+};
+
 export default {
   listFiles,
   getUploadUrl,
@@ -538,5 +588,6 @@ export default {
   listAssociatedFiles,
   listUnlinkedFiles,
   linkFileToAccount,
-  unlinkFileFromAccount
+  unlinkFileFromAccount,
+  parseFile
 }; 

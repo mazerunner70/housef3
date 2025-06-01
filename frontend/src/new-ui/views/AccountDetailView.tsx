@@ -23,11 +23,15 @@ const AccountDetailView: React.FC<AccountDetailViewProps> = ({ account }) => {
     <div className="account-detail-view">
       <h2>{account.name} ({account.type})</h2>
       <p>Bank: {account.bankName || 'N/A'} - Balance: {account.balance?.toString() || 'N/A'} {account.currency}</p>
-      <div className="tabs">
-        <button onClick={() => setActiveTab('files')} className={activeTab === 'files' ? 'active' : ''}>
+      <div className="account-detail-tabs">
+        <button 
+          onClick={() => setActiveTab('files')} 
+          className={`tab-selector-button ${activeTab === 'files' ? 'active' : ''}`}>
           Files
         </button>
-        <button onClick={() => setActiveTab('transactions')} className={activeTab === 'transactions' ? 'active' : ''}>
+        <button 
+          onClick={() => setActiveTab('transactions')} 
+          className={`tab-selector-button ${activeTab === 'transactions' ? 'active' : ''}`}>
           Transactions
         </button>
       </div>

@@ -1,69 +1,108 @@
 .account-list-item {
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    padding: 15px;
-    background-color: #f9f9f9;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    border: var(--border-width) solid var(--color-borders-dividers);
+    border-radius: var(--border-radius-medium); /* Use medium radius for cards */
+    padding: var(--spacing-l);
+    background-color: var(--color-white); /* Brighter background for cards */
+    box-shadow: var(--shadow-subtle);
     transition: box-shadow 0.3s ease;
+    display: flex; /* Use flex to align info and actions */
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-l);
 }
 
 .account-list-item:hover {
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08); /* Slightly more pronounced hover shadow */
+}
+
+.account-info {
+    flex-grow: 1; /* Allow info to take available space */
 }
 
 .account-list-item h3 {
     margin-top: 0;
-    margin-bottom: 10px;
-    color: #333;
-    font-size: 1.2em;
+    margin-bottom: var(--spacing-s);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-h4); /* Use themed heading size */
+    font-weight: var(--font-weight-semibold);
 }
 
 .account-list-item p {
-    margin: 5px 0;
-    color: #555;
-    font-size: 0.9em;
+    margin: var(--spacing-xs) 0;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-small);
 }
 
-.account-item-actions {
-    margin-top: 15px;
+/* Container for action buttons */
+.account-actions {
     display: flex;
-    gap: 10px;
+    gap: var(--spacing-s); /* Use theme spacing for gap */
+    flex-shrink: 0; /* Prevent buttons from shrinking */
+    margin-left: var(--spacing-l); /* Space between info and actions */
 }
 
-.account-item-actions button {
-    padding: 8px 12px;
-    border: none;
-    border-radius: 4px;
+/* Base styles for buttons within account items - adopt general .btn principles */
+.account-actions .edit-button,
+.account-actions .delete-button {
+    font-family: var(--font-primary);
+    font-weight: var(--font-weight-semibold);
+    border-radius: var(--border-radius-small);
     cursor: pointer;
-    font-size: 0.9em;
+    display: inline-flex; /* Key for sizing to content + padding */
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    border-style: solid;
+    border-width: var(--border-width);
+    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out, box-shadow 0.2s ease-in-out; /* Reinstated transition */
+    padding: var(--button-padding-compact-vertical) var(--button-padding-compact-horizontal); /* Use compact padding */
+    font-size: var(--font-size-small); /* Use smaller font for these actions */
+    min-height: var(--button-height-compact); /* Use compact height */
 }
 
+/* Edit Button - Styled as a Secondary Button */
 .edit-button {
-    background-color: #ffc107; /* Amber */
-    color: #333;
+    background-color: var(--color-secondary-brand);
+    color: var(--color-white);
+    border-color: var(--color-secondary-brand);
 }
 
 .edit-button:hover {
-    background-color: #e0a800;
+    background-color: #2980B9; /* Fallback: Pre-calculated darker shade of --color-secondary-brand */
+    border-color: #2980B9;    /* Fallback: Pre-calculated darker shade of --color-secondary-brand */
 }
 
+.edit-button:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px hsl(from var(--color-secondary-brand) h s l / 0.4);
+}
+
+/* Delete Button - Styled as a Danger Button */
 .delete-button {
-    background-color: #dc3545; /* Red */
-    color: white;
+    background-color: var(--color-error-danger);
+    color: var(--color-white);
+    border-color: var(--color-error-danger);
 }
 
 .delete-button:hover {
-    background-color: #c82333;
+    background-color: #D62C1A; /* Fallback: Pre-calculated darker shade of --color-error-danger */
+    border-color: #D62C1A;    /* Fallback: Pre-calculated darker shade of --color-error-danger */
+}
+
+.delete-button:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px hsl(from var(--color-error-danger) h s l / 0.4);
 }
 
 .view-details-link {
     display: block;
-    margin-top: 10px;
-    color: #007bff;
+    margin-top: var(--spacing-m);
+    color: var(--color-secondary-brand);
     text-decoration: none;
-    font-weight: bold;
+    font-weight: var(--font-weight-medium);
 }
 
 .view-details-link:hover {
     text-decoration: underline;
+    color: var(--color-primary-brand);
 } 

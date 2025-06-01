@@ -621,11 +621,11 @@ def get_file_preview_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
                 csv_file.seek(0)
                 next(csv.reader(csv_file)) # Skip header again
                 total_row_count = sum(1 for _ in csv.reader(csv_file))
-
+                logger.info(f"file: {file}")
                 return create_response(200, {
                     'fileId': file_id,
                     'fileName': file.file_name,
-                    'fileFormat': file.file_format.value,
+                    'fileFormat': file.file_format,
                     'columns': headers,
                     'data': sample_rows,
                     'totalRows': total_row_count,
@@ -635,9 +635,11 @@ def get_file_preview_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
                  return create_response(200, {'columns': headers if 'headers' in locals() else [], 'data': [], 'totalRows': 0, 'message': 'CSV file is empty or has no data rows.'})
             except csv.Error as csv_e:
                 logger.error(f"CSV parsing error for file {file_id}: {str(csv_e)}")
+                logger.error(traceback.format_exc())
                 return handle_error(400, f"Error parsing CSV file: {str(csv_e)}")
             except Exception as decode_e: # Catch potential decoding errors
                 logger.error(f"Error decoding or processing file content for {file_id}: {str(decode_e)}")
+                logger.error(traceback.format_exc())
                 return handle_error(500, "Error processing file content.")
         else:
             return create_response(200, {

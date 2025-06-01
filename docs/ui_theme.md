@@ -55,7 +55,7 @@ This document outlines the CSS scheme for a professional and compact user interf
 ## 4. Component Styling Principles
 
 ### Buttons
-- **Padding**: 8px 16px (for standard buttons), 6px 12px (for smaller/compact buttons).
+- **Padding**: 8px 24px (for standard buttons), 6px 16px (for smaller/compact buttons).
 - **Height**: Aim for a standard height like 36px or 40px for form elements to ensure vertical rhythm.
 - **States**: Clear hover, focus, active, and disabled states.
   - *Hover*: Slight darken/lighten of background or border.

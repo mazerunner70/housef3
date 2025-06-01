@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import FieldMapService, { FieldMap } from '../services/FieldMapService';
+import FieldMapService, { FieldMap } from '../services/FileMapService';
 import { DataPreviewPanel } from './DataPreviewPanel';
 import FileService, { FileMetadata } from '../services/FileService';
 import './FieldMapForm.css';

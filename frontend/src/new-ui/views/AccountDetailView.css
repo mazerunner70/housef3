@@ -1,61 +1,161 @@
 /* Styles for AccountDetailView */
 .account-detail-view {
-    padding: 20px;
-    background-color: #f9f9f9;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: var(--spacing-xl); /* Consistent padding */
+    background-color: var(--color-white); /* Card background */
+    border-radius: var(--border-radius-medium); /* Themed border radius */
+    box-shadow: var(--shadow-subtle); /* Themed shadow */
+    margin: var(--spacing-xl); /* Add some margin if this is a card within a larger view area */
 }
 
 .account-detail-header {
-    margin-bottom: 20px;
-    padding-bottom: 15px;
-    border-bottom: 1px solid #eee;
+    margin-bottom: var(--spacing-l);
+    padding-bottom: var(--spacing-l); /* Increased padding for visual separation */
+    border-bottom: var(--border-width) solid var(--color-borders-dividers);
 }
 
 .account-detail-header h2 {
-    margin: 0 0 5px 0;
-    color: #333;
+    margin: 0 0 var(--spacing-s) 0; /* Adjusted margin */
+    color: var(--color-text-primary); /* Theme heading color */
+    /* font-size will be inherited from global h2 or overridden if needed */
 }
 
 .account-detail-header p {
     margin: 0;
-    color: #666;
-    font-size: 0.9em;
+    color: var(--color-text-secondary); /* Theme secondary text color */
+    font-size: var(--font-size-body); /* Theme body font size */
 }
 
 .account-detail-tabs {
-    margin-bottom: 20px;
+    margin-bottom: var(--spacing-l);
+    display: flex; /* Added to align buttons */
+    border-bottom: 2px solid var(--color-borders-dividers);
 }
 
-.account-detail-tabs .tab-list {
-    list-style-type: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    border-bottom: 2px solid #ccc;
-}
-
-.account-detail-tabs .tab-list-item {
-    padding: 10px 20px;
+/* New styles for tab selector buttons */
+.account-detail-tabs .tab-selector-button {
+    padding: var(--spacing-s) var(--spacing-l);
     cursor: pointer;
-    margin-right: 5px;
-    border: 1px solid transparent;
-    border-bottom: none;
-    border-radius: 4px 4px 0 0;
-    background-color: #f0f0f0;
+    margin-right: var(--spacing-s);
+    border: var(--border-width) solid transparent;
+    border-bottom: none; /* Will be visually part of the container's border */
+    border-radius: var(--border-radius-small) var(--border-radius-small) 0 0;
+    background-color: var(--color-background-subtle);
+    color: var(--color-text-secondary);
+    font-family: var(--font-primary);
+    font-weight: var(--font-weight-medium);
+    font-size: var(--font-size-button);
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    flex-grow: 0; /* Do not grow */
+    flex-shrink: 0; /* Do not shrink */
+    flex-basis: auto; /* Size based on content */
+    width: auto; /* REMOVED !important */
+    position: relative; /* For active state alignment */
+    bottom: -2px; /* To align with the border and hide its own bottom border effectively */
 }
 
-.account-detail-tabs .tab-list-item.active {
-    background-color: #fff;
-    border-color: #ccc;
-    border-bottom-color: #fff;
-    position: relative;
-    top: 2px; /* Aligns with the bottom border of the tab container */
+.account-detail-tabs .tab-selector-button:hover {
+    background-color: var(--color-background-light);
+    color: var(--color-text-primary);
+}
+
+.account-detail-tabs .tab-selector-button.active {
+    background-color: var(--color-white);
+    border-color: var(--color-borders-dividers);
+    border-bottom-color: var(--color-white); /* To make it blend with content area */
+    color: var(--color-text-primary);
+    font-weight: var(--font-weight-semibold);
+    /* bottom: -2px; already set above, ensures it sits on top of the border */
 }
 
 .tab-content {
-    padding: 15px;
-    border: 1px solid #ccc;
-    border-top: none;
-    background-color: #fff;
+    padding: var(--spacing-l); /* Themed padding */
+    /* The border is effectively provided by the .tab-list and the .account-detail-tabs container's active item style */
+    background-color: var(--color-white); /* Ensure content area is white */
+}
+
+/* Styles for elements seen in the screenshot but not explicitly in current CSS */
+/* Assuming 'Back to Accounts List' is a button/link */
+.back-link { /* Or a more specific class if available */
+    display: inline-block;
+    margin-bottom: var(--spacing-l);
+    padding: var(--button-padding-compact-vertical) var(--button-padding-compact-horizontal);
+    color: var(--color-secondary-brand);
+    background-color: transparent;
+    border: var(--border-width) solid var(--color-secondary-brand);
+    border-radius: var(--border-radius-small);
+    text-decoration: none;
+    font-weight: var(--font-weight-medium);
+    font-size: var(--font-size-button);
+}
+
+.back-link:hover {
+    background-color: var(--color-secondary-brand);
+    color: var(--color-white);
+    text-decoration: none;
+}
+
+/* Styling for list items if needed, e.g., Associated Files */
+.associated-files-list,
+.unlinked-files-list {
+    list-style: none;
+    padding-left: 0;
+    margin-bottom: var(--spacing-l);
+}
+
+.associated-files-list li,
+.unlinked-files-list li {
+    padding: var(--spacing-s) 0;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-body);
+}
+
+.associated-files-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-s);
+    border: var(--border-width) solid var(--color-borders-dividers);
+    border-radius: var(--border-radius-small);
+    margin-bottom: var(--spacing-s);
+    background-color: var(--color-background-subtle);
+}
+
+.associated-files-list li span {
+    color: var(--color-text-primary);
+    flex-grow: 1; /* Allow text to take available space, shrinking button */
+    margin-right: var(--spacing-m); /* Add some space between text and button */
+}
+
+
+/* Assuming 'Unlink' is a button */
+.unlink-button { /* This should match .btn-secondary or .btn-danger if appropriate */
+    /* Using secondary button styling as a base */
+    background-color: var(--color-secondary-brand);
+    color: var(--color-white);
+    border: var(--border-width) solid var(--color-secondary-brand);
+    padding: var(--button-padding-compact-vertical) var(--button-padding-compact-horizontal);
+    border-radius: var(--border-radius-small);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-grow: 0; /* Do not grow */
+    flex-shrink: 0; /* Do not shrink */
+    flex-basis: auto; /* Size based on content */
+    width: auto; /* REMOVED !important */
+}
+
+.unlink-button:hover {
+    background-color: #2980B9; /* Pre-calculated darker shade */
+    border-color: #2980B9;
+}
+
+/* Placeholder for available unlinked files text */
+.no-files-message {
+    color: var(--color-text-secondary);
+    font-style: italic;
+    padding: var(--spacing-m) 0;
 } 

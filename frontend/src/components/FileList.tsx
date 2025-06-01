@@ -19,7 +19,7 @@ import FileFieldMapStatus from './FileFieldMapStatus';
 import FieldMapList from './FieldMapList';
 import { FieldMapForm } from './FieldMapForm';
 import FileService, { File } from '../services/FileService';
-import FieldMapService, { FieldMap } from '../services/FieldMapService';
+import FieldMapService, { FieldMap } from '../services/FileMapService';
 import { downloadFile } from '../utils/downloadUtils';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 

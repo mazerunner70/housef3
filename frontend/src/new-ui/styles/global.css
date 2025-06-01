@@ -68,9 +68,9 @@
 
   /* Buttons */
   --button-padding-standard-vertical: var(--spacing-s);
-  --button-padding-standard-horizontal: var(--spacing-l);
-  --button-padding-compact-vertical: 6px; /* Direct value from docs */
-  --button-padding-compact-horizontal: var(--spacing-m);
+  --button-padding-standard-horizontal: var(--spacing-xl);
+  --button-padding-compact-vertical: 6px;
+  --button-padding-compact-horizontal: var(--spacing-l);
   --button-height-standard: 40px;
   --button-height-compact: 36px;
 }
@@ -112,6 +112,11 @@ a:hover {
   text-decoration: underline;
 }
 
+/* Default button sizing */
+button {
+  width: auto; /* Default buttons to size to their content */
+}
+
 /* Utility class for visually hidden elements (accessibility) */
 .sr-only {
   position: absolute;
@@ -123,4 +128,25 @@ a:hover {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border-width: 0;
+}
+
+/* Primary Button styles from theme */
+.btn-primary {
+    background-color: var(--color-primary-brand);
+    color: var(--color-white);
+    border-color: var(--color-primary-brand);
+}
+
+.btn-primary:hover {
+    background-color: #1E2D3B; /* Fallback: Pre-calculated darker shade of --color-primary-brand */
+    border-color: #1E2D3B;    /* Fallback: Pre-calculated darker shade of --color-primary-brand */
+}
+
+.btn-primary:active {
+    background-color: #141E27; /* Fallback: Pre-calculated even darker shade of --color-primary-brand */
+    border-color: #141E27;    /* Fallback: Pre-calculated even darker shade of --color-primary-brand */
+}
+
+.btn-primary:focus {
+    /* ... existing code ... */
 } 

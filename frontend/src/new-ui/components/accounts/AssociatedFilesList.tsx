@@ -33,7 +33,7 @@ const AssociatedFilesList: React.FC<AssociatedFilesListProps> = ({ files, onUnli
         {files.map((file) => (
           <li key={file.id}>
             <span>{file.name} ({file.uploadDate}) - Status: {file.status}, Transactions: {file.transactionCount}</span>
-            <button onClick={() => handleUnlink(file.id)}>Unlink</button>
+            <button onClick={() => handleUnlink(file.id)} className="unlink-button">Unlink</button>
           </li>
         ))}
       </ul>

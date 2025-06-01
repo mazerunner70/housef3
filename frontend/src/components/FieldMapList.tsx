@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './FieldMapList.css';
-import FieldMapService, { FieldMap } from '../services/FieldMapService';
+import FieldMapService, { FieldMap } from '../services/FileMapService';
 
 
 interface FieldMapListProps {
