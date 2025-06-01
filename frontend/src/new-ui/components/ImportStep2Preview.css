@@ -1,0 +1,114 @@
+/* Frontend/src/new-ui/components/ImportStep2Preview.css */
+
+/* Base style for table cells in the preview */
+.preview-table-cell {
+  /* Define base border if needed, or rely on existing table styling */
+  /* For example, to ensure a default border that can be colored: */
+  /* border: 2px solid transparent; */ /* Start with a transparent border of the desired width */
+}
+
+/* Style for cells in a column that is validly mapped */
+.cell-valid-border {
+  border: 2px solid green !important; /* Using !important to ensure override during testing, can be refined */
+}
+
+/* Style for cells in a column that has invalid data based on mapping */
+.cell-invalid-border {
+  border: 2px solid red !important;   /* Using !important to ensure override during testing, can be refined */
+}
+
+/* Styles for compressing the CSV Mapping Controls section */
+.csv-mapping-controls-container {
+  margin-bottom: 1rem; /* Replaces mb-4 */
+  padding: 0.75rem; /* Replaces p-3 */
+  border: 1px solid #e5e7eb; /* Replaces border (Tailwind default gray) */
+  border-radius: 0.375rem; /* Replaces rounded-md */
+}
+
+.csv-mapping-header {
+  font-size: 1rem; /* Replaces text-md (usually 1rem) */
+  font-weight: 600; /* Replaces font-semibold */
+  margin-bottom: 0.5rem; /* Replaces mb-2 */
+}
+
+.csv-mapping-description {
+  font-size: 0.75rem; /* Replaces text-xs */
+  color: #6b7280; /* Replaces text-gray-500 (example) */
+  margin-bottom: 0.75rem; /* Replaces mb-2 (was mb-3 then mb-2) */
+}
+
+.csv-mapping-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr)); /* Replaces grid-cols-1 */
+  gap: 0.5rem 1rem; /* Replaces gap-y-2, gap-x-4 */
+}
+
+/* Responsive grid columns (adjust breakpoints as needed) */
+@media (min-width: 768px) { /* md breakpoint */
+  .csv-mapping-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)); /* Replaces md:grid-cols-2 */
+  }
+}
+
+@media (min-width: 1024px) { /* lg breakpoint */
+  .csv-mapping-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)); /* Replaces lg:grid-cols-3 */
+  }
+}
+
+.csv-mapping-item {
+  padding: 0.5rem; /* Replaces p-2 */
+  border: 1px solid #e5e7eb; /* Default border */
+  border-radius: 0.375rem; /* Replaces rounded-md */
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); /* Replaces shadow-sm (example) */
+}
+
+.csv-mapping-item.item-valid {
+  border-color: green;
+}
+
+.csv-mapping-item.item-invalid {
+  border-color: red;
+}
+
+.csv-mapping-item-label {
+  display: block;
+  font-size: 0.75rem; /* Replaces text-xs */
+  font-weight: 500; /* Replaces font-medium */
+  color: #374151; /* Replaces text-gray-700 (example) */
+  margin-bottom: 0.125rem; /* Replaces mb-0.5 */
+}
+
+.csv-mapping-item-select {
+  display: block;
+  width: 100%;
+  margin-top: 0.125rem; /* Replaces mt-0.5 */
+  padding: 0.25rem 0.5rem; /* Replaces py-1 px-2 */
+  font-size: 0.75rem; /* Replaces text-xs */
+  border: 1px solid #d1d5db; /* Replaces border-gray-300 */
+  background-color: #fff;
+  border-radius: 0.375rem;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.csv-mapping-item-select:focus {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  border-color: #4f46e5; /* Example focus color, replaces focus:ring-indigo-500 */
+}
+
+.csv-mapping-item-error-message, 
+.csv-mapping-item-success-message {
+  font-size: 0.75rem; /* Replaces text-xs */
+  margin-top: 0.25rem; /* Replaces mt-1 */
+  margin-bottom: 0.25rem; /* Add bottom margin of 4px (0.25rem) to both */
+}
+
+.csv-mapping-item-error-message {
+  color: #dc2626; /* Replaces text-red-600 */
+}
+
+.csv-mapping-item-success-message {
+  color: #16a34a; /* Replaces text-green-600 */
+  /* margin-bottom: 0.25rem; */ /* This is now in the combined rule */
+} 
