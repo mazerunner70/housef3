@@ -114,42 +114,51 @@ This view will be accessed by selecting an account from the main `AccountsView`.
     - `useAccountFiles.ts`: Custom hook for managing files associated with an account and unlinked files.
     - `useAccountTransactions.ts`: Custom hook for fetching and managing transactions for an account.
 
-## 5. Backend API Endpoints (Illustrative)
+## 5. Backend API Endpoints (Refined based on Handler Review)
 
-The following API endpoints (or GraphQL queries/mutations) would be needed. These are illustrative and actual implementation will depend on the backend structure (`db_utils.py` and API handlers).
+The following API endpoints are based on a review of the Lambda handlers (`account_operations.py` and `file_operations.py`). The `/api` prefix is typically managed by API Gateway.
 
-**Accounts:**
-- `GET /api/accounts`: List all accounts for the user.
-    - `db_utils.list_user_accounts(user_id)`
-- `POST /api/accounts`: Create a new account.
-    - `db_utils.create_account(account_data)`
-- `GET /api/accounts/{accountId}`: Get details for a specific account.
-    - `db_utils.get_account(account_id)`
-- `PUT /api/accounts/{accountId}`: Update an account.
-    - `db_utils.update_account(account_id, user_id, update_data)`
-- `DELETE /api/accounts/{accountId}`: Delete an account.
-    - `db_utils.delete_account(account_id, user_id)`
+**Accounts (`account_operations.py`):**
+- `GET /accounts`: List all accounts for the user.
+    - Maps to `list_user_accounts(user_id)`
+- `POST /accounts`: Create a new account.
+    - Maps to `create_account(account_data)`
+- `GET /accounts/{id}`: Get details for a specific account (path parameter `id` is `accountId`).
+    - Maps to `get_account(account_id)`
+- `PUT /accounts/{id}`: Update an account (path parameter `id` is `accountId`).
+    - Maps to `update_account(account_id, user_id, update_data)`
+- `DELETE /accounts/{id}`: Delete an account (path parameter `id` is `accountId`).
+    - Maps to `delete_account(account_id, user_id)`
+- **(New)** `DELETE /accounts`: Deletes all accounts for the authenticated user.
+- **(New)** `GET /accounts/{id}/timeline`: Retrieves a file timeline for a specific account.
 
-**Transaction Files:**
-- `GET /api/files?accountId={accountId}`: List files associated with a specific account.
-    - `db_utils.list_account_files(account_id)` (ensure it checks user ownership if not already)
-- `GET /api/files?unlinked=true`: List files uploaded by the user not linked to any account.
-    - Needs a new `db_utils` function, e.g., `list_user_unlinked_files(user_id)` which queries for files where `userId` matches and `accountId` is null.
-- `PUT /api/files/{fileId}/link`: Link a file to an account (body: `{ "accountId": "uuid" }`).
-    - `db_utils.update_transaction_file(file_id, user_id, {"accountId": account_id})` or a more specific `db_utils.update_file_account_id(file_id, account_id)`.
-- `PUT /api/files/{fileId}/unlink`: Unlink a file from an account (set `accountId` to null).
-    - `db_utils.update_transaction_file(file_id, user_id, {"accountId": null})` or `db_utils.update_file_account_id(file_id, null)`.
+**Transaction Files (Relevant endpoints from `account_operations.py` and `file_operations.py`):**
+- `GET /accounts/{id}/files`: List files associated with a specific account (path parameter `id` is `accountId`).
+    - Handled by `account_files_handler` in `account_operations.py`.
+    - This is the chosen endpoint for listing files linked to a specific account.
+- `GET /files`: List files for the user. When `accountId` query parameter is NOT provided, this is expected to list unlinked files.
+    - Handled by `list_files_handler` in `file_operations.py`.
+    - *Note: Confirmation needed that `get_files_for_user(user_id, None)` correctly fetches only files where `accountId` is null or not set.*
+- `PUT /files/{fileId}/associate`: Link a file to an account (path parameter `fileId`). Expects `accountId` in the request body.
+    - Handled by `associate_file_handler` in `file_operations.py`.
+    - Maps to `update_transaction_file(file_id, user_id, {"accountId": account_id})` or similar.
+- `PUT /files/{fileId}/unassociate`: Unlink a file from an account (path parameter `fileId`). Sets `accountId` to null.
+    - Handled by `unassociate_file_handler` in `file_operations.py`.
+    - Maps to `update_transaction_file(file_id, user_id, {"accountId": null})` or similar.
+- **(New/Different context)** `POST /accounts/{id}/files`: This endpoint in `account_operations.py` is for initiating a new file upload process and associating it with an account, not for linking an *existing, unlinked* file.
+- **(New/Different context)** `DELETE /accounts/{id}/files`: This endpoint in `account_operations.py` deletes *all* files associated with an account.
 
-**Transactions:**
-- `GET /api/transactions?accountId={accountId}`: List all transactions for a specific account.
-    - `db_utils.list_account_transactions(account_id, limit, last_evaluated_key)` (already exists, may need adjustments for filtering/sorting if done server-side).
-    - Consider adding filters: `startDate`, `endDate`, `type`, `searchTerm`. `db_utils.list_user_transactions` is more feature-rich and could be adapted or a new function `list_account_transactions_filtered` could be made.
+**Transactions (`account_operations.py`):**
+- `GET /accounts/{id}/transactions`: List all transactions for a specific account (path parameter `id` is `accountId`).
+    - Maps to `list_account_transactions(account_id, limit, last_evaluated_key)`.
+    - Design doc notes potential for filters; this seems to be the primary endpoint.
 
-**Considerations from `db_utils.py`:**
+
+**Original Design Considerations from `db_utils.py` (Still Relevant but map to updated endpoints):**
 - `checked_mandatory_account` and `checked_optional_account` will be useful for authorization.
-- `list_account_files` exists but might need user authorization check for each file if not implicitly handled.
-- A new function like `list_user_unlinked_files(user_id: str) -> List[TransactionFile]` will be needed. This would query the files table for items where `userId == user_id` and `accountId` is not set or is `None`.
-- The `update_file_account_id` function can be used for linking/unlinking files.
-- `list_account_transactions` exists for fetching transactions for an account.
+- `list_account_files` in `db_utils` is likely used by `GET /accounts/{id}/files` or `GET /files?accountId=...`.
+- `list_user_unlinked_files(user_id: str)`: The functionality for this is likely within `get_files_for_user(user_id, None)` if the `GET /files` (no `accountId`) endpoint is used as inferred.
+- `update_file_account_id` function: Likely used by `associate_file_handler` and `unassociate_file_handler`.
+- `list_account_transactions` in `db_utils` is used by `GET /accounts/{id}/transactions`.
 
 This document provides a foundational design. Further details and refinements will occur during development. 

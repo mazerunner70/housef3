@@ -1,0 +1,34 @@
+/* Styles for AccountFilesTab.css */
+.account-files-tab {
+    /* Add styles for the tab container if needed */
+}
+
+.files-section {
+    margin-bottom: 20px;
+}
+
+.files-section h3 {
+    margin-bottom: 10px;
+    color: #444;
+    font-size: 1.2em;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 5px;
+}
+
+.loading-message,
+.error-message {
+    padding: 10px;
+    border-radius: 4px;
+    text-align: center;
+}
+
+.loading-message {
+    background-color: #e0e0e0;
+    color: #333;
+}
+
+.error-message {
+    background-color: #ffe0e0;
+    color: #c00;
+    border: 1px solid #fcc;
+} 

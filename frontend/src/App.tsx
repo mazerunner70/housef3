@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import Login from './components/Login';
 import UserProfile from './components/UserProfile';
 import { ColorDisplay } from './components/ColorDisplay';
 import FileManager from './components/FileManager';
 import AccountManager from './components/AccountManager';
 import NewUILayout from './new-ui/layouts/NewUILayout';
+import AccountsView from './new-ui/views/AccountsView';
+import TransactionsView from './new-ui/views/TransactionsView';
 import { AuthUser, getCurrentUser, isAuthenticated, refreshToken } from './services/AuthService';
 import './App.css'
 
@@ -87,7 +90,30 @@ function App() {
   }
 
   if (showNewUI) {
-    return <NewUILayout onSignOut={handleSignOut} />;
+    if (!authenticated) {
+      return (
+        <div className="app-container">
+          <button onClick={toggleUIVersion} style={{ position: 'absolute', top: '10px', left: '10px', zIndex: 1000 }}>
+            Switch to Old UI
+          </button>
+          <h1>New UI Requires Sign In</h1>
+          <p>Please sign in to access the new application interface.</p>
+          <Login onLoginSuccess={() => { 
+            handleLoginSuccess(); 
+          }} />
+        </div>
+      );
+    }
+    return (
+      <Routes>
+        <Route path="/*" element={<NewUILayout onSignOut={handleSignOut} />}>
+          <Route index element={<Navigate to="accounts" replace />} />
+          <Route path="accounts" element={<AccountsView />} />
+          <Route path="transactions" element={<TransactionsView />} />
+          <Route path="*" element={<div><p>Page Not Found in New UI</p></div>} />
+        </Route>
+      </Routes>
+    );
   }
 
   return (

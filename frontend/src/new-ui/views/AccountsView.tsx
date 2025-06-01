@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import AccountList from '../components/accounts/AccountList';
 import AccountForm from '../components/accounts/AccountForm';
 import ConfirmationModal from '../components/accounts/ConfirmationModal';
+import AccountDetailView from './AccountDetailView';
 import './AccountsView.css';
 import useAccounts, { UIAccount, UIAccountInputData } from '../hooks/useAccounts';
 // import { Decimal } from 'decimal.js'; // Re-enable if using Decimal.js
@@ -27,20 +28,37 @@ const AccountsView: React.FC = () => {
     const [editingAccount, setEditingAccount] = useState<UIAccount | null>(null);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null);
+    const [selectedAccount, setSelectedAccount] = useState<UIAccount | null>(null);
 
     const handleAddAccount = () => {
         setEditingAccount(null);
         setShowAccountForm(true);
+        setSelectedAccount(null);
     };
 
     const handleEditAccount = (accountToEdit: UIAccount) => {
         setEditingAccount(accountToEdit);
         setShowAccountForm(true);
+        setSelectedAccount(null);
     };
 
     const handleDeleteAccountRequest = (accountId: string) => {
         setDeletingAccountId(accountId);
         setShowDeleteModal(true);
+        setSelectedAccount(null);
+    };
+
+    const handleViewAccountDetails = (accountId: string) => {
+        const accountToView = accounts.find(acc => acc.id === accountId);
+        if (accountToView) {
+            setSelectedAccount(accountToView);
+            setShowAccountForm(false);
+            setEditingAccount(null);
+        }
+    };
+
+    const handleCloseDetailView = () => {
+        setSelectedAccount(null);
     };
 
     const handleFormSubmit = async (formDataFromForm: UIAccountInputData) => {
@@ -91,6 +109,15 @@ const AccountsView: React.FC = () => {
         };
     };
 
+    if (selectedAccount) {
+        return (
+            <div className="accounts-view-container">
+                <button onClick={handleCloseDetailView} className="back-button">Back to Accounts List</button>
+                <AccountDetailView account={selectedAccount} />
+            </div>
+        );
+    }
+
     return (
         <div className="accounts-view-container">
             <h1>My Accounts</h1>
@@ -104,6 +131,7 @@ const AccountsView: React.FC = () => {
                     accounts={accounts}
                     onEdit={handleEditAccount}
                     onDelete={handleDeleteAccountRequest}
+                    onViewDetails={handleViewAccountDetails}
                 />
             )}
 

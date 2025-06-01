@@ -1,0 +1,61 @@
+/* Styles for AccountDetailView */
+.account-detail-view {
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.account-detail-header {
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #eee;
+}
+
+.account-detail-header h2 {
+    margin: 0 0 5px 0;
+    color: #333;
+}
+
+.account-detail-header p {
+    margin: 0;
+    color: #666;
+    font-size: 0.9em;
+}
+
+.account-detail-tabs {
+    margin-bottom: 20px;
+}
+
+.account-detail-tabs .tab-list {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    border-bottom: 2px solid #ccc;
+}
+
+.account-detail-tabs .tab-list-item {
+    padding: 10px 20px;
+    cursor: pointer;
+    margin-right: 5px;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 4px 4px 0 0;
+    background-color: #f0f0f0;
+}
+
+.account-detail-tabs .tab-list-item.active {
+    background-color: #fff;
+    border-color: #ccc;
+    border-bottom-color: #fff;
+    position: relative;
+    top: 2px; /* Aligns with the bottom border of the tab container */
+}
+
+.tab-content {
+    padding: 15px;
+    border: 1px solid #ccc;
+    border-top: none;
+    background-color: #fff;
+} 

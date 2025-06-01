@@ -1,72 +1,102 @@
-.new-ui-container {
+.new-ui-layout {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  font-family: sans-serif;
+  min-height: 100vh;
+  background-color: var(--color-background-light);
 }
 
 .new-ui-header {
   display: flex;
   align-items: center;
-  padding: 10px 20px;
-  background-color: #f0f0f0;
-  border-bottom: 1px solid #ddd;
+  padding: var(--spacing-m) var(--spacing-xl);
+  background-color: var(--color-white);
+  border-bottom: var(--border-width) solid var(--color-borders-dividers);
+  box-shadow: var(--shadow-subtle);
 }
 
 .new-ui-logo {
-  font-weight: bold;
-  margin-right: 20px;
-  font-size: 1.2em;
-  /* Replace with actual logo later */
+  height: 50px; /* Adjust as needed */
+  width: auto;   /* Maintain aspect ratio */
+  margin-right: var(--spacing-l);
 }
 
 .new-ui-title {
-  font-size: 1.5em;
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary-brand);
   margin: 0;
+  margin-right: auto; /* Pushes navigation to the right */
 }
 
-.new-ui-layout-content {
-    display: flex;
-    flex-grow: 1;
+.new-ui-navigation a {
+  margin-left: var(--spacing-l);
+  text-decoration: none;
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-body);
+}
+
+.new-ui-navigation a:hover,
+.new-ui-navigation a.active {
+  color: var(--color-primary-brand);
+  text-decoration: underline;
 }
 
 .new-ui-sidebar {
-  width: 220px;
-  background-color: #f8f9fa;
-  padding: 20px;
-  border-right: 1px solid #ddd;
-  height: calc(100vh - 60px); /* Adjust based on header height */
+  width: 240px;
+  background-color: var(--color-background-subtle);
+  padding: var(--spacing-l);
+  border-right: var(--border-width) solid var(--color-borders-dividers);
 }
 
-.new-ui-sidebar p {
-    margin-bottom: 10px;
-    cursor: pointer;
-}
-
-.new-ui-sidebar p:hover {
-    color: #007bff;
-}
-
-.new-ui-sidebar p.active {
-  color: #0056b3; /* Darker blue for active */
-  font-weight: 600; /* Make it bold */
-  background-color: #e9ecef; /* Light background highlight */
-  border-left: 3px solid #0056b3; /* Accent border */
-  padding-left: 17px; /* Adjust padding to align text with border */
-  margin-left: -20px; /* Counteract the main padding to extend highlight */
-  margin-right: -20px; /* Counteract the main padding */
-  padding-right: 20px;
+.new-ui-layout-content {
+  display: flex;
+  flex: 1;
 }
 
 .new-ui-main-content {
-  flex-grow: 1;
-  padding: 20px;
+  flex: 1;
+  padding: var(--spacing-xl);
   overflow-y: auto;
-  height: calc(100vh - 60px); /* Adjust based on header height */
+}
+
+.new-ui-footer {
+  padding: var(--spacing-m) var(--spacing-xl);
+  text-align: center;
+  background-color: var(--color-background-subtle);
+  border-top: var(--border-width) solid var(--color-borders-dividers);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-small);
+}
+
+.new-ui-sidebar p,
+.new-ui-sidebar a { /* Target both p (for Sign Out) and a (for NavLinks) */
+    display: block; /* Make them block for full-width clickability and padding */
+    padding: var(--spacing-s) var(--spacing-l);
+    margin-bottom: var(--spacing-xs);
+    cursor: pointer;
+    text-decoration: none;
+    color: var(--color-text-primary);
+    border-radius: var(--border-radius-small);
+}
+
+.new-ui-sidebar p:hover,
+.new-ui-sidebar a:hover {
+    background-color: var(--color-background-subtle);
+    color: var(--color-primary-brand);
+}
+
+.new-ui-sidebar a.active { /* Style for active NavLink */
+  color: var(--color-primary-brand);
+  font-weight: var(--font-weight-semibold);
+  background-color: hsl(from var(--color-secondary-brand) h s 90%); /* Lighter shade of secondary brand */
+  border-left: 3px solid var(--color-secondary-brand);
+  /* Adjust padding to align text with border, considering existing padding */
+  padding-left: calc(var(--spacing-l) - 3px); 
 }
 
 .sign-out-button {
   margin-top: auto; /* Pushes to the bottom of the sidebar */
-  padding-top: 10px;
-  border-top: 1px solid #ddd; /* Optional: add a separator line */
+  padding-top: var(--spacing-m);
+  border-top: var(--border-width) solid var(--color-borders-dividers);
 } 

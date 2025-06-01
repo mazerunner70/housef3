@@ -201,7 +201,7 @@ def handler(event, context):
 
             return {
                 'statusCode': 200,
-                'body': json.dumps(updated_transaction_file.model_dump(by_alias=True))
+                'body': updated_transaction_file.model_dump_json(by_alias=True)
             }
             
         except Exception as e:

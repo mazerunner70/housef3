@@ -1,19 +1,25 @@
 .app-container {
   width: 100%;
   margin: 0;
-  padding: 2rem;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  text-align: center;
+  padding: 2rem; /* This padding might still be relevant for the overall app shell */
+  /* font-family: \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif; */ /* Let new-ui theme handle font */
+  text-align: center; /* This might be part of old layout, review if it affects new-ui negatively */
 }
 
 .app-container h1 {
-  margin-bottom: 2rem;
-  color: #2c3e50;
+  margin-bottom: 2rem; /* Consider if new-ui heading margins are sufficient */
+  /* color: #2c3e50; */ /* Let new-ui theme handle color */
 }
 
 .content {
   margin-top: 2rem;
   width: 100%;
+  /* Styles below might be for old layout cards/containers. Review if they wrap new-ui elements. */
+  /* flex: 1; */
+  /* background-color: white; */
+  /* border-radius: 8px; */
+  /* padding: 2rem; */
+  /* box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); */
 }
 
 .loading-auth {
@@ -22,7 +28,7 @@
   align-items: center;
   min-height: 100vh;
   font-size: 1.2rem;
-  color: #555;
+  /* color: #555; */ /* Let new-ui theme handle text colors if this is used with new-ui */
   animation: pulse 1.5s infinite ease-in-out;
 }
 
@@ -38,17 +44,18 @@
   }
 }
 
-h1 {
+/* Loose h1 and p styles - highly likely to conflict. Commented out. */
+/* h1 {
   font-size: 2.5rem;
   color: #3498db;
   margin-bottom: 1.5rem;
-}
+} */
 
-p {
+/* p {
   font-size: 1.2rem;
   color: #333;
   margin-bottom: 1.5rem;
-}
+} */
 
 .logo {
   height: 6em;
@@ -78,23 +85,16 @@ p {
   }
 }
 
-.card {
+.card { /* This is a generic class, could conflict. If part of old UI, keep specific. */
   padding: 2em;
 }
 
 .read-the-docs {
-  color: #888;
+  /* color: #888; */ /* Let new-ui theme handle secondary text colors */
 }
 
-.content {
-  flex: 1;
-  background-color: white;
-  border-radius: 8px;
-  padding: 2rem;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  width: 100%;
-}
 
+/* Older layout styles - keep for now, but ensure new-ui components don\'t unwantedly inherit from these. */
 .section-tabs {
   display: flex;
   justify-content: center;

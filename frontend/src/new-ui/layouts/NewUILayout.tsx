@@ -1,51 +1,40 @@
-import React, { useState } from 'react';
+import React from 'react';
 import './NewUILayout.css'; // We'll create this for basic styling
-import TransactionsView from '../views/TransactionsView'; // Import TransactionsView
-import AccountsView from '../views/AccountsView'; // Import AccountsView
+import { Outlet, NavLink } from 'react-router-dom';
+import logoImage from '../assets/logo1.png'; // Import the logo
 
 interface NewUILayoutProps {
   onSignOut: () => void;
 }
 
-// Define possible view types
-type ActiveView = 'Dashboard' | 'Transactions' | 'Accounts' | 'Analytics';
-
 const NewUILayout: React.FC<NewUILayoutProps> = ({ onSignOut }) => {
-  const [activeView, setActiveView] = useState<ActiveView>('Dashboard'); // Default to Dashboard
-
-  const renderMainContent = () => {
-    switch (activeView) {
-      case 'Dashboard':
-        return <p>Welcome to the Dashboard! Content will appear here.</p>;
-      case 'Transactions':
-        return <TransactionsView />;
-      case 'Accounts':
-        return <AccountsView />;
-      case 'Analytics':
-        return <p>Analytics & Reports will appear here.</p>;
-      default:
-        return <p>Welcome to the new UI! Content will appear here.</p>;
-    }
-  };
-
   return (
-    <div className="new-ui-container">
+    <div className="new-ui-layout">
       <header className="new-ui-header">
-        <div className="new-ui-logo">APP LOGO</div>
+        <NavLink to="/">
+          <img src={logoImage} alt="App Logo" className="new-ui-logo" />
+        </NavLink>
         <h1 className="new-ui-title">Modern Finance App</h1>
+        <nav className="new-ui-navigation">
+          <NavLink to="/dashboard">Dashboard</NavLink>
+          <NavLink to="/transactions-header">Transactions</NavLink>
+        </nav>
       </header>
       <div className="new-ui-layout-content">
         <nav className="new-ui-sidebar">
-          <p onClick={() => setActiveView('Dashboard')} className={activeView === 'Dashboard' ? 'active' : ''}>Dashboard</p>
-          <p onClick={() => setActiveView('Transactions')} className={activeView === 'Transactions' ? 'active' : ''}>Transactions</p>
-          <p onClick={() => setActiveView('Accounts')} className={activeView === 'Accounts' ? 'active' : ''}>Accounts</p>
-          <p onClick={() => setActiveView('Analytics')} className={activeView === 'Analytics' ? 'active' : ''}>Analytics</p>
+          <NavLink to="/dashboard" className={({ isActive }) => isActive ? "active" : ""}>Dashboard</NavLink>
+          <NavLink to="/transactions" className={({ isActive }) => isActive ? "active" : ""}>Transactions</NavLink>
+          <NavLink to="/accounts" className={({ isActive }) => isActive ? "active" : ""}>Accounts</NavLink>
+          <NavLink to="/analytics" className={({ isActive }) => isActive ? "active" : ""}>Analytics</NavLink>
           <p onClick={onSignOut} className="sign-out-button">Sign Out</p>
         </nav>
         <main className="new-ui-main-content">
-          {renderMainContent()} {/* Render dynamic content here */}
+          <Outlet />
         </main>
       </div>
+      <footer className="new-ui-footer">
+        <p>&copy; 2024 Your App Name</p>
+      </footer>
     </div>
   );
 };

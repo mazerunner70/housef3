@@ -1,0 +1,126 @@
+/* frontend/src/new-ui/styles/global.css */
+
+/* Import Inter font - you might need to host this or use a font service like Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Color Palette */
+  --color-primary-brand: #2C3E50;
+  --color-secondary-brand: #3498DB;
+
+  --color-background-light: #F8F9FA;
+  --color-background-subtle: #ECF0F1;
+  --color-borders-dividers: #BDC3C7;
+
+  --color-text-primary: #212529;
+  --color-text-secondary: #7F8C8D;
+  --color-text-disabled: #B0BEC5;
+
+  --color-accent: #E67E22;
+  --color-success: #2ECC71;
+  --color-warning: #F1C40F;
+  --color-error-danger: #E74C3C;
+  --color-info: #3498DB;
+  --color-white: #FFFFFF;
+
+  /* Typography */
+  --font-primary: 'Inter', sans-serif;
+  --font-size-base: 15px;
+  --line-height-base: 1.6;
+
+  --font-size-h1: 32px;
+  --font-size-h2: 26px;
+  --font-size-h3: 20px;
+  --font-size-h4: 16px;
+  --font-size-body: 15px;
+  --font-size-small: 13px;
+  --font-size-button: 14px;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* Spacing */
+  --spacing-base-unit: 4px;
+  --spacing-xs: 4px;
+  --spacing-s: 8px;
+  --spacing-m: 12px;
+  --spacing-l: 16px;
+  --spacing-xl: 24px;
+  --spacing-xxl: 32px;
+
+  /* Borders */
+  --border-radius-small: 4px;
+  --border-radius-medium: 8px;
+  --border-width: 1px;
+
+  /* Shadows */
+  --shadow-subtle: 0 2px 4px rgba(0,0,0,0.05);
+
+  /* Forms */
+  --form-input-background: var(--color-white);
+  --form-input-border-color: var(--color-borders-dividers);
+  --form-input-focus-border-color: var(--color-secondary-brand);
+  --form-input-padding-vertical: var(--spacing-s);
+  --form-input-padding-horizontal: var(--spacing-m);
+  --form-label-font-size: var(--font-size-small);
+
+  /* Buttons */
+  --button-padding-standard-vertical: var(--spacing-s);
+  --button-padding-standard-horizontal: var(--spacing-l);
+  --button-padding-compact-vertical: 6px; /* Direct value from docs */
+  --button-padding-compact-horizontal: var(--spacing-m);
+  --button-height-standard: 40px;
+  --button-height-compact: 36px;
+}
+
+body {
+  font-family: var(--font-primary);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
+  color: var(--color-text-primary);
+  background-color: var(--color-background-light);
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin-top: 0;
+  margin-bottom: var(--spacing-m);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+
+h1 { font-size: var(--font-size-h1); }
+h2 { font-size: var(--font-size-h2); }
+h3 { font-size: var(--font-size-h3); font-weight: var(--font-weight-semibold); }
+h4 { font-size: var(--font-size-h4); font-weight: var(--font-weight-semibold); }
+
+p {
+  margin-top: 0;
+  margin-bottom: var(--spacing-l);
+}
+
+a {
+  color: var(--color-secondary-brand);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Utility class for visually hidden elements (accessibility) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+} 

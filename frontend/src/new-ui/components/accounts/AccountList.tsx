@@ -17,10 +17,10 @@ interface AccountListProps {
     accounts: UIAccount[];
     onEdit: (account: UIAccount) => void;
     onDelete: (accountId: string) => void;
-    // onSelect: (accountId: string) => void; // For navigating to detail view
+    onViewDetails: (accountId: string) => void; // Add onViewDetails to props
 }
 
-const AccountList: React.FC<AccountListProps> = ({ accounts, onEdit, onDelete }) => {
+const AccountList: React.FC<AccountListProps> = ({ accounts, onEdit, onDelete, onViewDetails }) => {
     if (!accounts || accounts.length === 0) {
         return <p className="no-accounts-message">No accounts found. Add one to get started!</p>;
     }
@@ -30,14 +30,10 @@ const AccountList: React.FC<AccountListProps> = ({ accounts, onEdit, onDelete })
             {accounts.map(account => (
                 <AccountListItem
                     key={account.id}
-                    id={account.id}
-                    name={account.name}
-                    type={account.type}
-                    currency={account.currency}
-                    balance={account.balance}
-                    bankName={account.bankName}
-                    onEdit={() => onEdit(account)}
-                    onDelete={() => onDelete(account.id)}
+                    account={account} // Pass the entire account object
+                    onEdit={() => onEdit(account)} // onEdit expects the full account object
+                    onDelete={() => onDelete(account.id)} // onDelete expects accountId
+                    onViewDetails={() => onViewDetails(account.id)} // onViewDetails expects accountId
                 />
             ))}
         </div>

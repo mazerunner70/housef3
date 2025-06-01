@@ -2,6 +2,7 @@
 Transaction file models for the financial account management system.
 """
 from decimal import Decimal
+import decimal
 import enum
 import uuid
 from datetime import datetime, timezone
@@ -146,20 +147,41 @@ class TransactionFile(BaseModel):
 
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Serializes TransactionFile to a flat dictionary for DynamoDB."""
-        data = self.model_dump(by_alias=True, exclude_none=True)
+        # Use mode='python' to get native Python types, then manually convert UUIDs
+        data = self.model_dump(mode='python', by_alias=True, exclude_none=True)
 
-        # Decimal 'openingBalance' is handled by Pydantic's model_dump and json_encoders.
-        # No special Money conversion needed.
+        # Manually convert UUID fields to strings for DynamoDB
+        if 'fileId' in data and isinstance(data.get('fileId'), uuid.UUID):
+            data['fileId'] = str(data['fileId'])
+        
+        if 'accountId' in data and data.get('accountId') is not None and isinstance(data.get('accountId'), uuid.UUID):
+            data['accountId'] = str(data['accountId'])
+
+        if 'fileMapId' in data and data.get('fileMapId') is not None and isinstance(data.get('fileMapId'), uuid.UUID):
+            data['fileMapId'] = str(data['fileMapId'])
+
+        # Decimal 'openingBalance' is handled by Pydantic's model_dump and json_encoders if mode='json'.
+        # For mode='python', it will be a Decimal object. Boto3 can handle Decimal, or convert to str if preferred.
+        if 'openingBalance' in data and data.get('openingBalance') is not None and isinstance(data.get('openingBalance'), Decimal):
+             data['openingBalance'] = str(data['openingBalance']) # Explicitly convert Decimal to string for DynamoDB
         
         # date_range is a DateRange model; model_dump already converts it to a dict.
         # Enums (processingStatus, fileFormat) are handled by Pydantic (use_enum_values=True)
-        # UUIDs are handled by json_encoders in model_config
         # Timestamps are already ints (milliseconds)
         return data
 
     @classmethod
     def from_dynamodb_item(cls, data: Dict[str, Any]) -> "TransactionFile":
         """Deserializes a dictionary from DynamoDB to a TransactionFile instance."""
+        
+        # Manually convert openingBalance from string to Decimal if necessary
+        if 'openingBalance' in data and data.get('openingBalance') is not None and isinstance(data.get('openingBalance'), str):
+            try:
+                data['openingBalance'] = Decimal(data['openingBalance'])
+            except decimal.InvalidOperation as e:
+                # Handle potential error if the string is not a valid Decimal
+                raise ValueError(f"Invalid string format for Decimal 'openingBalance': {data['openingBalance']} - {e}")
+
         # Pydantic will handle Decimal conversion for 'openingBalance' if it's a string/number in data.
         # No special Money conversion needed.
         

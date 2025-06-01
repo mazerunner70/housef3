@@ -102,7 +102,9 @@ export interface GetUploadUrlResponse {
 }
 
 // Get API endpoint from environment variables
-const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/api/files`;
+const API_BASE_URL = import.meta.env.VITE_API_ENDPOINT;
+const ACCOUNTS_API_ENDPOINT = `${API_BASE_URL}/api/accounts`;
+const FILES_API_ENDPOINT = `${API_BASE_URL}/api/files`;
 
 // Helper function to handle API requests with authentication
 const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
@@ -182,7 +184,7 @@ const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
 // Get list of files
 export const listFiles = async (): Promise<FileListResponse> => {
   try {
-    const response = await authenticatedRequest(API_ENDPOINT);
+    const response = await authenticatedRequest(FILES_API_ENDPOINT);
     const data: FileListResponse = await response.json();
     return data;
   } catch (error) {
@@ -216,7 +218,7 @@ export const getUploadUrl = async (
     });
     
     // Get presigned URL for S3 upload
-    const response = await authenticatedRequest(`${API_ENDPOINT}/upload`, {
+    const response = await authenticatedRequest(`${FILES_API_ENDPOINT}/upload`, {
       method: 'POST',
       body: JSON.stringify({
         key: s3Key,
@@ -304,7 +306,7 @@ export const uploadFileToS3 = async (presignedUploadData: GetUploadUrlResponse, 
 // Get download URL for a file
 export const getDownloadUrl = async (fileId: string): Promise<DownloadUrlResponse> => {
   try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/${fileId}/download`);
+    const response = await authenticatedRequest(`${FILES_API_ENDPOINT}/${fileId}/download`);
     const data: DownloadUrlResponse = await response.json();
     return data;
   } catch (error) {
@@ -316,7 +318,7 @@ export const getDownloadUrl = async (fileId: string): Promise<DownloadUrlRespons
 // Delete a file
 export const deleteFile = async (fileId: string): Promise<void> => {
   try {
-    await authenticatedRequest(`${API_ENDPOINT}/${fileId}`, {
+    await authenticatedRequest(`${FILES_API_ENDPOINT}/${fileId}`, {
       method: 'DELETE'
     });
   } catch (error) {
@@ -328,7 +330,7 @@ export const deleteFile = async (fileId: string): Promise<void> => {
 // Unassociate a file from an account
 export const unassociateFileFromAccount = async (fileId: string): Promise<void> => {
   try {
-    await authenticatedRequest(`${API_ENDPOINT}/${fileId}/unassociate`, {
+    await authenticatedRequest(`${FILES_API_ENDPOINT}/${fileId}/unassociate`, {
       method: 'POST'
     });
   } catch (error) {
@@ -340,7 +342,7 @@ export const unassociateFileFromAccount = async (fileId: string): Promise<void> 
 // Associate a file with an account
 export const associateFileWithAccount = async (fileId: string, accountId: string): Promise<void> => {
   try {
-    await authenticatedRequest(`${API_ENDPOINT}/${fileId}/associate`, {
+    await authenticatedRequest(`${FILES_API_ENDPOINT}/${fileId}/associate`, {
       method: 'POST',
       body: JSON.stringify({ accountId })
     });
@@ -360,7 +362,7 @@ export interface UpdateBalanceResponse {
 
 export const updateFileBalance = async (fileId: string, openingBalance: number): Promise<UpdateBalanceResponse> => {
   try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/${fileId}/balance`, {
+    const response = await authenticatedRequest(`${FILES_API_ENDPOINT}/${fileId}/balance`, {
       method: 'POST',
       body: JSON.stringify({ openingBalance })
     });
@@ -375,7 +377,7 @@ export const updateFileBalance = async (fileId: string, openingBalance: number):
 // Associate a field map with a file
 export const associateFieldMap = async (fileId: string, fieldMapId: string): Promise<void> => {
   try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/${fileId}/file-map`, {
+    const response = await authenticatedRequest(`${FILES_API_ENDPOINT}/${fileId}/file-map`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json'
@@ -398,7 +400,7 @@ export const associateFieldMap = async (fileId: string, fieldMapId: string): Pro
 //Get preview data for a file
 export const getFilePreview = async (fileId: string): Promise<FilePreviewResponse> => {
   try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/${fileId}/preview`);
+    const response = await authenticatedRequest(`${FILES_API_ENDPOINT}/${fileId}/preview`);
     const data: FilePreviewResponse = await response.json();
     return data;
   } catch (error) {
@@ -410,8 +412,8 @@ export const getFilePreview = async (fileId: string): Promise<FilePreviewRespons
 // Get file content
 export const getFile = async (fileId: string): Promise<FileResponse> => {
   try {
-    console.log(`Loading ${API_ENDPOINT}/${fileId}`);
-    const response = await authenticatedRequest(`${API_ENDPOINT}/${fileId}`);
+    console.log(`Loading ${FILES_API_ENDPOINT}/${fileId}`);
+    const response = await authenticatedRequest(`${FILES_API_ENDPOINT}/${fileId}`);
     const data: FileResponse = await response.json();
     return data;
   } catch (error) {
@@ -422,7 +424,7 @@ export const getFile = async (fileId: string): Promise<FileResponse> => {
 
 export const getFileMetadata = async (fileId: string): Promise<FileMetadata> => {
   try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/${fileId}/metadata`);
+    const response = await authenticatedRequest(`${FILES_API_ENDPOINT}/${fileId}/metadata`);
     const data: FileMetadata = await response.json();
     return data;
   } catch (error) {
@@ -441,13 +443,84 @@ export interface FileContentResponse {
 
 export const getFileContent = async (fileId: string): Promise<FileContentResponse> => {
   try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/${fileId}/content`);
+    const response = await authenticatedRequest(`${FILES_API_ENDPOINT}/${fileId}/content`);
     const data: FileContentResponse = await response.json();
     return data;
   } catch (error) {
     console.error('Error getting file content:', error);
     throw error;
   }
+};
+
+// TODO: Define these types more accurately based on actual backend responses
+// These are initial placeholders based on hook types and design doc.
+export interface ServiceFile {
+    fileId: string;
+    fileName: string;
+    uploadDate: string; // Or number (timestamp)
+    status?: string;     // e.g., "Processed", "Pending"
+    transactionCount?: number;
+    accountId?: string | null;
+    // Add other fields that the backend might return for a file
+}
+
+export interface LinkFileRequestBody {
+    accountId: string;
+}
+
+/**
+ * Lists files associated with a specific account.
+ * Uses GET /api/accounts/{accountId}/files as per updated design.
+ */
+export const listAssociatedFiles = async (accountId: string): Promise<ServiceFile[]> => {
+    // Use the /api/accounts/{accountId}/files endpoint
+    const url = `${ACCOUNTS_API_ENDPOINT}/${accountId}/files`; 
+    const response = await authenticatedRequest(url);
+    const data = await response.json(); 
+    // The response structure from account_files_handler might be different.
+    // Assuming it returns an object with a 'files' array similar to other list endpoints.
+    // Adjust if necessary based on actual backend response.
+    return data.files || []; 
+};
+
+/**
+ * Lists unlinked files for the current user.
+ * GET /api/files (no accountId implies unlinked for the user)
+ */
+export const listUnlinkedFiles = async (): Promise<ServiceFile[]> => {
+    const url = `${FILES_API_ENDPOINT}`;
+    const response = await authenticatedRequest(url);
+    const data = await response.json();
+    // Filter for files where accountId is null or undefined
+    const unlinkedFiles = (data.files || []).filter((file: ServiceFile) => !file.accountId);
+    return unlinkedFiles;
+};
+
+/**
+ * Links an existing file to an account.
+ * PUT /api/files/{fileId}/associate
+ */
+export const linkFileToAccount = async (fileId: string, accountId: string): Promise<void> => {
+    const url = `${FILES_API_ENDPOINT}/${fileId}/associate`;
+    const body: LinkFileRequestBody = { accountId };
+    await authenticatedRequest(url, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+    });
+    // Typically, PUT operations might return the updated resource or 204 No Content
+    // For simplicity, not expecting a specific response body here for void promise
+};
+
+/**
+ * Unlinks a file from an account (sets its accountId to null).
+ * PUT /api/files/{fileId}/unassociate
+ */
+export const unlinkFileFromAccount = async (fileId: string): Promise<void> => {
+    const url = `${FILES_API_ENDPOINT}/${fileId}/unassociate`;
+    await authenticatedRequest(url, {
+        method: 'PUT',
+    });
+    // As above, not expecting a specific response body for void promise
 };
 
 export default {
@@ -461,5 +534,9 @@ export default {
   updateFileBalance,
   associateFieldMap,
   getFileMetadata,
-  getFileContent
+  getFileContent,
+  listAssociatedFiles,
+  listUnlinkedFiles,
+  linkFileToAccount,
+  unlinkFileFromAccount
 }; 
