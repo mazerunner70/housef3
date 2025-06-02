@@ -951,7 +951,7 @@ def get_transaction_by_account_and_hash(account_id: Union[str, uuid.UUID], trans
     """
     try:
         response = get_transactions_table().query(
-            IndexName='AccountHashIndex', 
+            IndexName='TransactionHashIndex', 
             KeyConditionExpression=Key('accountId').eq(str(account_id)) & Key('transactionHash').eq(transaction_hash)
         )
         if response.get('Items'):

@@ -145,7 +145,7 @@ resource "aws_apigatewayv2_route" "associate_file" {
 # File balance update route
 resource "aws_apigatewayv2_route" "file_balance" {
   api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /files/{id}/balance"
+  route_key          = "PUT /files/{id}/balance"
   target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id

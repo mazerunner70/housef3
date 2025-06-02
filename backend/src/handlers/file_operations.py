@@ -703,6 +703,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return update_file_field_map_handler(event, user_id)
         elif route == "POST /files/upload":
             return get_upload_url_handler(event, user_id)
+        elif route == "PUT /files/{id}/balance":
+            return update_file_balance_handler(event, user_id)
         else:
             return create_response(400, {"message": f"Unsupported route: {route}"})
     except Exception as e:

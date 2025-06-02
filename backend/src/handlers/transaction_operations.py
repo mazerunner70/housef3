@@ -94,8 +94,18 @@ def get_transactions_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
                 # Items on this page, but no key for the next page (this is the last page).
                 total_pages_for_response = current_page_for_response
 
+        # Serialize transactions with string conversion for amount and balance
+        serialized_transactions = []
+        for t in transactions_list:
+            transaction_data = t.model_dump(by_alias=True)
+            if transaction_data.get("amount") is not None:
+                transaction_data["amount"] = str(transaction_data["amount"])
+            if transaction_data.get("balance") is not None:
+                transaction_data["balance"] = str(transaction_data["balance"])
+            serialized_transactions.append(transaction_data)
+
         response_data: Dict[str, Any] = {
-            "transactions": [t.model_dump(by_alias=True) for t in transactions_list],
+            "transactions": serialized_transactions,
             "pagination": {
                 "currentPage": current_page_for_response,
                 "pageSize": page_size,

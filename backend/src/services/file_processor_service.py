@@ -48,6 +48,7 @@ from services.auth_checks import (
     checked_mandatory_account,
     checked_mandatory_file_map,
     checked_mandatory_transaction_file,
+    checked_optional_account,
     checked_optional_file_map,
     checked_optional_transaction_file
 )
@@ -634,13 +635,12 @@ def set_defaults_from_account(transaction_file: TransactionFile)->TransactionFil
         transaction_file.file_map_id = account.default_file_map_id if not transaction_file.file_map_id else transaction_file.file_map_id
     return transaction_file
 
-def set_defaults_into_account(transaction_file: TransactionFile)->Account:
-
+def set_defaults_into_account(transaction_file: TransactionFile)->Optional[Account]:
+    account: Optional[Account] = checked_optional_account(transaction_file.account_id, transaction_file.user_id)
     """
     If account_id set, use defaults from account
     """
-    if transaction_file.account_id:
-        account = checked_mandatory_account(transaction_file.account_id, transaction_file.user_id)
+    if account:
         update = {}
         if transaction_file.currency:
             update['currency'] = transaction_file.currency

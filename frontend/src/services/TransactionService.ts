@@ -1,5 +1,6 @@
 import { getCurrentUser, refreshToken, isAuthenticated } from './AuthService';
 import { Currency } from './AccountService';
+import { Decimal } from 'decimal.js';
 
 // Money interface to match backend model
 export interface Money {
@@ -17,8 +18,9 @@ export interface Transaction {
   userId: string;
   date: number;  // milliseconds since epoch
   description: string;
-  amount: Money;
-  balance: Money;
+  amount: Decimal;
+  balance: Decimal;
+  currency: Currency;
   transactionType?: string;
   category?: string;
   payee?: string;
@@ -71,8 +73,9 @@ export interface TransactionViewItem extends Omit<Transaction, 'category' | 'acc
   payee?: string;
   category: CategoryInfo; // Use new CategoryInfo
   account?: string;   // Changed to string (accountId)
-  amount: Money; 
-  balance: Money; 
+  amount: Decimal; 
+  balance: Decimal; 
+  currency: Currency;
   type: 'income' | 'expense' | 'transfer';
   notes?: string;
   isSplit?: boolean;
@@ -128,9 +131,22 @@ export const getUserTransactions = async (params: TransactionRequestParams): Pro
   const endpoint = `${API_ENDPOINT}/api/transactions?${query.toString()}`; 
   try {
     const response = await authenticatedRequest(endpoint);
-    const res = response as TransactionsViewResponse; 
-    console.log('res size', res.transactions.length);
-    return res;
+    const data = response as TransactionsViewResponse; // Cast to the expected response type
+
+    // Ensure financial values are Decimal instances
+    const processedTransactions = data.transactions.map(tx => ({
+      ...tx,
+      amount: new Decimal(tx.amount),
+      balance: new Decimal(tx.balance),
+    }));
+
+    const processedResponse: TransactionsViewResponse = {
+      ...data,
+      transactions: processedTransactions,
+    };
+    
+    console.log('processedResponse size', processedResponse.transactions.length);
+    return processedResponse;
   } catch (error) {
     console.error('Error fetching user transactions:', error);
     throw error;

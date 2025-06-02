@@ -3,6 +3,7 @@ import './TransactionTable.css';
 import Pagination from './Pagination'; // Import Pagination
 import { TransactionViewItem, CategoryInfo } from '../../services/TransactionService'; // IMPORT SERVICE TYPES
 import { Account as AccountDetail } from '../../services/AccountService'; // IMPORT ACCOUNT SERVICE
+import { Decimal } from 'decimal.js';
 
 export interface SortConfig {
   key: keyof TransactionViewItem | null; // USE TransactionViewItem
@@ -238,17 +239,29 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                 let currencySymbol = "";
                 let amountClass = 'amount-expense'; // Default to expense or neutral
 
-                if (transaction.amount && typeof transaction.amount.amount === 'number') {
-                  const numericAmount = transaction.amount.amount;
+                // transaction.amount is expected to be a Decimal instance due to processing in TransactionService.ts
+                if (transaction.amount instanceof Decimal) {
+                  const numericAmount = transaction.amount; // It's already a Decimal
                   displayAmount = numericAmount.toFixed(2);
-                  if (transaction.amount.currency) {
-                    currencySymbol = transaction.amount.currency as string; // Assuming Currency is string-compatible
+                  if (transaction.currency) {
+                    currencySymbol = transaction.currency as string; // Assuming Currency is string-compatible
                   }
-                  amountClass = numericAmount >= 0 ? 'amount-income' : 'amount-expense';
+                  amountClass = numericAmount.greaterThanOrEqualTo(new Decimal(0)) ? 'amount-income' : 'amount-expense';
                 } else {
-                  // Fallback for unexpected structure or undefined amount
-                  console.warn("Transaction amount or its structure is unexpected:", transaction);
+                  // This path is taken if transaction.amount is not a Decimal instance.
+                  // This could be because it's undefined, null, or if the service layer conversion somehow failed.
+                  if (transaction.amount !== undefined && transaction.amount !== null) {
+                    // Only log a warning if amount is present but not a Decimal, as this is unexpected.
+                    console.warn(
+                      "TransactionTable: transaction.amount was expected to be a Decimal instance but was not. Value type:", 
+                      typeof transaction.amount, 
+                      "Value:", transaction.amount, 
+                      "Transaction ID:", transaction.id
+                    );
+                  }
+                  // displayAmount, currencySymbol, amountClass will retain their default values.
                 }
+                // This console.log was present in the original code provided
                 console.log("Transaction:", transaction);
                 return (
                   <td className={amountClass}>

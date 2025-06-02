@@ -363,7 +363,7 @@ export interface UpdateBalanceResponse {
 export const updateFileBalance = async (fileId: string, openingBalance: number): Promise<UpdateBalanceResponse> => {
   try {
     const response = await authenticatedRequest(`${FILES_API_ENDPOINT}/${fileId}/balance`, {
-      method: 'POST',
+      method: 'PUT',
       body: JSON.stringify({ openingBalance })
     });
     const data: UpdateBalanceResponse = await response.json();

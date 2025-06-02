@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 // Use AccountService for fetching accounts
 import { listAccounts, Account as ServiceAccount } from '../../services/AccountService';
-import { getUploadUrl, uploadFileToS3, listFiles, FileMetadata, deleteFile, parseFile, updateFileFieldMapAssociation, getProcessedFileMetadata, FileProcessResult } from '../../services/FileService'; // Added parseFile
+import { getUploadUrl, uploadFileToS3, listFiles, FileMetadata, deleteFile, parseFile, updateFileFieldMapAssociation, getProcessedFileMetadata, FileProcessResult, updateFileBalance } from '../../services/FileService'; // Added parseFile and updateFileBalance
 import { listFieldMaps, getFieldMap, createFieldMap, updateFieldMap, FieldMap } from '../../services/FileMapService'; // Import more from FileMapService
 import { getCurrentUser } from '../../services/AuthService'; // Import getCurrentUser
 import ImportStep2Preview from '../components/ImportStep2Preview'; // Import the new component
@@ -73,6 +73,10 @@ const ImportTransactionsView: React.FC = () => {
 
   // New state for import results
   const [importResult, setImportResult] = useState<ImportResultForView | null>(null);
+
+  // State for inline editing of opening balance
+  const [editingFileId, setEditingFileId] = useState<string | null>(null);
+  const [editingOpeningBalance, setEditingOpeningBalance] = useState<string>('');
 
   // Fetch accounts and history when the component mounts or currentStep becomes 1
   const fetchInitialData = useCallback(async () => {
@@ -503,6 +507,46 @@ const ImportTransactionsView: React.FC = () => {
     }
   }, [currentFileId, selectedAccount, initialFieldMapForStep2?.id]); // Add initialFieldMapForStep2.id to dependencies
 
+  const handleSaveOpeningBalance = async (fileId: string, balanceStr: string) => {
+    const newBalance = parseFloat(balanceStr);
+    if (isNaN(newBalance)) {
+      setErrorMessage("Invalid balance amount.");
+      return;
+    }
+
+    setIsLoadingHistory(true); // Indicate loading state for the history section
+    setErrorMessage(null);
+
+    try {
+      // Call the service to update the balance
+      const updatedFile = await updateFileBalance(fileId, newBalance);
+      
+      // Update the import history state
+      setImportHistory(prevHistory => 
+        prevHistory.map(file => 
+          file.fileId === fileId 
+            ? { ...file, openingBalance: updatedFile.openingBalance } 
+            : file
+        )
+      );
+      
+      // Exit editing mode
+      setEditingFileId(null);
+      setEditingOpeningBalance('');
+      alert("Opening balance updated successfully!"); // Or a more subtle notification
+
+    } catch (error: any) {
+      console.error("Error updating opening balance:", error);
+      setErrorMessage(error.message || "Failed to update opening balance.");
+      // Optionally, you might want to keep the cell in edit mode or clear it
+      // For now, we will clear it as per existing Escape/✗ logic
+      setEditingFileId(null);
+      setEditingOpeningBalance('');
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
   if (isLoading && accounts.length === 0 && currentStep === 1) {
       return <div className="loading-overlay">Loading accounts...</div>;
   }
@@ -577,7 +621,7 @@ const ImportTransactionsView: React.FC = () => {
                       <th className="history-th-td">Upload Date</th>
                       <th className="history-th-td">Mapping</th>
                       <th className="history-th-td">Format</th>
-                      <th className="history-th-td">Size (KB)</th>
+                      <th className="history-th-td">Opening Balance</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -589,7 +633,11 @@ const ImportTransactionsView: React.FC = () => {
                         style={{ cursor: 'pointer' }}
                       >
                         <td className="history-th-td">{file.fileName}</td>
-                        <td className="history-th-td">{file.accountName || 'N/A'}</td>
+                        <td className="history-th-td">
+                          {file.accountId 
+                            ? (accounts.find(acc => acc.id === file.accountId)?.name || file.accountName || 'N/A') 
+                            : (file.accountName || 'N/A')}
+                        </td>
                         <td className="history-th-td">{new Date(file.uploadDate).toLocaleDateString()}</td>
                         <td className="history-th-td">
                           {file.fieldMap?.fileMapId && fieldMapsData[file.fieldMap.fileMapId] 
@@ -597,7 +645,39 @@ const ImportTransactionsView: React.FC = () => {
                             : file.fieldMap?.name || '--'}
                         </td>
                         <td className="history-th-td">{file.fileFormat || 'N/A'}</td>
-                        <td className="history-th-td">{(file.fileSize / 1024).toFixed(1)}</td>
+                        {editingFileId === file.fileId ? (
+                          <td className="history-th-td">
+                            <input
+                              type="number"
+                              value={editingOpeningBalance}
+                              onChange={(e) => setEditingOpeningBalance(e.target.value.replace(/[^\d.-]/g, ''))}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleSaveOpeningBalance(file.fileId, editingOpeningBalance);
+                                }
+                                if (e.key === 'Escape') {
+                                  setEditingFileId(null);
+                                  setEditingOpeningBalance('');
+                                }
+                              }}
+                              style={{ width: '80px', marginRight: '5px' }}
+                              autoFocus
+                            />
+                            <button onClick={() => handleSaveOpeningBalance(file.fileId, editingOpeningBalance)}>✓</button>
+                            <button onClick={() => { setEditingFileId(null); setEditingOpeningBalance(''); }}>✗</button>
+                          </td>
+                        ) : (
+                          <td 
+                            className="history-th-td"
+                            onClick={() => {
+                              setEditingFileId(file.fileId);
+                              setEditingOpeningBalance(typeof file.openingBalance === 'number' ? file.openingBalance.toString() : '');
+                            }}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            {typeof file.openingBalance === 'number' ? file.openingBalance.toFixed(2) : 'N/A'}
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>

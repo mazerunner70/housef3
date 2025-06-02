@@ -173,18 +173,17 @@ class Transaction(BaseModel):
         """
         Convert the transaction object to a flattened dictionary suitable for DynamoDB.
         Uses Pydantic's model_dump and ensures nested Money objects are also flattened via to_flat_map.
+        Ensures UUID fields are converted to strings.
         """
-        # by_alias=True uses field aliases (e.g., "userId")
-        # exclude_none=True removes fields that are None
-        # json_encoders in model_config handles UUID to str and Decimal to str for non-Money fields.
         data = self.model_dump(by_alias=True, exclude_none=True)
 
-        # Amount and Balance are Decimals. Pydantic's model_dump with json_encoders handles their serialization.
-        # Currency is an Enum, Pydantic handles its serialization (use_enum_values=True in model_config if not default).
-
-        # Timestamps (date, createdAt, updatedAt) are already integers (milliseconds since epoch)
-        # UUIDs (userId, fileId, transactionId, accountId) are handled by json_encoders in model_config to be str
-        # if they were not already str. Pydantic model_dump with populate_by_name=True also helps.
+        # Ensure UUID fields are strings for DynamoDB
+        for key, value in data.items():
+            if isinstance(value, uuid.UUID):
+                data[key] = str(value)
+            # If a field could be a list of UUIDs, you'd handle that here too:
+            # elif isinstance(value, list) and all(isinstance(item, uuid.UUID) for item in value):
+            #     data[key] = [str(item) for item in value]
 
         return data
 
