@@ -679,34 +679,33 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Handle based on route
         if route == "GET /files":
             return list_files_handler(event, user_id)
-        elif route == "GET /files/account/{accountId}":
+        if route == "GET /files/account/{accountId}":
             return get_files_by_account_handler(event, user_id)
-        elif route == "GET /files/{id}/metadata":
+        if route == "GET /files/{id}/metadata":
             return get_file_metadata_handler(event, user_id)
-        elif route == "GET /files/{id}/content":
+        if route == "GET /files/{id}/content":
             return get_file_content_handler(event, user_id)
-        elif route == "GET /files/{id}/download":
+        if route == "GET /files/{id}/download":
             return get_download_url_handler(event, user_id)
-        elif route == "GET /files/{id}/transactions":
+        if route == "GET /files/{id}/transactions":
             return get_file_transactions_handler(event, user_id)
-        elif route == "GET /files/{id}/preview":
+        if route == "GET /files/{id}/preview":
             return get_file_preview_handler(event, user_id)
-        elif route == "DELETE /files/{id}/transactions":
+        if route == "DELETE /files/{id}/transactions":
             return delete_file_transactions_handler(event, user_id)
-        elif route == "DELETE /files/{id}":
+        if route == "DELETE /files/{id}":
             return delete_file_handler(event, user_id)
-        elif route == "PUT /files/{id}/unassociate":
+        if route == "PUT /files/{id}/unassociate":
             return unassociate_file_handler(event, user_id)
-        elif route == "PUT /files/{id}/associate":
+        if route == "PUT /files/{id}/associate":
             return associate_file_handler(event, user_id)
-        elif route == "PUT /files/{id}/file-map":
+        if route == "PUT /files/{id}/file-map":
             return update_file_field_map_handler(event, user_id)
-        elif route == "POST /files/upload":
+        if route == "POST /files/upload":
             return get_upload_url_handler(event, user_id)
-        elif route == "PUT /files/{id}/balance":
+        if route == "PUT /files/{id}/balance":
             return update_file_balance_handler(event, user_id)
-        else:
-            return create_response(400, {"message": f"Unsupported route: {route}"})
+        return create_response(400, {"message": f"Unsupported route: {route}"})
     except Exception as e:
         logger.error(f"Error in handler: {str(e)}")
         return create_response(500, {"message": "Internal server error"}) 

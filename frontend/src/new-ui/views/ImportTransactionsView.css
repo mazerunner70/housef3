@@ -173,4 +173,32 @@
 .button-danger:hover:not(:disabled) {
   background-color: #c82333;
   border-color: #bd2130;
-} 
+}
+
+.account-selection-row {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.account-select-group, .default-mapping-group {
+  flex: 1;
+  min-width: 0; /* Prevent flex items from being wider than container */
+}
+
+.account-select-group .label-common, 
+.default-mapping-group .label-common {
+  margin-bottom: 5px;
+}
+
+.account-select-group .select-common, 
+.default-mapping-group .select-common {
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .account-selection-row {
+    flex-direction: column;
+    gap: 0;
+  }
+}

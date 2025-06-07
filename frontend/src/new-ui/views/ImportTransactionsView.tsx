@@ -69,7 +69,12 @@ const ImportTransactionsView: React.FC = () => {
   const [availableFieldMaps, setAvailableFieldMaps] = useState<AvailableMapInfo[]>([]);
   const [currentlyLoadedFieldMapDetails, setCurrentlyLoadedFieldMapDetails] = useState<ColumnMapping[] | undefined>(undefined);
   const [initialFieldMapForStep2, setInitialFieldMapForStep2] = useState<{id: string, name: string} | undefined>(undefined);
-  const [isLoadingFieldMaps, setIsLoadingFieldMaps] = useState<boolean>(false); // Optional: for loading state
+  const [isLoadingFieldMaps, setIsLoadingFieldMaps] = useState<boolean>(false);
+
+  // New state for default mapping dropdown
+  const [selectedDefaultMapping, setSelectedDefaultMapping] = useState<string>('');
+  const [defaultMappingName, setDefaultMappingName] = useState<string>('');
+  const [isLoadingDefaultMapping, setIsLoadingDefaultMapping] = useState<boolean>(false);
 
   // New state for import results
   const [importResult, setImportResult] = useState<ImportResultForView | null>(null);
@@ -131,6 +136,34 @@ const ImportTransactionsView: React.FC = () => {
     }
   }, []); 
 
+  const fetchDefaultMapping = async (accountId: string) => {
+    try {
+      setIsLoadingDefaultMapping(true);
+      setDefaultMappingName('');
+      setSelectedDefaultMapping('');
+      
+      // Get the account details to retrieve the defaultFieldMapId
+      const response = await listAccounts();
+      const account = response.accounts.find(acc => acc.accountId === accountId);
+      
+      if (account && account.defaultFieldMapId) {
+        // Fetch the field map details
+        const fieldMap = await getFieldMap(account.defaultFieldMapId);
+        setDefaultMappingName(fieldMap.name);
+        setSelectedDefaultMapping(account.defaultFieldMapId);
+      } else {
+        setDefaultMappingName('');
+        setSelectedDefaultMapping('');
+      }
+    } catch (error) {
+      console.error('Failed to fetch default mapping:', error);
+      setDefaultMappingName('');
+      setSelectedDefaultMapping('');
+    } finally {
+      setIsLoadingDefaultMapping(false);
+    }
+  };
+
   useEffect(() => {
     if (currentStep === 1) {
       fetchInitialData();
@@ -144,6 +177,16 @@ const ImportTransactionsView: React.FC = () => {
       setInitialFieldMapForStep2(undefined); // Reset initial map to load
     }
   }, [currentStep, fetchInitialData]);
+
+  // Effect to fetch default mapping when account is selected
+  useEffect(() => {
+    if (selectedAccount) {
+      fetchDefaultMapping(selectedAccount);
+    } else {
+      setDefaultMappingName('');
+      setSelectedDefaultMapping('');
+    }
+  }, [selectedAccount]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -569,17 +612,42 @@ const ImportTransactionsView: React.FC = () => {
         <div className="step-container">
           <h3 className="import-header">Step 1: File Upload & Account Selection</h3>
           
-          <label htmlFor="account-select" className="label-common">Select Account:</label>
-          <select 
-            id="account-select"
-            value={selectedAccount} 
-            onChange={e => setSelectedAccount(e.target.value)} 
-            className="select-common"
-            disabled={accounts.length === 0 && !isLoading} 
-          >
-            <option value="">{isLoading && accounts.length === 0 ? "Loading accounts..." : accounts.length === 0 ? "No accounts found" : "-- Select an Account --"}</option>
-            {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
-          </select>
+          <div className="account-selection-row">
+            <div className="account-select-group">
+              <label htmlFor="account-select" className="label-common">Select Account:</label>
+              <select 
+                id="account-select"
+                value={selectedAccount} 
+                onChange={e => setSelectedAccount(e.target.value)} 
+                className="select-common"
+                disabled={accounts.length === 0 && !isLoading} 
+              >
+                <option value="">{isLoading && accounts.length === 0 ? "Loading accounts..." : accounts.length === 0 ? "No accounts found" : "-- Select an Account --"}</option>
+                {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
+              </select>
+            </div>
+            
+            <div className="default-mapping-group">
+              <label htmlFor="default-mapping-select" className="label-common">Default Mapping:</label>
+              <select 
+                id="default-mapping-select"
+                value={selectedDefaultMapping} 
+                onChange={e => setSelectedDefaultMapping(e.target.value)}
+                className="select-common"
+                disabled={!selectedAccount || isLoadingDefaultMapping}
+              >
+                <option value="">
+                  {!selectedAccount ? "Select account first" : 
+                   isLoadingDefaultMapping ? "Loading mapping..." : 
+                   !defaultMappingName ? "No default mapping" : 
+                   "-- Select Default Mapping --"}
+                </option>
+                {defaultMappingName && (
+                  <option value={selectedDefaultMapping}>{defaultMappingName}</option>
+                )}
+              </select>
+            </div>
+          </div>
 
           <label className="label-common">Upload Transaction File (OFX, QFX, CSV):</label>
           <div 
