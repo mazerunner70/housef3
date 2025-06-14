@@ -433,6 +433,98 @@ export const getFileMetadata = async (fileId: string): Promise<FileMetadata> => 
   }
 };
 
+// Wait for file processing to complete after S3 upload
+export const waitForFileProcessing = async (
+  fileId: string, 
+  maxWaitTime: number = 10000,
+  pollInterval: number = 500
+): Promise<FileMetadata> => {
+  console.log(`Waiting for file ${fileId} to be processed...`);
+  const startTime = Date.now();
+  
+  while (Date.now() - startTime < maxWaitTime) {
+    try {
+      const metadata = await getFileMetadata(fileId);
+      console.log(`File ${fileId} status: ${metadata.processingStatus}`);
+      
+      // File exists and has been processed
+      if (metadata.processingStatus && 
+          ['COMPLETED', 'PROCESSED', 'ERROR'].includes(metadata.processingStatus)) {
+        return metadata;
+      }
+      
+      // File exists but still processing, continue polling
+      if (metadata.processingStatus && 
+          ['PENDING', 'PROCESSING'].includes(metadata.processingStatus)) {
+        console.log(`File ${fileId} still processing, waiting...`);
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        continue;
+      }
+      
+      // File exists but unknown status, return it anyway
+      return metadata;
+      
+    } catch (error: any) {
+      // If 404, the file hasn't been created yet, continue polling
+      if (error.status === 404 || error.message?.includes('404') || error.message?.includes('Not Found')) {
+        console.log(`File ${fileId} not found yet, continuing to poll...`);
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        continue;
+      }
+      
+      // If it's a network error, retry
+      if (error.message?.includes('NetworkError') || error.message?.includes('fetch')) {
+        console.log(`Network error while polling for file ${fileId}, retrying...`);
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        continue;
+      }
+      
+      // Other error, re-throw
+      console.error(`Error while waiting for file ${fileId}:`, error);
+      throw error;
+    }
+  }
+  
+  throw new Error(`File processing timeout after ${maxWaitTime}ms for file ${fileId}`);
+};
+
+// Enhanced parseFile function for components that need more control
+export const parseFileWithPolling = async (
+  fileId: string,
+  onStatusUpdate?: (status: string) => void
+): Promise<{ data?: any[], headers?: string[], error?: string, file_format?: 'csv' | 'ofx' | 'qfx' }> => {
+  try {
+    console.log(`Starting parseFileWithPolling for fileId: ${fileId}`);
+    onStatusUpdate?.('Waiting for file processing...');
+    
+    // Wait for the file to be processed
+    let metadata: FileMetadata;
+    try {
+      metadata = await waitForFileProcessing(fileId, 15000, 1000);
+      onStatusUpdate?.(`File processed: ${metadata.processingStatus}`);
+    } catch (waitError: any) {
+      console.error(`Timeout waiting for file ${fileId}:`, waitError);
+      onStatusUpdate?.('Processing timeout');
+      return { error: `File processing timeout. Please try again.` };
+    }
+    
+    // Check processing status
+    if (metadata.processingStatus === 'ERROR') {
+      const errorMsg = metadata.errorMessage || 'File processing failed';
+      onStatusUpdate?.('Processing failed');
+      return { error: errorMsg };
+    }
+    
+    onStatusUpdate?.('Generating preview...');
+    return await getFilePreviewData(fileId);
+    
+  } catch (error: any) {
+    console.error('Error in parseFileWithPolling:', error);
+    onStatusUpdate?.('Error occurred');
+    return { error: error.message || 'An error occurred' };
+  }
+};
+
 // Get file content directly from API
 export interface FileContentResponse {
   fileId: string;
@@ -523,43 +615,67 @@ export const unlinkFileFromAccount = async (fileId: string): Promise<void> => {
     // As above, not expecting a specific response body for void promise
 };
 
-// New mock parseFile function
+// Internal function to call the preview endpoint directly
+const getFilePreviewData = async (fileId: string): Promise<{ data?: any[], headers?: string[], error?: string, file_format?: 'csv' | 'ofx' | 'qfx' }> => {
+    const url = `${FILES_API_ENDPOINT}/${fileId}/preview`;
+    console.log(`Calling GET ${url} for parsing/previewing file.`);
+
+    // authenticatedRequest will throw an error for non-ok HTTP responses.
+    const response = await authenticatedRequest(url, { method: 'GET' }); 
+    
+    // We expect the backend for GET /api/files/{fileId}/preview to return a structure like:
+    // { data?: any[], columns?: string[], fileFormat?: 'csv' | 'ofx' | 'qfx', error?: string /* optional error in body */ }
+    // The 'fileType' field is crucial and assumed to be provided by this endpoint.
+    // The 'columns' field (from existing FilePreviewResponse) will be mapped to 'headers'.
+    const result: { 
+        data?: any[], 
+        columns?: string[], 
+        fileFormat?: 'csv' | 'ofx' | 'qfx', 
+        error?: string 
+    } = await response.json();
+
+    // Check if the response body itself contains an error message, even if HTTP status was 2xx.
+    if (result.error) {
+        console.error(`Error message in response body from ${url}:`, result.error);
+        return { error: result.error };
+    }
+
+    // Ensure essential fields are present for a successful parse, especially fileType.
+    if (!result.fileFormat) {
+        console.error(`'fileType' missing in response from ${url} for fileId: ${fileId}`);
+        return { error: `'fileType' is missing from the preview response. Cannot determine how to process the file.` };
+    }
+
+    return {
+        data: result.data,
+        headers: result.columns, // Mapping 'columns' from preview response to 'headers'
+        file_format: result.fileFormat,
+    };
+};
+
+// Parse file function with polling for file processing completion
 export const parseFile = async (fileId: string): Promise<{ data?: any[], headers?: string[], error?: string, file_format?: 'csv' | 'ofx' | 'qfx' }> => {
     try {
-        const url = `${FILES_API_ENDPOINT}/${fileId}/preview`;
-        console.log(`Calling GET ${url} for parsing/previewing file.`);
-
-        // authenticatedRequest will throw an error for non-ok HTTP responses.
-        const response = await authenticatedRequest(url, { method: 'GET' }); 
+        console.log(`Starting parseFile for fileId: ${fileId}`);
         
-        // We expect the backend for GET /api/files/{fileId}/preview to return a structure like:
-        // { data?: any[], columns?: string[], fileFormat?: 'csv' | 'ofx' | 'qfx', error?: string /* optional error in body */ }
-        // The 'fileType' field is crucial and assumed to be provided by this endpoint.
-        // The 'columns' field (from existing FilePreviewResponse) will be mapped to 'headers'.
-        const result: { 
-            data?: any[], 
-            columns?: string[], 
-            fileFormat?: 'csv' | 'ofx' | 'qfx', 
-            error?: string 
-        } = await response.json();
-
-        // Check if the response body itself contains an error message, even if HTTP status was 2xx.
-        if (result.error) {
-            console.error(`Error message in response body from ${url}:`, result.error);
-            return { error: result.error };
+        // First, wait for the file to be processed by the S3 trigger Lambda
+        let metadata: FileMetadata;
+        try {
+            metadata = await waitForFileProcessing(fileId, 15000, 1000); // Wait up to 15 seconds
+        } catch (waitError: any) {
+            console.error(`Timeout waiting for file ${fileId} to be processed:`, waitError);
+            return { error: `File processing timeout. The file may still be being processed. Please try again in a moment.` };
         }
-
-        // Ensure essential fields are present for a successful parse, especially fileType.
-        if (!result.fileFormat) {
-            console.error(`'fileType' missing in response from ${url} for fileId: ${fileId}`);
-            return { error: `'fileType' is missing from the preview response. Cannot determine how to process the file.` };
+        
+        // Check if file processing failed
+        if (metadata.processingStatus === 'ERROR') {
+            const errorMsg = metadata.errorMessage || 'File processing failed';
+            console.error(`File ${fileId} processing failed:`, errorMsg);
+            return { error: errorMsg };
         }
-
-        return {
-            data: result.data,
-            headers: result.columns, // Mapping 'columns' from preview response to 'headers'
-            file_format: result.fileFormat,
-        };
+        
+        // Now call the preview endpoint
+        return await getFilePreviewData(fileId);
 
     } catch (err: any) {
         // This catches errors from authenticatedRequest (network, non-ok HTTP status) 

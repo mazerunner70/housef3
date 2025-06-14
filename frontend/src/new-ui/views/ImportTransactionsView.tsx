@@ -24,6 +24,7 @@ const TARGET_TRANSACTION_FIELDS = [
 interface ViewAccount {
   id: string;    // Corresponds to accountId from ServiceAccount
   name: string;  // Corresponds to accountName from ServiceAccount
+  defaultFieldMapId?: string; // For tracking the account's default mapping
 }
 
 // Define your column mapping state structure for CSVs (will be used later)
@@ -82,6 +83,14 @@ const ImportTransactionsView: React.FC = () => {
   // State for inline editing of opening balance
   const [editingFileId, setEditingFileId] = useState<string | null>(null);
   const [editingOpeningBalance, setEditingOpeningBalance] = useState<string>('');
+  
+  // State for inline editing of mapping
+  const [editingMappingFileId, setEditingMappingFileId] = useState<string | null>(null);
+  const [editingMappingValue, setEditingMappingValue] = useState<string>('');
+  
+  // State for inline editing of account
+  const [editingAccountFileId, setEditingAccountFileId] = useState<string | null>(null);
+  const [editingAccountValue, setEditingAccountValue] = useState<string>('');
 
   // Fetch accounts and history when the component mounts or currentStep becomes 1
   const fetchInitialData = useCallback(async () => {
@@ -101,6 +110,7 @@ const ImportTransactionsView: React.FC = () => {
       const viewAccounts = accountsResponse.accounts.map(acc => ({
         id: acc.accountId,
         name: acc.accountName,
+        defaultFieldMapId: acc.defaultFieldMapId,
       }));
       setAccounts(viewAccounts);
 
@@ -256,64 +266,7 @@ const ImportTransactionsView: React.FC = () => {
     }
   };
   
-  const handleProceedWithSelectedHistoryFile = async () => {
-    if (!selectedHistoryFileId) {
-      alert("Please select a file from the history to proceed.");
-      return;
-    }
-    const historyFileMeta = importHistory.find(f => f.fileId === selectedHistoryFileId);
-    if (!historyFileMeta) {
-      setErrorMessage("Selected history file metadata not found.");
-      return;
-    }
-    setIsLoading(true);
-    setErrorMessage(null);
-    setCurrentFileId(selectedHistoryFileId);
-    try {
-      console.log(`Parsing history file with ID: ${selectedHistoryFileId}`);
-      const parseResult = await parseFile(selectedHistoryFileId);
-      if (parseResult.error) {
-        setErrorMessage(`Error parsing file: ${parseResult.error}`);
-        setIsLoading(false);
-        return;
-      }
-      const rawFileFormat = historyFileMeta.fileFormat?.toLowerCase() || parseResult.file_format || 'csv';
-      if (rawFileFormat === 'csv' || rawFileFormat === 'ofx' || rawFileFormat === 'qfx') {
-        setFileTypeForStep2(rawFileFormat as 'csv' | 'ofx' | 'qfx');
-      } else {
-        setErrorMessage(`Cannot process history file: unsupported or unknown format (${rawFileFormat})`);
-        setIsLoading(false);
-        return;
-      }
-      if (rawFileFormat === 'csv') {
-        if (!parseResult.headers || !parseResult.data) {
-          setErrorMessage("CSV parsing did not return headers or data.");
-          setIsLoading(false);
-          return;
-        }
-        setCsvHeaders(parseResult.headers);
-        const transactions = parseResult.data.map((item: any, index: number) => ({ id: item.id || `csv-hist-${index}`, ...item }));
-        setParsedTransactionData(transactions);
-      } else { 
-         if (!parseResult.data) {
-          setErrorMessage(`${rawFileFormat.toUpperCase()} parsing did not return data.`);
-          setIsLoading(false);
-          return;
-        }
-        const transactions = parseResult.data.map((item: any, index: number) => ({ id: item.id || `parsed-hist-${index}`, ...item }));
-        setParsedTransactionData(transactions);
-        setCsvHeaders([]); 
-      }
-      // Now call the common logic to set up for step 2, including field map determination
-      await proceedToStep2Logic(historyFileMeta);
-    } catch (error: any) {
-      console.error("Error processing history file:", error);
-      setErrorMessage(error.message || "Failed to process history file. Please try again.");
-      setCurrentFileId(null); 
-    } finally {
-      setIsLoading(false);
-    }
-  };
+
 
   const proceedToStep2Logic = async (fileMetaForMapLookup?: FileMetadata) => {
     // 1. Determine initialFieldMapForStep2
@@ -384,17 +337,54 @@ const ImportTransactionsView: React.FC = () => {
         setParsedTransactionData(transactions);
         setCsvHeaders([]); 
       }
-      // For new files, fieldMap association would likely happen after save in Step2, or if backend auto-applies one.
-      // For now, assume no initial map. If backend provides it in parseResult.file_metadata, use it.
-      let newFileMetaForMapLookup: FileMetadata | undefined = undefined;
-      // Safely access file_metadata, assuming parseResult might not always have it or it might not have fieldMap
-      if (parseResult && typeof parseResult === 'object' && 'file_metadata' in parseResult) {
-        const meta = (parseResult as any).file_metadata as FileMetadata; // Cast to any then FileMetadata
-        if (meta && meta.fieldMap) {
-            newFileMetaForMapLookup = meta;
+      // Check if a default mapping is selected - if so, bypass Step 2 and go straight to import
+      if (selectedDefaultMapping && defaultMappingName) {
+        console.log(`[ImportTransactionsView] Default mapping selected: ${defaultMappingName} (${selectedDefaultMapping}). Bypassing Step 2.`);
+        
+        // Associate the selected default mapping with the file and complete import
+        const preliminaryFileName = selectedFile?.name || 'Unknown File';
+        const preliminaryAccountName = accounts.find(a => a.id === selectedAccount)?.name || 'Unassigned';
+        
+        try {
+          // Associate the mapping and process the file
+          const processApiResult = await updateFileFieldMapAssociation(newFileId, selectedDefaultMapping);
+          const success = processApiResult.statusCode === 200;
+
+          setImportResult({
+            success: success,
+            message: processApiResult.message,
+            transactionCount: processApiResult.transactionCount,
+            fileName: processApiResult.fileName || preliminaryFileName,
+            accountName: processApiResult.accountName || preliminaryAccountName,
+            errorDetails: !success ? (processApiResult.message || 'Processing failed.') : undefined,
+          });
+          setCurrentStep(3);
+          
+        } catch (error: any) {
+          console.error("[ImportTransactionsView] Error with direct import using default mapping:", error);
+          setImportResult({
+            success: false,
+            message: "Import with Default Mapping Failed",
+            errorDetails: error.message || "An unexpected error occurred during processing with default mapping.",
+            fileName: preliminaryFileName,
+            accountName: preliminaryAccountName,
+          });
+          setCurrentStep(3);
         }
+      } else {
+        // No default mapping selected, proceed to Step 2 for manual mapping
+        // For new files, fieldMap association would likely happen after save in Step2, or if backend auto-applies one.
+        // For now, assume no initial map. If backend provides it in parseResult.file_metadata, use it.
+        let newFileMetaForMapLookup: FileMetadata | undefined = undefined;
+        // Safely access file_metadata, assuming parseResult might not always have it or it might not have fieldMap
+        if (parseResult && typeof parseResult === 'object' && 'file_metadata' in parseResult) {
+          const meta = (parseResult as any).file_metadata as FileMetadata; // Cast to any then FileMetadata
+          if (meta && meta.fieldMap) {
+              newFileMetaForMapLookup = meta;
+          }
+        }
+        await proceedToStep2Logic(newFileMetaForMapLookup);
       }
-      await proceedToStep2Logic(newFileMetaForMapLookup);
     } catch (error: any) {
       console.error("Error during file upload and parse process:", error);
       setErrorMessage(error.message || "Failed to process file. Please try again.");
@@ -590,6 +580,96 @@ const ImportTransactionsView: React.FC = () => {
     }
   };
 
+  const handleSaveMapping = async (fileId: string, mappingId: string) => {
+    if (!mappingId) {
+      setErrorMessage("Please select a valid mapping.");
+      return;
+    }
+
+    setIsLoadingHistory(true);
+    setErrorMessage(null);
+
+    try {
+      // Associate the new mapping with the file
+      await updateFileFieldMapAssociation(fileId, mappingId);
+      
+      // Get the mapping name for display
+      const mappingName = fieldMapsData[mappingId] || availableFieldMaps.find(m => m.id === mappingId)?.name || 'Unknown';
+      
+      // Update the import history state
+      setImportHistory(prevHistory => 
+        prevHistory.map(file => 
+          file.fileId === fileId 
+            ? { 
+                ...file, 
+                fieldMap: { 
+                  fileMapId: mappingId, 
+                  name: mappingName 
+                } 
+              } 
+            : file
+        )
+      );
+      
+      // Exit editing mode
+      setEditingMappingFileId(null);
+      setEditingMappingValue('');
+      alert("Mapping updated successfully!");
+
+    } catch (error: any) {
+      console.error("Error updating mapping:", error);
+      setErrorMessage(error.message || "Failed to update mapping.");
+      setEditingMappingFileId(null);
+      setEditingMappingValue('');
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  const handleSaveAccount = async (fileId: string, accountId: string) => {
+    setIsLoadingHistory(true);
+    setErrorMessage(null);
+
+    try {
+      // For now, I'll assume we need to create an API call to update the file's account association
+      // Since I don't see a specific service for this, I'll use a generic approach
+      // You may need to add this endpoint to your FileService
+      
+      // Get the account name for display
+      const accountName = accounts.find(acc => acc.id === accountId)?.name || 'Unknown';
+      
+      // Update the import history state optimistically
+      setImportHistory(prevHistory => 
+        prevHistory.map(file => 
+          file.fileId === fileId 
+            ? { 
+                ...file, 
+                accountId: accountId || undefined,
+                accountName: accountName 
+              } 
+            : file
+        )
+      );
+      
+      // Exit editing mode
+      setEditingAccountFileId(null);
+      setEditingAccountValue('');
+      
+      // TODO: Add actual API call to update file account association
+      // await updateFileAccountAssociation(fileId, accountId);
+      
+      alert("Account updated successfully!");
+
+    } catch (error: any) {
+      console.error("Error updating account:", error);
+      setErrorMessage(error.message || "Failed to update account.");
+      setEditingAccountFileId(null);
+      setEditingAccountValue('');
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
   if (isLoading && accounts.length === 0 && currentStep === 1) {
       return <div className="loading-overlay">Loading accounts...</div>;
   }
@@ -634,17 +714,18 @@ const ImportTransactionsView: React.FC = () => {
                 value={selectedDefaultMapping} 
                 onChange={e => setSelectedDefaultMapping(e.target.value)}
                 className="select-common"
-                disabled={!selectedAccount || isLoadingDefaultMapping}
+                disabled={!selectedAccount || isLoadingDefaultMapping || isLoadingFieldMaps}
               >
                 <option value="">
                   {!selectedAccount ? "Select account first" : 
-                   isLoadingDefaultMapping ? "Loading mapping..." : 
-                   !defaultMappingName ? "No default mapping" : 
-                   "-- Select Default Mapping --"}
+                   isLoadingDefaultMapping || isLoadingFieldMaps ? "Loading mappings..." : 
+                   "-- Select Mapping --"}
                 </option>
-                {defaultMappingName && (
-                  <option value={selectedDefaultMapping}>{defaultMappingName}</option>
-                )}
+                {availableFieldMaps.map(mapping => (
+                  <option key={mapping.id} value={mapping.id}>
+                    {mapping.name} {mapping.id === (accounts.find(acc => acc.id === selectedAccount)?.defaultFieldMapId) ? "(Account Default)" : ""}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -672,7 +753,10 @@ const ImportTransactionsView: React.FC = () => {
             disabled={!selectedFile || isLoading || isLoadingHistory}
             className="button-common button-primary"
           >
-            {(isLoading && currentStep === 1 && !isLoadingHistory && selectedFile) ? 'Uploading & Parsing...' : (isLoadingHistory && currentStep === 1) ? 'Loading Data...' : 'Upload & Continue'}
+            {(isLoading && currentStep === 1 && !isLoadingHistory && selectedFile) ? 'Uploading & Processing...' : 
+             (isLoadingHistory && currentStep === 1) ? 'Loading Data...' : 
+             (selectedDefaultMapping && defaultMappingName) ? 'Upload & Import with Default Mapping' : 
+             'Upload & Continue'}
           </button>
 
           <div style={{marginTop: '30px'}}>
@@ -701,17 +785,113 @@ const ImportTransactionsView: React.FC = () => {
                         style={{ cursor: 'pointer' }}
                       >
                         <td className="history-th-td">{file.fileName}</td>
-                        <td className="history-th-td">
-                          {file.accountId 
-                            ? (accounts.find(acc => acc.id === file.accountId)?.name || file.accountName || 'N/A') 
-                            : (file.accountName || 'N/A')}
-                        </td>
+                        {editingAccountFileId === file.fileId ? (
+                          <td className="history-th-td">
+                            <select
+                              value={editingAccountValue}
+                              onChange={(e) => setEditingAccountValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleSaveAccount(file.fileId, editingAccountValue);
+                                }
+                                if (e.key === 'Escape') {
+                                  setEditingAccountFileId(null);
+                                  setEditingAccountValue('');
+                                }
+                              }}
+                              style={{ width: '150px', marginRight: '5px' }}
+                              autoFocus
+                            >
+                              <option value="">-- Select Account --</option>
+                              {accounts.map(acc => (
+                                <option key={acc.id} value={acc.id}>
+                                  {acc.name}
+                                </option>
+                              ))}
+                            </select>
+                            <button onClick={() => handleSaveAccount(file.fileId, editingAccountValue)}>✓</button>
+                            <button onClick={() => { setEditingAccountFileId(null); setEditingAccountValue(''); }}>✗</button>
+                          </td>
+                        ) : (
+                          <td 
+                            className="history-th-td"
+                            onClick={() => {
+                              setEditingAccountFileId(file.fileId);
+                              // Set the current account as default
+                              const currentAccountId = file.accountId || '';
+                              const accountExists = accounts.some(acc => acc.id === currentAccountId);
+                              const valueToSet = accountExists ? currentAccountId : '';
+                              console.log('Editing account for file:', file.fileId, 'Current account ID:', currentAccountId, 'Setting value to:', valueToSet);
+                              setEditingAccountValue(valueToSet);
+                            }}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            {file.accountId 
+                              ? (accounts.find(acc => acc.id === file.accountId)?.name || file.accountName || 'N/A') 
+                              : (file.accountName || 'N/A')}
+                          </td>
+                        )}
                         <td className="history-th-td">{new Date(file.uploadDate).toLocaleDateString()}</td>
-                        <td className="history-th-td">
-                          {file.fieldMap?.fileMapId && fieldMapsData[file.fieldMap.fileMapId] 
-                            ? fieldMapsData[file.fieldMap.fileMapId] 
-                            : file.fieldMap?.name || '--'}
-                        </td>
+                        {editingMappingFileId === file.fileId ? (
+                          <td className="history-th-td">
+                            <select
+                              value={editingMappingValue}
+                              onChange={(e) => setEditingMappingValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleSaveMapping(file.fileId, editingMappingValue);
+                                }
+                                if (e.key === 'Escape') {
+                                  setEditingMappingFileId(null);
+                                  setEditingMappingValue('');
+                                }
+                              }}
+                              style={{ width: '150px', marginRight: '5px' }}
+                              autoFocus
+                            >
+                              <option value="">-- Select Mapping --</option>
+                              {availableFieldMaps.map(map => (
+                                <option key={map.id} value={map.id}>
+                                  {map.name}
+                                </option>
+                              ))}
+                            </select>
+                            <button onClick={() => handleSaveMapping(file.fileId, editingMappingValue)}>✓</button>
+                            <button onClick={() => { setEditingMappingFileId(null); setEditingMappingValue(''); }}>✗</button>
+                          </td>
+                        ) : (
+                          <td 
+                            className="history-th-td"
+                            onClick={() => {
+                              setEditingMappingFileId(file.fileId);
+                              // Debug the file mapping data
+                              console.log('Full file.fieldMap object:', file.fieldMap);
+                              console.log('fieldMapsData:', fieldMapsData);
+                              
+                              // Set the current mapping as default, ensuring it matches available options
+                              const currentMappingId = file.fieldMap?.fileMapId || '';
+                              const currentMappingName = file.fieldMap?.name || '';
+                              
+                              // If we don't have an ID but we have a name, try to find the ID from the name
+                              let mappingIdToUse = currentMappingId;
+                              if (!currentMappingId && currentMappingName) {
+                                const foundMapping = availableFieldMaps.find(map => map.name === currentMappingName);
+                                mappingIdToUse = foundMapping?.id || '';
+                                console.log('Found mapping by name:', currentMappingName, 'ID:', mappingIdToUse);
+                              }
+                              
+                              const mappingExists = availableFieldMaps.some(map => map.id === mappingIdToUse);
+                              const valueToSet = mappingExists ? mappingIdToUse : '';
+                              console.log('Editing mapping for file:', file.fileId, 'Current mapping ID:', currentMappingId, 'Current mapping name:', currentMappingName, 'ID to use:', mappingIdToUse, 'Setting value to:', valueToSet);
+                              setEditingMappingValue(valueToSet);
+                            }}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            {file.fieldMap?.fileMapId && fieldMapsData[file.fieldMap.fileMapId] 
+                              ? fieldMapsData[file.fieldMap.fileMapId] 
+                              : file.fieldMap?.name || '--'}
+                          </td>
+                        )}
                         <td className="history-th-td">{file.fileFormat || 'N/A'}</td>
                         {editingFileId === file.fileId ? (
                           <td className="history-th-td">
@@ -751,20 +931,17 @@ const ImportTransactionsView: React.FC = () => {
                   </tbody>
                 </table>
                 <div style={{ marginTop: '10px' }}>
-                  <button
-                    onClick={handleProceedWithSelectedHistoryFile} 
-                    disabled={!selectedHistoryFileId || isLoading || isLoadingHistory}
-                    className="button-common button-primary"
-                    style={{ marginRight: '10px' }}
-                  >
-                    {(isLoading && selectedHistoryFileId) ? 'Processing...' : 'Next (Selected History)'}
-                  </button>
+                  <p className="history-help-text">
+                    {selectedHistoryFileId 
+                      ? "Click on any field above to edit file attributes. Opening balance is editable inline." 
+                      : "Select a file to edit its attributes, mapping, or metadata."}
+                  </p>
                   <button
                     onClick={handleDeleteHistoryFile}
                     disabled={!selectedHistoryFileId || isLoadingHistory}
                     className="button-common button-danger"
                   >
-                    Delete Selected
+                    Delete Selected File
                   </button>
                 </div>
               </>

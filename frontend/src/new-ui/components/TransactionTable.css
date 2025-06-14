@@ -81,6 +81,26 @@
   font-weight: 500;
 }
 
+.transaction-table-container .balance-cell {
+  font-family: monospace;
+  text-align: right !important;
+  font-weight: 500;
+}
+
+.transaction-table-container .balance-positive {
+  font-family: monospace;
+  text-align: right !important;
+  color: #28a745; /* Green for positive balance */
+  font-weight: 500;
+}
+
+.transaction-table-container .balance-negative {
+  font-family: monospace;
+  text-align: right !important;
+  color: #dc3545; /* Red for negative balance */
+  font-weight: 500;
+}
+
 .transaction-table-container .action-button {
   background: none;
   border: none;

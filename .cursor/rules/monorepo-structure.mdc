@@ -17,6 +17,10 @@ Infrastructure code
 Located in: infrastructure/terraform/
 All Terraform code for infrastructure is here, following project conventions.
 
+Design document
+Located in docs/
+All design doc for aspects of the system are stored here
+
 Scripts for building frontend and backend
 Frontend build script: scripts/scripts/build_frontend.sh
 Backend build script: scripts/scripts/build_backend.sh

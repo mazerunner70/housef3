@@ -133,10 +133,10 @@ def handler(event, context):
             raise ValueError(f"Invalid S3 key format: {key}")
             
         user_id = key_parts[0]
-        # file_id from key is not used to create TransactionFile's file_id, as model has default_factory
+        file_id_from_key = key_parts[1]  # Extract the file ID from S3 key to use consistently
         file_name = key_parts[2]
         
-        logger.info(f"Processing file upload - User: {user_id}, File S3 Key: {key}, Name: {file_name}")
+        logger.info(f"Processing file upload - User: {user_id}, File ID: {file_id_from_key}, S3 Key: {key}, Name: {file_name}")
 
         try:
             # Get object metadata first to check for account ID
@@ -184,10 +184,12 @@ def handler(event, context):
             transaction_file_create_dto = TransactionFileCreate(**dto_data)
             
             # Instantiate TransactionFile from DTO data.
-            # This uses default_factory for file_id, upload_date, processing_status, etc.
-            transaction_file = TransactionFile(**transaction_file_create_dto.model_dump())
+            # Explicitly set the file_id to match what the frontend expects
+            transaction_file_data = transaction_file_create_dto.model_dump()
+            transaction_file_data['file_id'] = uuid.UUID(file_id_from_key)  # Override the default factory
+            transaction_file = TransactionFile(**transaction_file_data)
             
-            logger.info(f"Created TransactionFile object with file_id: {transaction_file.file_id}")
+            logger.info(f"Created TransactionFile object with file_id: {transaction_file.file_id} (should match S3 key file_id: {file_id_from_key})")
             if transaction_file.account_id:
                 logger.info(f"TransactionFile associated with account_id: {transaction_file.account_id}")
 

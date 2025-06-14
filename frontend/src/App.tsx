@@ -8,6 +8,7 @@ import AccountManager from './components/AccountManager';
 import NewUILayout from './new-ui/layouts/NewUILayout';
 import AccountsView from './new-ui/views/AccountsView';
 import TransactionsView from './new-ui/views/TransactionsView';
+import AnalyticsView from './new-ui/views/AnalyticsView';
 import { AuthUser, getCurrentUser, isAuthenticated, refreshToken } from './services/AuthService';
 import './App.css'
 
@@ -110,6 +111,7 @@ function App() {
           <Route index element={<Navigate to="accounts" replace />} />
           <Route path="accounts" element={<AccountsView />} />
           <Route path="transactions" element={<TransactionsView />} />
+          <Route path="analytics" element={<AnalyticsView />} />
           <Route path="*" element={<div><p>Page Not Found in New UI</p></div>} />
         </Route>
       </Routes>

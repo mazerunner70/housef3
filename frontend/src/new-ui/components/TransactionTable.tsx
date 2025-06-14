@@ -101,6 +101,13 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
           return sortConfig.direction === 'ascending' ? aAccName.localeCompare(bAccName) : bAccName.localeCompare(aAccName);
         }
 
+        // Add support for sorting by balance
+        if (sortConfig.key === 'balance') {
+          const aBalance = aValue instanceof Decimal ? aValue : new Decimal(0);
+          const bBalance = bValue instanceof Decimal ? bValue : new Decimal(0);
+          return sortConfig.direction === 'ascending' ? aBalance.comparedTo(bBalance) : bBalance.comparedTo(aBalance);
+        }
+
         if (typeof aValue === 'number' && typeof bValue === 'number') {
           return sortConfig.direction === 'ascending' ? aValue - bValue : bValue - aValue;
         }
@@ -180,13 +187,14 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
             <th onClick={() => handleSort('category')}>Category{getSortIndicator('category')}</th>
             <th onClick={() => handleSort('account')}>Account{getSortIndicator('account')}</th>
             <th onClick={() => handleSort('amount')}>Amount{getSortIndicator('amount')}</th>
+            <th onClick={() => handleSort('balance')}>Balance{getSortIndicator('balance')}</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {sortedTransactionsOnPage.length === 0 && (
             <tr>
-              <td colSpan={7} style={{ textAlign: 'center', padding: '20px' }}>
+              <td colSpan={8} style={{ textAlign: 'center', padding: '20px' }}>
                 No transactions for the current page or filters.
               </td>
             </tr>
@@ -266,6 +274,37 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                 return (
                   <td className={amountClass}>
                     {currencySymbol}{displayAmount}
+                  </td>
+                );
+              })()}
+              {(() => {
+                // Display balance
+                let displayBalance = "0.00";
+                let currencySymbol = "";
+                let balanceClass = 'balance-cell';
+
+                // transaction.balance is expected to be a Decimal instance
+                if (transaction.balance instanceof Decimal) {
+                  const numericBalance = transaction.balance;
+                  displayBalance = numericBalance.toFixed(2);
+                  if (transaction.currency) {
+                    currencySymbol = transaction.currency as string;
+                  }
+                  balanceClass = numericBalance.greaterThanOrEqualTo(new Decimal(0)) ? 'balance-positive' : 'balance-negative';
+                } else {
+                  if (transaction.balance !== undefined && transaction.balance !== null) {
+                    console.warn(
+                      "TransactionTable: transaction.balance was expected to be a Decimal instance but was not. Value type:", 
+                      typeof transaction.balance, 
+                      "Value:", transaction.balance, 
+                      "Transaction ID:", transaction.id
+                    );
+                  }
+                }
+
+                return (
+                  <td className={balanceClass}>
+                    {currencySymbol}{displayBalance}
                   </td>
                 );
               })()}
