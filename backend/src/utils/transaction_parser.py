@@ -409,7 +409,7 @@ def parse_csv_transactions(transaction_file: TransactionFile, content: bytes) ->
         logger.error(f"Error parsing CSV transactions: {str(e)}")
         return []
 
-def parse_ofx_colon_separated(text_content: str, transaction_file: TransactionFile) -> List[Transaction]:
+def parse_ofx_colon_separated(text_content: str, transaction_file: TransactionFile, file_map: FileMap) -> List[Transaction]:
     """Parse OFX content in colon-separated format."""
     transactions: List[Transaction] = []
     if not transaction_file.opening_balance:
@@ -431,7 +431,7 @@ def parse_ofx_colon_separated(text_content: str, transaction_file: TransactionFi
             if in_transaction and current_transaction:
                 # Process the previous transaction
                 try:
-                    transaction = create_transaction_from_ofx(transaction_file, current_transaction, balance, import_order)
+                    transaction = create_transaction_from_ofx(transaction_file, current_transaction, balance, import_order, file_map)
                     if transaction:
                         transactions.append(transaction)
                         balance += transaction.amount
@@ -443,7 +443,7 @@ def parse_ofx_colon_separated(text_content: str, transaction_file: TransactionFi
         elif line == '</STMTTRN>' or (in_transaction and line.startswith('STMTTRN') and line != 'STMTTRN'):
             if in_transaction and current_transaction:
                 try:
-                    transaction = create_transaction_from_ofx(transaction_file, current_transaction, balance, import_order)
+                    transaction = create_transaction_from_ofx(transaction_file, current_transaction, balance, import_order, file_map)
                     if transaction:
                         transactions.append(transaction)
                         balance += transaction.amount
@@ -465,7 +465,7 @@ def parse_ofx_colon_separated(text_content: str, transaction_file: TransactionFi
     # Process any remaining transaction
     if in_transaction and current_transaction:
         try:
-            transaction = create_transaction_from_ofx(transaction_file, current_transaction, balance, import_order)
+            transaction = create_transaction_from_ofx(transaction_file, current_transaction, balance, import_order, file_map)
             if transaction:
                 transactions.append(transaction)
         except Exception as e:
@@ -474,60 +474,102 @@ def parse_ofx_colon_separated(text_content: str, transaction_file: TransactionFi
     logger.info(f"Found {len(transactions)} transactions")
     return transactions
 
-def create_transaction_from_ofx(transaction_file: TransactionFile, data: Dict[str, str], balance: Decimal, import_order: int) -> Transaction:
-    """Create a transaction dictionary from OFX data."""
+def create_transaction_from_ofx(transaction_file: TransactionFile, data: Dict[str, str], balance: Decimal, import_order: int, file_map: FileMap) -> Transaction:
+    """Create a transaction dictionary from OFX data using field mapping."""
     try:
-        # Get required fields
-        date_str = data.get('DTPOSTED', '')[:8]  # Take first 8 chars for YYYYMMDD
+        logger.info(f"Creating transaction from OFX data: {data}")
+        
+        # Apply field mapping to the raw OFX data
+        row_data = apply_field_mapping(data, file_map)
+        logger.info(f"After field mapping: {row_data}")
+        
+        if not row_data:
+            logger.warning("Field mapping returned empty result")
+            raise ValueError("Field mapping returned empty result")
+        
+        # Validate required fields after mapping
+        if 'date' not in row_data:
+            raise ValueError("Date field is required but not found in mapped data")
+        if 'amount' not in row_data:
+            raise ValueError("Amount field is required but not found in mapped data")
+        if 'description' not in row_data:
+            logger.warning("Description field not found in mapped data, using empty string")
+            row_data['description'] = ''
+        
+        # Parse date - handle OFX date format (YYYYMMDD or YYYYMMDDHHMMSS)
+        date_str = str(row_data['date'])
+        if len(date_str) >= 8:
+            date_str = date_str[:8]  # Take first 8 chars for YYYYMMDD
         date_ms = parse_date(date_str)
-        if not date_ms:
-            logger.warning(f"Invalid date format: {date_str}")
-            raise ValueError(f"Invalid date format: {date_str}")
-            
-        # Get amount
-        amount_str = data.get('TRNAMT', '0').replace(',', '')
-        currency: Optional[Currency] = Currency(data.get('CURRENCY')) if data.get('CURRENCY') else transaction_file.currency if transaction_file.currency else None
+        
+        # Process amount
+        amount_str = str(row_data['amount']).replace(',', '')
         amount = Decimal(amount_str)
         
-        # Get description from n tag, NAME, or MEMO
-        description = data.get('n') or data.get('NAME') or data.get('MEMO', '')
+        # Get currency from mapping or use transaction file currency
+        currency: Optional[Currency] = None
+        if 'currency' in row_data and row_data['currency']:
+            try:
+                currency = Currency(row_data['currency'])
+            except ValueError:
+                logger.warning(f"Invalid currency value: {row_data['currency']}")
+        if not currency:
+            currency = transaction_file.currency
         
+        # Get description
+        description = str(row_data['description']).strip()
+        
+        # Validate required IDs
         if not transaction_file.account_id:
             raise ValueError("Account ID is required")
         if not transaction_file.user_id:
             raise ValueError("User ID is required")
         if not transaction_file.file_id:
             raise ValueError("File ID is required")
+        
         # Create transaction
         transaction = Transaction.create(
             account_id=transaction_file.account_id,
             user_id=transaction_file.user_id,
             file_id=transaction_file.file_id,
             date=date_ms,
-            description=description.strip(),
+            description=description,
             amount=amount,
             currency=currency,
             balance=balance + amount,
             import_order=import_order,
-            transaction_type=data.get('TRNTYPE', '').strip().upper() if data.get('TRNTYPE') else None
+            transaction_type=row_data.get('transactionType', '').strip().upper() if row_data.get('transactionType') else None,
+            memo=row_data.get('memo'),
+            check_number=row_data.get('checkNumber'),
+            fit_id=row_data.get('fitId'),
+            status=row_data.get('status')
         )
         
-            
+        logger.info(f"Created transaction: {transaction}")
         return transaction
+        
     except Exception as e:
         raise ValueError(f"Error creating transaction: {str(e)}")
 
 def parse_ofx_transactions(transaction_file: TransactionFile, content: bytes) -> List[Transaction]:
-    """Parse transactions from OFX/QFX file content."""
+    """Parse transactions from OFX/QFX file content using field mapping."""
     try:
+        # Check if file mapping is available
+        if not transaction_file.file_map_id:
+            logger.warning(f"File map is required for OFX transaction parsing: {transaction_file.file_map_id}")
+            return []
+            
+        # Get the file mapping
+        file_map = checked_mandatory_file_map(transaction_file.file_map_id, transaction_file.user_id)
+        
         # Decode the content
         text_content = content.decode('utf-8')
-        logger.info("Parsing OFX/QFX content")
+        logger.info("Parsing OFX/QFX content with field mapping")
         
         # Check if this is a colon-separated format
-        if any(marker in text_content for marker in ['OFXHEADER:', 'DATA:OFXSGML', 'STMTTRN']):
+        if any(marker in text_content for marker in ['OFXHEADER:', 'DATA:OFXSGML']):
             logger.info("Detected colon-separated OFX/QFX format")
-            return parse_ofx_colon_separated(text_content, transaction_file)
+            return parse_ofx_colon_separated(text_content, transaction_file, file_map)
             
         # Try parsing as XML
         try:
@@ -541,18 +583,23 @@ def parse_ofx_transactions(transaction_file: TransactionFile, content: bytes) ->
             # Find all transaction elements
             for i, stmttrn in enumerate(root.findall('.//STMTTRN'), 1):
                 try:
-                    # Extract transaction data
-                    data = {
-                        'DTPOSTED': stmttrn.findtext('DTPOSTED', ''),
-                        'TRNAMT': stmttrn.findtext('TRNAMT', '0'),
-                        'n': stmttrn.findtext('n'),
-                        'NAME': stmttrn.findtext('NAME'),
-                        'MEMO': stmttrn.findtext('MEMO'),
-                        'TRNTYPE': stmttrn.findtext('TRNTYPE'),
-                        'CURRENCY': stmttrn.findtext('CURRENCY')
-                    }
+                    # Extract transaction data into a dictionary
+                    data = {}
                     
-                    transaction = create_transaction_from_ofx(transaction_file, data, balance, i)
+                    # Extract all available fields from the XML element
+                    for child in stmttrn:
+                        data[child.tag] = child.text or ''
+                    
+                    # Ensure we have the common OFX fields even if empty
+                    common_fields = ['DTPOSTED', 'TRNAMT', 'NAME', 'MEMO', 'TRNTYPE', 'CURRENCY', 'FITID']
+                    for field in common_fields:
+                        if field not in data:
+                            element = stmttrn.find(field)
+                            data[field] = element.text if element is not None else ''
+                    
+                    logger.info(f"Extracted OFX data: {data}")
+                    
+                    transaction = create_transaction_from_ofx(transaction_file, data, balance, i, file_map)
                     if transaction:
                         transactions.append(transaction)
                         balance += transaction.amount
@@ -564,8 +611,8 @@ def parse_ofx_transactions(transaction_file: TransactionFile, content: bytes) ->
             logger.info(f"Found {len(transactions)} transactions in XML format")
             return transactions
             
-        except ET.ParseError:
-            logger.error("Failed to parse as XML")
+        except ET.ParseError as e:
+            logger.error(f"Failed to parse as XML: {str(e)}")
             return []
             
     except Exception as e:

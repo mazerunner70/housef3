@@ -123,16 +123,23 @@ const AccountsView: React.FC = () => {
             <h1>My Accounts</h1>
             <button onClick={handleAddAccount} className="add-account-button">Add New Account</button>
 
-            {isLoading && <p>Loading accounts...</p>}
-            {error && <p style={{ color: 'red' }}>Error: {error} <button onClick={clearError}>Clear</button></p>}
+            {isLoading && <p className="accounts-loading">Loading accounts...</p>}
+            {error && (
+                <div className="accounts-error-container">
+                    <span className="error-message">Error: {error}</span>
+                    <button onClick={clearError} className="clear-error-button">Clear</button>
+                </div>
+            )}
 
             {!isLoading && !error && accounts && (
-                <AccountList
-                    accounts={accounts}
-                    onEdit={handleEditAccount}
-                    onDelete={handleDeleteAccountRequest}
-                    onViewDetails={handleViewAccountDetails}
-                />
+                <div className="accounts-content">
+                    <AccountList
+                        accounts={accounts}
+                        onEdit={handleEditAccount}
+                        onDelete={handleDeleteAccountRequest}
+                        onViewDetails={handleViewAccountDetails}
+                    />
+                </div>
             )}
 
             {showAccountForm && (

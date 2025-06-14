@@ -32,7 +32,7 @@ interface ImportStep2PreviewProps {
   ) => void;
   onCancel: () => void;
   // Target fields that the user can map CSV columns to
-  targetTransactionFields: { field: string; label: string; regex?: string }[];
+  targetTransactionFields: { field: string; label: string; required?: boolean; regex?: string | string[] }[];
 
   // New props for named field map management
   availableFieldMaps: Array<{ id: string; name: string }>;
@@ -98,7 +98,7 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
 
   // Effect to initialize/reset columnMappings based on targetTransactionFields or existingMapping prop
   useEffect(() => {
-    if (fileType === 'csv') {
+    if (fileType === 'csv' || fileType === 'ofx' || fileType === 'qfx') {
       const initialMappingsFromProps = existingMapping || []; // Use existingMapping if provided by parent
       
       // If existingMapping is provided, it means a map was pre-loaded. 
@@ -119,21 +119,24 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
           isValid: undefined,
         }));
       }
-      console.log("[ImportStep2Preview] CSV - Setting columnMappings:", determinedInitialMappings);
+      console.log(`[ImportStep2Preview] ${fileType.toUpperCase()} - Setting columnMappings:`, determinedInitialMappings);
       setColumnMappings(determinedInitialMappings);
     } else {
       setColumnMappings([]);
       setIsMappingValid(true);
-      console.log("[ImportStep2Preview] Non-CSV - Cleared columnMappings, set isMappingValid to true.");
+      console.log("[ImportStep2Preview] Non-mappable format - Cleared columnMappings, set isMappingValid to true.");
     }
   }, [fileType, csvHeaders, targetTransactionFields, existingMapping]); // existingMapping is key here
 
   // Effect to process data and set overall form validity (and update columnMappings isValid status)
   useEffect(() => {
     console.log("[ImportStep2Preview] Mapping/Validation useEffect. fileType:", fileType, "parsedData length:", parsedData.length, "columnMappings:", columnMappings);
-    if (fileType === 'csv') {
-      if (columnMappings.length === 0 && csvHeaders.length > 0) {
-        console.log("[ImportStep2Preview] CSV - columnMappings not yet initialized, skipping validation in this effect run.");
+    if (fileType === 'csv' || fileType === 'ofx' || fileType === 'qfx') {
+      const availableHeaders = fileType === 'csv' ? csvHeaders : 
+        (parsedData.length > 0 ? Object.keys(parsedData[0]).filter(key => key !== 'id') : []);
+      
+      if (columnMappings.length === 0 && availableHeaders.length > 0) {
+        console.log(`[ImportStep2Preview] ${fileType.toUpperCase()} - columnMappings not yet initialized, skipping validation in this effect run.`);
         return;
       }
 
@@ -141,17 +144,26 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
       // and the overall isMappingValid for the import button.
       // transactionData for the table will be set directly from parsedData.
       setTransactionData(parsedData); // Always show raw parsedData in the table
-      console.log("[ImportStep2Preview] CSV - Set transactionData to raw parsedData for table display.", parsedData);
+      console.log(`[ImportStep2Preview] ${fileType.toUpperCase()} - Set transactionData to raw parsedData for table display.`, parsedData);
 
       // Validate individual mappings (this part is for the mapping controls UI)
       const updatedMappingsWithValidity = columnMappings.map(mapping => {
         if (mapping.targetField && mapping.csvColumn) {
           const targetFieldConfig = targetTransactionFields.find(f => f.field === mapping.targetField);
           if (targetFieldConfig?.regex && parsedData.length > 0) {
-            const isColumnDataValid = parsedData.every(rawRow => {
-              const cellValue = rawRow[mapping.csvColumn!];
-              return cellValue !== undefined ? new RegExp(targetFieldConfig.regex!).test(String(cellValue)) : false;
+            // Handle both single regex string and array of regex patterns
+            const regexPatterns = Array.isArray(targetFieldConfig.regex) 
+              ? targetFieldConfig.regex 
+              : [targetFieldConfig.regex];
+            
+            // Check if any regex pattern matches ALL rows in the column
+            const isColumnDataValid = regexPatterns.some(pattern => {
+              return parsedData.every(rawRow => {
+                const cellValue = rawRow[mapping.csvColumn!];
+                return cellValue !== undefined ? new RegExp(pattern).test(String(cellValue)) : false;
+              });
             });
+            
             return { ...mapping, isValid: isColumnDataValid };
           }
           return { ...mapping, isValid: true }; // No regex or no data to check, consider valid if mapped
@@ -160,23 +172,23 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
       });
       // Only update if there are actual changes in validity to avoid potential loops if objects are different but content same
       if (JSON.stringify(columnMappings) !== JSON.stringify(updatedMappingsWithValidity)) {
-         console.log("[ImportStep2Preview] CSV - Updating columnMappings with new validity states:", updatedMappingsWithValidity);
+         console.log(`[ImportStep2Preview] ${fileType.toUpperCase()} - Updating columnMappings with new validity states:`, updatedMappingsWithValidity);
         setColumnMappings(updatedMappingsWithValidity);
       }
       
       // Overall form validity for the import button
-      const requiredTargetFields = targetTransactionFields.filter(f => f.regex).map(f => f.field);
-      const mappedTargetFieldsWithCsvColumn = columnMappings.filter(m => m.csvColumn !== null).map(m => m.targetField);
-      const allRequiredFieldsMapped = requiredTargetFields.every(rf => mappedTargetFieldsWithCsvColumn.includes(rf));
+      const requiredTargetFields = targetTransactionFields.filter(f => f.required === true).map(f => f.field);
+      const mappedTargetFieldsWithColumn = columnMappings.filter(m => m.csvColumn !== null).map(m => m.targetField);
+      const allRequiredFieldsMapped = requiredTargetFields.every(rf => mappedTargetFieldsWithColumn.includes(rf));
       const allCurrentlyMappedColumnsValid = columnMappings.every(m => m.csvColumn ? m.isValid === true : true); // Only check validity if mapped
 
-      console.log("[ImportStep2Preview] CSV - Validation for import: allRequiredFieldsMapped:", allRequiredFieldsMapped, "allCurrentlyMappedColumnsValid:", allCurrentlyMappedColumnsValid);
+      console.log(`[ImportStep2Preview] ${fileType.toUpperCase()} - Validation for import: allRequiredFieldsMapped:`, allRequiredFieldsMapped, "allCurrentlyMappedColumnsValid:", allCurrentlyMappedColumnsValid);
       setIsMappingValid(allRequiredFieldsMapped && allCurrentlyMappedColumnsValid);
 
-    } else { // Non-CSV
-      console.log("[ImportStep2Preview] Non-CSV - Setting transactionData directly from parsedData:", parsedData);
+    } else { // Non-mappable formats
+      console.log("[ImportStep2Preview] Non-mappable format - Setting transactionData directly from parsedData:", parsedData);
       setTransactionData(parsedData);
-      setIsMappingValid(true); // Non-CSV files are considered valid for import by default
+      setIsMappingValid(true); // Non-mappable files are considered valid for import by default
     }
   }, [columnMappings, parsedData, fileType, targetTransactionFields, csvHeaders]); // Added csvHeaders as it's used in guard
 
@@ -289,12 +301,16 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
     }
   };
 
-  const renderCsvMappingControls = () => {
-    if (fileType !== 'csv') return null;
+  const renderMappingControls = () => {
+    if (fileType === 'csv' || fileType === 'ofx' || fileType === 'qfx') {
+      // Show mapping controls for CSV, OFX, and QFX files
+    } else {
+      return null;
+    }
 
-    const mappedCsvColumns = columnMappings
+    const mappedColumns = columnMappings
       .map(m => m.csvColumn)
-      .filter((csvCol): csvCol is string => csvCol !== null);
+      .filter((col): col is string => col !== null);
 
     return (
       <div className="csv-mapping-controls-container">
@@ -345,12 +361,12 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
         </div>
 
         {/* Existing Section Header for Column by Column mapping */}
-        <h3 className="csv-mapping-header">Map Target Fields to CSV Columns</h3>
-        <p className="csv-mapping-description">Select CSV column for each target field. Used CSV columns become unavailable for other fields.</p>
+        <h3 className="csv-mapping-header">Map Target Fields to {fileType === 'csv' ? 'CSV Columns' : `${fileType.toUpperCase()} Fields`}</h3>
+        <p className="csv-mapping-description">Select {fileType === 'csv' ? 'CSV column' : `${fileType.toUpperCase()} field`} for each target field. Used {fileType === 'csv' ? 'CSV columns' : `${fileType.toUpperCase()} fields`} become unavailable for other fields.</p>
         <div className="csv-mapping-grid">
           {targetTransactionFields.map(targetFieldConfig => {
             const currentMapping = columnMappings.find(m => m.targetField === targetFieldConfig.field);
-            const currentlyMappedCsvColumn = currentMapping?.csvColumn || '';
+            const currentlyMappedColumn = currentMapping?.csvColumn || '';
             
             let itemWrapperClass = "csv-mapping-item";
             if (currentMapping?.isValid === true) {
@@ -359,6 +375,9 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
               itemWrapperClass += ' item-invalid';
             }
 
+            const availableHeaders = fileType === 'csv' ? csvHeaders : 
+              (parsedData.length > 0 ? Object.keys(parsedData[0]).filter(key => key !== 'id') : []);
+
             return (
               <div key={targetFieldConfig.field} className={itemWrapperClass}>
                 <label htmlFor={`map-target-${targetFieldConfig.field}`} className="csv-mapping-item-label">
@@ -366,14 +385,14 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
                 </label>
                 <select
                   id={`map-target-${targetFieldConfig.field}`}
-                  value={currentlyMappedCsvColumn}
+                  value={currentlyMappedColumn}
                   onChange={e => handleMappingChange(targetFieldConfig.field, e.target.value || null)}
                   className="csv-mapping-item-select"
                   disabled={isSavingMapping} // Disable if a save operation is in progress
                 >
                   <option value="">-- Unmapped --</option>
-                  {csvHeaders.filter(
-                    header => header !== '' && (!mappedCsvColumns.includes(header) || header === currentlyMappedCsvColumn)
+                  {availableHeaders.filter(
+                    header => header !== '' && (!mappedColumns.includes(header) || header === currentlyMappedColumn)
                   ).map(header => (
                     <option key={header} value={header}>
                       {header}
@@ -470,13 +489,13 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
 
   const handleCompleteImportClick = () => {
     let fieldMapToAssociate: { id: string; name: string } | undefined = undefined;
-    if (fileType === 'csv' && selectedFieldMapId && fieldMapNameInput.trim()) {
+    if ((fileType === 'csv' || fileType === 'ofx' || fileType === 'qfx') && selectedFieldMapId && fieldMapNameInput.trim()) {
       // Only pass if a map is selected AND has a name (could be an existing one or a newly named one)
       // This assumes that if `selectedFieldMapId` is set, `fieldMapNameInput` also reflects its name
       // or the new name if it was just typed in for a new save.
       fieldMapToAssociate = { id: selectedFieldMapId, name: fieldMapNameInput.trim() };
     }
-    // If it's not a CSV, or if no map is actively selected/named, pass undefined.
+    // If it's not a mappable format, or if no map is actively selected/named, pass undefined.
     // The parent (ImportTransactionsView) will decide if it needs to fetch latest metadata
     // or proceed with a map association.
     onCompleteImport(transactionData, fieldMapToAssociate);
@@ -484,9 +503,9 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
 
   return (
     <div className="import-step2-preview-container">
-      <h2 className="step2-main-header">Step 2: Preview, Map Columns (if CSV), and Confirm</h2>
+      <h2 className="step2-main-header">Step 2: Preview, Map Fields, and Confirm</h2>
 
-      {fileType === 'csv' && renderCsvMappingControls()}
+      {(fileType === 'csv' || fileType === 'ofx' || fileType === 'qfx') && renderMappingControls()}
 
       <div className="transaction-preview-section">
         <h3 className="transaction-preview-header">Transaction Preview</h3>

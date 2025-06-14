@@ -310,7 +310,10 @@ def get_transaction_file(file_id: uuid.UUID) -> Optional[TransactionFile]:
         response = get_files_table().get_item(Key={'fileId': str(file_id)})
         
         if 'Item' in response:
-            return TransactionFile.from_dynamodb_item(response['Item'])
+            logger.info(f"3 {response['Item']}")
+            tfd = TransactionFile.from_dynamodb_item(response['Item'])
+            logger.info(f"2exact type {type(tfd.file_format)} {tfd.file_format}")
+            return tfd
         return None
     except ClientError as e:
         logger.error(f"Error retrieving file {str(file_id)}: {str(e)}")

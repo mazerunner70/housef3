@@ -14,11 +14,32 @@ import ImportCompletionView from './ImportCompletionView'; // Import the new com
 
 // Define TARGET_TRANSACTION_FIELDS (should match what ImportStep2Preview expects)
 const TARGET_TRANSACTION_FIELDS = [
-  { field: 'date', label: 'Transaction Date', regex: '^\\d{4}-\\d{2}-\\d{2}$' }, // YYYY-MM-DD
-  { field: 'description', label: 'Description', regex: '.+' }, // Any non-empty string
-  { field: 'amount', label: 'Amount', regex: '^-?(\\d+|\\d{1,3}(,\\d{3})*)(\\.\\d+)?$' }, // Number, allows commas, optional negative/decimal
-  { field: 'debitOrCredit', label: 'Debit/Credit', regex: '^(debit|credit|CRDT|DBIT|DR|CR)$' }, // Specific values
-  { field: 'currency', label: 'Currency', regex: '^[A-Z]{3}$' }, // 3 uppercase letters
+  { 
+    field: 'date', 
+    label: 'Transaction Date', 
+    required: true,
+    regex: [
+      '^\\d{4}-\\d{2}-\\d{2}$',           // YYYY-MM-DD (ISO format)
+      '^\\d{2}/\\d{2}/\\d{4}$',           // MM/DD/YYYY (US format)
+      '^\\d{1,2}/\\d{1,2}/\\d{4}$',       // M/D/YYYY or MM/D/YYYY or M/DD/YYYY
+      '^\\d{2}-\\d{2}-\\d{4}$',           // MM-DD-YYYY
+      '^\\d{1,2}-\\d{1,2}-\\d{4}$',       // M-D-YYYY or MM-D-YYYY or M-DD-YYYY
+      '^\\d{4}/\\d{2}/\\d{2}$',           // YYYY/MM/DD
+      '^\\d{4}/\\d{1,2}/\\d{1,2}$',       // YYYY/M/D or YYYY/MM/D or YYYY/M/DD
+      '^\\d{2}\\.\\d{2}\\.\\d{4}$',       // DD.MM.YYYY (European format with dots)
+      '^\\d{1,2}\\.\\d{1,2}\\.\\d{4}$',   // D.M.YYYY or DD.M.YYYY or D.MM.YYYY
+      '^\\d{4}\\.\\d{2}\\.\\d{2}$',       // YYYY.MM.DD
+      '^\\d{4}\\.\\d{1,2}\\.\\d{1,2}$',   // YYYY.M.D or YYYY.MM.D or YYYY.M.DD
+      '^\\d{2}\\d{2}\\d{4}$',             // MMDDYYYY (no separators)
+      '^\\d{4}\\d{2}\\d{2}$',             // YYYYMMDD (no separators)
+      '^\\d{1,2}\\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{4}$', // D MMM YYYY
+      '^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{1,2},?\\s+\\d{4}$', // MMM D, YYYY
+    ]
+  },
+  { field: 'description', label: 'Description', required: true, regex: ['.+'] }, // Any non-empty string
+  { field: 'amount', label: 'Amount', required: true, regex: ['^-?(\\d+|\\d{1,3}(,\\d{3})*)(\\.\\d+)?$'] }, // Number, allows commas, optional negative/decimal
+  { field: 'debitOrCredit', label: 'Debit/Credit', required: false, regex: ['^(debit|credit|CRDT|DBIT|DR|CR)$'] }, // Optional but validated if mapped
+  { field: 'currency', label: 'Currency', required: false, regex: ['^[A-Z]{3}$'] }, // Optional but validated if mapped
 ];
 
 // Define a local Account type for the component if its structure differs from ServiceAccount
@@ -430,7 +451,7 @@ const ImportTransactionsView: React.FC = () => {
     }
   };
 
-  const handleCompleteImportStep2 = async (
+        const handleCompleteImportStep2 = async (
     mappedData: TransactionRow[], // Currently unused as backend does processing
     finalFieldMapToAssociate?: { id: string; name: string } // Passed from ImportStep2Preview
   ) => {
@@ -451,11 +472,11 @@ const ImportTransactionsView: React.FC = () => {
     try {
       let processApiResult: FileProcessResult;
 
-      if (fileTypeForStep2 === 'csv' && finalFieldMapToAssociate?.id) {
-        console.log(`[ImportTransactionsView] Associating map '${finalFieldMapToAssociate.name}' (${finalFieldMapToAssociate.id}) with file ${currentFileId} and processing.`);
+      if ((fileTypeForStep2 === 'csv' || fileTypeForStep2 === 'ofx' || fileTypeForStep2 === 'qfx') && finalFieldMapToAssociate?.id) {
+        console.log(`[ImportTransactionsView] Associating map '${finalFieldMapToAssociate.name}' (${finalFieldMapToAssociate.id}) with ${fileTypeForStep2.toUpperCase()} file ${currentFileId} and processing.`);
         processApiResult = await updateFileFieldMapAssociation(currentFileId, finalFieldMapToAssociate.id);
       } else {
-        console.log(`[ImportTransactionsView] Finalizing import for non-CSV or CSV without explicit map association. File ID: ${currentFileId}. Fetching latest metadata.`);
+        console.log(`[ImportTransactionsView] Finalizing import for ${fileTypeForStep2.toUpperCase()} without explicit map association. File ID: ${currentFileId}. Fetching latest metadata.`);
         processApiResult = await getProcessedFileMetadata(currentFileId);
       }
 

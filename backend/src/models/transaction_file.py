@@ -82,7 +82,6 @@ class TransactionFile(BaseModel):
             uuid.UUID: str,
             # enum.Enum: lambda e: e.value # Handles FileFormat and ProcessingStatus automatically with Pydantic v2 if they are StrEnum
         },
-        use_enum_values=True, # Ensures enum values are used in serialization
         arbitrary_types_allowed=True # For Money if it's not a Pydantic model
     )
 
@@ -134,7 +133,8 @@ class TransactionFile(BaseModel):
         Returns True if any fields were changed, False otherwise.
         """
         updated_fields = False
-        update_dict = update_data.model_dump(exclude_unset=True, by_alias=False) # Use field names
+        # Use mode='python' to get the actual enum objects, not their string values
+        update_dict = update_data.model_dump(exclude_unset=True, by_alias=False, mode='python') # Use field names
 
         for key, value in update_dict.items():
             if hasattr(self, key) and getattr(self, key) != value:
@@ -165,8 +165,14 @@ class TransactionFile(BaseModel):
         if 'openingBalance' in data and data.get('openingBalance') is not None and isinstance(data.get('openingBalance'), Decimal):
              data['openingBalance'] = str(data['openingBalance']) # Explicitly convert Decimal to string for DynamoDB
         
+        # Manually convert enums to strings for DynamoDB storage
+        if 'fileFormat' in data and data.get('fileFormat') is not None:
+            data['fileFormat'] = data['fileFormat'].value if hasattr(data['fileFormat'], 'value') else str(data['fileFormat'])
+            
+        if 'processingStatus' in data and data.get('processingStatus') is not None:
+            data['processingStatus'] = data['processingStatus'].value if hasattr(data['processingStatus'], 'value') else str(data['processingStatus'])
+        
         # date_range is a DateRange model; model_dump already converts it to a dict.
-        # Enums (processingStatus, fileFormat) are handled by Pydantic (use_enum_values=True)
         # Timestamps are already ints (milliseconds)
         return data
 
@@ -183,10 +189,9 @@ class TransactionFile(BaseModel):
                 raise ValueError(f"Invalid string format for Decimal 'openingBalance': {data['openingBalance']} - {e}")
 
         # Pydantic will handle Decimal conversion for 'openingBalance' if it's a string/number in data.
-        # No special Money conversion needed.
-        
+        # Pydantic will automatically convert string enum values to enum objects based on type hints.
         # Pydantic will reconstruct DateRange if 'dateRange' in data is a dict and matches DateRange fields.
-        # Pydantic handles enums and UUIDs based on type hints and model_config.
+        # Pydantic handles UUIDs based on type hints and model_config.
         return cls.model_validate(data)
 
     # Removed validate method as Pydantic handles validation
@@ -205,7 +210,6 @@ class TransactionFileCreate(BaseModel):
 
     model_config = ConfigDict(
         populate_by_name=True,
-        use_enum_values=True,
         json_encoders={uuid.UUID: str}
     )
 
@@ -227,7 +231,6 @@ class TransactionFileUpdate(BaseModel):
 
     model_config = ConfigDict(
         populate_by_name=True,
-        use_enum_values=True,
         json_encoders={uuid.UUID: str},
         arbitrary_types_allowed=True 
     )

@@ -6,7 +6,14 @@
 :root {
   /* Color Palette */
   --color-primary-brand: #2C3E50;
+  --color-primary-brand-hover: #1E2D3B;
+  --color-primary-brand-active: #141E27;
+  --color-primary-brand-focus: rgba(44, 62, 80, 0.3);
+  
   --color-secondary-brand: #3498DB;
+  --color-secondary-brand-hover: #2980B9;
+  --color-secondary-brand-active: #1F5F99;
+  --color-secondary-brand-focus: rgba(52, 152, 219, 0.3);
 
   --color-background-light: #F8F9FA;
   --color-background-subtle: #ECF0F1;
@@ -17,9 +24,24 @@
   --color-text-disabled: #B0BEC5;
 
   --color-accent: #E67E22;
+  --color-accent-hover: #D35400;
+  --color-accent-focus: rgba(230, 126, 34, 0.3);
+  
   --color-success: #2ECC71;
+  --color-success-hover: #27AE60;
+  --color-success-focus: rgba(46, 204, 113, 0.3);
+  
   --color-warning: #F1C40F;
+  --color-warning-hover: #F39C12;
+  --color-warning-focus: rgba(241, 196, 15, 0.3);
+  
   --color-error-danger: #E74C3C;
+  --color-error-danger-hover: #C0392B;
+  --color-error-danger-active: #A93226;
+  --color-error-danger-focus: rgba(231, 76, 60, 0.3);
+  --color-error-danger-light: #FADBD8;
+  --color-error-danger-border: #F1948A;
+  
   --color-info: #3498DB;
   --color-white: #FFFFFF;
 

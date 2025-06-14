@@ -5,6 +5,7 @@ import traceback
 import uuid
 import csv
 import io
+import xml.etree.ElementTree as ET
 from models.money import Currency, Money
 from services.file_processor_service import FileProcessorResponse, process_file
 from utils.db_utils import (
@@ -31,7 +32,7 @@ from typing import Dict, Any, List, Optional, Union
 from decimal import Decimal
 from models.transaction_file import FileFormat, ProcessingStatus, DateRange
 from models.transaction import Transaction
-from utils.transaction_parser import file_type_selector, parse_transactions
+from utils.transaction_parser import file_type_selector, parse_transactions, preprocess_csv_text
 from utils.s3_dao import (
     get_presigned_post_url,
     delete_object,
@@ -616,8 +617,165 @@ def update_file_field_map_handler(event: Dict[str, Any], user_id: str) -> Dict[s
         logger.error(f"Error updating file field map: {str(e)}", exc_info=True)
         return create_response(500, {"message": "Error updating file field map"})
 
+def parse_ofx_preview(content: str, file_format: FileFormat) -> Dict[str, Any]:
+    """Parse OFX/QFX content and return preview data similar to CSV format."""
+    try:
+        transactions_data = []
+        total_rows = 0
+        
+        # Define standard columns for OFX preview
+        columns = ['Date', 'Amount', 'Description', 'Type', 'Memo', 'Transaction ID']
+        
+        # Check if this is a colon-separated format
+        if any(marker in content for marker in ['OFXHEADER:', 'DATA:OFXSGML']):
+            logger.info(f"Parsing colon-separated format (type {file_format}) for preview")
+            transactions_data, total_rows = parse_ofx_colon_separated_preview(content)
+        else:
+            # Try parsing as XML
+            try:
+                logger.info(f"Parsing XML format (type {file_format}) for preview")
+                logger.info(f"exact type {type(file_format)} {file_format}")
+                root = ET.fromstring(content)
+                transactions_data, total_rows = parse_ofx_xml_preview(root)
+            except ET.ParseError as e:
+                logger.error(f"Failed to parse as XML: {str(e)}")
+                return {
+                    'columns': columns,
+                    'data': [],
+                    'totalRows': 0,
+                    'message': f'Error parsing {file_format.value.upper()} file: Invalid XML format'
+                }
+        
+        # Limit preview to first 10 transactions
+        preview_data = transactions_data[:10]
+        
+        return {
+            'columns': columns,
+            'data': preview_data,
+            'totalRows': total_rows,
+            'message': f'Preview of first {len(preview_data)} transactions from {file_format.value.upper()} file.' if preview_data else f'No transactions found in {file_format.value.upper()} file.'
+        }
+        
+    except Exception as e:
+        logger.error(f"Error parsing OFX/QFX preview: {str(e)}")
+        return {
+            'columns': ['DTPOSTED', 'TRNAMT', 'NAME', 'TRNTYPE', 'Memo', 'FITID'],
+            'data': [],
+            'totalRows': 0,
+            'message': f'Error parsing {file_format.value.upper()} file: {str(e)}'
+        }
+
+def parse_ofx_colon_separated_preview(content: str) -> tuple[List[Dict[str, str]], int]:
+    """Parse colon-separated OFX content for preview."""
+    transactions = []
+    current_transaction = {}
+    in_transaction = False
+    total_count = 0
+    
+    for line in content.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Handle transaction markers
+        if line == '<STMTTRN>' or line == 'STMTTRN':
+            if in_transaction and current_transaction:
+                # Process the previous transaction
+                transaction_dict = format_ofx_transaction_for_preview(current_transaction)
+                if transaction_dict:
+                    transactions.append(transaction_dict)
+                    total_count += 1
+            current_transaction = {}
+            in_transaction = True
+        elif line == '</STMTTRN>' or (in_transaction and line.startswith('STMTTRN') and line != 'STMTTRN'):
+            if in_transaction and current_transaction:
+                transaction_dict = format_ofx_transaction_for_preview(current_transaction)
+                if transaction_dict:
+                    transactions.append(transaction_dict)
+                    total_count += 1
+            current_transaction = {}
+            in_transaction = False
+        elif in_transaction and '>' in line and '</' in line:
+            # XML-style tag with value
+            tag = line[1:line.index('>')]
+            value = line[line.index('>')+1:line.rindex('<')]
+            current_transaction[tag] = value
+        elif in_transaction and ':' in line:
+            # Colon-separated style
+            key, value = line.split(':', 1)
+            current_transaction[key] = value.strip()
+    
+    # Process any remaining transaction
+    if in_transaction and current_transaction:
+        transaction_dict = format_ofx_transaction_for_preview(current_transaction)
+        if transaction_dict:
+            transactions.append(transaction_dict)
+            total_count += 1
+    
+    return transactions, total_count
+
+def parse_ofx_xml_preview(root: ET.Element) -> tuple[List[Dict[str, str]], int]:
+    """Parse XML OFX content for preview."""
+    transactions = []
+    total_count = 0
+    
+    # Find all transaction elements
+    for stmttrn in root.findall('.//STMTTRN'):
+        try:
+            # Extract transaction data
+            data = {
+                'DTPOSTED': stmttrn.findtext('DTPOSTED', ''),
+                'TRNAMT': stmttrn.findtext('TRNAMT', '0'),
+                'NAME': stmttrn.findtext('NAME', ''),
+                'MEMO': stmttrn.findtext('MEMO', ''),
+                'TRNTYPE': stmttrn.findtext('TRNTYPE', ''),
+                'FITID': stmttrn.findtext('FITID', '')
+            }
+            
+            transaction_dict = format_ofx_transaction_for_preview(data)
+            if transaction_dict:
+                transactions.append(transaction_dict)
+                total_count += 1
+                
+        except Exception as e:
+            logger.error(f"Error processing XML transaction for preview: {str(e)}")
+            continue
+    
+    return transactions, total_count
+
+def format_ofx_transaction_for_preview(data: Dict[str, str]) -> Dict[str, str]:
+    """Format OFX transaction data for preview display."""
+    try:
+        # Parse date (take first 8 chars for YYYYMMDD)
+        date_str = data.get('DTPOSTED', '')[:8]
+        formatted_date = ''
+        if len(date_str) == 8:
+            try:
+                # Convert YYYYMMDD to MM/DD/YYYY for display
+                year = date_str[:4]
+                month = date_str[4:6]
+                day = date_str[6:8]
+                formatted_date = f"{month}/{day}/{year}"
+            except:
+                formatted_date = date_str
+        
+        # Get description from various possible fields
+        description = data.get('n') or data.get('NAME') or data.get('MEMO', '')
+        
+        return {
+            'DTPOSTED': formatted_date,
+            'TRNAMT': data.get('TRNAMT', '0'),
+            'NAME': description.strip(),
+            'TRNTYPE': data.get('TRNTYPE', '').strip(),
+            'MEMO': data.get('MEMO', '').strip(),
+            'FITID': data.get('FITID', '').strip()
+        }
+    except Exception as e:
+        logger.error(f"Error formatting OFX transaction for preview: {str(e)}")
+        return {}
+
 def get_file_preview_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
-    """Get a preview of a file, specifically for CSVs."""
+    """Get a preview of a file, supporting CSV, OFX, and QFX formats."""
     try:
         file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
         file = checked_mandatory_transaction_file(file_id, user_id)
@@ -626,11 +784,11 @@ def get_file_preview_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
             content_bytes = get_object_content(file.s3_key)
             if content_bytes is None:
                 return handle_error(500, "Error reading file content from S3.")
-
             try:
                 content_str = content_bytes.decode('utf-8')
                 # Use io.StringIO to treat the string as a file
-                csv_file = io.StringIO(content_str)
+                preprocessed_content = preprocess_csv_text(content_str)
+                csv_file = io.StringIO(preprocessed_content)
                 reader = csv.reader(csv_file)
                 
                 headers = next(reader, None)
@@ -671,6 +829,29 @@ def get_file_preview_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
                 logger.error(f"Error decoding or processing file content for {file_id}: {str(decode_e)}")
                 logger.error(traceback.format_exc())
                 return handle_error(500, "Error processing file content.")
+        elif file.file_format in [FileFormat.OFX, FileFormat.QFX]:
+            content_bytes = get_object_content(file.s3_key)
+            if content_bytes is None:
+                return handle_error(500, "Error reading file content from S3.")
+
+            try:
+                content_str = content_bytes.decode('utf-8')
+                logger.info(f"Parsing {file_id}(type {file.file_format})  with content: {content_str}")
+                preview_data = parse_ofx_preview(content_str, file.file_format)
+                
+                return create_response(200, {
+                    'fileId': file_id,
+                    'fileName': file.file_name,
+                    'fileFormat': file.file_format.value,
+                    'columns': preview_data['columns'],
+                    'data': preview_data['data'],
+                    'totalRows': preview_data['totalRows'],
+                    'message': preview_data['message']
+                })
+            except Exception as parse_e:
+                logger.error(f"Error parsing OFX/QFX file {file_id}: {str(parse_e)}")
+                logger.error(traceback.format_exc())
+                return handle_error(400, f"Error parsing {file.file_format.value.upper()} file: {str(parse_e)}")
         else:
             return create_response(200, {
                 'fileId': file_id,
@@ -679,7 +860,7 @@ def get_file_preview_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
                 'columns': [],
                 'data': [],
                 'totalRows': 0,
-                'message': 'Preview is only supported for CSV files.'
+                'message': f'Preview is only supported for CSV, OFX, and QFX files. Current format: {file.file_format.value if file.file_format else "unknown"}'
             })
     except ValueError as ve:
         return handle_error(400, str(ve))

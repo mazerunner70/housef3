@@ -34,13 +34,13 @@
 }
 
 .btn--primary:hover {
-  background-color: hsl(from var(--color-primary-brand) h s calc(l - 5%)); /* Darken primary */
-  border-color: hsl(from var(--color-primary-brand) h s calc(l - 5%));
+  background-color: var(--color-primary-brand-hover);
+  border-color: var(--color-primary-brand-hover);
 }
 
 .btn--primary:focus {
   outline: none;
-  box-shadow: 0 0 0 3px hsl(from var(--color-primary-brand) h s l / 0.3);
+  box-shadow: 0 0 0 3px var(--color-primary-brand-focus);
 }
 
 .btn--secondary {
@@ -50,13 +50,13 @@
 }
 
 .btn--secondary:hover {
-  background-color: hsl(from var(--color-secondary-brand) h s calc(l - 5%)); /* Darken secondary */
-  border-color: hsl(from var(--color-secondary-brand) h s calc(l - 5%));
+  background-color: var(--color-secondary-brand-hover);
+  border-color: var(--color-secondary-brand-hover);
 }
 
 .btn--secondary:focus {
   outline: none;
-  box-shadow: 0 0 0 3px hsl(from var(--color-secondary-brand) h s l / 0.3);
+  box-shadow: 0 0 0 3px var(--color-secondary-brand-focus);
 }
 
 .btn--tertiary {
@@ -83,13 +83,13 @@
 }
 
 .btn--danger:hover {
-  background-color: hsl(from var(--color-error-danger) h s calc(l - 5%)); /* Darken danger */
-  border-color: hsl(from var(--color-error-danger) h s calc(l - 5%));
+  background-color: var(--color-error-danger-hover);
+  border-color: var(--color-error-danger-hover);
 }
 
 .btn--danger:focus {
   outline: none;
-  box-shadow: 0 0 0 3px hsl(from var(--color-error-danger) h s l / 0.3);
+  box-shadow: 0 0 0 3px var(--color-error-danger-focus);
 }
 
 /* Disabled state */

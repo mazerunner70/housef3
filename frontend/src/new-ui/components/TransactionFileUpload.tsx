@@ -94,6 +94,7 @@ const TransactionFileUpload: React.FC<TransactionFileUploadProps> = ({
 
   // Basic CSV content validation
   const validateCSVContent = async (file: File): Promise<boolean> => {
+    console.log('validateCSVContent', file);
     if (!file.name.toLowerCase().endsWith('.csv')) {
       return true; // Skip CSV validation for non-CSV files
     }
