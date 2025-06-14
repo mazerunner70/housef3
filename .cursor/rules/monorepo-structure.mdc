@@ -22,8 +22,8 @@ Located in docs/
 All design doc for aspects of the system are stored here
 
 Scripts for building frontend and backend
-Frontend build script: scripts/scripts/build_frontend.sh
-Backend build script: scripts/scripts/build_backend.sh
+Frontend build script: scripts/build_frontend.sh
+Backend build script: scripts/build_backend.sh
 These scripts handle building and (for frontend) deploying the respective parts.
 
 Script for running frontend tests

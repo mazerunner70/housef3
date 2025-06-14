@@ -329,9 +329,11 @@ def account_file_upload_handler(event: Dict[str, Any], user_id: str) -> Dict[str
         logger.error("FILE_STORAGE_BUCKET environment variable not set")
         return create_response(500, {"message": "Server configuration error"})
         
-        
+    # Create S3 key using the generated file ID
+    s3_key = f"{user_id}/{file_id}/{file_name}"
 
-    s3_key = generate_upload_url(
+    # Generate presigned URL for S3 upload
+    upload_url = generate_upload_url(
         user_id,
         file_id,
         file_name,
@@ -368,8 +370,10 @@ def account_file_upload_handler(event: Dict[str, Any], user_id: str) -> Dict[str
     transaction_file_create_dto = TransactionFileCreate(**dto_data)
     
     # Instantiate TransactionFile from DTO data.
-    # This uses default_factory for file_id, upload_date, processing_status, etc.
-    transaction_file = TransactionFile(**transaction_file_create_dto.model_dump())
+    # Explicitly set the file_id to match the S3 key instead of using default_factory
+    transaction_file_data = transaction_file_create_dto.model_dump()
+    transaction_file_data['file_id'] = uuid.UUID(file_id)  # Use the file_id from S3 key
+    transaction_file = TransactionFile(**transaction_file_data)
 
 
     create_transaction_file(transaction_file)

@@ -244,3 +244,42 @@
   background: #0056b3;
   border-color: #0056b3;
 }
+
+/* Enhanced File Upload Section */
+.enhanced-file-upload-section {
+  margin: 20px 0;
+}
+
+/* File validation warnings */
+.validation-warnings {
+  margin-top: 16px;
+  padding: 16px;
+  background-color: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 6px;
+  border-left: 4px solid #f39c12;
+}
+
+.validation-warnings h4 {
+  margin: 0 0 8px 0;
+  font-size: 0.875rem;
+  color: #856404;
+}
+
+.validation-warnings ul {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.validation-warnings li {
+  font-size: 0.875rem;
+  color: #856404;
+  margin-bottom: 4px;
+}
+
+.validation-warnings p {
+  margin: 8px 0 0 0;
+  font-size: 0.875rem;
+  color: #856404;
+  font-style: italic;
+}

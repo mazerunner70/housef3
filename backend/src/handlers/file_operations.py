@@ -171,11 +171,17 @@ def get_upload_url_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any
         # Parse request body
         key = mandatory_body_parameter(event, 'key')
         content_type = mandatory_body_parameter(event, 'contentType')
+        file_id = mandatory_body_parameter(event, 'fileId')  # Now required explicit parameter
         account_id = optional_body_parameter(event, 'accountId')
         
         # Validate the key starts with the user's ID for security
         if not key.startswith(f"{user_id}/"):
             return create_response(403, {'message': 'Invalid key prefix'})
+            
+        # Validate that the file_id in the key matches the explicit file_id parameter
+        key_parts = key.split('/')
+        if len(key_parts) != 3 or key_parts[1] != file_id:
+            return create_response(400, {'message': 'File ID in key does not match explicit fileId parameter'})
             
         # If account_id is provided, verify user has access to it
         if account_id:
@@ -187,13 +193,15 @@ def get_upload_url_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any
         # Prepare fields for presigned URL
         fields = {
             'Content-Type': content_type,
-            'key': key
+            'key': key,
+            'x-amz-meta-fileid': file_id  # Always store file_id in metadata
         }
         
         # Define policy conditions using AWS-documented format
         conditions = [
             ['starts-with', '$Content-Type', ''],
-            ['starts-with', '$key', f"{user_id}/"]  # Ensure key starts with user ID
+            ['starts-with', '$key', f"{user_id}/"],  # Ensure key starts with user ID
+            ['eq', '$x-amz-meta-fileid', file_id]  # Ensure file_id matches
         ]
         
         # If account_id is provided, add metadata field and condition
@@ -215,15 +223,12 @@ def get_upload_url_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any
             fields=fields
         )
         
-        # Extract file ID from key (format: userId/fileId/filename)
-        file_id = key.split('/')[1]
-        
         logger.info(f"Generated presigned URL data: {json.dumps(presigned_data)}")
         
         return create_response(200, {
             'url': presigned_data['url'],
             'fields': presigned_data['fields'],
-            'fileId': file_id,
+            'fileId': file_id,  # Use the explicit file_id parameter
             'expires': 3600  # URL expires in 1 hour
         })
     except ValueError as ve:
@@ -452,7 +457,7 @@ def get_file_metadata_handler(event: Dict[str, Any], user_id: str) -> Dict[str, 
     try:
         # Get file ID from path parameters
         file_id = uuid.UUID(mandatory_path_parameter(event, 'id')) 
-        
+        logger.info(f"Getting file metadata for file {file_id}")
         # Get file metadata from DynamoDB
         file = checked_mandatory_transaction_file(file_id, user_id)
         
@@ -470,8 +475,15 @@ def get_file_metadata_handler(event: Dict[str, Any], user_id: str) -> Dict[str, 
                 }
         
         return create_response(200, file_json)
+    except NotFound as e:
+        logger.info(f"File {mandatory_path_parameter(event, 'id')} not found for user {user_id}")
+        return create_response(404, {"message": "File not found"})
+    except ValueError as e:
+        logger.error(f"Invalid file ID format: {str(e)}")
+        return create_response(400, {"message": "Invalid file ID format"})
     except Exception as e:
         logger.error(f"Error getting file metadata: {str(e)}")
+        logger.error(traceback.format_exc())
         return create_response(500, {"message": "Error getting file metadata"})
 
 def get_file_transactions_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
@@ -503,7 +515,12 @@ def get_file_transactions_handler(event: Dict[str, Any], user_id: str) -> Dict[s
         except Exception as e:
             logger.error(f"Error retrieving transactions for file {file_id}: {str(e)}")
             return create_response(500, {"message": "Error retrieving transactions"})
-            
+    except NotFound as e:
+        logger.info(f"File {mandatory_path_parameter(event, 'id')} not found for user {user_id}")
+        return create_response(404, {"message": "File not found"})
+    except ValueError as e:
+        logger.error(f"Invalid file ID format: {str(e)}")
+        return create_response(400, {"message": "Invalid file ID format"})        
     except Exception as e:
         logger.error(f"Error in get_file_transactions_handler: {str(e)}")
         return create_response(500, {"message": "Internal server error"})
@@ -529,6 +546,12 @@ def delete_file_transactions_handler(event: Dict[str, Any], user_id: str) -> Dic
                 'timestamp': datetime.utcnow().isoformat()
             }
         })
+    except NotFound as e:
+        logger.info(f"File {mandatory_path_parameter(event, 'id')} not found for user {user_id}")
+        return create_response(404, {"message": "File not found"})
+    except ValueError as e:
+        logger.error(f"Invalid file ID format: {str(e)}")
+        return create_response(400, {"message": "Invalid file ID format"})
     except Exception as e:
         logger.error(f"Error in delete_file_transactions_handler: {str(e)}")
         return create_response(500, {"message": "Internal server error"})
@@ -553,7 +576,12 @@ def get_file_content_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
             'contentType': file.file_format.value if file.file_format else 'unknown',
             'fileName': file.file_name
         })
-            
+    except NotFound as e:
+        logger.info(f"File {mandatory_path_parameter(event, 'id')} not found for user {user_id}")
+        return create_response(404, {"message": "File not found"})
+    except ValueError as e:
+        logger.error(f"Invalid file ID format: {str(e)}")
+        return create_response(400, {"message": "Invalid file ID format"})        
     except Exception as e:
         logger.error(f"Error getting file content: {str(e)}")
         return create_response(500, {"message": "Error getting file content"})
@@ -578,7 +606,9 @@ def update_file_field_map_handler(event: Dict[str, Any], user_id: str) -> Dict[s
         logger.info(f"Updating file {file_id} with field map {field_map_id}")
         response: FileProcessorResponse = process_file(file)
         return create_response(200, response.to_dict())
-                    
+    except NotFound as e:
+        logger.info(f"File {mandatory_path_parameter(event, 'id')} not found for user {user_id}")
+        return create_response(404, {"message": "File not found"})                
     except ValueError as e:
         logger.error(f"Validation error in update_file_field_map_handler: {str(e)}", exc_info=True)
         return create_response(400, {"message": str(e)})

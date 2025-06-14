@@ -127,26 +127,28 @@ def handler(event, context):
         key = event['Records'][0]['s3']['object']['key']
         size = event['Records'][0]['s3']['object']['size']
         
-        # Extract user ID and file ID from the key (format: userId/fileId/filename)
+        # Extract user ID and filename from the key (format: userId/fileId/filename)
         key_parts = key.split('/')
         if len(key_parts) != 3:
             raise ValueError(f"Invalid S3 key format: {key}")
             
         user_id = key_parts[0]
-        file_id_from_key = key_parts[1]  # Extract the file ID from S3 key to use consistently
         file_name = key_parts[2]
         
-        logger.info(f"Processing file upload - User: {user_id}, File ID: {file_id_from_key}, S3 Key: {key}, Name: {file_name}")
+        # Get file_id and account_id from S3 metadata instead of parsing key
+        metadata = get_object_metadata(key, bucket)
+        if metadata is None:
+            raise ValueError(f"Could not get metadata for file: {key}. File metadata is required for processing.")
+        
+        file_id_from_metadata = metadata.get('metadata', {}).get('fileid')
+        if not file_id_from_metadata:
+            raise ValueError(f"File ID not found in S3 metadata for: {key}")
+        
+        account_id_str = metadata.get('metadata', {}).get('accountid')
+        
+        logger.info(f"Processing file upload - User: {user_id}, File ID: {file_id_from_metadata}, S3 Key: {key}, Name: {file_name}")
 
         try:
-            # Get object metadata first to check for account ID
-            metadata = get_object_metadata(key, bucket)
-            if metadata is None:
-                # Changed to log error and potentially proceed, or handle as critical
-                logger.error(f"Could not get metadata for file: {key}. Proceeding without S3 metadata accountId.")
-                account_id_str = None
-            else:
-                account_id_str = metadata.get('metadata', {}).get('accountid')
             
             parsed_account_id: Optional[uuid.UUID] = None
             if account_id_str:
@@ -186,10 +188,10 @@ def handler(event, context):
             # Instantiate TransactionFile from DTO data.
             # Explicitly set the file_id to match what the frontend expects
             transaction_file_data = transaction_file_create_dto.model_dump()
-            transaction_file_data['file_id'] = uuid.UUID(file_id_from_key)  # Override the default factory
+            transaction_file_data['file_id'] = uuid.UUID(file_id_from_metadata)  # Use metadata file_id
             transaction_file = TransactionFile(**transaction_file_data)
             
-            logger.info(f"Created TransactionFile object with file_id: {transaction_file.file_id} (should match S3 key file_id: {file_id_from_key})")
+            logger.info(f"Created TransactionFile object with file_id: {transaction_file.file_id} (matches metadata file_id: {file_id_from_metadata})")
             if transaction_file.account_id:
                 logger.info(f"TransactionFile associated with account_id: {transaction_file.account_id}")
 

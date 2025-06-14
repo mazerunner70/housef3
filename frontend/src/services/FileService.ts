@@ -160,7 +160,10 @@ const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
         });
         
         if (!retryResponse.ok) {
-          throw new Error(`Request failed after token refresh: ${retryResponse.status} ${retryResponse.statusText}`);
+          const error = new Error(`Request failed after token refresh: ${retryResponse.status} ${retryResponse.statusText}`);
+          (error as any).status = retryResponse.status;
+          (error as any).statusText = retryResponse.statusText;
+          throw error;
         }
         
         return retryResponse;
@@ -171,7 +174,10 @@ const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
     }
     
     if (!response.ok) {
-      throw new Error(`Request failed: ${response.status} ${response.statusText}`);
+      const error = new Error(`Request failed: ${response.status} ${response.statusText}`);
+      (error as any).status = response.status;
+      (error as any).statusText = response.statusText;
+      throw error;
     }
     
     return response;
@@ -214,6 +220,7 @@ export const getUploadUrl = async (
       fileSize,
       userId,
       accountId,
+      fileId,
       s3Key
     });
     
@@ -223,10 +230,12 @@ export const getUploadUrl = async (
       body: JSON.stringify({
         key: s3Key,
         contentType,
+        fileId,  // Pass file_id explicitly
         accountId,
-        metadata: accountId ? {
-          accountid: accountId  // Using lowercase 'accountid' to match Lambda's expectation
-        } : undefined
+        metadata: {
+          fileid: fileId,  // Store file_id in metadata
+          ...(accountId && { accountid: accountId })
+        }
       })
     });
     
@@ -466,14 +475,19 @@ export const waitForFileProcessing = async (
       
     } catch (error: any) {
       // If 404, the file hasn't been created yet, continue polling
-      if (error.status === 404 || error.message?.includes('404') || error.message?.includes('Not Found')) {
-        console.log(`File ${fileId} not found yet, continuing to poll...`);
+      if (error.status === 404 || 
+          error.message?.includes('404') || 
+          error.message?.includes('Not Found') ||
+          error.message?.includes('File not found')) {
+        console.log(`File ${fileId} not found yet (${error.status || 'unknown status'}), continuing to poll...`);
         await new Promise(resolve => setTimeout(resolve, pollInterval));
         continue;
       }
       
       // If it's a network error, retry
-      if (error.message?.includes('NetworkError') || error.message?.includes('fetch')) {
+      if (error.message?.includes('NetworkError') || 
+          error.message?.includes('fetch') ||
+          error.message?.includes('Failed to fetch')) {
         console.log(`Network error while polling for file ${fileId}, retrying...`);
         await new Promise(resolve => setTimeout(resolve, pollInterval));
         continue;
@@ -755,21 +769,22 @@ export async function updateFileFieldMapAssociation(fileId: string, fileMapId: s
 
 /**
  * Gets detailed metadata for a single file and adapts it to FileProcessResult.
+ * Uses polling to wait for the file record to be created by the file processor.
  * Corresponds to GET /files/{fileId}/metadata.
  */
 export async function getProcessedFileMetadata(fileId: string): Promise<FileProcessResult> {
-  console.log(`FileService: Getting processed metadata for file ${fileId}.`);
+  console.log(`FileService: Getting processed metadata for file ${fileId} with polling.`);
   try {
-    const response = await authenticatedRequest(`${FILES_API_ENDPOINT}/${fileId}/metadata`);
-    const fileMeta: FileMetadata = await response.json(); 
-    return adaptBackendFileMetaToProcessResult(fileMeta, response.status);
+    // Use the same polling mechanism as parseFile to wait for file processing
+    const metadata = await waitForFileProcessing(fileId, 15000, 1000); // Wait up to 15 seconds
+    return adaptBackendFileMetaToProcessResult(metadata, 200);
   } catch (error: any) {
     console.error('Error getting processed file metadata:', error);
     return {
       fileId,
       fileName: 'Unknown', 
       statusCode: error.response?.status || 500,
-      message: error.message || 'Failed to retrieve file processing status.',
+      message: error.message || 'Failed to retrieve file processing status. The file may still be processing.',
       processingStatus: 'ERROR',
       transactionCount: undefined,
       accountName: undefined,

@@ -6,6 +6,9 @@ import { listFieldMaps, getFieldMap, createFieldMap, updateFieldMap, FieldMap } 
 import { getCurrentUser } from '../../services/AuthService'; // Import getCurrentUser
 import ImportStep2Preview from '../components/ImportStep2Preview'; // Import the new component
 import type { TransactionRow, ColumnMapping } from '../components/ImportStep2Preview'; // Import types
+import TransactionFileUpload from '../components/TransactionFileUpload'; // Enhanced file upload
+import { FileValidationResult } from '../utils/fileValidation'; // File validation types
+import { detectFileType } from '../utils/fileValidation'; // Import file type detection
 import './ImportTransactionsView.css'; // Import the CSS file
 import ImportCompletionView from './ImportCompletionView'; // Import the new component
 
@@ -91,6 +94,9 @@ const ImportTransactionsView: React.FC = () => {
   // State for inline editing of account
   const [editingAccountFileId, setEditingAccountFileId] = useState<string | null>(null);
   const [editingAccountValue, setEditingAccountValue] = useState<string>('');
+  
+  // State for enhanced file validation
+  const [fileValidation, setFileValidation] = useState<FileValidationResult>({ isValid: false });
 
   // Fetch accounts and history when the component mounts or currentStep becomes 1
   const fetchInitialData = useCallback(async () => {
@@ -209,23 +215,29 @@ const ImportTransactionsView: React.FC = () => {
     }
   };
 
-  const handleFileDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.dataTransfer.files && event.dataTransfer.files[0]) {
-      setSelectedFile(event.dataTransfer.files[0]);
-      setErrorMessage(null);
-      setSelectedHistoryFileId(null); // Clear history selection when new file is dropped
-      setInitialFieldMapForStep2(undefined); // Reset for new file
-      setCurrentlyLoadedFieldMapDetails(undefined);
-      console.log("File dropped:", event.dataTransfer.files[0]);
+  // Enhanced file selection handler for TransactionFileUpload
+  const handleEnhancedFileSelect = (file: File | null) => {
+    setSelectedFile(file);
+    setErrorMessage(null);
+    setSelectedHistoryFileId(null); // Clear history selection
+    setInitialFieldMapForStep2(undefined); // Reset for new file
+    setCurrentlyLoadedFieldMapDetails(undefined);
+    if (file) {
+      console.log("Enhanced file selected:", file);
     }
-  }, []);
+  };
 
-  const handleDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-  }, []);
+  // File validation change handler
+  const handleFileValidationChange = (result: FileValidationResult) => {
+    setFileValidation(result);
+    if (result.error) {
+      setErrorMessage(result.error);
+    } else {
+      setErrorMessage(null);
+    }
+  };
+
+
 
   const handleHistoryRowClick = (fileId: string) => {
     setSelectedHistoryFileId(prev => (prev === fileId ? null : fileId));
@@ -304,8 +316,32 @@ const ImportTransactionsView: React.FC = () => {
         setIsLoading(false);
         return;
       }
+      
+      // Detect file type and provide appropriate MIME type if empty
+      let mimeType = selectedFile.type;
+      if (!mimeType || mimeType.trim() === '') {
+        const detectedType = detectFileType(selectedFile.name);
+        switch (detectedType) {
+          case 'ofx':
+            mimeType = 'application/x-ofx';
+            break;
+          case 'qfx':
+            mimeType = 'application/vnd.intu.qfx';
+            break;
+          case 'csv':
+            mimeType = 'text/csv';
+            break;
+          case 'qif':
+            mimeType = 'application/x-quicken';
+            break;
+          default:
+            mimeType = 'application/octet-stream'; // Generic fallback
+        }
+        console.log(`[ImportTransactionsView] Empty MIME type detected for ${selectedFile.name}. Using fallback: ${mimeType}`);
+      }
+      
       const presignedData = await getUploadUrl(
-        selectedFile.name, selectedFile.type, selectedFile.size, currentUser.id, selectedAccount || undefined
+        selectedFile.name, mimeType, selectedFile.size, currentUser.id, selectedAccount || undefined
       );
       const newFileId = presignedData.fileId;
       setCurrentFileId(newFileId);
@@ -730,27 +766,33 @@ const ImportTransactionsView: React.FC = () => {
             </div>
           </div>
 
-          <label className="label-common">Upload Transaction File (OFX, QFX, CSV):</label>
-          <div 
-            onDrop={handleFileDrop} 
-            onDragOver={handleDragOver} 
-            onClick={() => document.getElementById('fileInput')?.click()} 
-            className="drop-zone"
-          >
-            {selectedFile ? `Selected: ${selectedFile.name}` : 'Drag & drop your file here, or click to select.'}
-            <input 
-              id="fileInput" 
-              type="file" 
-              onChange={handleFileChange} 
-              accept=".ofx,.qfx,.csv" 
-              style={{ display: 'none' }} 
+          {/* Enhanced File Upload Section */}
+          <div className="enhanced-file-upload-section">
+            <TransactionFileUpload
+              selectedFile={selectedFile}
+              onFileSelect={handleEnhancedFileSelect}
+              onValidationChange={handleFileValidationChange}
+              disabled={ isLoading}
+              showPreview={true}
             />
           </div>
-          {selectedFile && <p>File to upload: <strong>{selectedFile.name}</strong> ({Math.round(selectedFile.size / 1024)} KB)</p>}
+
+          {/* File validation warnings */}
+          {fileValidation.warnings && fileValidation.warnings.length > 0 && (
+            <div className="validation-warnings">
+              <h4>⚠️ File Warnings</h4>
+              <ul>
+                {fileValidation.warnings.map((warning, index) => (
+                  <li key={index}>{warning}</li>
+                ))}
+              </ul>
+              <p>You can still proceed, but the import may not work as expected.</p>
+            </div>
+          )}
 
           <button 
             onClick={proceedToStep2} 
-            disabled={!selectedFile || isLoading || isLoadingHistory}
+            disabled={!selectedFile || !fileValidation.isValid || isLoading || isLoadingHistory}
             className="button-common button-primary"
           >
             {(isLoading && currentStep === 1 && !isLoadingHistory && selectedFile) ? 'Uploading & Processing...' : 

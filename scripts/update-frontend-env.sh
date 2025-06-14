@@ -1,8 +1,12 @@
 #!/bin/bash
 set -e
 
+# Accept SCRIPT_DIR and PROJECT_ROOT as arguments, fallback to calculated values
+SCRIPT_DIR="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+PROJECT_ROOT="${2:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+
 # Navigate to the Terraform directory
-cd "$(dirname "$0")/../../infrastructure/terraform"
+cd "$PROJECT_ROOT/infrastructure/terraform"
 
 # Extract Cognito configuration variables
 COGNITO_USER_POOL_ID=$(terraform output -raw cognito_user_pool_id)
@@ -12,7 +16,7 @@ CLOUDFRONT_DOMAIN=$(terraform output -raw cloudfront_distribution_domain 2>/dev/
 API_ENDPOINT="https://${CLOUDFRONT_DOMAIN}"
 
 # Create or update the development .env.local file
-DEV_ENV_FILE="../../frontend/.env.local"
+DEV_ENV_FILE="$PROJECT_ROOT/frontend/.env.local"
 
 echo "Updating frontend development environment variables..."
 cat > "$DEV_ENV_FILE" << EOF
@@ -24,7 +28,7 @@ VITE_API_ENDPOINT=${API_ENDPOINT}
 EOF
 
 # Create or update the production .env.production file
-PROD_ENV_FILE="../../frontend/.env.production"
+PROD_ENV_FILE="$PROJECT_ROOT/frontend/.env.production"
 
 echo "Updating frontend production environment variables..."
 cat > "$PROD_ENV_FILE" << EOF
