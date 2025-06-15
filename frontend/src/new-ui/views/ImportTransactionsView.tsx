@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 // Use AccountService for fetching accounts
 import { listAccounts, Account as ServiceAccount } from '../../services/AccountService';
-import { getUploadUrl, uploadFileToS3, listFiles, FileMetadata, deleteFile, parseFile, updateFileFieldMapAssociation, getProcessedFileMetadata, FileProcessResult, updateFileBalance } from '../../services/FileService'; // Added parseFile and updateFileBalance
+import { getUploadUrl, uploadFileToS3, listFiles, FileMetadata, deleteFile, parseFile, updateFileFieldMapAssociation, getProcessedFileMetadata, FileProcessResult, updateFileBalance, associateFileWithAccount } from '../../services/FileService'; // Added parseFile, updateFileBalance, and associateFileWithAccount
 import { listFieldMaps, getFieldMap, createFieldMap, updateFieldMap, FieldMap } from '../../services/FileMapService'; // Import more from FileMapService
 import { getCurrentUser } from '../../services/AuthService'; // Import getCurrentUser
 import ImportStep2Preview from '../components/ImportStep2Preview'; // Import the new component
@@ -48,7 +48,7 @@ const TARGET_TRANSACTION_FIELDS = [
 interface ViewAccount {
   id: string;    // Corresponds to accountId from ServiceAccount
   name: string;  // Corresponds to accountName from ServiceAccount
-  defaultFieldMapId?: string; // For tracking the account's default mapping
+  defaultfileMapid?: string; // For tracking the account's default mapping
 }
 
 // Define your column mapping state structure for CSVs (will be used later)
@@ -91,7 +91,7 @@ const ImportTransactionsView: React.FC = () => {
   const [existingMappingsForStep2, setExistingMappingsForStep2] = useState<ColumnMapping[] | undefined>(undefined); // Re-introduced
 
   // New state for named field map management
-  const [availableFieldMaps, setAvailableFieldMaps] = useState<AvailableMapInfo[]>([]);
+  const [availableFileMaps, setAvailableFileMaps] = useState<AvailableMapInfo[]>([]);
   const [currentlyLoadedFieldMapDetails, setCurrentlyLoadedFieldMapDetails] = useState<ColumnMapping[] | undefined>(undefined);
   const [initialFieldMapForStep2, setInitialFieldMapForStep2] = useState<{id: string, name: string} | undefined>(undefined);
   const [isLoadingFieldMaps, setIsLoadingFieldMaps] = useState<boolean>(false);
@@ -137,7 +137,7 @@ const ImportTransactionsView: React.FC = () => {
       const viewAccounts = accountsResponse.accounts.map(acc => ({
         id: acc.accountId,
         name: acc.accountName,
-        defaultFieldMapId: acc.defaultFieldMapId,
+        defaultfilemapid: acc.defaultFileMapId,
       }));
       setAccounts(viewAccounts);
 
@@ -160,7 +160,7 @@ const ImportTransactionsView: React.FC = () => {
         id: fm.fileMapId!, // Assuming fileMapId is always present for listed maps
         name: fm.name,
       }));
-      setAvailableFieldMaps(mapsForDropdown);
+      setAvailableFileMaps(mapsForDropdown);
       console.log("[ImportTransactionsView] Fetched available field maps:", mapsForDropdown);
 
     } catch (error: any) {
@@ -179,18 +179,38 @@ const ImportTransactionsView: React.FC = () => {
       setDefaultMappingName('');
       setSelectedDefaultMapping('');
       
-      // Get the account details to retrieve the defaultFieldMapId
+      console.log(`[ImportTransactionsView] Fetching default mapping for account: ${accountId}`);
+      console.log(`[ImportTransactionsView] Available file maps:`, availableFileMaps);
+      
+      // Get the account details to retrieve the defaultFieldMapId  
       const response = await listAccounts();
       const account = response.accounts.find(acc => acc.accountId === accountId);
       
-      if (account && account.defaultFieldMapId) {
+      console.log(`[ImportTransactionsView] Found account:`, account);
+      console.log(`[ImportTransactionsView] Account defaultFileMapId:`, account?.defaultFileMapId);
+      
+      if (account && account.defaultFileMapId) {
+        // Check if the default mapping exists in available field maps
+        const mappingExists = availableFileMaps.some(map => map.id === account.defaultFileMapId);
+        console.log(`[ImportTransactionsView] Default mapping ${account.defaultFileMapId} exists in available maps:`, mappingExists);
+        
+        if (!mappingExists) {
+          console.warn(`[ImportTransactionsView] Account's default mapping ${account.defaultFileMapId} not found in available field maps. Available maps:`, availableFileMaps.map((m: AvailableMapInfo) => m.id));
+          setDefaultMappingName('');
+          setSelectedDefaultMapping('');
+          return;
+        }
+        
         // Fetch the field map details
-        const fieldMap = await getFieldMap(account.defaultFieldMapId);
+        const fieldMap = await getFieldMap(account.defaultFileMapId);
         setDefaultMappingName(fieldMap.name);
-        setSelectedDefaultMapping(account.defaultFieldMapId);
+        // Automatically set the default mapping when account is selected
+        setSelectedDefaultMapping(account.defaultFileMapId);
+        console.log(`[ImportTransactionsView] Auto-selected default mapping for account ${account.accountName}: ${fieldMap.name} (${account.defaultFileMapId})`);
       } else {
         setDefaultMappingName('');
         setSelectedDefaultMapping('');
+        console.log(`[ImportTransactionsView] No default mapping found for account ${account?.accountName || accountId}. Account object:`, account);
       }
     } catch (error) {
       console.error('Failed to fetch default mapping:', error);
@@ -576,7 +596,7 @@ const ImportTransactionsView: React.FC = () => {
       // After successful save/update, refresh the list of available maps
       const fieldMapsListResponse = await listFieldMaps();
       const mapsForDropdown = fieldMapsListResponse.fieldMaps.map(fm => ({ id: fm.fileMapId!, name: fm.name }));
-      setAvailableFieldMaps(mapsForDropdown);
+      setAvailableFileMaps(mapsForDropdown);
       console.log("[ImportTransactionsView] Refreshed available field maps after save/update.");
 
       // If this was a new save or an update to the map currently associated with the file,
@@ -651,7 +671,7 @@ const ImportTransactionsView: React.FC = () => {
       await updateFileFieldMapAssociation(fileId, mappingId);
       
       // Get the mapping name for display
-      const mappingName = fieldMapsData[mappingId] || availableFieldMaps.find(m => m.id === mappingId)?.name || 'Unknown';
+      const mappingName = fieldMapsData[mappingId] || availableFileMaps.find(m => m.id === mappingId)?.name || 'Unknown';
       
       // Update the import history state
       setImportHistory(prevHistory => 
@@ -688,14 +708,13 @@ const ImportTransactionsView: React.FC = () => {
     setErrorMessage(null);
 
     try {
-      // For now, I'll assume we need to create an API call to update the file's account association
-      // Since I don't see a specific service for this, I'll use a generic approach
-      // You may need to add this endpoint to your FileService
+      // Call the API to associate the file with the account
+      await associateFileWithAccount(fileId, accountId);
       
       // Get the account name for display
       const accountName = accounts.find(acc => acc.id === accountId)?.name || 'Unknown';
       
-      // Update the import history state optimistically
+      // Update the import history state after successful API call
       setImportHistory(prevHistory => 
         prevHistory.map(file => 
           file.fileId === fileId 
@@ -711,9 +730,6 @@ const ImportTransactionsView: React.FC = () => {
       // Exit editing mode
       setEditingAccountFileId(null);
       setEditingAccountValue('');
-      
-      // TODO: Add actual API call to update file account association
-      // await updateFileAccountAssociation(fileId, accountId);
       
       alert("Account updated successfully!");
 
@@ -778,9 +794,9 @@ const ImportTransactionsView: React.FC = () => {
                    isLoadingDefaultMapping || isLoadingFieldMaps ? "Loading mappings..." : 
                    "-- Select Mapping --"}
                 </option>
-                {availableFieldMaps.map(mapping => (
+                  {availableFileMaps.map(mapping => (
                   <option key={mapping.id} value={mapping.id}>
-                    {mapping.name} {mapping.id === (accounts.find(acc => acc.id === selectedAccount)?.defaultFieldMapId) ? "(Account Default)" : ""}
+                    {mapping.name} {mapping.id === (accounts.find(acc => acc.id === selectedAccount)?.defaultfileMapid) ? "(Account Default)" : ""}
                   </option>
                 ))}
               </select>
@@ -913,7 +929,7 @@ const ImportTransactionsView: React.FC = () => {
                               autoFocus
                             >
                               <option value="">-- Select Mapping --</option>
-                              {availableFieldMaps.map(map => (
+                              {availableFileMaps.map(map => (
                                 <option key={map.id} value={map.id}>
                                   {map.name}
                                 </option>
@@ -938,12 +954,12 @@ const ImportTransactionsView: React.FC = () => {
                               // If we don't have an ID but we have a name, try to find the ID from the name
                               let mappingIdToUse = currentMappingId;
                               if (!currentMappingId && currentMappingName) {
-                                const foundMapping = availableFieldMaps.find(map => map.name === currentMappingName);
+                                const foundMapping = availableFileMaps.find(map => map.name === currentMappingName);
                                 mappingIdToUse = foundMapping?.id || '';
                                 console.log('Found mapping by name:', currentMappingName, 'ID:', mappingIdToUse);
                               }
                               
-                              const mappingExists = availableFieldMaps.some(map => map.id === mappingIdToUse);
+                              const mappingExists = availableFileMaps.some(map => map.id === mappingIdToUse);
                               const valueToSet = mappingExists ? mappingIdToUse : '';
                               console.log('Editing mapping for file:', file.fileId, 'Current mapping ID:', currentMappingId, 'Current mapping name:', currentMappingName, 'ID to use:', mappingIdToUse, 'Setting value to:', valueToSet);
                               setEditingMappingValue(valueToSet);
@@ -1022,7 +1038,7 @@ const ImportTransactionsView: React.FC = () => {
           onCompleteImport={handleCompleteImportStep2}
           onCancel={handleCancelStep2}
           targetTransactionFields={TARGET_TRANSACTION_FIELDS}
-          availableFieldMaps={availableFieldMaps}
+          availableFieldMaps={availableFileMaps}
           initialFieldMapToLoad={initialFieldMapForStep2}
           onLoadFieldMapDetails={handleLoadFieldMapDetails}
           onSaveOrUpdateFieldMap={handleSaveOrUpdateFieldMap}

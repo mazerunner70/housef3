@@ -412,9 +412,7 @@ def parse_csv_transactions(transaction_file: TransactionFile, content: bytes) ->
 def parse_ofx_colon_separated(text_content: str, transaction_file: TransactionFile, file_map: FileMap) -> List[Transaction]:
     """Parse OFX content in colon-separated format."""
     transactions: List[Transaction] = []
-    if not transaction_file.opening_balance:
-        raise ValueError("Opening balance is required")
-    balance = transaction_file.opening_balance
+    balance = transaction_file.opening_balance if transaction_file.opening_balance else Decimal(0)
     current_transaction: Dict[str, str] = {}
     in_transaction: bool = False
     import_order: int = 1
@@ -434,7 +432,7 @@ def parse_ofx_colon_separated(text_content: str, transaction_file: TransactionFi
                     transaction = create_transaction_from_ofx(transaction_file, current_transaction, balance, import_order, file_map)
                     if transaction:
                         transactions.append(transaction)
-                        balance += transaction.amount
+                        balance = transaction.balance if transaction.balance is not None else balance + transaction.amount
                         import_order += 1
                 except Exception as e:
                     logger.error(f"Error processing transaction: {str(e)}")
@@ -446,7 +444,7 @@ def parse_ofx_colon_separated(text_content: str, transaction_file: TransactionFi
                     transaction = create_transaction_from_ofx(transaction_file, current_transaction, balance, import_order, file_map)
                     if transaction:
                         transactions.append(transaction)
-                        balance += transaction.amount
+                        balance = transaction.balance if transaction.balance is not None else balance + transaction.amount
                         import_order += 1
                 except Exception as e:
                     logger.error(f"Error processing transaction: {str(e)}")
@@ -527,6 +525,9 @@ def create_transaction_from_ofx(transaction_file: TransactionFile, data: Dict[st
         if not transaction_file.file_id:
             raise ValueError("File ID is required")
         
+        # Update balance with the transaction amount (consistent with CSV processing)
+        new_balance = balance + amount
+        
         # Create transaction
         transaction = Transaction.create(
             account_id=transaction_file.account_id,
@@ -536,7 +537,7 @@ def create_transaction_from_ofx(transaction_file: TransactionFile, data: Dict[st
             description=description,
             amount=amount,
             currency=currency,
-            balance=balance + amount,
+            balance=new_balance,
             import_order=import_order,
             transaction_type=row_data.get('transactionType', '').strip().upper() if row_data.get('transactionType') else None,
             memo=row_data.get('memo'),
@@ -576,9 +577,7 @@ def parse_ofx_transactions(transaction_file: TransactionFile, content: bytes) ->
             logger.info("Attempting to parse as XML")
             root = ET.fromstring(text_content)
             transactions = []
-            if not transaction_file.opening_balance:
-                raise ValueError("Opening balance is required")
-            balance = transaction_file.opening_balance
+            balance = transaction_file.opening_balance if transaction_file.opening_balance else Decimal(0)
             
             # Find all transaction elements
             for i, stmttrn in enumerate(root.findall('.//STMTTRN'), 1):
@@ -602,7 +601,7 @@ def parse_ofx_transactions(transaction_file: TransactionFile, content: bytes) ->
                     transaction = create_transaction_from_ofx(transaction_file, data, balance, i, file_map)
                     if transaction:
                         transactions.append(transaction)
-                        balance += transaction.amount
+                        balance = transaction.balance if transaction.balance is not None else balance + transaction.amount
                         
                 except Exception as e:
                     logger.error(f"Error processing XML transaction: {str(e)}")

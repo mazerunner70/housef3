@@ -36,7 +36,7 @@ export interface Account {
   currency: Currency;
   notes?: string;
   isActive: boolean;
-  defaultFieldMapId?: string;
+  defaultFileMapId?: string;
   createdAt: number;
   updatedAt: number;
 }

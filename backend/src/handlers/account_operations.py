@@ -8,9 +8,16 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from decimal import Decimal
 
-from models.account import Account, AccountType, Currency
-from models.money import Money
-from models.transaction_file import TransactionFileCreate
+from models.account import (
+    Account, 
+    AccountType, 
+    AccountCreate, 
+    AccountUpdate,
+    convert_currency_input
+)
+from models.money import Money, Currency
+from models.transaction_file import TransactionFile, TransactionFileCreate, FileFormat
+from models.transaction import Transaction
 from utils.db_utils import (
     get_account,
     list_user_accounts,
@@ -99,18 +106,22 @@ def create_account_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any
         balance = mandatory_body_parameter(event, 'balance')
         notes = optional_body_parameter(event, 'notes')
         is_active = optional_body_parameter(event, 'isActive')
+        default_field_map_id = optional_body_parameter(event, 'defaultfileMapid')
 
+        # Convert currency input to Currency enum
+        currency_enum = convert_currency_input(currency)
         
         account = Account(
             userId=user_id,
             accountId=uuid.uuid4(),
             accountName=account_name,
             accountType=AccountType(account_type),
-            currency=Currency(currency),
+            currency=currency_enum,
             institution=institution,
             balance=Decimal(balance),
             notes=notes,
-            isActive=bool(is_active) if is_active is not None else True
+            isActive=bool(is_active) if is_active is not None else True,
+            defaultFileMapId=uuid.UUID(default_field_map_id) if default_field_map_id else None
         )
 
         # Validate and create the account
@@ -187,16 +198,21 @@ def update_account_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any
         balance = optional_body_parameter(event, 'balance')
         notes = optional_body_parameter(event, 'notes')
         is_active = optional_body_parameter(event, 'isActive')
+        default_field_map_id = optional_body_parameter(event, 'defaultfileMapid')
+        
+        # Convert currency input to Currency enum if provided
+        currency_enum = convert_currency_input(currency) if currency is not None else None
         
         # Update the account
         updated_account = update_account(uuid.UUID(account_id), user_id, {
             'account_name': account_name,
             'account_type': account_type,
-            'currency': currency,
+            'currency': currency_enum,
             'institution': institution,
             'balance': balance,
             'notes': notes,
-            'is_active': is_active
+            'is_active': is_active,
+            'default_file_map_id': default_field_map_id
         })
         
         # Return the updated account
@@ -369,12 +385,10 @@ def account_file_upload_handler(event: Dict[str, Any], user_id: str) -> Dict[str
     
     transaction_file_create_dto = TransactionFileCreate(**dto_data)
     
-    # Instantiate TransactionFile from DTO data.
-    # Explicitly set the file_id to match the S3 key instead of using default_factory
-    transaction_file_data = transaction_file_create_dto.model_dump()
-    transaction_file_data['file_id'] = uuid.UUID(file_id)  # Use the file_id from S3 key
-    transaction_file = TransactionFile(**transaction_file_data)
-
+    # Convert DTO to full TransactionFile entity with specified file_id
+    transaction_file = transaction_file_create_dto.to_transaction_file(
+        file_id=uuid.UUID(file_id)
+    )
 
     create_transaction_file(transaction_file)
 

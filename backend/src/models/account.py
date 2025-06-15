@@ -4,6 +4,7 @@ Account models for the financial account management system.
 import decimal
 import enum
 import uuid
+import logging
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from decimal import Decimal
@@ -12,6 +13,34 @@ from typing_extensions import Self
 from pydantic import BaseModel, Field, field_validator, ConfigDict, model_validator, ValidationInfo
 
 from models.money import Currency, Money
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
+def convert_currency_input(currency_input: Any) -> Optional[Currency]:
+    """
+    Helper function to convert currency input (typically from API) to Currency enum.
+    Use this for API input handling before creating model instances.
+    
+    Args:
+        currency_input: String currency code or Currency enum
+        
+    Returns:
+        Currency enum or None
+        
+    Raises:
+        ValueError: If currency_input is invalid
+    """
+    if currency_input is None:
+        return None
+    if isinstance(currency_input, Currency):
+        return currency_input
+    if isinstance(currency_input, str):
+        try:
+            return Currency(currency_input)
+        except ValueError:
+            raise ValueError(f"Invalid currency value: '{currency_input}'. Valid options are: {', '.join([c.value for c in Currency])}")
+    raise ValueError(f"Currency must be a string or Currency enum, got {type(currency_input).__name__}: {currency_input}")
 
 
 class AccountType(str, enum.Enum):
@@ -48,7 +77,6 @@ class Account(BaseModel):
             Decimal: str,
             uuid.UUID: str
         },
-        use_enum_values=True,
         arbitrary_types_allowed=True
     )
 
@@ -58,6 +86,21 @@ class Account(BaseModel):
         if v < 0:
             raise ValueError("Timestamp must be a positive integer representing milliseconds since epoch")
         return v
+    
+    @field_validator('currency', mode='after')
+    @classmethod
+    def validate_currency(cls, v, info: ValidationInfo) -> Optional[Currency]:
+        """Ensure currency is always a Currency enum, never a string."""
+        if v is None:
+            return None
+        if isinstance(v, Currency):
+            return v
+        # Check if this is from database deserialization
+        if info.context and info.context.get('from_database'):
+            # During database deserialization, we've already converted strings to enums
+            return v
+        # If we get here, something assigned a non-Currency value
+        raise ValueError(f"Currency must be a Currency enum, got {type(v).__name__}: {v}")
     
     @model_validator(mode='after')
     def check_currency_if_balance_exists(self) -> Self:
@@ -101,6 +144,10 @@ class Account(BaseModel):
         if 'balance' in item and isinstance(item['balance'], Decimal):
             item['balance'] = str(item['balance']) # Ensure string for DynamoDB if not handled by Boto3 Decimal
           
+        # Convert currency enum to string for DynamoDB storage
+        if 'currency' in item and item.get('currency') is not None:
+            item['currency'] = item['currency'].value if hasattr(item['currency'], 'value') else str(item['currency'])
+        
         # Timestamps (createdAt, updatedAt) are integers from Pydantic model.
         # Boto3 will handle Python int as DynamoDB Number (N).
         # No conversion to ISO string needed if DynamoDB attribute type is N.
@@ -122,7 +169,16 @@ class Account(BaseModel):
             except decimal.InvalidOperation:
                 raise ValueError(f"Invalid decimal value for balance from DB: {data['balance']}")
 
-        return cls.model_validate(data)
+        # Convert currency string to Currency enum if necessary (for data from DynamoDB)
+        if 'currency' in data and data.get('currency') is not None and isinstance(data.get('currency'), str):
+            try:
+                data['currency'] = Currency(data['currency'])
+            except ValueError:
+                logger.warning(f"Invalid currency value from database: {data['currency']}, setting to None")
+                data['currency'] = None
+
+        # Use model_validate with context to indicate this is from database
+        return cls.model_validate(data, context={'from_database': True})
 
 
 class AccountCreate(BaseModel):
@@ -140,23 +196,26 @@ class AccountCreate(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
         json_encoders={uuid.UUID: str, Decimal: str},
-        use_enum_values=True,
         arbitrary_types_allowed=True
     )
     
+    @field_validator('currency', mode='after')
+    @classmethod
+    def validate_currency(cls, v, info: ValidationInfo) -> Currency:
+        """Ensure currency is always a Currency enum, never a string."""
+        if isinstance(v, Currency):
+            return v
+        # Check if this is from database deserialization
+        if info.context and info.context.get('from_database'):
+            # During database deserialization, we've already converted strings to enums
+            return v
+        # If we get here, something assigned a non-Currency value
+        raise ValueError(f"Currency must be a Currency enum, got {type(v).__name__}: {v}")
+    
     @model_validator(mode='after')
     def check_currency_if_balance_exists_create(self: Self) -> Self:
-        # In AccountCreate, 'balance' is Decimal and 'currency' is Currency.
-        # This validator ensures that currency is always present since balance is mandatory.
-        # The types themselves enforce presence for balance and currency.
-        # If balance could be optional, then:
-        # if self.balance is not None and self.currency is None:
-        #     raise ValueError("Account currency must be set if balance is provided.")
-        # As 'balance' and 'currency' are not Optional, Pydantic already enforces their presence.
-        # This validator can be simplified or removed if type hints are sufficient.
-        # For now, let's keep a simple check to be explicit, though Pydantic handles non-Optional.
-        if self.balance is not None and self.currency is None: # Technically, currency is not Optional here.
-            raise ValueError("Currency must be provided with balance.") # Should not be hit if types are enforced
+        if self.balance is not None and self.currency is None:
+            raise ValueError("Currency must be provided with balance.")
         return self
 
 class AccountUpdate(BaseModel):
@@ -173,9 +232,23 @@ class AccountUpdate(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
         json_encoders={uuid.UUID: str, Decimal: str},
-        use_enum_values=True,
         arbitrary_types_allowed=True
     )
+
+    @field_validator('currency', mode='after')
+    @classmethod
+    def validate_currency(cls, v, info: ValidationInfo) -> Optional[Currency]:
+        """Ensure currency is always a Currency enum, never a string."""
+        if v is None:
+            return None
+        if isinstance(v, Currency):
+            return v
+        # Check if this is from database deserialization
+        if info.context and info.context.get('from_database'):
+            # During database deserialization, we've already converted strings to enums
+            return v
+        # If we get here, something assigned a non-Currency value
+        raise ValueError(f"Currency must be a Currency enum, got {type(v).__name__}: {v}")
 
     @model_validator(mode='after')
     def check_currency_consistency_on_update(self: Self, info: ValidationInfo) -> Self:

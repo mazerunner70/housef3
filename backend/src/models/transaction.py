@@ -6,7 +6,7 @@ import logging
 from decimal import Decimal
 from typing_extensions import Self
 
-from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict # For Pydantic v2
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict, ValidationInfo # For Pydantic v2
 from pydantic import ValidationError # Import for explicit error handling if needed
 
 from utils.transaction_utils import generate_transaction_hash
@@ -57,6 +57,21 @@ class Transaction(BaseModel):
         if v is not None and v < 0:
             raise ValueError("Timestamp must be a positive integer representing milliseconds since epoch")
         return v
+    
+    @field_validator('currency', mode='after')
+    @classmethod
+    def validate_currency(cls, v, info: ValidationInfo) -> Optional[Currency]:
+        """Ensure currency is always a Currency enum, never a string."""
+        if v is None:
+            return None
+        if isinstance(v, Currency):
+            return v
+        # Check if this is from database deserialization
+        if info.context and info.context.get('from_database'):
+            # During database deserialization, we've already converted strings to enums
+            return v
+        # If we get here, something assigned a non-Currency value
+        raise ValueError(f"Currency must be a Currency enum, got {type(v).__name__}: {v}")
     
     # Other field-specific validators (e.g., for string patterns, specific value constraints) can be added here.
 
@@ -205,7 +220,7 @@ class Transaction(BaseModel):
         # Timestamps: Pydantic should convert numbers to int based on type hints.
         # Other fields should map directly or be handled by Pydantic's parsing.
 
-        return cls.model_validate(data)
+        return cls.model_validate(data, context={'from_database': True})
 
 
 def transaction_to_json(transaction_input: Union[Transaction, Dict[str, Any]]) -> str:
@@ -268,6 +283,19 @@ class TransactionCreate(BaseModel):
             raise ValueError("Timestamp must be a positive integer representing milliseconds since epoch")
         return v
 
+    @field_validator('currency', mode='after')
+    @classmethod
+    def validate_currency(cls, v, info: ValidationInfo) -> Currency:
+        """Ensure currency is always a Currency enum, never a string."""
+        if isinstance(v, Currency):
+            return v
+        # Check if this is from database deserialization
+        if info.context and info.context.get('from_database'):
+            # During database deserialization, we've already converted strings to enums
+            return v
+        # If we get here, something assigned a non-Currency value
+        raise ValueError(f"Currency must be a Currency enum, got {type(v).__name__}: {v}")
+
 class TransactionUpdate(BaseModel):
     """Data Transfer Object for updating an existing transaction.
     All fields are optional.
@@ -296,3 +324,18 @@ class TransactionUpdate(BaseModel):
         if v is not None and v < 0:
             raise ValueError("Timestamp must be a positive integer representing milliseconds since epoch")
         return v
+
+    @field_validator('currency', mode='after')
+    @classmethod
+    def validate_currency(cls, v, info: ValidationInfo) -> Optional[Currency]:
+        """Ensure currency is always a Currency enum, never a string."""
+        if v is None:
+            return None
+        if isinstance(v, Currency):
+            return v
+        # Check if this is from database deserialization
+        if info.context and info.context.get('from_database'):
+            # During database deserialization, we've already converted strings to enums
+            return v
+        # If we get here, something assigned a non-Currency value
+        raise ValueError(f"Currency must be a Currency enum, got {type(v).__name__}: {v}")

@@ -31,7 +31,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ account, onSubmit, onCancel }
         currency: account.currency,
         notes: account.notes,
         isActive: account.isActive,
-        defaultFieldMapId: account.defaultFieldMapId
+        defaultfileMapid: account.defaultfileMapid
       });
     }
   }, [account]);

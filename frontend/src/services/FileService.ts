@@ -352,7 +352,7 @@ export const unassociateFileFromAccount = async (fileId: string): Promise<void> 
 export const associateFileWithAccount = async (fileId: string, accountId: string): Promise<void> => {
   try {
     await authenticatedRequest(`${FILES_API_ENDPOINT}/${fileId}/associate`, {
-      method: 'POST',
+      method: 'PUT',
       body: JSON.stringify({ accountId })
     });
   } catch (error) {

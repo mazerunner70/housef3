@@ -185,11 +185,10 @@ def handler(event, context):
             
             transaction_file_create_dto = TransactionFileCreate(**dto_data)
             
-            # Instantiate TransactionFile from DTO data.
-            # Explicitly set the file_id to match what the frontend expects
-            transaction_file_data = transaction_file_create_dto.model_dump()
-            transaction_file_data['file_id'] = uuid.UUID(file_id_from_metadata)  # Use metadata file_id
-            transaction_file = TransactionFile(**transaction_file_data)
+            # Convert DTO to full TransactionFile entity with specified file_id
+            transaction_file = transaction_file_create_dto.to_transaction_file(
+                file_id=uuid.UUID(file_id_from_metadata)
+            )
             
             logger.info(f"Created TransactionFile object with file_id: {transaction_file.file_id} (matches metadata file_id: {file_id_from_metadata})")
             if transaction_file.account_id:

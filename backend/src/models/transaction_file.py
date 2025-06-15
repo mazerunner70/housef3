@@ -5,12 +5,45 @@ from decimal import Decimal
 import decimal
 import enum
 import uuid
+import logging
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, Tuple, List
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator, ConfigDict, ValidationInfo
 
 from models.account import Currency
 from models.money import Money
+import warnings
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
+# Convert only Pydantic serialization warnings to exceptions
+warnings.filterwarnings('error', category=UserWarning, message='.*Pydantic serializer warnings.*')
+
+def convert_currency_input(currency_input: Any) -> Optional[Currency]:
+    """
+    Helper function to convert currency input (typically from API) to Currency enum.
+    Use this for API input handling before creating model instances.
+    
+    Args:
+        currency_input: String currency code or Currency enum
+        
+    Returns:
+        Currency enum or None
+        
+    Raises:
+        ValueError: If currency_input is invalid
+    """
+    if currency_input is None:
+        return None
+    if isinstance(currency_input, Currency):
+        return currency_input
+    if isinstance(currency_input, str):
+        try:
+            return Currency(currency_input)
+        except ValueError:
+            raise ValueError(f"Invalid currency value: '{currency_input}'. Valid options are: {', '.join([c.value for c in Currency])}")
+    raise ValueError(f"Currency must be a string or Currency enum, got {type(currency_input).__name__}: {currency_input}")
 
 
 class FileFormat(str, enum.Enum):
@@ -92,6 +125,21 @@ class TransactionFile(BaseModel):
             raise ValueError("Timestamp must be a positive integer representing milliseconds since epoch")
         return v
 
+    @field_validator('currency', mode='after')
+    @classmethod
+    def validate_currency(cls, v, info: ValidationInfo) -> Optional[Currency]:
+        """Ensure currency is always a Currency enum, never a string."""
+        if v is None:
+            return None
+        if isinstance(v, Currency):
+            return v
+        # Check if this is from database deserialization
+        if info.context and info.context.get('from_database'):
+            # During database deserialization, we've already converted strings to enums
+            return v
+        # If we get here, something assigned a non-Currency value
+        raise ValueError(f"Currency must be a Currency enum, got {type(v).__name__}: {v}")
+
     # to_flat_dict, from_flat_dict, to_dict, from_dict are replaced by Pydantic's model_dump and model_validate
 
     def update_processing_status(
@@ -172,6 +220,10 @@ class TransactionFile(BaseModel):
         if 'processingStatus' in data and data.get('processingStatus') is not None:
             data['processingStatus'] = data['processingStatus'].value if hasattr(data['processingStatus'], 'value') else str(data['processingStatus'])
         
+        # Convert currency enum to string for DynamoDB storage
+        if 'currency' in data and data.get('currency') is not None:
+            data['currency'] = data['currency'].value if hasattr(data['currency'], 'value') else str(data['currency'])
+        
         # date_range is a DateRange model; model_dump already converts it to a dict.
         # Timestamps are already ints (milliseconds)
         return data
@@ -188,11 +240,19 @@ class TransactionFile(BaseModel):
                 # Handle potential error if the string is not a valid Decimal
                 raise ValueError(f"Invalid string format for Decimal 'openingBalance': {data['openingBalance']} - {e}")
 
+        # Convert currency string to Currency enum if necessary (for data from DynamoDB)
+        if 'currency' in data and data.get('currency') is not None and isinstance(data.get('currency'), str):
+            try:
+                data['currency'] = Currency(data['currency'])
+            except ValueError:
+                logger.warning(f"Invalid currency value from database: {data['currency']}, setting to None")
+                data['currency'] = None
+
         # Pydantic will handle Decimal conversion for 'openingBalance' if it's a string/number in data.
         # Pydantic will automatically convert string enum values to enum objects based on type hints.
         # Pydantic will reconstruct DateRange if 'dateRange' in data is a dict and matches DateRange fields.
         # Pydantic handles UUIDs based on type hints and model_config.
-        return cls.model_validate(data)
+        return cls.model_validate(data, context={'from_database': True})
 
     # Removed validate method as Pydantic handles validation
 
@@ -212,6 +272,41 @@ class TransactionFileCreate(BaseModel):
         populate_by_name=True,
         json_encoders={uuid.UUID: str}
     )
+
+    @field_validator('currency', mode='after')
+    @classmethod
+    def validate_currency(cls, v, info: ValidationInfo) -> Optional[Currency]:
+        """Ensure currency is always a Currency enum, never a string."""
+        if v is None:
+            return None
+        if isinstance(v, Currency):
+            return v
+        # Check if this is from database deserialization
+        if info.context and info.context.get('from_database'):
+            # During database deserialization, we've already converted strings to enums
+            return v
+        # If we get here, something assigned a non-Currency value
+        raise ValueError(f"Currency must be a Currency enum, got {type(v).__name__}: {v}")
+
+    def to_transaction_file(self, file_id: Optional[uuid.UUID] = None) -> 'TransactionFile':
+        """
+        Convert this TransactionFileCreate DTO to a full TransactionFile entity.
+        
+        Args:
+            file_id: Optional file_id to use instead of auto-generating one
+            
+        Returns:
+            TransactionFile: The full entity with auto-generated fields
+        """
+        # Get the data from this DTO
+        transaction_file_data = self.model_dump(by_alias=False)
+        
+        # Set the file_id if provided, otherwise let TransactionFile generate it
+        if file_id is not None:
+            transaction_file_data['file_id'] = file_id
+            
+        # Create and return the full TransactionFile entity
+        return TransactionFile(**transaction_file_data)
 
 # DTO for updating a TransactionFile
 class TransactionFileUpdate(BaseModel):
@@ -242,48 +337,17 @@ class TransactionFileUpdate(BaseModel):
             raise ValueError("Timestamp must be a positive integer representing milliseconds since epoch")
         return v
 
-# Removed validate_transaction_file_data function (validations moved into Pydantic model or handled by type hints)
-# Removed type_default function (Pydantic handles JSON serialization defaults)
-# Removed transaction_file_to_json function (use model_instance.model_dump_json())
-
-
-# Example of how to use (optional, can be removed):
-# if __name__ == '__main__':
-#     # Create
-#     file_create_data = TransactionFileCreate(
-#         userId="user123",
-#         fileName="transactions.csv",
-#         fileSize=1024,
-#         s3Key="s3://bucket/transactions.csv",
-#         fileFormat=FileFormat.CSV,
-#         accountId=uuid.uuid4()
-#     )
-#     print("Create DTO:", file_create_data.model_dump_json(by_alias=True, indent=2))
-
-#     # Instantiate main model from create DTO + other defaults
-#     # In a real scenario, you'd pass file_create_data and then fill in system-set fields
-#     new_file = TransactionFile(**file_create_data.model_dump(by_alias=False), file_id=uuid.uuid4())
-#     print("\nNew File:", new_file.model_dump_json(by_alias=True, indent=2))
-
-#     # Update status
-#     new_file.update_processing_status(
-#         status=ProcessingStatus.PROCESSED,
-#         record_count=100,
-#         date_range_input=(int(datetime(2023,1,1, tzinfo=timezone.utc).timestamp()*1000), int(datetime(2023,1,31, tzinfo=timezone.utc).timestamp()*1000)),
-#         opening_balance_input=Decimal("100.00")
-#     )
-#     print("\nFile after status update:", new_file.model_dump_json(by_alias=True, indent=2))
-
-#     # Update with DTO
-#     update_dto = TransactionFileUpdate(fileName="transactions_final.csv", transaction_count=98)
-#     changed = new_file.update_with_data(update_dto)
-#     print(f"\nFile changed by update DTO: {changed}")
-#     print("File after DTO update:", new_file.model_dump_json(by_alias=True, indent=2))
-
-#     # Simulate loading from DB (dict with aliases)
-#     db_data = new_file.model_dump(by_alias=True)
-#     loaded_file = TransactionFile.model_validate(db_data)
-#     print("\nLoaded File from DB data:", loaded_file.model_dump_json(by_alias=True, indent=2))
-
-#     assert loaded_file.file_id == new_file.file_id
-#     assert loaded_file.date_range.start_date == new_file.date_range.start_date 
+    @field_validator('currency', mode='after')
+    @classmethod
+    def validate_currency(cls, v, info: ValidationInfo) -> Optional[Currency]:
+        """Ensure currency is always a Currency enum, never a string."""
+        if v is None:
+            return None
+        if isinstance(v, Currency):
+            return v
+        # Check if this is from database deserialization
+        if info.context and info.context.get('from_database'):
+            # During database deserialization, we've already converted strings to enums
+            return v
+        # If we get here, something assigned a non-Currency value
+        raise ValueError(f"Currency must be a Currency enum, got {type(v).__name__}: {v}")

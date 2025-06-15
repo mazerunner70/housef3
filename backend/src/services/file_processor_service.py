@@ -17,7 +17,7 @@ from handlers.account_operations import create_response
 from models import account
 from models.account import Account, Currency
 from models.money import Money
-from models.transaction_file import DateRange, FileFormat, ProcessingStatus, TransactionFile
+from models.transaction_file import DateRange, FileFormat, ProcessingStatus, TransactionFile, convert_currency_input
 from models.file_map import FileMap
 from models.transaction import Transaction
 from utils.lambda_utils import handle_error
@@ -419,7 +419,9 @@ def process_new_file(transaction_file: TransactionFile, content_bytes: bytes) ->
         content_bytes
     ) if transaction_file.file_format and transaction_file.file_map_id  and transaction_file.account_id and transaction_file.opening_balance else None
     if transactions:
-        transaction_file.currency = transactions[0].currency
+        # Ensure currency is properly set from transactions (should already be Currency enum)
+        if transactions[0].currency:
+            transaction_file.currency = transactions[0].currency
         update_transaction_duplicates(transactions)
         if not transaction_file.currency:
             raise ValueError("Currency is required")
@@ -631,7 +633,10 @@ def set_defaults_from_account(transaction_file: TransactionFile)->TransactionFil
     """
     if transaction_file.account_id:
         account = checked_mandatory_account(transaction_file.account_id, transaction_file.user_id)
-        transaction_file.currency = account.currency if not transaction_file.currency else transaction_file.currency
+        # Ensure currency assignment is safe (account.currency should already be Currency enum)
+        logger.info(f"Setting currency from account {account.currency}, type {type(account.currency)}")
+        if not transaction_file.currency and account.currency:
+            transaction_file.currency = account.currency
         transaction_file.file_map_id = account.default_file_map_id if not transaction_file.file_map_id else transaction_file.file_map_id
     return transaction_file
 
