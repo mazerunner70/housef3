@@ -61,7 +61,7 @@ class Account(BaseModel):
     user_id: str = Field(alias="userId")
     account_name: str = Field(max_length=100, alias="accountName")
     account_type: AccountType = Field(alias="accountType")
-    institution: str = Field(max_length=100)
+    institution: Optional[str] = Field(default=None, max_length=100)
     balance: Optional[Decimal] = None
     currency: Optional[Currency] = None
     notes: Optional[str] = Field(default=None, max_length=1000)
@@ -186,9 +186,9 @@ class AccountCreate(BaseModel):
     user_id: str = Field(alias="userId")
     account_name: str = Field(max_length=100, alias="accountName")
     account_type: AccountType = Field(alias="accountType")
-    institution: str = Field(max_length=100)
-    balance: Decimal
-    currency: Currency
+    institution: Optional[str] = Field(default=None, max_length=100)
+    balance: Optional[Decimal] = None
+    currency: Optional[Currency] = None
     notes: Optional[str] = Field(default=None, max_length=1000)
     is_active: bool = Field(default=True, alias="isActive")
     default_file_map_id: Optional[uuid.UUID] = Field(default=None, alias="defaultFileMapId")
@@ -201,8 +201,10 @@ class AccountCreate(BaseModel):
     
     @field_validator('currency', mode='after')
     @classmethod
-    def validate_currency(cls, v, info: ValidationInfo) -> Currency:
+    def validate_currency(cls, v, info: ValidationInfo) -> Optional[Currency]:
         """Ensure currency is always a Currency enum, never a string."""
+        if v is None:
+            return None
         if isinstance(v, Currency):
             return v
         # Check if this is from database deserialization

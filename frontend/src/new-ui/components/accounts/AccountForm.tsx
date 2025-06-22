@@ -31,7 +31,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ initialData, onSubmit, onCanc
         type: AccountService.AccountType.CHECKING, // Default using namespace import
         currency: AccountService.Currency.USD,   // Default using namespace import
         balance: undefined, // Balance is optional, and not set for new accounts via this form
-        bankName: '',
+        bankName: undefined, // Use undefined instead of empty string for optional field
         ...(initialData || {}),
     });
 
@@ -50,7 +50,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ initialData, onSubmit, onCanc
                 type: AccountService.AccountType.CHECKING,
                 currency: AccountService.Currency.USD,
                 balance: undefined, // No balance field for new accounts
-                bankName: '',
+                bankName: undefined,
             });
         }
     }, [initialData]);
@@ -62,17 +62,12 @@ const AccountForm: React.FC<AccountFormProps> = ({ initialData, onSubmit, onCanc
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        // Create a copy of formData to pass, explicitly managing the optional balance
+        // Create a copy of formData to pass, explicitly managing the optional fields
         const dataToSubmit: UIAccountInputData = {
             ...formData,
-            // If balance field was entirely removed and not part of formData state for new accounts:
-            // balance will be undefined. The hook defaults it to '0' for create operations.
-            // If editing an account, and balance field is present but optional:
-            // balance: formData.balance // will be string or undefined from state
+            // Convert empty string to undefined for optional bankName field
+            bankName: formData.bankName?.trim() === '' ? undefined : formData.bankName,
         };
-        // Since balance is removed from form for new accounts, formData.balance will be undefined.
-        // If editing retains an optional balance field, this would pass it through.
-        // For now, assuming `balance` is not a field in the form for add/edit.
         onSubmit(dataToSubmit);
     };
 
