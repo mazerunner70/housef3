@@ -124,6 +124,58 @@ export const validateOFXContent = async (file: File): Promise<{ isValid: boolean
 };
 
 /**
+ * Enhanced QIF content validation
+ */
+export const validateQIFContent = async (file: File): Promise<{ isValid: boolean; warnings?: string[] }> => {
+  if (!file.name.toLowerCase().endsWith('.qif')) {
+    return { isValid: true };
+  }
+
+  try {
+    const chunk = file.slice(0, 2048);
+    const text = await chunk.text();
+    
+    const warnings: string[] = [];
+    
+    // Check for QIF type header
+    const hasTypeHeader = /!Type:(Bank|Cash|CCard|Invst|Oth A|Oth L)/.test(text);
+    
+    // Check for transaction structure
+    const hasTransactionData = text.includes('D') && text.includes('T') && text.includes('^');
+    
+    // Check for account header (multi-account files)
+    const hasAccountHeader = text.includes('!Account');
+    
+    if (!hasTypeHeader && !hasAccountHeader) {
+      warnings.push('No QIF type header found - file may not be valid QIF format');
+    }
+    
+    if (!hasTransactionData) {
+      warnings.push('No transaction data detected in file preview');
+    }
+    
+    // Check for potential encoding issues
+    if (text.includes('�') || text.includes('\ufffd')) {
+      warnings.push('File may have encoding issues - ensure it is saved as plain text');
+    }
+    
+    const isValid = hasTypeHeader || hasAccountHeader || hasTransactionData;
+    
+    return {
+      isValid,
+      warnings: warnings.length > 0 ? warnings : undefined
+    };
+    
+  } catch (error) {
+    console.warn('Could not validate QIF content:', error);
+    return { 
+      isValid: true,
+      warnings: ['Could not validate file content - proceeding with caution']
+    };
+  }
+};
+
+/**
  * Validate QFX content (similar to OFX but Quicken-specific)
  */
 export const validateQFXContent = async (file: File): Promise<{ isValid: boolean; warnings?: string[] }> => {
@@ -253,6 +305,9 @@ export const validateTransactionFile = async (
       break;
     case 'qfx':
       contentValidation = await validateQFXContent(file);
+      break;
+    case 'qif':
+      contentValidation = await validateQIFContent(file);
       break;
     case 'csv':
       contentValidation = await validateCSVContent(file);

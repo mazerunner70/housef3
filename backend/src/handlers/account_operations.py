@@ -366,6 +366,8 @@ def account_file_upload_handler(event: Dict[str, Any], user_id: str) -> Dict[str
         file_format = FileFormat.CSV
     elif file_name.lower().endswith(('.ofx', '.qfx')):
         file_format = FileFormat.OFX
+    elif file_name.lower().endswith('.qif'):
+        file_format = FileFormat.QIF
     elif file_name.lower().endswith('.pdf'):
         file_format = FileFormat.PDF
     elif file_name.lower().endswith('.xlsx'):

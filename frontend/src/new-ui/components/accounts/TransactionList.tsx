@@ -9,6 +9,7 @@ export interface UITransaction {
   amount: string; // Using string if Decimal.js is involved, or number
   type: 'Debit' | 'Credit'; // Or an enum
   status?: string; // e.g., "Cleared", "Pending"
+  importOrder?: number; // Import order for sorting
 }
 
 interface TransactionListProps {
@@ -31,6 +32,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions }) => {
             <th>Amount</th>
             <th>Type</th>
             <th>Status</th>
+            <th>Import Order</th>
           </tr>
         </thead>
         <tbody>
@@ -42,6 +44,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions }) => {
               <td>{tx.amount}</td>
               <td>{tx.type}</td>
               <td>{tx.status || 'N/A'}</td>
+              <td className="import-order">{tx.importOrder || 'N/A'}</td>
             </tr>
           ))}
         </tbody>

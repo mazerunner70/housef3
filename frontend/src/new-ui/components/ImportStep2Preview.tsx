@@ -20,7 +20,7 @@ export interface ColumnMapping {
 
 interface ImportStep2PreviewProps {
   parsedData: TransactionRow[];
-  fileType: 'csv' | 'ofx' | 'qfx'; // To determine if mapping is needed
+  fileType: 'csv' | 'ofx' | 'qfx' | 'qif'; // To determine if mapping is needed
   // Headers from the CSV file, if applicable
   csvHeaders?: string[];
   // Pre-existing mapping configuration, if any
@@ -98,7 +98,7 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
 
   // Effect to initialize/reset columnMappings based on targetTransactionFields or existingMapping prop
   useEffect(() => {
-    if (fileType === 'csv' || fileType === 'ofx' || fileType === 'qfx') {
+    if (fileType === 'csv' || fileType === 'ofx' || fileType === 'qfx' || fileType === 'qif') {
       const initialMappingsFromProps = existingMapping || []; // Use existingMapping if provided by parent
       
       // If existingMapping is provided, it means a map was pre-loaded. 
@@ -131,7 +131,7 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
   // Effect to process data and set overall form validity (and update columnMappings isValid status)
   useEffect(() => {
     console.log("[ImportStep2Preview] Mapping/Validation useEffect. fileType:", fileType, "parsedData length:", parsedData.length, "columnMappings:", columnMappings);
-    if (fileType === 'csv' || fileType === 'ofx' || fileType === 'qfx') {
+    if (fileType === 'csv' || fileType === 'ofx' || fileType === 'qfx' || fileType === 'qif') {
       const availableHeaders = fileType === 'csv' ? csvHeaders : 
         (parsedData.length > 0 ? Object.keys(parsedData[0]).filter(key => key !== 'id') : []);
       
@@ -302,8 +302,8 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
   };
 
   const renderMappingControls = () => {
-    if (fileType === 'csv' || fileType === 'ofx' || fileType === 'qfx') {
-      // Show mapping controls for CSV, OFX, and QFX files
+    if (fileType === 'csv' || fileType === 'ofx' || fileType === 'qfx' || fileType === 'qif') {
+      // Show mapping controls for CSV, OFX, QFX, and QIF files
     } else {
       return null;
     }
@@ -401,7 +401,7 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
                 </select>
                 {currentMapping?.csvColumn && currentMapping.isValid === false && (
                   <p className="csv-mapping-item-error-message">
-                    Data in mapped CSV column ('{currentMapping.csvColumn}') does not match expected format.
+                    Data in mapped {fileType.toUpperCase()} column ('{currentMapping.csvColumn}') does not match expected format.
                   </p>
                 )}
                 {currentMapping?.csvColumn && currentMapping.isValid === true && (
@@ -489,7 +489,7 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
 
   const handleCompleteImportClick = () => {
     let fieldMapToAssociate: { id: string; name: string } | undefined = undefined;
-    if ((fileType === 'csv' || fileType === 'ofx' || fileType === 'qfx') && selectedFieldMapId && fieldMapNameInput.trim()) {
+    if ((fileType === 'csv' || fileType === 'ofx' || fileType === 'qfx' || fileType === 'qif') && selectedFieldMapId && fieldMapNameInput.trim()) {
       // Only pass if a map is selected AND has a name (could be an existing one or a newly named one)
       // This assumes that if `selectedFieldMapId` is set, `fieldMapNameInput` also reflects its name
       // or the new name if it was just typed in for a new save.
@@ -505,7 +505,7 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
     <div className="import-step2-preview-container">
       <h2 className="step2-main-header">Step 2: Preview, Map Fields, and Confirm</h2>
 
-      {(fileType === 'csv' || fileType === 'ofx' || fileType === 'qfx') && renderMappingControls()}
+      {(fileType === 'csv' || fileType === 'ofx' || fileType === 'qfx' || fileType === 'qif') && renderMappingControls()}
 
       <div className="transaction-preview-section">
         <h3 className="transaction-preview-header">Transaction Preview</h3>

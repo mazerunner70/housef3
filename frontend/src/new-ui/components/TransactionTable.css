@@ -101,6 +101,14 @@
   font-weight: 500;
 }
 
+.transaction-table-container .import-order {
+  font-family: monospace;
+  text-align: center !important;
+  font-weight: 500;
+  color: #6c757d;
+  width: 80px;
+}
+
 .transaction-table-container .action-button {
   background: none;
   border: none;

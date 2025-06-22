@@ -224,7 +224,7 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
           <div>
             <span className="account-detail-label">Balance:</span>
             <span className="account-detail-balance">
-              {formatCurrency({ amount: account.balance, currency: account.currency })}
+              {formatCurrency({ amount: typeof account.balance === 'number' ? account.balance : account.balance.toNumber(), currency: account.currency })}
             </span>
           </div>
           {account.institution && (
@@ -353,23 +353,42 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
                   const bValue = b[sortField];
                   const direction = sortDirection === 'asc' ? 1 : -1;
                   
+                  // Primary sort by the selected field
+                  let primaryComparison = 0;
                   if (sortField === 'date') {
-                    return direction * (new Date(aValue as string).getTime() - new Date(bValue as string).getTime());
+                    primaryComparison = direction * (new Date(aValue as string).getTime() - new Date(bValue as string).getTime());
+                  } else if (sortField === 'amount' || sortField === 'balance' || sortField === 'importOrder') {
+                    primaryComparison = direction * ((aValue as number) - (bValue as number));
+                  } else {
+                    primaryComparison = direction * String(aValue).localeCompare(String(bValue));
                   }
-                  if (sortField === 'amount' || sortField === 'balance' || sortField === 'importOrder') {
-                    return direction * ((aValue as number) - (bValue as number));
+                  
+                  // If primary comparison is equal, add secondary sort
+                  if (primaryComparison === 0) {
+                    // Secondary sort: concatenated date + import order string
+                    const aOrder = a.importOrder ?? 0;
+                    const bOrder = b.importOrder ?? 0;
+                    
+                    // Create concatenated sort keys: date + padded import order
+                    const aDateStr = typeof a.date === 'number' ? a.date.toString() : new Date(a.date).getTime().toString();
+                    const bDateStr = typeof b.date === 'number' ? b.date.toString() : new Date(b.date).getTime().toString();
+                    const aSortKey = `${aDateStr.padStart(15, '0')}_${aOrder.toString().padStart(10, '0')}`;
+                    const bSortKey = `${bDateStr.padStart(15, '0')}_${bOrder.toString().padStart(10, '0')}`;
+                    
+                    return aSortKey.localeCompare(bSortKey);
                   }
-                  return direction * String(aValue).localeCompare(String(bValue));
+                  
+                  return primaryComparison;
                 })
                 .map(transaction => (
                   <div key={transaction.transactionId} className="transaction-row">
                     <div className="cell date">{formatDate(transaction.date)}</div>
                     <div className="cell description">{transaction.description}</div>
-                    <div className={`cell amount ${transaction.amount.amount >= 0 ? 'positive' : 'negative'}`}>
-                      {formatCurrency(transaction.amount)}
+                    <div className={`cell amount ${transaction.amount.toNumber() >= 0 ? 'positive' : 'negative'}`}>
+                      {formatCurrency({ amount: transaction.amount.toNumber(), currency: transaction.currency })}
                     </div>
                     <div className="cell transaction-balance">
-                      {formatCurrency(transaction.balance)}
+                      {formatCurrency({ amount: transaction.balance.toNumber(), currency: transaction.currency })}
                     </div>
                     <div className="cell import-order">
                       {transaction.importOrder}

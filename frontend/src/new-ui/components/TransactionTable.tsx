@@ -116,6 +116,18 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
         }
         return 0;
       });
+    } else {
+      // Default sorting: concatenated date + import order string
+      sortableItems.sort((a, b) => {
+        const aOrder = a.importOrder ?? 0;
+        const bOrder = b.importOrder ?? 0;
+        
+        // Create concatenated sort keys: date + padded import order
+        const aSortKey = `${a.date.toString().padStart(15, '0')}_${aOrder.toString().padStart(10, '0')}`;
+        const bSortKey = `${b.date.toString().padStart(15, '0')}_${bOrder.toString().padStart(10, '0')}`;
+        
+        return aSortKey.localeCompare(bSortKey);
+      });
     }
     return sortableItems;
   }, [transactions, sortConfig, accountsMap]); // Added accountsMap dependency
@@ -188,13 +200,14 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
             <th onClick={() => handleSort('account')}>Account{getSortIndicator('account')}</th>
             <th onClick={() => handleSort('amount')}>Amount{getSortIndicator('amount')}</th>
             <th onClick={() => handleSort('balance')}>Balance{getSortIndicator('balance')}</th>
+            <th onClick={() => handleSort('importOrder')}>Import Order{getSortIndicator('importOrder')}</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {sortedTransactionsOnPage.length === 0 && (
             <tr>
-              <td colSpan={8} style={{ textAlign: 'center', padding: '20px' }}>
+              <td colSpan={9} style={{ textAlign: 'center', padding: '20px' }}>
                 No transactions for the current page or filters.
               </td>
             </tr>
@@ -308,6 +321,9 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                   </td>
                 );
               })()}
+              <td className="import-order">
+                {transaction.importOrder || 'N/A'}
+              </td>
               <td>
                 <button onClick={() => onEditTransaction(transaction.id)} className="action-button edit-button" title="Edit transaction">
                   ✎

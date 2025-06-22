@@ -40,7 +40,7 @@ from utils.s3_dao import (
     get_presigned_url_simple,
     put_object
 )
-from handlers.file_processor import create_file
+from handlers.file_processor import process_file
 from services.file_service import get_files_for_user, format_file_metadata, get_files_for_account
 from utils.lambda_utils import create_response, mandatory_body_parameter, mandatory_path_parameter, handle_error, mandatory_query_parameter, optional_body_parameter, optional_query_parameter 
 
@@ -774,8 +774,98 @@ def format_ofx_transaction_for_preview(data: Dict[str, str]) -> Dict[str, str]:
         logger.error(f"Error formatting OFX transaction for preview: {str(e)}")
         return {}
 
+def parse_qif_preview(content: str) -> Dict[str, Any]:
+    """Parse QIF content and return preview data with actual QIF field codes as columns."""
+    try:
+        transactions_data = []
+        total_rows = 0
+        all_fields = set()
+        
+        lines = content.splitlines()
+        current_transaction = {}
+        
+        # First pass: collect all field codes present in the file
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith('!'):
+                continue
+                
+            if line == '^':
+                # End of transaction
+                if current_transaction:
+                    all_fields.update(current_transaction.keys())
+                    transactions_data.append(current_transaction.copy())
+                    total_rows += 1
+                current_transaction = {}
+            elif len(line) >= 2:
+                field_code = line[0]
+                field_value = line[1:]
+                current_transaction[field_code] = field_value
+        
+        # Process any remaining transaction
+        if current_transaction:
+            all_fields.update(current_transaction.keys())
+            transactions_data.append(current_transaction.copy())
+            total_rows += 1
+        
+        # Create columns from actual QIF field codes found in file
+        # Sort to ensure consistent ordering: D, T, P, M, L, N, C, then others
+        priority_fields = ['D', 'T', 'P', 'M', 'L', 'N', 'C']
+        columns = []
+        
+        # Add priority fields first if they exist
+        for field in priority_fields:
+            if field in all_fields:
+                columns.append(field)
+                all_fields.remove(field)
+        
+        # Add any remaining fields alphabetically
+        columns.extend(sorted(all_fields))
+        
+        # Sort transactions by date for preview (QIF files often have reverse chronological order)
+        def parse_qif_date_for_sorting(date_str):
+            """Parse QIF date for sorting purposes."""
+            if not date_str:
+                return 0
+            try:
+                # Try common QIF date formats for sorting
+                for fmt in ["%m/%d/%Y", "%m/%d/%y", "%m/%d'%y", "%m/ %d/%y"]:
+                    try:
+                        return datetime.strptime(date_str.strip(), fmt).timestamp()
+                    except ValueError:
+                        continue
+                return 0
+            except:
+                return 0
+        
+        transactions_data.sort(key=lambda tx: parse_qif_date_for_sorting(tx.get('D', '')))
+        
+        # Format data for preview - ensure all transactions have all columns
+        formatted_data = []
+        for transaction in transactions_data[:10]:  # Limit to first 10
+            formatted_transaction = {}
+            for col in columns:
+                formatted_transaction[col] = transaction.get(col, '')
+            formatted_data.append(formatted_transaction)
+        
+        return {
+            'columns': columns,
+            'data': formatted_data,
+            'totalRows': total_rows,
+            'message': f'Preview of first {len(formatted_data)} QIF transactions.' if formatted_data else 'No transactions found in QIF file.'
+        }
+        
+    except Exception as e:
+        logger.error(f"Error parsing QIF preview: {str(e)}")
+        return {
+            'columns': [],
+            'data': [],
+            'totalRows': 0,
+            'message': f'Error parsing QIF file: {str(e)}'
+        }
+
 def get_file_preview_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
-    """Get a preview of a file, supporting CSV, OFX, and QFX formats."""
+    """Get a preview of a file, supporting CSV, OFX, QFX, and QIF formats."""
     try:
         file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
         file = checked_mandatory_transaction_file(file_id, user_id)
@@ -852,6 +942,28 @@ def get_file_preview_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
                 logger.error(f"Error parsing OFX/QFX file {file_id}: {str(parse_e)}")
                 logger.error(traceback.format_exc())
                 return handle_error(400, f"Error parsing {file.file_format.value.upper()} file: {str(parse_e)}")
+        elif file.file_format == FileFormat.QIF:
+            content_bytes = get_object_content(file.s3_key)
+            if content_bytes is None:
+                return handle_error(500, "Error reading file content from S3.")
+
+            try:
+                content_str = content_bytes.decode('utf-8')
+                preview_data = parse_qif_preview(content_str)
+                
+                return create_response(200, {
+                    'fileId': file_id,
+                    'fileName': file.file_name,
+                    'fileFormat': file.file_format.value,
+                    'columns': preview_data['columns'],
+                    'data': preview_data['data'],
+                    'totalRows': preview_data['totalRows'],
+                    'message': preview_data['message']
+                })
+            except Exception as parse_e:
+                logger.error(f"Error parsing QIF file {file_id}: {str(parse_e)}")
+                logger.error(traceback.format_exc())
+                return handle_error(400, f"Error parsing QIF file: {str(parse_e)}")
         else:
             return create_response(200, {
                 'fileId': file_id,
@@ -860,7 +972,7 @@ def get_file_preview_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
                 'columns': [],
                 'data': [],
                 'totalRows': 0,
-                'message': f'Preview is only supported for CSV, OFX, and QFX files. Current format: {file.file_format.value if file.file_format else "unknown"}'
+                'message': f'Preview is only supported for CSV, OFX, QFX, and QIF files. Current format: {file.file_format.value if file.file_format else "unknown"}'
             })
     except ValueError as ve:
         return handle_error(400, str(ve))

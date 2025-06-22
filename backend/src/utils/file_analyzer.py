@@ -74,6 +74,10 @@ def detect_format_from_content(content: bytes) -> FileFormat:
             # If not text, try as binary
             return FileFormat.OTHER
 
+        # Check for QIF format
+        if text_content.startswith('!Type:') or '!Type:' in text_content[:100]:
+            return FileFormat.QIF
+
         # Check for OFX/QFX format
         if text_content.strip().startswith('OFXHEADER:100'):
             # Check if it's a QFX file
@@ -145,6 +149,7 @@ def detect_format_from_extension(filename: str) -> FileFormat:
         'csv': FileFormat.CSV,
         'ofx': FileFormat.OFX,
         'qfx': FileFormat.QFX,
+        'qif': FileFormat.QIF,
         'pdf': FileFormat.PDF,
         'xlsx': FileFormat.XLSX,
         'xls': FileFormat.EXCEL,

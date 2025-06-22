@@ -36,11 +36,15 @@ __all__ = [
     'parse_transactions',
     'parse_csv_transactions',
     'parse_ofx_transactions',
+    'parse_qif_transactions',
     'apply_field_mapping',
     'find_column_index',
     'parse_date',
+    'parse_qif_date',
     'detect_date_order',
     'file_type_selector',
+    'create_transaction_from_qif',
+    'map_qif_cleared_status',
 ]
 
 def detect_date_order(dates: List[str]) -> str:
@@ -132,6 +136,8 @@ def parse_transactions(transaction_file: TransactionFile,
             return parse_csv_transactions(transaction_file, content)
         elif transaction_file.file_format in [FileFormat.OFX, FileFormat.QFX]:
             return parse_ofx_transactions(transaction_file, content)
+        elif transaction_file.file_format == FileFormat.QIF:
+            return parse_qif_transactions(transaction_file, content)
         else:
             logger.warning(f"Unsupported file format for transaction parsing: {transaction_file.file_format}")
             return []
@@ -620,13 +626,17 @@ def parse_ofx_transactions(transaction_file: TransactionFile, content: bytes) ->
 
 def file_type_selector(content: bytes) -> Optional[FileFormat]:
     """
-    Detect the file format (CSV, OFX, QFX) from the raw content bytes.
+    Detect the file format (CSV, OFX, QFX, QIF) from the raw content bytes.
     Returns a FileFormat enum value if positively determined, otherwise None.
     """
     try:
         text = content.decode('utf-8', errors='ignore').strip()
     except Exception:
         return None  # Could not decode
+
+    # Check for QIF markers
+    if text.startswith('!Type:') or '!Type:' in text[:100]:
+        return FileFormat.QIF
 
     # Check for OFX/QFX markers
     if text.startswith('<OFX') or 'OFXHEADER:' in text or 'DATA:OFXSGML' in text:
@@ -640,9 +650,191 @@ def file_type_selector(content: bytes) -> Optional[FileFormat]:
             return FileFormat.OFX
         if '<QFX>' in text or '<QFX ' in text:
             return FileFormat.QFX
-    # Heuristic for CSV: must have at least one comma in the first line and no XML/OFX/QFX markers
+    # Heuristic for CSV: must have at least one comma in the first line and no XML/OFX/QFX/QIF markers
     first_line = text.splitlines()[0] if text else ''
-    if ',' in first_line and not any(marker in text for marker in ['<OFX', '<QFX', 'OFXHEADER:', 'DATA:OFXSGML', '<?xml']):
+    if ',' in first_line and not any(marker in text for marker in ['<OFX', '<QFX', 'OFXHEADER:', 'DATA:OFXSGML', '<?xml', '!Type:']):
         return FileFormat.CSV
     # Could not positively determine
     return FileFormat.OTHER
+
+
+def parse_qif_transactions(transaction_file: TransactionFile, content: bytes) -> Optional[List[Transaction]]:
+    """
+    Parse transactions from QIF file content.
+    
+    Args:
+        transaction_file: TransactionFile object with metadata
+        content: The raw QIF file content
+        
+    Returns:
+        List of Transaction objects
+    """
+    try:
+        if not transaction_file.file_map_id:
+            logger.warning(f"File map is required for QIF transaction parsing")
+            return []
+            
+        file_map = checked_mandatory_file_map(transaction_file.file_map_id, transaction_file.user_id)
+        
+        # Decode content
+        text_content = content.decode('utf-8')
+        logger.info("Parsing QIF content with field mapping")
+        
+        transactions = []
+        current_transaction = {}
+        balance = transaction_file.opening_balance if transaction_file.opening_balance else Decimal(0)
+        import_order = 1
+        
+        lines = text_content.splitlines()
+        i = 0
+        
+        # Skip to transaction data (past headers)
+        while i < len(lines) and not lines[i].startswith('D'):
+            i += 1
+            
+        # Parse each transaction
+        while i < len(lines):
+            line = lines[i].strip()
+            
+            if not line:
+                i += 1
+                continue
+                
+            if line == '^':
+                # End of transaction - process it
+                if current_transaction:
+                    transaction = create_transaction_from_qif(
+                        transaction_file, current_transaction, balance, import_order, file_map
+                    )
+                    if transaction:
+                        transactions.append(transaction)
+                        balance = transaction.balance if transaction.balance else balance + transaction.amount
+                        import_order += 1
+                current_transaction = {}
+            else:
+                # Parse field
+                if len(line) >= 2:
+                    field_code = line[0]
+                    field_value = line[1:]
+                    current_transaction[field_code] = field_value
+            
+            i += 1
+        
+        # Process any remaining transaction
+        if current_transaction:
+            transaction = create_transaction_from_qif(
+                transaction_file, current_transaction, balance, import_order, file_map
+            )
+            if transaction:
+                transactions.append(transaction)
+        
+        # Sort transactions by date in ascending order
+        # QIF files often have transactions in reverse chronological order
+        transactions.sort(key=lambda tx: tx.date if tx.date else 0)
+        
+        # Recalculate running balances after sorting
+        if transaction_file.opening_balance and transactions:
+            current_balance = transaction_file.opening_balance
+            for i, tx in enumerate(transactions):
+                current_balance += tx.amount
+                tx.balance = current_balance
+                tx.import_order = i + 1  # Update import order after sorting
+        
+        logger.info(f"Successfully parsed and sorted {len(transactions)} QIF transactions")
+        return transactions
+        
+    except Exception as e:
+        logger.error(f"Error parsing QIF transactions: {str(e)}")
+        return []
+
+
+def create_transaction_from_qif(
+    transaction_file: TransactionFile, 
+    qif_data: Dict[str, str], 
+    balance: Decimal, 
+    import_order: int, 
+    file_map: FileMap
+) -> Transaction:
+    """Create a transaction from QIF field data using field mapping."""
+    try:
+        # Apply user's field mapping directly to QIF field codes
+        # qif_data contains field codes like {'D': '1/1/2024', 'T': '-150.00', 'P': 'Grocery Store'}
+        row_data = apply_field_mapping(qif_data, file_map)
+        
+        if not row_data:
+            raise ValueError("Field mapping returned empty result")
+            
+        # Parse date
+        date_str = str(row_data.get('date', ''))
+        date_ms = parse_qif_date(date_str)
+        
+        # Parse amount
+        amount_str = str(row_data.get('amount', '0')).replace(',', '')
+        amount = -Decimal(amount_str)
+        
+        # Update balance
+        new_balance = balance + amount
+        
+        # Validate required IDs
+        if not transaction_file.account_id:
+            raise ValueError("Account ID is required")
+        if not transaction_file.user_id:
+            raise ValueError("User ID is required")
+        if not transaction_file.file_id:
+            raise ValueError("File ID is required")
+        
+        # Create transaction
+        transaction = Transaction.create(
+            account_id=transaction_file.account_id,
+            user_id=transaction_file.user_id,
+            file_id=transaction_file.file_id,
+            date=date_ms,
+            description=row_data.get('description', '').strip(),
+            amount=amount,
+            currency=transaction_file.currency,
+            balance=new_balance,
+            import_order=import_order,
+            memo=row_data.get('memo'),
+            check_number=row_data.get('checkNumber'),
+            status=map_qif_cleared_status(row_data.get('clearedStatus'))
+        )
+        
+        return transaction
+        
+    except Exception as e:
+        raise ValueError(f"Error creating QIF transaction: {str(e)}")
+
+
+def parse_qif_date(date_str: str) -> int:
+    """Parse QIF date formats and return milliseconds since epoch."""
+    # QIF supports various date formats
+    qif_date_formats = [
+        "%d/%m/%Y",    # 15/01/2024
+        "%d/%m/%y",    # 15/01/24
+        "%m/%d/%Y",    # 1/15/2024
+        "%m/%d/%y",    # 1/15/24  
+        "%m/%d'%y",    # 1/15'24 (Quicken format)
+        "%m/ %d/%y",   # 1/ 1/24 (spaces)
+        "%Y-%m-%d"      # 2024-01-15
+    ]
+    
+    for fmt in qif_date_formats:
+        try:
+            dt = datetime.strptime(date_str.strip(), fmt)
+            return int(dt.timestamp() * 1000)
+        except ValueError:
+            continue
+            
+    raise ValueError(f"Invalid QIF date format: {date_str}")
+
+
+def map_qif_cleared_status(status: Optional[str]) -> Optional[str]:
+    """Map QIF cleared status to internal format."""
+    if not status:
+        return None
+    status = status.strip().upper()
+    if status in ['*', 'R']:
+        return 'reconciled'
+    elif status in ['X', 'C']:
+        return 'cleared'
+    return 'uncleared'

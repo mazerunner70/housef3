@@ -49,6 +49,8 @@ if [ -n "$1" ]; then
     echo "Running specific test: $1"
     echo "--------------------------------------------------------------------------------"
     PYTHONPATH=$SRC_PATH LOG_LEVEL=DEBUG LOGGING_CONFIG=tests/logging.conf python3 -m unittest "$1" -v 2>&1 | tee test.log
+    # Use PIPESTATUS to get the exit code of the unittest command, not tee
+    exit_code=${PIPESTATUS[0]}
 else
     # Run all tests if no specific test provided
     echo "Running all tests..."
@@ -70,10 +72,9 @@ else
     echo "--------------------------------------------------------------------------------"
     
     PYTHONPATH=$SRC_PATH LOG_LEVEL=DEBUG LOGGING_CONFIG=tests/logging.conf python3 -m unittest $TEST_FILES -v 2>&1 | tee test.log
+    # Use PIPESTATUS to get the exit code of the unittest command, not tee
+    exit_code=${PIPESTATUS[0]}
 fi
-
-# Store the exit code
-exit_code=$?
 
 # Deactivate virtual environment
 deactivate

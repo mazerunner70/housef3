@@ -336,7 +336,7 @@ def list_account_files(account_id: uuid.UUID) -> List[TransactionFile]:
             IndexName='AccountIdIndex',
             KeyConditionExpression=Key('accountId').eq(str(account_id))
         )
-        
+        logger.info(f"1 {response['Items']}")
         files = []
         for item in response.get('Items', []):
             files.append(TransactionFile.from_dynamodb_item(item))

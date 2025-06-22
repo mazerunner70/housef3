@@ -51,6 +51,7 @@ class FileFormat(str, enum.Enum):
     CSV = "csv"
     OFX = "ofx"
     QFX = "qfx"
+    QIF = "qif"
     PDF = "pdf"
     XLSX = "xlsx"
     OTHER = "other"
@@ -226,11 +227,19 @@ class TransactionFile(BaseModel):
         
         # date_range is a DateRange model; model_dump already converts it to a dict.
         # Timestamps are already ints (milliseconds)
+        
+        # Debug: Log the dateRange structure
+        if 'dateRange' in data:
+            logger.info(f"Serialized dateRange: {data['dateRange']} (type: {type(data['dateRange'])})")
+        
         return data
 
     @classmethod
     def from_dynamodb_item(cls, data: Dict[str, Any]) -> "TransactionFile":
         """Deserializes a dictionary from DynamoDB to a TransactionFile instance."""
+        
+        # Handle DynamoDB type descriptors if they appear (defensive programming)
+        data = TransactionFile._convert_dynamodb_types(data)
         
         # Manually convert openingBalance from string to Decimal if necessary
         if 'openingBalance' in data and data.get('openingBalance') is not None and isinstance(data.get('openingBalance'), str):
@@ -253,6 +262,48 @@ class TransactionFile(BaseModel):
         # Pydantic will reconstruct DateRange if 'dateRange' in data is a dict and matches DateRange fields.
         # Pydantic handles UUIDs based on type hints and model_config.
         return cls.model_validate(data, context={'from_database': True})
+    
+    @staticmethod
+    def _convert_dynamodb_types(data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Convert DynamoDB type descriptors to Python types recursively.
+        This handles cases where DynamoDB returns raw type descriptors.
+        """
+        if not isinstance(data, dict):
+            return data
+            
+        converted = {}
+        for key, value in data.items():
+            if isinstance(value, dict):
+                # Check if this is a DynamoDB type descriptor
+                if len(value) == 1:
+                    type_key = next(iter(value.keys()))
+                    type_value = next(iter(value.values()))
+                    
+                    if type_key == 'N':  # Number
+                        converted[key] = int(type_value) if type_value.isdigit() else float(type_value)
+                    elif type_key == 'S':  # String
+                        converted[key] = type_value
+                    elif type_key == 'BOOL':  # Boolean
+                        converted[key] = type_value
+                    elif type_key == 'NULL':  # Null
+                        converted[key] = None
+                    elif type_key == 'L':  # List
+                        converted[key] = [TransactionFile._convert_dynamodb_types(item) for item in type_value]
+                    elif type_key == 'M':  # Map
+                        converted[key] = TransactionFile._convert_dynamodb_types(type_value)
+                    else:
+                        # Not a type descriptor, recurse into nested dict
+                        converted[key] = TransactionFile._convert_dynamodb_types(value)
+                else:
+                    # Not a type descriptor, recurse into nested dict
+                    converted[key] = TransactionFile._convert_dynamodb_types(value)
+            elif isinstance(value, list):
+                converted[key] = [TransactionFile._convert_dynamodb_types(item) for item in value]
+            else:
+                converted[key] = value
+                
+        return converted
 
     # Removed validate method as Pydantic handles validation
 

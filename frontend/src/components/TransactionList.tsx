@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Transaction, getFileTransactions } from '../services/TransactionService';
 import './TransactionList.css';
+import Decimal from 'decimal.js';
 
 interface TransactionListProps {
   fileId: string;
   fileName?: string;
-  openingBalance?: number;
+  openingBalance?: Decimal;
   onClose: () => void;
 }
 
@@ -44,11 +45,11 @@ const TransactionList: React.FC<TransactionListProps> = ({
   }, [fileId]);
 
   // Format amount as currency
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: Decimal) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD'
-    }).format(amount);
+    }).format(amount.toNumber());
   };
 
   // Format date
@@ -81,11 +82,16 @@ const TransactionList: React.FC<TransactionListProps> = ({
   // Get sorted transactions
   const getSortedTransactions = () => {
     if (!isCustomSorted) {
-      // Use importOrder when no custom sorting is applied
+      // Sort by concatenated date + import order string
       return [...transactions].sort((a, b) => {
         const aOrder = a.importOrder ?? 0;
         const bOrder = b.importOrder ?? 0;
-        return aOrder - bOrder;
+        
+        // Create concatenated sort keys: date + padded import order
+        const aSortKey = `${a.date.toString().padStart(15, '0')}_${aOrder.toString().padStart(10, '0')}`;
+        const bSortKey = `${b.date.toString().padStart(15, '0')}_${bOrder.toString().padStart(10, '0')}`;
+        
+        return aSortKey.localeCompare(bSortKey);
       });
     }
 
@@ -175,6 +181,9 @@ const TransactionList: React.FC<TransactionListProps> = ({
                 <th onClick={() => handleSortChange('balance')} className="sortable">
                   Balance {getSortIndicator('balance')}
                 </th>
+                <th onClick={() => handleSortChange('importOrder')} className="sortable">
+                  Import Order {getSortIndicator('importOrder')}
+                </th>
                 <th>Type</th>
                 <th>Category</th>
                 <th>Reference</th>
@@ -190,11 +199,14 @@ const TransactionList: React.FC<TransactionListProps> = ({
                       <div className="memo">{transaction.memo}</div>
                     )}
                   </td>
-                  <td className={`amount-cell ${transaction.amount >= 0 ? 'positive' : 'negative'}`}>
+                  <td className={`amount-cell ${transaction.amount >= Decimal(0) ? 'positive' : 'negative'}`}>
                     {formatCurrency(transaction.amount)}
                   </td>
                   <td className="transaction-balance">
                     {formatCurrency(transaction.balance)}
+                  </td>
+                  <td className="import-order">
+                    {transaction.importOrder}
                   </td>
                   <td>{transaction.transactionType}</td>
                   <td>{transaction.category}</td>

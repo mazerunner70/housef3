@@ -87,7 +87,7 @@ const ImportTransactionsView: React.FC = () => {
   // State for Step 2
   const [parsedTransactionData, setParsedTransactionData] = useState<TransactionRow[]>([]);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
-  const [fileTypeForStep2, setFileTypeForStep2] = useState<'csv' | 'ofx' | 'qfx'>('csv');
+  const [fileTypeForStep2, setFileTypeForStep2] = useState<'csv' | 'ofx' | 'qfx' | 'qif'>('csv');
   const [existingMappingsForStep2, setExistingMappingsForStep2] = useState<ColumnMapping[] | undefined>(undefined); // Re-introduced
 
   // New state for named field map management
@@ -492,7 +492,7 @@ const ImportTransactionsView: React.FC = () => {
     try {
       let processApiResult: FileProcessResult;
 
-      if ((fileTypeForStep2 === 'csv' || fileTypeForStep2 === 'ofx' || fileTypeForStep2 === 'qfx') && finalFieldMapToAssociate?.id) {
+      if ((fileTypeForStep2 === 'csv' || fileTypeForStep2 === 'ofx' || fileTypeForStep2 === 'qfx' || fileTypeForStep2 === 'qif') && finalFieldMapToAssociate?.id) {
         console.log(`[ImportTransactionsView] Associating map '${finalFieldMapToAssociate.name}' (${finalFieldMapToAssociate.id}) with ${fileTypeForStep2.toUpperCase()} file ${currentFileId} and processing.`);
         processApiResult = await updateFileFieldMapAssociation(currentFileId, finalFieldMapToAssociate.id);
       } else {

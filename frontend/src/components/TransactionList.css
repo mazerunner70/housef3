@@ -126,6 +126,14 @@
   font-weight: 500;
 }
 
+.import-order {
+  font-family: monospace;
+  text-align: center !important;
+  font-weight: 500;
+  color: #6c757d;
+  width: 80px;
+}
+
 @media (min-width: 1200px) {
   .transaction-list-container {
     max-width: 1200px;

@@ -13,7 +13,7 @@ from typing import Dict, Any, List, Tuple, Optional
 from decimal import Decimal
 from models.transaction_file import FileFormat, ProcessingStatus, TransactionFile, TransactionFileCreate
 from models.file_map import FileMap
-from services.file_processor_service import create_file, process_file, FileProcessorResponse
+from services.file_processor_service import process_file, FileProcessorResponse
 from utils.transaction_parser import parse_transactions, file_type_selector
 from models.transaction import Transaction
 from utils.file_analyzer import analyze_file_format

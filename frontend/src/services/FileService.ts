@@ -506,7 +506,7 @@ export const waitForFileProcessing = async (
 export const parseFileWithPolling = async (
   fileId: string,
   onStatusUpdate?: (status: string) => void
-): Promise<{ data?: any[], headers?: string[], error?: string, file_format?: 'csv' | 'ofx' | 'qfx' }> => {
+): Promise<{ data?: any[], headers?: string[], error?: string, file_format?: 'csv' | 'ofx' | 'qfx' | 'qif' }> => {
   try {
     console.log(`Starting parseFileWithPolling for fileId: ${fileId}`);
     onStatusUpdate?.('Waiting for file processing...');
@@ -630,7 +630,7 @@ export const unlinkFileFromAccount = async (fileId: string): Promise<void> => {
 };
 
 // Internal function to call the preview endpoint directly
-const getFilePreviewData = async (fileId: string): Promise<{ data?: any[], headers?: string[], error?: string, file_format?: 'csv' | 'ofx' | 'qfx' }> => {
+const getFilePreviewData = async (fileId: string): Promise<{ data?: any[], headers?: string[], error?: string, file_format?: 'csv' | 'ofx' | 'qfx' | 'qif' }> => {
     const url = `${FILES_API_ENDPOINT}/${fileId}/preview`;
     console.log(`Calling GET ${url} for parsing/previewing file.`);
 
@@ -644,7 +644,7 @@ const getFilePreviewData = async (fileId: string): Promise<{ data?: any[], heade
     const result: { 
         data?: any[], 
         columns?: string[], 
-        fileFormat?: 'csv' | 'ofx' | 'qfx', 
+        fileFormat?: 'csv' | 'ofx' | 'qfx' | 'qif', 
         error?: string 
     } = await response.json();
 
@@ -668,7 +668,7 @@ const getFilePreviewData = async (fileId: string): Promise<{ data?: any[], heade
 };
 
 // Parse file function with polling for file processing completion
-export const parseFile = async (fileId: string): Promise<{ data?: any[], headers?: string[], error?: string, file_format?: 'csv' | 'ofx' | 'qfx' }> => {
+export const parseFile = async (fileId: string): Promise<{ data?: any[], headers?: string[], error?: string, file_format?: 'csv' | 'ofx' | 'qfx' | 'qif' }> => {
     try {
         console.log(`Starting parseFile for fileId: ${fileId}`);
         

@@ -1,66 +1,129 @@
 .account-list-item {
     border: var(--border-width) solid var(--color-borders-dividers);
-    border-radius: var(--border-radius-medium); /* Use medium radius for cards */
-    padding: var(--spacing-l);
-    background-color: var(--color-white); /* Brighter background for cards */
+    border-radius: var(--border-radius-medium);
+    background-color: var(--color-white);
     box-shadow: var(--shadow-subtle);
-    transition: box-shadow 0.3s ease;
-    display: flex; /* Use flex to align info and actions */
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--spacing-l);
+    transition: box-shadow 0.3s ease, transform 0.2s ease;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 180px;
 }
 
 .account-list-item:hover {
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08); /* Slightly more pronounced hover shadow */
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    transform: translateY(-2px);
 }
 
-.account-info {
-    flex-grow: 1; /* Allow info to take available space */
+/* Header Section */
+.account-card-header {
+    padding: var(--spacing-l);
+    background: linear-gradient(135deg, var(--color-primary-brand) 0%, var(--color-secondary-brand) 100%);
+    color: var(--color-white);
 }
 
-.account-list-item h3 {
-    margin-top: 0;
-    margin-bottom: var(--spacing-s);
-    color: var(--color-text-primary);
-    font-size: var(--font-size-h4); /* Use themed heading size */
+.account-primary-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-s);
+}
+
+.account-name {
+    margin: 0;
+    font-size: var(--font-size-h4);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-white);
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+    line-height: 1.2;
+}
+
+.account-name:hover {
+    opacity: 0.9;
+    text-decoration: underline;
+}
+
+.account-balance {
+    font-size: var(--font-size-h5);
     font-weight: var(--font-weight-semibold);
+    color: var(--color-white);
+    opacity: 0.95;
 }
 
-.account-list-item p {
-    margin: var(--spacing-xs) 0;
-    color: var(--color-text-secondary);
+/* Body Section */
+.account-card-body {
+    padding: var(--spacing-l);
+    flex-grow: 1;
+    background-color: var(--color-white);
+}
+
+.account-details {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-m);
+}
+
+.account-detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-s) 0;
+    border-bottom: 1px solid var(--color-background-subtle);
+}
+
+.account-detail-item:last-child {
+    border-bottom: none;
+}
+
+.detail-label {
     font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
-/* Container for action buttons */
+.detail-value {
+    font-size: var(--font-size-body);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-primary);
+    text-align: right;
+}
+
+/* Footer Section */
+.account-card-footer {
+    padding: var(--spacing-l);
+    background-color: var(--color-background-subtle);
+    border-top: 1px solid var(--color-borders-dividers);
+}
+
 .account-actions {
     display: flex;
-    gap: var(--spacing-s); /* Use theme spacing for gap */
-    flex-shrink: 0; /* Prevent buttons from shrinking */
-    margin-left: var(--spacing-l); /* Space between info and actions */
+    gap: var(--spacing-m);
+    justify-content: flex-end;
 }
 
-/* Base styles for buttons within account items - adopt general .btn principles */
+/* Button Styles */
 .account-actions .edit-button,
 .account-actions .delete-button {
     font-family: var(--font-primary);
     font-weight: var(--font-weight-semibold);
     border-radius: var(--border-radius-small);
     cursor: pointer;
-    display: inline-flex; /* Key for sizing to content + padding */
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     text-decoration: none;
     border-style: solid;
     border-width: var(--border-width);
-    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out, box-shadow 0.2s ease-in-out; /* Reinstated transition */
-    padding: var(--button-padding-compact-vertical) var(--button-padding-compact-horizontal); /* Use compact padding */
-    font-size: var(--font-size-small); /* Use smaller font for these actions */
-    min-height: var(--button-height-compact); /* Use compact height */
+    transition: all 0.2s ease-in-out;
+    padding: var(--button-padding-compact-vertical) var(--button-padding-compact-horizontal);
+    font-size: var(--font-size-small);
+    min-height: var(--button-height-compact);
+    min-width: 80px;
 }
 
-/* Edit Button - Styled as a Secondary Button */
+/* Edit Button */
 .edit-button {
     background-color: var(--color-secondary-brand);
     color: var(--color-white);
@@ -68,16 +131,18 @@
 }
 
 .edit-button:hover {
-    background-color: #2980B9; /* Fallback: Pre-calculated darker shade of --color-secondary-brand */
-    border-color: #2980B9;    /* Fallback: Pre-calculated darker shade of --color-secondary-brand */
+    background-color: #2980B9;
+    border-color: #2980B9;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
 }
 
 .edit-button:focus {
     outline: none;
-    box-shadow: 0 0 0 3px hsl(from var(--color-secondary-brand) h s l / 0.4);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.4);
 }
 
-/* Delete Button - Styled as a Danger Button */
+/* Delete Button */
 .delete-button {
     background-color: var(--color-error-danger);
     color: var(--color-white);
@@ -85,24 +150,47 @@
 }
 
 .delete-button:hover {
-    background-color: #D62C1A; /* Fallback: Pre-calculated darker shade of --color-error-danger */
-    border-color: #D62C1A;    /* Fallback: Pre-calculated darker shade of --color-error-danger */
+    background-color: #D62C1A;
+    border-color: #D62C1A;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(231, 76, 60, 0.3);
 }
 
 .delete-button:focus {
     outline: none;
-    box-shadow: 0 0 0 3px hsl(from var(--color-error-danger) h s l / 0.4);
+    box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.4);
 }
 
-.view-details-link {
-    display: block;
-    margin-top: var(--spacing-m);
-    color: var(--color-secondary-brand);
-    text-decoration: none;
-    font-weight: var(--font-weight-medium);
-}
-
-.view-details-link:hover {
-    text-decoration: underline;
-    color: var(--color-primary-brand);
+/* Responsive Design */
+@media (max-width: 768px) {
+    .account-list-item {
+        min-height: auto;
+    }
+    
+    .account-card-header,
+    .account-card-body,
+    .account-card-footer {
+        padding: var(--spacing-m);
+    }
+    
+    .account-actions {
+        flex-direction: column;
+        gap: var(--spacing-s);
+    }
+    
+    .account-actions .edit-button,
+    .account-actions .delete-button {
+        width: 100%;
+        min-width: auto;
+    }
+    
+    .account-detail-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--spacing-xs);
+    }
+    
+    .detail-value {
+        text-align: left;
+    }
 } 
