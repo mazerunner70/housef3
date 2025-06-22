@@ -93,6 +93,7 @@ const ImportTransactionsView: React.FC = () => {
   // New state for named field map management
   const [availableFileMaps, setAvailableFileMaps] = useState<AvailableMapInfo[]>([]);
   const [currentlyLoadedFieldMapDetails, setCurrentlyLoadedFieldMapDetails] = useState<ColumnMapping[] | undefined>(undefined);
+  const [currentlyLoadedFieldMapData, setCurrentlyLoadedFieldMapData] = useState<FieldMap | undefined>(undefined); // Store full field map data
   const [initialFieldMapForStep2, setInitialFieldMapForStep2] = useState<{id: string, name: string} | undefined>(undefined);
   const [isLoadingFieldMaps, setIsLoadingFieldMaps] = useState<boolean>(false);
 
@@ -235,6 +236,7 @@ const ImportTransactionsView: React.FC = () => {
       setCurrentFileId(null);
       setExistingMappingsForStep2(undefined); // Reset this too
       setCurrentlyLoadedFieldMapDetails(undefined); // Reset loaded map details
+      setCurrentlyLoadedFieldMapData(undefined); // Reset loaded map data
       setInitialFieldMapForStep2(undefined); // Reset initial map to load
       // Don't clear success alert here since we want to show it on return to step 1
     }
@@ -268,6 +270,7 @@ const ImportTransactionsView: React.FC = () => {
     setSelectedHistoryFileId(null); // Clear history selection
     setInitialFieldMapForStep2(undefined); // Reset for new file
     setCurrentlyLoadedFieldMapDetails(undefined);
+    setCurrentlyLoadedFieldMapData(undefined);
     if (file) {
       console.log("Enhanced file selected:", file);
     }
@@ -561,14 +564,19 @@ const ImportTransactionsView: React.FC = () => {
           isValid: undefined, // Validity will be re-calculated by ImportStep2Preview
         }));
         console.log("[ImportTransactionsView] Transformed mappings for Step2:", transformedMappings);
+        console.log("[ImportTransactionsView] Field map reverseAmounts flag:", fieldMapData.reverseAmounts);
         setCurrentlyLoadedFieldMapDetails(transformedMappings); // Update state to pass as prop
+        // Store the reverseAmounts flag to be accessed by the child component
+        setCurrentlyLoadedFieldMapData(fieldMapData); // Store full field map data
         return transformedMappings;
       }
       setCurrentlyLoadedFieldMapDetails(undefined); // Clear if not found or no mappings
+      setCurrentlyLoadedFieldMapData(undefined);
       return undefined;
     } catch (error) {
       console.error("[ImportTransactionsView] Error loading field map details:", fieldMapId, error);
       setCurrentlyLoadedFieldMapDetails(undefined); // Clear on error
+      setCurrentlyLoadedFieldMapData(undefined);
       throw error; // Re-throw so ImportStep2Preview can catch and display message
     }
   }, []);
@@ -579,9 +587,10 @@ const ImportTransactionsView: React.FC = () => {
       mapIdToUpdate?: string;
       name: string;
       mappingsToSave: Array<{ csvColumn: string; targetField: string }>;
+      reverseAmounts?: boolean;
     }
   ): Promise<{ newMapId?: string; newName?: string; success: boolean; message?: string }> => {
-    const { mapIdToUpdate, name, mappingsToSave } = params;
+    const { mapIdToUpdate, name, mappingsToSave, reverseAmounts } = params;
     console.log(`[ImportTransactionsView] Saving/Updating map. ID: ${mapIdToUpdate}, Name: ${name}`);
     try {
       let serviceResponse: FieldMap;
@@ -589,12 +598,17 @@ const ImportTransactionsView: React.FC = () => {
 
       if (mapIdToUpdate) {
         // updateFieldMap expects fileMapId and a Partial<FieldMap> object for updates
-        serviceResponse = await updateFieldMap(mapIdToUpdate, { name, mappings: preparedMappings });
+        serviceResponse = await updateFieldMap(mapIdToUpdate, { 
+          name, 
+          mappings: preparedMappings,
+          reverseAmounts: reverseAmounts || false 
+        });
       } else {
         // createFieldMap expects an Omit<FieldMap, 'fileMapId' | 'createdAt' | 'updatedAt'> object
         serviceResponse = await createFieldMap({
             name,
             mappings: preparedMappings,
+            reverseAmounts: reverseAmounts || false,
             // Optionally include accountId if relevant and available
             // accountId: selectedAccount || undefined, 
             // description can also be added if there's a UI for it
@@ -1171,6 +1185,7 @@ const ImportTransactionsView: React.FC = () => {
           initialFieldMapToLoad={initialFieldMapForStep2}
           onLoadFieldMapDetails={handleLoadFieldMapDetails}
           onSaveOrUpdateFieldMap={handleSaveOrUpdateFieldMap}
+          currentlyLoadedFieldMapData={currentlyLoadedFieldMapData}
         />
       )}
 

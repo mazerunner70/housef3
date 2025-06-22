@@ -660,10 +660,13 @@ def create_transactions_from_mapped_data(
                 FileFormat.QIF: 'qif'
             }[transaction_file.file_format]
             
+            # Determine if amounts should be reversed based on file mapping
+            reverse_amounts = file_map.reverse_amounts if file_map else False
+            
             parsed_data = ParsedTransactionData(
                 date=parse_date_with_format(mapped_data['date'], date_info.format_string, format_type),
                 description=mapped_data.get('description', ''),
-                amount=_process_amount_for_format(mapped_data, transaction_file.file_format),
+                amount=_process_amount_for_format(mapped_data, transaction_file.file_format, reverse_amounts),
                 currency=_parse_currency(mapped_data.get('currency')) or transaction_file.currency,
                 memo=mapped_data.get('memo'),
                 transaction_type=mapped_data.get('debitOrCredit') or mapped_data.get('transactionType'),
@@ -709,7 +712,7 @@ def parse_transactions_orchestrator(transaction_file: TransactionFile, content: 
 # HELPER FUNCTIONS FOR UNIVERSAL PROCESSING
 # =============================================================================
 
-def _process_amount_for_format(mapped_data: Dict[str, Any], file_format: Optional[FileFormat]) -> Decimal:
+def _process_amount_for_format(mapped_data: Dict[str, Any], file_format: Optional[FileFormat], reverse_amounts: bool = False) -> Decimal:
     """Process amount based on file format"""
     if not file_format:
         raise ValueError("File format is required")
@@ -717,13 +720,19 @@ def _process_amount_for_format(mapped_data: Dict[str, Any], file_format: Optiona
     amount_str = str(mapped_data.get('amount', '0'))
     
     if file_format == FileFormat.CSV:
-        return process_csv_amount(amount_str, mapped_data.get('debitOrCredit'))
+        amount = process_csv_amount(amount_str, mapped_data.get('debitOrCredit'))
     elif file_format in [FileFormat.OFX, FileFormat.QFX]:
-        return process_ofx_amount(amount_str)
+        amount = process_ofx_amount(amount_str)
     elif file_format == FileFormat.QIF:
-        return process_qif_amount(amount_str)
+        amount = process_qif_amount(amount_str)
     else:
-        return Decimal(amount_str.replace(',', ''))
+        amount = Decimal(amount_str.replace(',', ''))
+    
+    # Apply reverse amounts flag if specified
+    if reverse_amounts:
+        amount = -amount
+    
+    return amount
 
 
 def _parse_currency(currency_str: Optional[str]) -> Optional[Currency]:

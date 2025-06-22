@@ -45,8 +45,11 @@ interface ImportStep2PreviewProps {
       // Mappings to save should be in the format { csvColumn: string, targetField: string }
       // Only include mappings where csvColumn is actually set.
       mappingsToSave: Array<{ csvColumn: string; targetField: string }>;
+      reverseAmounts?: boolean; // Flag to reverse transaction amounts
     }
   ) => Promise<{ newMapId?: string; newName?: string; success: boolean; message?: string }>;
+  // Full field map data for loaded mapping (includes reverseAmounts)
+  currentlyLoadedFieldMapData?: any; // FieldMap type from FileMapService
 }
 
 const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
@@ -62,10 +65,12 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
   initialFieldMapToLoad, // Will be used to set initial state for dropdown and name
   onLoadFieldMapDetails,
   onSaveOrUpdateFieldMap,
+  currentlyLoadedFieldMapData, // Full field map data
 }) => {
   const [transactionData, setTransactionData] = useState<TransactionRow[]>(parsedData);
   const [columnMappings, setColumnMappings] = useState<ColumnMapping[]>([]);
   const [isMappingValid, setIsMappingValid] = useState(false);
+  const [reverseAmounts, setReverseAmounts] = useState<boolean>(false); // State for amount reversal flag
 
   // New state for named field map management
   const [selectedFieldMapId, setSelectedFieldMapId] = useState<string | null>(null);
@@ -95,6 +100,17 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
       setFieldMapNameInput('');
     }
   }, [initialFieldMapToLoad]);
+
+  // Effect to update reverseAmounts state when currentlyLoadedFieldMapData changes
+  useEffect(() => {
+    if (currentlyLoadedFieldMapData?.reverseAmounts !== undefined) {
+      console.log("[ImportStep2Preview] Setting reverseAmounts from loaded field map data:", currentlyLoadedFieldMapData.reverseAmounts);
+      setReverseAmounts(currentlyLoadedFieldMapData.reverseAmounts);
+    } else {
+      // Reset to false when no field map is loaded
+      setReverseAmounts(false);
+    }
+  }, [currentlyLoadedFieldMapData]);
 
   // Effect to initialize/reset columnMappings based on targetTransactionFields or existingMapping prop
   useEffect(() => {
@@ -271,12 +287,13 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
         return;
     }
 
-    console.log("[ImportStep2Preview] Attempting to save/update mapping. Name:", fieldMapNameInput, "ID to update:", selectedFieldMapId, "Mappings:", mappingsToSave);
+    console.log("[ImportStep2Preview] Attempting to save/update mapping. Name:", fieldMapNameInput, "ID to update:", selectedFieldMapId, "Mappings:", mappingsToSave, "ReverseAmounts:", reverseAmounts);
     try {
       const result = await onSaveOrUpdateFieldMap({
         mapIdToUpdate: selectedFieldMapId || undefined, // Pass ID if updating
         name: fieldMapNameInput.trim(),
         mappingsToSave,
+        reverseAmounts, // Include the reverse amounts flag
       });
 
       if (result.success) {
@@ -357,6 +374,28 @@ const ImportStep2Preview: React.FC<ImportStep2PreviewProps> = ({
             >
               {isSavingMapping ? 'Saving...' : (selectedFieldMapId ? 'Update Existing Profile' : 'Save as New Profile')}
             </button>
+          </div>
+        </div>
+
+        {/* Amount Reversal Option */}
+        <div className="amount-reversal-section">
+          <h4 className="amount-reversal-header">Transaction Amount Options</h4>
+          <div className="amount-reversal-control">
+            <label className="amount-reversal-checkbox-label">
+              <input
+                type="checkbox"
+                checked={reverseAmounts}
+                onChange={(e) => setReverseAmounts(e.target.checked)}
+                className="amount-reversal-checkbox"
+                disabled={isSavingMapping}
+              />
+              <span className="amount-reversal-text">
+                Reverse all transaction amounts (multiply by -1)
+              </span>
+            </label>
+            <p className="amount-reversal-description">
+              Use this option if your bank exports payments as positive values when they should be negative, or vice versa.
+            </p>
           </div>
         </div>
 

@@ -9,6 +9,7 @@ export interface FieldMap {
     sourceField: string;
     targetField: string;
   }>;
+  reverseAmounts?: boolean;  // Flag to reverse transaction amounts (multiply by -1)
   createdAt: string;
   updatedAt: string;
 }

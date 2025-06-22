@@ -206,11 +206,106 @@
 /* Responsive adjustments for controls if needed */
 @media (min-width: 640px) { /* sm breakpoint or similar */
   .named-mapping-controls {
-    flex-direction: row; /* Align items in a row on larger screens */
-    align-items: flex-end; /* Align items to the bottom (button aligns nicely) */
+    flex-direction: row; /* Side by side on larger screens */
   }
+  
   .named-mapping-button {
-    white-space: nowrap; /* Prevent button text from wrapping */
-    flex-shrink: 0; /* Prevent button from shrinking if space is tight */
+    align-self: flex-end; /* Align button to bottom */
   }
+}
+
+/* Styles for the Amount Reversal Section */
+.amount-reversal-section {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  background-color: #fefce8; /* Light yellow background to draw attention */
+}
+
+.amount-reversal-header {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: #1f2937;
+}
+
+.amount-reversal-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.amount-reversal-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.amount-reversal-checkbox {
+  margin: 0;
+  cursor: pointer;
+}
+
+.amount-reversal-text {
+  font-weight: 500;
+  color: #374151;
+}
+
+.amount-reversal-description {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin: 0;
+  padding-left: 1.25rem; /* Align with checkbox text */
+}
+.amount-reversal-section {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  background-color: #fefce8; /* Light yellow background to draw attention */
+}
+
+.amount-reversal-header {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: #1f2937;
+}
+
+.amount-reversal-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.amount-reversal-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.amount-reversal-checkbox {
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+  accent-color: #2563eb; /* Blue color for checkbox when checked */
+}
+
+.amount-reversal-text {
+  user-select: none; /* Prevent text selection when clicking */
+}
+
+.amount-reversal-description {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin: 0;
+  padding-left: 1.5rem; /* Align with checkbox text */
+  line-height: 1.4;
 } 

@@ -652,8 +652,11 @@ def update_file_field_map_handler(event: Dict[str, Any], user_id: str) -> Dict[s
         field_map = get_file_map(field_map_id)
         if not field_map:
             return create_response(404, {"message": "Field map not found"})
+        
+        # Update file properties
         file.file_map_id = field_map_id
         logger.info(f"Updating file {file_id} with field map {field_map_id}")
+        
         response: FileProcessorResponse = process_file(file)
         return create_response(200, response.to_dict())
     except NotFound as e:

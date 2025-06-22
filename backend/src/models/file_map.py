@@ -26,6 +26,7 @@ class FileMap(BaseModel):
     mappings: List[FieldMapping]
     account_id: Optional[uuid.UUID] = Field(default=None, alias="accountId")
     description: Optional[str] = Field(default=None, max_length=1000)
+    reverse_amounts: bool = Field(default=False, alias="reverseAmounts")  # Flag to reverse transaction amounts (multiply by -1)
     created_at: int = Field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000), alias="createdAt")
     updated_at: int = Field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000), alias="updatedAt")
 
@@ -72,6 +73,7 @@ class FileMapCreate(BaseModel):
     mappings: List[FieldMapping]
     account_id: Optional[uuid.UUID] = Field(default=None, alias="accountId")
     description: Optional[str] = Field(default=None, max_length=1000)
+    reverse_amounts: bool = Field(default=False, alias="reverseAmounts")  # Flag to reverse transaction amounts (multiply by -1)
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -92,6 +94,7 @@ class FileMapUpdate(BaseModel):
     mappings: Optional[List[FieldMapping]] = None
     account_id: Optional[uuid.UUID] = Field(default=None, alias="accountId")
     description: Optional[str] = Field(default=None, max_length=1000)
+    reverse_amounts: Optional[bool] = Field(default=None, alias="reverseAmounts")  # Flag to reverse transaction amounts (multiply by -1)
 
     model_config = ConfigDict(
         populate_by_name=True,
