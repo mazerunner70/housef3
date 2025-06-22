@@ -283,3 +283,166 @@
   color: #856404;
   font-style: italic;
 }
+
+/* Alert Panel Styles */
+.alert-panel {
+  border-radius: 8px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  animation: slideDown 0.3s ease-out;
+}
+
+.alert-success {
+  background-color: #d4edda;
+  border: 1px solid #c3e6cb;
+}
+
+.alert-error {
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+}
+
+.alert-content {
+  display: flex;
+  align-items: flex-start;
+  padding: 16px 20px;
+  gap: 15px;
+}
+
+.alert-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.alert-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.alert-success .alert-icon svg {
+  color: #28a745;
+}
+
+.alert-error .alert-icon svg {
+  color: #dc3545;
+}
+
+.alert-text {
+  flex: 1;
+}
+
+.alert-text h3 {
+  margin: 0 0 8px 0;
+  font-size: 1.2em;
+  font-weight: 600;
+}
+
+.alert-success .alert-text h3 {
+  color: #155724;
+}
+
+.alert-error .alert-text h3 {
+  color: #721c24;
+}
+
+.alert-text p {
+  margin: 6px 0;
+  font-size: 1em;
+  line-height: 1.5;
+}
+
+.alert-success .alert-text p {
+  color: #155724;
+}
+
+.alert-error .alert-text p {
+  color: #721c24;
+}
+
+.alert-message {
+  font-weight: 500;
+}
+
+.alert-error-details {
+  font-size: 0.9em;
+  background-color: rgba(255, 255, 255, 0.7);
+  padding: 8px 12px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  white-space: pre-wrap;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.alert-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.alert-close:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.alert-close svg {
+  width: 20px;
+  height: 20px;
+  color: #6c757d;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Status badge styles */
+.status-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.status-pending {
+  background-color: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+}
+
+.status-processing {
+  background-color: #d1ecf1;
+  color: #0c5460;
+  border: 1px solid #b8daff;
+}
+
+.status-processed, .status-completed {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.status-error {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.status-unknown {
+  background-color: #e2e3e5;
+  color: #495057;
+  border: 1px solid #ced4da;
+}

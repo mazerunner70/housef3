@@ -1,10 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Login from './components/Login';
-import UserProfile from './components/UserProfile';
-import { ColorDisplay } from './components/ColorDisplay';
-import FileManager from './components/FileManager';
-import AccountManager from './components/AccountManager';
 import NewUILayout from './new-ui/layouts/NewUILayout';
 import AccountsView from './new-ui/views/AccountsView';
 import TransactionsView from './new-ui/views/TransactionsView';
@@ -16,8 +12,6 @@ function App() {
   const [authenticated, setAuthenticated] = useState<boolean>(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [activeSection, setActiveSection] = useState<'colors' | 'files' | 'accounts'>('files');
-  const [showNewUI, setShowNewUI] = useState<boolean>(false);
 
   // Check authentication status on component mount
   useEffect(() => {
@@ -78,109 +72,31 @@ function App() {
     setUser(null);
   };
 
-  const handleSectionChange = (section: 'colors' | 'files' | 'accounts') => {
-    setActiveSection(section);
-  };
-
-  const toggleUIVersion = () => {
-    setShowNewUI(prev => !prev);
-  };
-
   if (loading) {
     return <div className="loading-auth">Checking authentication...</div>;
   }
 
-  if (showNewUI) {
-    if (!authenticated) {
-      return (
-        <div className="app-container">
-          <button onClick={toggleUIVersion} style={{ position: 'absolute', top: '10px', left: '10px', zIndex: 1000 }}>
-            Switch to Old UI
-          </button>
-          <h1>New UI Requires Sign In</h1>
-          <p>Please sign in to access the new application interface.</p>
-          <Login onLoginSuccess={() => { 
-            handleLoginSuccess(); 
-          }} />
-        </div>
-      );
-    }
+  if (!authenticated) {
     return (
-      <Routes>
-        <Route path="/*" element={<NewUILayout onSignOut={handleSignOut} />}>
-          <Route index element={<Navigate to="accounts" replace />} />
-          <Route path="accounts" element={<AccountsView />} />
-          <Route path="transactions" element={<TransactionsView />} />
-          <Route path="analytics" element={<AnalyticsView />} />
-          <Route path="*" element={<div><p>Page Not Found in New UI</p></div>} />
-        </Route>
-      </Routes>
+      <div className="app-container">
+        <h1>House F3 Application</h1>
+        <p>Please sign in to access the application</p>
+        <Login onLoginSuccess={handleLoginSuccess} />
+      </div>
     );
   }
 
   return (
-    <div className="app-container">
-      <button onClick={toggleUIVersion} style={{ position: 'absolute', top: '10px', left: '10px', zIndex: 1000 }}>
-        Switch to {showNewUI ? 'Old' : 'New'} UI
-      </button>
-      <h1>House F3 Application</h1>
-      
-      {authenticated && user ? (
-        <>
-          <UserProfile user={user} onSignOut={handleSignOut} />
-          
-          <div className="section-tabs">
-            <button 
-              className={`section-button ${activeSection === 'files' ? 'active' : ''}`}
-              onClick={() => handleSectionChange('files')}
-            >
-              File Manager
-            </button>
-            <button 
-              className={`section-button ${activeSection === 'accounts' ? 'active' : ''}`}
-              onClick={() => handleSectionChange('accounts')}
-            >
-              Accounts
-            </button>
-            <button 
-              className={`section-button ${activeSection === 'colors' ? 'active' : ''}`}
-              onClick={() => handleSectionChange('colors')}
-            >
-              Colors
-            </button>
-          </div>
-          
-          <div className="content">
-            {activeSection === 'files' && (
-              <>
-                <h2>File Management</h2>
-                <FileManager />
-              </>
-            )}
-            
-            {activeSection === 'accounts' && (
-              <>
-                <h2>Account Management</h2>
-                <AccountManager />
-              </>
-            )}
-            
-            {activeSection === 'colors' && (
-              <>
-                <h2>Color Import</h2>
-                <ColorDisplay />
-              </>
-            )}
-          </div>
-        </>
-      ) : (
-        <>
-          <p>Please sign in to access the application</p>
-          <Login onLoginSuccess={handleLoginSuccess} />
-        </>
-      )}
-    </div>
-  )
+    <Routes>
+      <Route path="/*" element={<NewUILayout onSignOut={handleSignOut} />}>
+        <Route index element={<Navigate to="accounts" replace />} />
+        <Route path="accounts" element={<AccountsView />} />
+        <Route path="transactions" element={<TransactionsView />} />
+        <Route path="analytics" element={<AnalyticsView />} />
+        <Route path="*" element={<div><p>Page Not Found</p></div>} />
+      </Route>
+    </Routes>
+  );
 }
 
 export default App

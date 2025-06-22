@@ -7,7 +7,12 @@ from models.transaction_file import DateRange
 class DecimalEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, Decimal):
-            return float(obj) if obj % 1 else int(obj)
+            # Convert to string to preserve precision, then to float/int only for clean values
+            if obj % 1 == 0:
+                return int(obj)
+            else:
+                # Return as string to preserve precision for decimal values
+                return str(obj)
         if isinstance(obj, uuid.UUID):
             return str(obj)
         if isinstance(obj, DateRange):

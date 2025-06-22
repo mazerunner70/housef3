@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 // Use AccountService for fetching accounts
 import { listAccounts, Account as ServiceAccount } from '../../services/AccountService';
-import { getUploadUrl, uploadFileToS3, listFiles, FileMetadata, deleteFile, parseFile, updateFileFieldMapAssociation, getProcessedFileMetadata, FileProcessResult, updateFileBalance, associateFileWithAccount } from '../../services/FileService'; // Added parseFile, updateFileBalance, and associateFileWithAccount
+import { getUploadUrl, uploadFileToS3, listFiles, FileMetadata, deleteFile, parseFile, updateFileFieldMapAssociation, getProcessedFileMetadata, FileProcessResult, updateFileBalance, updateFileClosingBalance, associateFileWithAccount } from '../../services/FileService'; // Added parseFile, updateFileBalance, updateFileClosingBalance, and associateFileWithAccount
 import { listFieldMaps, getFieldMap, createFieldMap, updateFieldMap, FieldMap } from '../../services/FileMapService'; // Import more from FileMapService
 import { getCurrentUser } from '../../services/AuthService'; // Import getCurrentUser
 import ImportStep2Preview from '../components/ImportStep2Preview'; // Import the new component
@@ -10,7 +10,7 @@ import TransactionFileUpload from '../components/TransactionFileUpload'; // Enha
 import { FileValidationResult } from '../utils/fileValidation'; // File validation types
 import { detectFileType } from '../utils/fileValidation'; // Import file type detection
 import './ImportTransactionsView.css'; // Import the CSS file
-import ImportCompletionView from './ImportCompletionView'; // Import the new component
+import Decimal from 'decimal.js';
 
 // Define TARGET_TRANSACTION_FIELDS (should match what ImportStep2Preview expects)
 const TARGET_TRANSACTION_FIELDS = [
@@ -101,12 +101,16 @@ const ImportTransactionsView: React.FC = () => {
   const [defaultMappingName, setDefaultMappingName] = useState<string>('');
   const [isLoadingDefaultMapping, setIsLoadingDefaultMapping] = useState<boolean>(false);
 
-  // New state for import results
-  const [importResult, setImportResult] = useState<ImportResultForView | null>(null);
+  // New state for import results - replaced with success alert
+  const [successAlert, setSuccessAlert] = useState<ImportResultForView | null>(null);
 
   // State for inline editing of opening balance
   const [editingFileId, setEditingFileId] = useState<string | null>(null);
   const [editingOpeningBalance, setEditingOpeningBalance] = useState<string>('');
+  
+  // State for inline editing of closing balance
+  const [editingClosingFileId, setEditingClosingFileId] = useState<string | null>(null);
+  const [editingClosingBalance, setEditingClosingBalance] = useState<string>('');
   
   // State for inline editing of mapping
   const [editingMappingFileId, setEditingMappingFileId] = useState<string | null>(null);
@@ -232,6 +236,7 @@ const ImportTransactionsView: React.FC = () => {
       setExistingMappingsForStep2(undefined); // Reset this too
       setCurrentlyLoadedFieldMapDetails(undefined); // Reset loaded map details
       setInitialFieldMapForStep2(undefined); // Reset initial map to load
+      // Don't clear success alert here since we want to show it on return to step 1
     }
   }, [currentStep, fetchInitialData]);
 
@@ -427,7 +432,7 @@ const ImportTransactionsView: React.FC = () => {
           const processApiResult = await updateFileFieldMapAssociation(newFileId, selectedDefaultMapping);
           const success = processApiResult.statusCode === 200;
 
-          setImportResult({
+          setSuccessAlert({
             success: success,
             message: processApiResult.message,
             transactionCount: processApiResult.transactionCount,
@@ -435,18 +440,18 @@ const ImportTransactionsView: React.FC = () => {
             accountName: processApiResult.accountName || preliminaryAccountName,
             errorDetails: !success ? (processApiResult.message || 'Processing failed.') : undefined,
           });
-          setCurrentStep(3);
+          setCurrentStep(1);
           
         } catch (error: any) {
           console.error("[ImportTransactionsView] Error with direct import using default mapping:", error);
-          setImportResult({
+          setSuccessAlert({
             success: false,
             message: "Import with Default Mapping Failed",
             errorDetails: error.message || "An unexpected error occurred during processing with default mapping.",
             fileName: preliminaryFileName,
             accountName: preliminaryAccountName,
           });
-          setCurrentStep(3);
+          setCurrentStep(1);
         }
       } else {
         // No default mapping selected, proceed to Step 2 for manual mapping
@@ -483,7 +488,7 @@ const ImportTransactionsView: React.FC = () => {
 
     setIsLoading(true);
     setErrorMessage(null);
-    setImportResult(null); // Clear previous results
+    setSuccessAlert(null); // Clear previous results
 
     const historyFile = importHistory.find(f => f.fileId === currentFileId);
     let preliminaryFileName = selectedFile?.name || historyFile?.fileName || 'Unknown File';
@@ -502,7 +507,7 @@ const ImportTransactionsView: React.FC = () => {
 
       const success = processApiResult.statusCode === 200;
 
-      setImportResult({
+      setSuccessAlert({
         success: success,
         message: processApiResult.message,
         transactionCount: processApiResult.transactionCount,
@@ -510,18 +515,18 @@ const ImportTransactionsView: React.FC = () => {
         accountName: processApiResult.accountName || preliminaryAccountName,
         errorDetails: !success ? (processApiResult.message || 'Processing failed.') : undefined,
       });
-      setCurrentStep(3);
+      setCurrentStep(1);
 
     } catch (error: any) {
       console.error("[ImportTransactionsView] Error completing import step 2 (finalization):", error);
-      setImportResult({
+      setSuccessAlert({
         success: false,
         message: "Import Finalization Failed",
         errorDetails: error.message || "An unexpected error occurred during final processing.",
         fileName: preliminaryFileName,
         accountName: preliminaryAccountName,
       });
-      setCurrentStep(3); 
+      setCurrentStep(1); 
     } finally {
       setIsLoading(false);
     }
@@ -529,7 +534,8 @@ const ImportTransactionsView: React.FC = () => {
 
   const handleCancelStep2 = () => {
     console.log("Step 2 Cancelled. Returning to Step 1.");
-    setCurrentStep(1); 
+    setCurrentStep(1);
+    setSuccessAlert(null);
     // States like selectedFile, selectedAccount are reset by useEffect for currentStep === 1
   };
   
@@ -538,7 +544,8 @@ const ImportTransactionsView: React.FC = () => {
     setSelectedFile(null);
     setSelectedAccount('');
     setErrorMessage(null);
-    // Resetting other states (filePreviewData, importResult, etc.) will be handled when they are re-introduced
+    setSuccessAlert(null);
+    // Resetting other states (filePreviewData, etc.) will be handled when they are re-introduced
   };
 
   // Callback for ImportStep2Preview to load details of a selected field map
@@ -629,7 +636,7 @@ const ImportTransactionsView: React.FC = () => {
 
     try {
       // Call the service to update the balance
-      const updatedFile = await updateFileBalance(fileId, newBalance);
+      const updatedFile = await updateFileBalance(fileId, new Decimal(newBalance));
       
       // Update the import history state
       setImportHistory(prevHistory => 
@@ -652,6 +659,44 @@ const ImportTransactionsView: React.FC = () => {
       // For now, we will clear it as per existing Escape/✗ logic
       setEditingFileId(null);
       setEditingOpeningBalance('');
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  const handleSaveClosingBalance = async (fileId: string, balanceStr: string) => {
+    const newBalance = parseFloat(balanceStr);
+    if (isNaN(newBalance)) {
+      setErrorMessage("Invalid balance amount.");
+      return;
+    }
+
+    setIsLoadingHistory(true); // Indicate loading state for the history section
+    setErrorMessage(null);
+
+    try {
+      // Call the service to update the closing balance (which calculates new opening balance)
+      const updatedFile = await updateFileClosingBalance(fileId, new Decimal(newBalance));
+      
+      // Update the import history state with the complete updated file from backend
+      setImportHistory(prevHistory => 
+        prevHistory.map(file => 
+          file.fileId === fileId 
+            ? updatedFile  // Replace entire file object with backend response
+            : file
+        )
+      );
+      
+      // Exit editing mode
+      setEditingClosingFileId(null);
+      setEditingClosingBalance('');
+      alert("Closing balance updated successfully! Opening balance has been recalculated."); // Or a more subtle notification
+
+    } catch (error: any) {
+      console.error("Error updating closing balance:", error);
+      setErrorMessage(error.message || "Failed to update closing balance.");
+      setEditingClosingFileId(null);
+      setEditingClosingBalance('');
     } finally {
       setIsLoadingHistory(false);
     }
@@ -743,6 +788,16 @@ const ImportTransactionsView: React.FC = () => {
     }
   };
 
+  // Helper function to format balance for display
+  const formatBalanceDisplay = (balance: Decimal | undefined): string => {
+    return balance ? balance.toFixed(2) : 'N/A';
+  };
+
+  // Helper function to convert Decimal to number for editing
+  const decimalToNumber = (balance: Decimal | undefined): number | undefined => {
+    return balance ? balance.toNumber() : undefined;
+  };
+
   if (isLoading && accounts.length === 0 && currentStep === 1) {
       return <div className="loading-overlay">Loading accounts...</div>;
   }
@@ -757,6 +812,40 @@ const ImportTransactionsView: React.FC = () => {
 
       {errorMessage && (
           <div className="error-message-container">{errorMessage}</div>
+      )}
+
+      {successAlert && (
+        <div className={`alert-panel ${successAlert.success ? 'alert-success' : 'alert-error'}`}>
+          <div className="alert-content">
+            <div className="alert-icon">
+              {successAlert.success ? (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+              )}
+            </div>
+            <div className="alert-text">
+              <h3>{successAlert.success ? 'Import Successful!' : 'Import Failed'}</h3>
+              {successAlert.success && successAlert.transactionCount !== undefined && successAlert.fileName && successAlert.accountName && (
+                <p>
+                  <strong>{successAlert.transactionCount}</strong> transaction{successAlert.transactionCount === 1 ? '' : 's'} from <strong>'{successAlert.fileName}'</strong>{' '}
+                  {successAlert.accountName !== 'Unassigned' && successAlert.accountName !== '' ? <>have been added to <strong>'{successAlert.accountName}'</strong>.</> : <>have been imported.</>}
+                </p>
+              )}
+              {successAlert.message && <p className="alert-message">{successAlert.message}</p>}
+              {successAlert.errorDetails && <p className="alert-error-details">Details: {successAlert.errorDetails}</p>}
+            </div>
+            <button className="alert-close" onClick={() => setSuccessAlert(null)}>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
       )}
 
       {showProcessingLoader && <div className="loading-overlay">Processing...</div>}
@@ -852,7 +941,9 @@ const ImportTransactionsView: React.FC = () => {
                       <th className="history-th-td">Upload Date</th>
                       <th className="history-th-td">Mapping</th>
                       <th className="history-th-td">Format</th>
+                      <th className="history-th-td">Processed State</th>
                       <th className="history-th-td">Opening Balance</th>
+                      <th className="history-th-td">Closing Balance</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -972,6 +1063,11 @@ const ImportTransactionsView: React.FC = () => {
                           </td>
                         )}
                         <td className="history-th-td">{file.fileFormat || 'N/A'}</td>
+                        <td className="history-th-td">
+                          <span className={`status-badge status-${file.processingStatus?.toLowerCase() || 'unknown'}`}>
+                            {file.processingStatus || 'UNKNOWN'}
+                          </span>
+                        </td>
                         {editingFileId === file.fileId ? (
                           <td className="history-th-td">
                             <input
@@ -998,11 +1094,44 @@ const ImportTransactionsView: React.FC = () => {
                             className="history-th-td"
                             onClick={() => {
                               setEditingFileId(file.fileId);
-                              setEditingOpeningBalance(typeof file.openingBalance === 'number' ? file.openingBalance.toString() : '');
+                              setEditingOpeningBalance(decimalToNumber(file.openingBalance)?.toString() || '');
                             }}
                             style={{ cursor: 'pointer' }}
                           >
-                            {typeof file.openingBalance === 'number' ? file.openingBalance.toFixed(2) : 'N/A'}
+                            {formatBalanceDisplay(file.openingBalance)}
+                          </td>
+                        )}
+                        {editingClosingFileId === file.fileId ? (
+                          <td className="history-th-td">
+                            <input
+                              type="number"
+                              value={editingClosingBalance}
+                              onChange={(e) => setEditingClosingBalance(e.target.value.replace(/[^\d.-]/g, ''))}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleSaveClosingBalance(file.fileId, editingClosingBalance);
+                                }
+                                if (e.key === 'Escape') {
+                                  setEditingClosingFileId(null);
+                                  setEditingClosingBalance('');
+                                }
+                              }}
+                              style={{ width: '80px', marginRight: '5px' }}
+                              autoFocus
+                            />
+                            <button onClick={() => handleSaveClosingBalance(file.fileId, editingClosingBalance)}>✓</button>
+                            <button onClick={() => { setEditingClosingFileId(null); setEditingClosingBalance(''); }}>✗</button>
+                          </td>
+                        ) : (
+                          <td 
+                            className="history-th-td"
+                            onClick={() => {
+                              setEditingClosingFileId(file.fileId);
+                              setEditingClosingBalance(decimalToNumber(file.closingBalance)?.toString() || '');
+                            }}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            {formatBalanceDisplay(file.closingBalance)}
                           </td>
                         )}
                       </tr>
@@ -1012,7 +1141,7 @@ const ImportTransactionsView: React.FC = () => {
                 <div style={{ marginTop: '10px' }}>
                   <p className="history-help-text">
                     {selectedHistoryFileId 
-                      ? "Click on any field above to edit file attributes. Opening balance is editable inline." 
+                      ? "Click on any field above to edit file attributes. Opening and closing balances are editable inline." 
                       : "Select a file to edit its attributes, mapping, or metadata."}
                   </p>
                   <button
@@ -1045,25 +1174,7 @@ const ImportTransactionsView: React.FC = () => {
         />
       )}
 
-      {currentStep === 3 && importResult && (
-        <ImportCompletionView
-          success={importResult.success}
-          message={importResult.message}
-          transactionCount={importResult.transactionCount}
-          fileName={importResult.fileName}
-          accountName={importResult.accountName}
-          errorDetails={importResult.errorDetails}
-          onViewTransactions={() => {
-            alert('Navigate to transactions list (pre-filtered for this import if possible).');
-            setCurrentStep(1); 
-          }}
-          onImportAnother={() => setCurrentStep(1)}
-          onGoToStatements={() => {
-            alert('Navigate to Statements & Imports main tab/view.');
-            setCurrentStep(1); 
-          }}
-        />
-      )}
+
     </div>
   );
 };

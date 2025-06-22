@@ -102,6 +102,7 @@ class TransactionFile(BaseModel):
     
     error_message: Optional[str] = Field(default=None, alias="errorMessage")
     opening_balance: Optional[Decimal] = Field(default=None, alias="openingBalance")
+    closing_balance: Optional[Decimal] = Field(default=None, alias="closingBalance")
     currency: Optional[Currency] = None # This might be part of Money or derived, review usage
     duplicate_count: Optional[int] = Field(default=None, alias="duplicateCount")
     transaction_count: Optional[int] = Field(default=None, alias="transactionCount")
@@ -281,7 +282,7 @@ class TransactionFile(BaseModel):
                     type_value = next(iter(value.values()))
                     
                     if type_key == 'N':  # Number
-                        converted[key] = int(type_value) if type_value.isdigit() else float(type_value)
+                        converted[key] = int(type_value) if type_value.isdigit() else Decimal(type_value)
                     elif type_key == 'S':  # String
                         converted[key] = type_value
                     elif type_key == 'BOOL':  # Boolean
@@ -371,6 +372,7 @@ class TransactionFileUpdate(BaseModel):
     date_range: Optional[DateRange] = Field(default=None, alias="dateRange")
     error_message: Optional[str] = Field(default=None, alias="errorMessage")
     opening_balance: Optional[Decimal] = Field(default=None, alias="openingBalance")
+    closing_balance: Optional[Decimal] = Field(default=None, alias="closingBalance")
     currency: Optional[Currency] = None
     duplicate_count: Optional[int] = Field(default=None, alias="duplicateCount")
     transaction_count: Optional[int] = Field(default=None, alias="transactionCount")

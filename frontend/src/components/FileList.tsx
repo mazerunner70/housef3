@@ -22,6 +22,7 @@ import FileService, { File } from '../services/FileService';
 import FieldMapService, { FieldMap } from '../services/FileMapService';
 import { downloadFile } from '../utils/downloadUtils';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import Decimal from 'decimal.js';
 
 interface FileListProps {
   onRefreshNeeded: boolean;
@@ -60,14 +61,14 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
     previousFile?: FileMetadata;
   }
 
-  const updateBalanceMutation = useMutation<UpdateBalanceResponse, Error, { fileId: string, balanceValue: number }, MutationContext>({
-    mutationFn: ({ fileId, balanceValue }: { fileId: string, balanceValue: number }) => updateFileBalance(fileId, balanceValue),
+  const updateBalanceMutation = useMutation<UpdateBalanceResponse, Error, { fileId: string, balanceValue: Decimal }, MutationContext>({
+    mutationFn: ({ fileId, balanceValue }: { fileId: string, balanceValue: Decimal }) => updateFileBalance(fileId, balanceValue),
     onSuccess: (data) => {
       console.log('[onSuccess] API responded with:', data);
       setFiles(prevFiles =>
         prevFiles.map(file =>
           file.fileId === data.fileId
-            ? { ...file, ...data }
+            ? { ...file, openingBalance: data.openingBalance }
             : file
         )
       );
@@ -79,7 +80,7 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
         setSuccess('Opening balance updated successfully');
       }
     },
-    onMutate: async ({ fileId, balanceValue }: { fileId: string, balanceValue: number }) => {
+    onMutate: async ({ fileId, balanceValue }: { fileId: string, balanceValue: Decimal }) => {
       console.log('[onMutate] Optimistically updating file', fileId, 'with balance', balanceValue);
       await queryClient.cancelQueries({ queryKey: ['file', fileId] });
       const previousFile = queryClient.getQueryData<FileMetadata>(['file', fileId]);
@@ -356,8 +357,8 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
     setSavingBalanceFileId(fileId);
     setError(null);
     try {
-      console.log('[handleSaveBalance] Triggering mutation with:', { fileId, balanceValue });
-      updateBalanceMutation.mutate({ fileId, balanceValue });
+      console.log('[handleSaveBalance] Triggering mutation with:', { fileId, balanceValue: new Decimal(balanceValue) });
+      updateBalanceMutation.mutate({ fileId, balanceValue: new Decimal(balanceValue) });
     } catch (error) {
       console.error('[handleSaveBalance] Error:', error);
       setError(error instanceof Error ? error.message : 'Failed to save opening balance');
@@ -443,6 +444,19 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
       console.error('Error saving field map:', error);
       setError(error instanceof Error ? error.message : 'Failed to save field map');
     }
+  };
+
+  // Helper function to format balance for display
+  const formatBalanceDisplay = (balance: Decimal | undefined, currency?: string): string => {
+    if (!balance) return 'N/A';
+    
+    const currencySymbol = currency || '$';
+    return `${currencySymbol}${balance.toFixed(2)}`;
+  };
+
+  // Helper function to convert Decimal balance to number for editing
+  const decimalToNumber = (balance: Decimal | undefined): number | undefined => {
+    return balance ? balance.toNumber() : undefined;
   };
 
   // Render filtered and sorted files
@@ -634,10 +648,10 @@ const FileList: React.FC<FileListProps> = ({ onRefreshNeeded, onRefreshComplete 
                             </div>
                           ) : (
                             <div className="balance-with-edit">
-                              <span className="balance-display">{file.currency || '$'}{file.openingBalance.toFixed(2)}</span>
+                              <span className="balance-display">{formatBalanceDisplay(file.openingBalance, file.currency)}</span>
                               <button
                                 className="edit-balance-button"
-                                onClick={() => handleEditBalance(file.fileId, file.openingBalance)}
+                                onClick={() => handleEditBalance(file.fileId, decimalToNumber(file.openingBalance))}
                                 title="Edit opening balance"
                               >
                                 ✎

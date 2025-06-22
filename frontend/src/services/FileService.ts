@@ -1,6 +1,7 @@
 import { getCurrentUser, refreshToken, isAuthenticated } from './AuthService';
 import { FieldMap } from './FileMapService';
 import { v4 as uuidv4 } from 'uuid';
+import Decimal from 'decimal.js';
 
 export interface FileMetadata {
   fileId: string;
@@ -14,7 +15,8 @@ export interface FileMetadata {
   fileFormat?: 'csv' | 'ofx' | 'qfx' | 'pdf' | 'xlsx' | 'other';
   processingStatus?: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'ERROR' | 'PROCESSED';
   errorMessage?: string;
-  openingBalance?: number;
+  openingBalance?: Decimal;  // Frontend uses Decimal for precision
+  closingBalance?: Decimal;  // Frontend uses Decimal for precision
   currency?: string;
   fieldMap?: {
     fileMapId: string;
@@ -64,7 +66,7 @@ export interface File {
   userId: string;
   accountId?: string;
   fieldMap?: FieldMap;
-  openingBalance?: number;
+  openingBalance?: Decimal;  // Frontend uses Decimal for precision
 }
 
 export interface FilePreviewResponse {
@@ -187,12 +189,47 @@ const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
   }
 };
 
+// Helper function to convert backend response to frontend FileMetadata with Decimal conversion
+const convertBackendFileToFileMetadata = (backendFile: any): FileMetadata => {
+  return {
+    ...backendFile,
+    openingBalance: backendFile.openingBalance ? new Decimal(backendFile.openingBalance) : undefined,
+    closingBalance: backendFile.closingBalance ? new Decimal(backendFile.closingBalance) : undefined,
+  };
+};
+
+// Helper function to convert backend UpdateBalanceResponse to frontend format
+const convertBackendUpdateBalanceResponse = (backendResponse: any): UpdateBalanceResponse => {
+  return {
+    ...backendResponse,
+    openingBalance: new Decimal(backendResponse.openingBalance),
+  };
+};
+
+// Update file closing balance (which calculates new opening balance)
+export interface UpdateClosingBalanceResponse extends FileMetadata {
+  // This is now the full FileMetadata object since backend returns complete transaction file
+}
+
+// Helper function to convert backend UpdateClosingBalanceResponse to frontend format
+const convertBackendUpdateClosingBalanceResponse = (backendResponse: any): UpdateClosingBalanceResponse => {
+  // Backend now returns full transaction file, so convert like any FileMetadata
+  return convertBackendFileToFileMetadata(backendResponse);
+};
+
 // Get list of files
 export const listFiles = async (): Promise<FileListResponse> => {
   try {
     const response = await authenticatedRequest(FILES_API_ENDPOINT);
-    const data: FileListResponse = await response.json();
-    return data;
+    const data: any = await response.json();
+    
+    // Convert backend files to frontend FileMetadata with Decimal conversion
+    const convertedFiles = data.files.map(convertBackendFileToFileMetadata);
+    
+    return {
+      ...data,
+      files: convertedFiles,
+    };
   } catch (error) {
     console.error('Error listing files:', error);
     throw error;
@@ -364,21 +401,36 @@ export const associateFileWithAccount = async (fileId: string, accountId: string
 // Update file opening balance
 export interface UpdateBalanceResponse {
   fileId: string;
-  openingBalance: number;
+  openingBalance: Decimal;  // Frontend uses Decimal for precision
   transactionCount?: number;
   message: string;
 }
 
-export const updateFileBalance = async (fileId: string, openingBalance: number): Promise<UpdateBalanceResponse> => {
+export const updateFileBalance = async (fileId: string, openingBalance: Decimal): Promise<UpdateBalanceResponse> => {
   try {
     const response = await authenticatedRequest(`${FILES_API_ENDPOINT}/${fileId}/balance`, {
       method: 'PUT',
-      body: JSON.stringify({ openingBalance })
+      body: JSON.stringify({ openingBalance: openingBalance.toString() })  // Send as string to backend
     });
-    const data: UpdateBalanceResponse = await response.json();
-    return data;
+    const data = await response.json();
+    return convertBackendUpdateBalanceResponse(data);  // Convert to Decimal
   } catch (error) {
     console.error('Error updating file balance:', error);
+    throw error;
+  }
+};
+
+// Update file closing balance
+export const updateFileClosingBalance = async (fileId: string, closingBalance: Decimal): Promise<UpdateClosingBalanceResponse> => {
+  try {
+    const response = await authenticatedRequest(`${FILES_API_ENDPOINT}/${fileId}/closing-balance`, {
+      method: 'PUT',
+      body: JSON.stringify({ closingBalance: closingBalance.toString() })  // Send as string to backend
+    });
+    const data = await response.json();
+    return convertBackendUpdateClosingBalanceResponse(data);  // Convert to Decimal
+  } catch (error) {
+    console.error('Error updating file closing balance:', error);
     throw error;
   }
 };
@@ -801,6 +853,7 @@ export default {
   unassociateFileFromAccount,
   associateFileWithAccount,
   updateFileBalance,
+  updateFileClosingBalance,
   associateFieldMap, 
   getFileMetadata,   
   getFileContent,

@@ -25,7 +25,8 @@ from utils.db_utils import (
     checked_mandatory_account,
     checked_mandatory_transaction_file,
     checked_optional_account,
-    NotFound
+    NotFound,
+    update_transaction_file_object
 )
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Union
@@ -452,6 +453,54 @@ def update_file_balance_handler(event: Dict[str, Any], user_id: str) -> Dict[str
         logger.error(f"Error updating file balance: {str(e)}")
         logger.error(traceback.format_exc())
         return create_response(500, {"message": "Error handling update balance request"})
+
+def update_file_closing_balance_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """Update a file's closing balance by calculating a new opening balance and return the updated file."""
+    try:
+        # Get file ID from path parameters
+        file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
+            
+        # Get file metadata from DynamoDB
+        file = checked_mandatory_transaction_file(file_id, user_id)
+        
+        # Parse the request body to get the closing balance
+        new_closing_balance = Decimal(mandatory_body_parameter(event, 'closingBalance'))
+        currency = optional_body_parameter(event, 'currency') 
+        currency = Currency(currency) if currency else file.currency
+        
+        # Calculate the difference between new and existing closing balance
+        existing_closing_balance = file.closing_balance or Decimal(0)
+        difference = new_closing_balance - existing_closing_balance
+        
+        # Adjust the existing opening balance by the difference
+        existing_opening_balance = file.opening_balance or Decimal(0)
+        new_opening_balance = existing_opening_balance + difference
+        
+        logger.info(f"Optimized closing balance update: existing_closing={existing_closing_balance}, new_closing={new_closing_balance}, difference={difference}, existing_opening={existing_opening_balance}, new_opening={new_opening_balance}")
+        
+        # Update the file with new balances
+        file.opening_balance = new_opening_balance
+        file.closing_balance = new_closing_balance
+        if currency:
+            file.currency = currency
+
+        new_file = process_file(file)
+        
+        # Return the entire transaction file object
+        return create_response(200, new_file.to_dict())
+
+    except ValueError as e: 
+        logger.error(f"Error updating file closing balance: {str(e)}")
+        logger.error(traceback.format_exc())
+        return handle_error(400, str(e))
+    except NotFound as e:
+        logger.error(f"File not found: {str(e)}")
+        logger.error(traceback.format_exc())
+        return handle_error(404, str(e))
+    except Exception as e:
+        logger.error(f"Error updating file closing balance: {str(e)}")
+        logger.error(traceback.format_exc())
+        return create_response(500, {"message": "Error handling update closing balance request"})
 
 def get_file_metadata_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Get metadata for a single file by ID."""
@@ -1028,6 +1077,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return get_upload_url_handler(event, user_id)
         if route == "PUT /files/{id}/balance":
             return update_file_balance_handler(event, user_id)
+        if route == "PUT /files/{id}/closing-balance":
+            return update_file_closing_balance_handler(event, user_id)
         return create_response(400, {"message": f"Unsupported route: {route}"})
     except Exception as e:
         logger.error(f"Error in handler: {str(e)}")

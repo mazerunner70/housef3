@@ -151,6 +151,15 @@ resource "aws_apigatewayv2_route" "file_balance" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# File closing balance update route
+resource "aws_apigatewayv2_route" "file_closing_balance" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "PUT /files/{id}/closing-balance"
+  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 # File metadata route
 resource "aws_apigatewayv2_route" "get_file_metadata" {
   api_id             = aws_apigatewayv2_api.main.id

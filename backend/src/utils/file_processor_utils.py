@@ -101,7 +101,7 @@ def find_file_records_by_s3_key(s3_key: str, table: Any = None) -> List[Dict[str
         logger.error(f"Error finding file records by S3 key: {str(e)}")
         return []
 
-def extract_opening_balance(content_bytes: bytes, file_format: FileFormat) -> Optional[float]:
+def extract_opening_balance(content_bytes: bytes, file_format: FileFormat) -> Optional[Decimal]:
     """
     Extract the opening balance from file content based on its format.
     
@@ -134,7 +134,7 @@ def extract_opening_balance(content_bytes: bytes, file_format: FileFormat) -> Op
         logger.error(f"Error extracting opening balance: {str(e)}")
         return None
 
-def extract_opening_balance_ofx(content: str) -> Optional[float]:
+def extract_opening_balance_ofx(content: str) -> Optional[Decimal]:
     """
     Extract opening balance from OFX/QFX file.
     
@@ -149,7 +149,7 @@ def extract_opening_balance_ofx(content: str) -> Optional[float]:
     match = re.search(r'<LEDGERBAL>.*?<BALAMT>([-+]?\d*\.?\d+)</BALAMT>', content, re.DOTALL)
     if match:
         try:
-            return float(match.group(1))
+            return Decimal(match.group(1))
         except (ValueError, TypeError):
             pass
     
@@ -157,7 +157,7 @@ def extract_opening_balance_ofx(content: str) -> Optional[float]:
     match = re.search(r'LEDGERBAL\s+BALAMT:([-+]?\d*\.?\d+)', content)
     if match:
         try:
-            return float(match.group(1))
+            return Decimal(match.group(1))
         except (ValueError, TypeError):
             pass
     
@@ -165,13 +165,13 @@ def extract_opening_balance_ofx(content: str) -> Optional[float]:
     match = re.search(r'<AVAILBAL>.*?<BALAMT>([-+]?\d*\.?\d+)</BALAMT>', content, re.DOTALL)
     if match:
         try:
-            return float(match.group(1))
+            return Decimal(match.group(1))
         except (ValueError, TypeError):
             pass
     
     return None
 
-def extract_opening_balance_csv(content: str) -> Optional[float]:
+def extract_opening_balance_csv(content: str) -> Optional[Decimal]:
     """
     Extract opening balance from CSV file.
     This is more heuristic as CSV formats vary widely by institution.
@@ -194,7 +194,7 @@ def extract_opening_balance_csv(content: str) -> Optional[float]:
         match = re.search(pattern, content, re.IGNORECASE)
         if match:
             try:
-                return float(match.group(1))
+                return Decimal(match.group(1))
             except (ValueError, TypeError):
                 continue
     
@@ -209,7 +209,7 @@ def extract_opening_balance_csv(content: str) -> Optional[float]:
                 numbers = re.findall(r'([-+]?\d*\.?\d+)', line)
                 for num in numbers:
                     try:
-                        return float(num)
+                        return Decimal(num)
                     except (ValueError, TypeError):
                         continue
                         

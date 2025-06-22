@@ -21,7 +21,7 @@ from models.transaction_file import DateRange, FileFormat, ProcessingStatus, Tra
 from models.file_map import FileMap
 from models.transaction import Transaction
 from utils.lambda_utils import handle_error
-from utils.transaction_parser import parse_transactions, file_type_selector
+from utils.transaction_parser_new import parse_transactions, file_type_selector
 from utils.db_utils import (
     create_transaction_file,
     get_transaction_by_account_and_hash,
@@ -179,47 +179,47 @@ def determine_file_map(transaction_file: TransactionFile) -> Optional[FileMap]:
         raise  # Re-raise the exception to be handled by the caller
 
 
-def parse_file_transactions(
-    transaction_file: TransactionFile,
-    content_bytes: bytes, 
-) -> Optional[List[Transaction]]:
-    """
-    Parse transactions from file content.
+# def parse_file_transactions(
+#     transaction_file: TransactionFile,
+#     content_bytes: bytes, 
+# ) -> Optional[List[Transaction]]:
+#     """
+#     Parse transactions from file content.
     
-    Args:
-        account_id: The account ID to use
-        content_bytes: The file content as bytes
-        file_format: The format of the file
-        opening_balance: The opening balance to use
-        file_map: Optional field mapping configuration
+#     Args:
+#         account_id: The account ID to use
+#         content_bytes: The file content as bytes
+#         file_format: The format of the file
+#         opening_balance: The opening balance to use
+#         file_map: Optional field mapping configuration
         
-    Returns:
-        List of transactions
+#     Returns:
+#         List of transactions
         
-    Raises:
-        ValueError: If parsing fails or no transactions could be parsed
-    """
-    try:
-        # Validate required parameters
-        if not checked_optional_file_map(transaction_file.file_map_id, transaction_file.user_id):
-            return None
+#     Raises:
+#         ValueError: If parsing fails or no transactions could be parsed
+#     """
+#     try:
+#         # Validate required parameters
+#         if not checked_optional_file_map(transaction_file.file_map_id, transaction_file.user_id):
+#             return None
         
             
-        # Parse transactions using the utility
-        transactions = parse_transactions(
-            transaction_file,
-            content_bytes
-        )
+#         # Parse transactions using the utility
+#         transactions = parse_transactions(
+#             transaction_file,
+#             content_bytes
+#         )
         
-        if not transactions:
-            logger.warning(f"No transactions could be parsed from file {transaction_file.file_id}")
-            return None
+#         if not transactions:
+#             logger.warning(f"No transactions could be parsed from file {transaction_file.file_id}")
+#             return None
             
-        logger.info(f"Successfully parsed {len(transactions)} transactions")
-        return transactions
-    except Exception as e:
-        logger.error(f"Error parsing transactions: {str(e)}")
-        raise
+#         logger.info(f"Successfully parsed {len(transactions)} transactions")
+#         return transactions
+#     except Exception as e:
+#         logger.error(f"Error parsing transactions: {str(e)}")
+#         raise
 
 
 def calculate_running_balances(transactions: List[Transaction], opening_balance: Optional[Decimal]) -> None:
@@ -316,6 +316,14 @@ def update_file_status(
         transaction_file.transaction_count = len(transactions)
         transaction_file.date_range = DateRange(startDate=transactions[0].date, endDate=transactions[-1].date)
         transaction_file.opening_balance = (transactions[0].balance  - transactions[0].amount ) if transactions[0].balance and transactions[0].amount else None
+        
+        # Calculate closing balance from the last processed transaction
+        if transactions:
+            last_transaction = transactions[-1]
+            if last_transaction.balance:
+                transaction_file.closing_balance = last_transaction.balance
+                logger.info(f"Set closing balance to {transaction_file.closing_balance} from last transaction")
+        
         logger.info(f"Updated file status for {transaction_file.file_id} to PROCESSED")
         return transaction_file
     except Exception as e:
@@ -450,97 +458,10 @@ def  determine_opening_balance_from_transaction_overlap(transactions: List[Trans
         return None
 
 
-def process_new_file(transaction_file: TransactionFile, content_bytes: bytes) -> FileProcessorResponse:
-    """Process a newly uploaded file."""
-    # For new files, there's no old transaction file, so pass None
-    return process_file(transaction_file)
-
-# def update_file_mapping(old_transaction_file: TransactionFile, new_transaction_file: TransactionFile) -> FileProcessorResponse:
-#     """Update a file's field mapping and reprocess transactions."""
-#     try:   
-#         # Get field map
-#         new_field_map: FileMap = checked_mandatory_file_map(new_transaction_file.file_map_id, new_transaction_file.user_id)
-#         account = checked_mandatory_account(new_transaction_file.account_id, new_transaction_file.user_id)
-#         logger.info(f"Comparing file mapping new {new_transaction_file.file_map_id} with old {old_transaction_file.file_map_id}")
-#         # Check if field mapping has changed
-#         should_reprocess = (
-#             old_transaction_file.file_map_id != new_field_map.file_map_id and
-#             new_transaction_file.opening_balance is not None
-#         )
-#         logger.info(f"Should reprocess: {should_reprocess}")
-#         if should_reprocess:
-#             # Get file content
-#             content_bytes = get_file_content(new_transaction_file.file_id)
-#             if not content_bytes:
-#                 raise NotFound("File content not found")
-                
-#             # Delete existing transactions
-#             logger.info(f"Field mapping has changed for file {new_transaction_file.file_id} - deleting existing transactions")
-#             deleted_count = delete_transactions_for_file(new_transaction_file.file_id)
-            
-#             # Process with new mapping
-#             transactions = parse_file_transactions(
-#                 new_transaction_file,
-#                 content_bytes
-#             )
-#             currency = transactions[0].currency if transactions else new_transaction_file.currency 
-#             if not currency:
-#                 raise ValueError("Currency is required")
-#             logger.info(f"Processing with new mapping for file {new_transaction_file.file_id} and currency {currency}")
-#             if transactions:
-#                 duplicate_count = update_transaction_duplicates(transactions)
-#                 logger.info(f"Duplicate count: {duplicate_count}")
-#                 # Determine opening balance from transaction overlap
-#                 opening_balance = determine_opening_balance_from_transaction_overlap(transactions)
-#                 logger.info(f"Opening balance: {opening_balance}")
-#                 new_transaction_file.opening_balance = opening_balance if opening_balance else new_transaction_file.opening_balance
-#                 # Calculate running balances
-#                 if new_transaction_file.opening_balance:
-#                     calculate_running_balances(transactions, new_transaction_file.opening_balance)
-#                 else:
-#                     raise ValueError("Opening balance is required to calculate running balances")
-                
-#                 # Save transactions
-#                 transaction_count, _ = create_transactions(
-#                     transactions,
-#                     new_transaction_file
-#                 )
-                
-#                 # Update file status
-#                 update_file_status(new_transaction_file, transactions)
-                
-#                 return FileProcessorResponse(
-#                     transactions=transactions,
-#                     transaction_count=transaction_count,
-#                     duplicate_count=duplicate_count,
-#                     deleted_count=deleted_count,
-#                     message="Field map updated, transactions reprocessed"
-#                 )
-#             else:
-#                 return FileProcessorResponse(
-#                     transactions=[],
-#                     transaction_count=0,
-#                     duplicate_count=0,
-#                     deleted_count=deleted_count,
-#                     message="No transactions found after reprocessing"
-#                 )
-#         else:
-#         # If field map hasn't changed, just update the mapping
-#             update_transaction_file(new_transaction_file.file_id, new_transaction_file.user_id, {'file_map_id': new_transaction_file.file_map_id})
-#             logger.info(f"transaction reprocessing not needed for file {new_transaction_file.file_id}, just updated the mapping to {new_transaction_file.file_map_id}   ")
-#         transactions = list_file_transactions(new_transaction_file.file_id)
-#         return FileProcessorResponse(
-#             transactions=transactions,
-#             transaction_count=len(transactions) if transactions else 0,
-#             duplicate_count=0,
-#             deleted_count=0,
-#             message="Field map is unchanged, no reprocessing needed"
-#         )
-            
-#     except Exception as e:
-#         logger.error(f"Error remapping file: {str(e)}")
-#         logger.error(f"Stack trace: {traceback.format_exc()}")
-#         raise Exception(f"Error remapping file: {str(e)}")
+# def process_new_file(transaction_file: TransactionFile, content_bytes: bytes) -> FileProcessorResponse:
+#     """Process a newly uploaded file."""
+#     # For new files, there's no old transaction file, so pass None
+#     return process_file(transaction_file)
 
 def update_opening_balance(transaction_file: TransactionFile) -> FileProcessorResponse:
     """Update a file's opening balance without reprocessing transactions."""
@@ -548,35 +469,7 @@ def update_opening_balance(transaction_file: TransactionFile) -> FileProcessorRe
     if not transaction_file.opening_balance:
         raise ValueError("New opening balance is required")
     return process_file(transaction_file)
-        
-    # old_transaction_file = checked_mandatory_transaction_file(transaction_file.file_id, transaction_file.user_id)
-    # if not old_transaction_file.opening_balance:
-    #     raise ValueError("Old opening balance is required")
-        
-    # balance_change = transaction_file.opening_balance - old_transaction_file.opening_balance
-        
-    # # Update all transactions from account adding balance change to the balance
-    # if not transaction_file.account_id:
-    #     raise ValueError("Account ID is required")
-        
-    # transactions = list_account_transactions(transaction_file.account_id)
-    
-    # # Update transactions in database
-    # for tx in transactions:
-    #     if tx.balance:
-    #         tx.balance += balance_change
-    #         update_transaction(tx)
-    
-    # transaction_files = list_account_files(transaction_file.account_id)
-    # for file in transaction_files:
-    #     if file.opening_balance:
-    #         update_transaction_file(file.file_id, file.user_id, {'opening_balance': file.opening_balance})
-    
-    # return FileProcessorResponse(
-    #     message="Opening balance updated successfully",
-    #     transaction_count=len(transactions)
-    # )
-    
+         
 
 def change_file_account(transaction_file: TransactionFile) -> FileProcessorResponse:
     """Reassign a file to a different account."""
@@ -643,10 +536,18 @@ def set_defaults_into_account(transaction_file: TransactionFile)->Optional[Accou
 
 def update_file_object(transaction_file: TransactionFile, transations: List[Transaction])->TransactionFile:
     """
-    Update the transaction file object with new metadata, eg, start end date, transactioncount, opening balance, currency
+    Update the transaction file object with new metadata, eg, start end date, transactioncount, opening balance, currency, closing balance
     """
     transaction_file.date_range = DateRange(startDate=transations[0].date, endDate=transations[-1].date)
     transaction_file.transaction_count = len(transations)
+    
+    # Calculate closing balance from the last processed transaction
+    if transations:
+        last_transaction = transations[-1]
+        if last_transaction.balance:
+            transaction_file.closing_balance = last_transaction.balance
+            logger.info(f"Set closing balance to {transaction_file.closing_balance} from last transaction")
+    
     return transaction_file
 
 def update_file(old_transaction_file: Optional[TransactionFile], transaction_file: TransactionFile) -> FileProcessorResponse:
@@ -675,8 +576,9 @@ def update_file(old_transaction_file: Optional[TransactionFile], transaction_fil
         transaction_file.transaction_count = len(transactions) if transactions else 0
         if transactions:
             transaction_file.duplicate_count = update_transaction_duplicates(transactions)
-            opening_balance = determine_opening_balance_from_transaction_overlap(transactions)
-            transaction_file.opening_balance = opening_balance if opening_balance else transaction_file.opening_balance
+            if not transaction_file.opening_balance:
+                opening_balance = determine_opening_balance_from_transaction_overlap(transactions)
+                transaction_file.opening_balance = opening_balance if opening_balance else transaction_file.opening_balance
             calculate_running_balances(transactions, transaction_file.opening_balance)
             update_file_object(transaction_file, transactions)
         if transactions and transaction_file.opening_balance and transaction_file.currency:
@@ -708,7 +610,7 @@ def reparse_file(transaction_file: TransactionFile) -> Optional[List[Transaction
         content_bytes = get_file_content(transaction_file.file_id)
         if not content_bytes:
             raise NotFound("File content not found")
-        return parse_file_transactions(transaction_file, content_bytes)
+        return parse_transactions(transaction_file, content_bytes)
     except Exception as e:
         logger.error(f"Error reparsing file: {str(e)}")
         #show stack trace
