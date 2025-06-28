@@ -80,6 +80,12 @@ resource "aws_dynamodb_table" "analytics_status" {
     projection_type = "ALL"
   }
 
+  # TTL config for automatic cleanup of old status records
+  ttl {
+    attribute_name = "ttl"
+    enabled = true
+  }
+
   tags = {
     Environment = var.environment
     Project     = var.project_name

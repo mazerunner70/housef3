@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import List, Dict, Any, Optional, Tuple
 from collections import defaultdict
 
-from ..models.account import Account, AccountType
+from ..models.account import AccountType
 from ..models.transaction import Transaction
 from ..utils.db_utils import list_user_accounts, list_user_transactions
 

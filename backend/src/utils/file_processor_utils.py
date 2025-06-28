@@ -10,11 +10,7 @@ import boto3
 from boto3.dynamodb.conditions import Key
 from typing import Dict, Any, List, Optional
 from decimal import Decimal
-from datetime import datetime
-
-from models.transaction_file import FileFormat, ProcessingStatus
-from models.file_map import FileMap
-from utils.transaction_parser_new    import parse_transactions
+from models.transaction_file import FileFormat
 from utils.db_utils import (
     get_transaction_file,
     check_duplicate_transaction

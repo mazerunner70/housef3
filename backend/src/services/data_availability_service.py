@@ -12,6 +12,7 @@ from ..models.analytics import (
 from ..utils.db_utils import (
     get_transactions_table, get_files_table, get_accounts_table
 )
+from ..utils.analytics_config import get_analytics_config
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ class DataAvailabilityService:
         self.transactions_table = get_transactions_table()
         self.files_table = get_files_table()
         self.accounts_table = get_accounts_table()
+        self.config = get_analytics_config()
 
     def get_account_data_ranges(self, user_id: str) -> List[AccountDataRange]:
         """
@@ -230,7 +232,7 @@ class DataAvailabilityService:
                 return False
 
             # Check if any account has recent data uploads
-            recent_threshold = datetime.now() - timedelta(days=7)
+            recent_threshold = datetime.now() - timedelta(days=self.config.precomputation_recent_upload_days)
             has_recent_uploads = any(
                 acc_range.last_statement_upload and
                 acc_range.last_statement_upload > recent_threshold
@@ -271,7 +273,8 @@ class DataAvailabilityService:
                          acc_range.earliest_transaction_date).days
 
             # If we have very few transactions for a large date span, there might be gaps
-            if date_span > 90 and acc_range.transaction_count < 10:
+            if (date_span > self.config.sparse_data_date_span_days and 
+                acc_range.transaction_count < self.config.sparse_data_min_transactions):
                 gap = DataGap(
                     accountId=acc_range.account_id,
                     startDate=acc_range.earliest_transaction_date,
@@ -287,7 +290,7 @@ class DataAvailabilityService:
                 gaps.append(gap)
 
             # Check for outdated data
-            if acc_range.latest_transaction_date < date.today() - timedelta(days=30):
+            if acc_range.latest_transaction_date < date.today() - timedelta(days=self.config.outdated_data_threshold_days):
                 gap = DataGap(
                     accountId=acc_range.account_id,
                     startDate=acc_range.latest_transaction_date,
@@ -382,14 +385,14 @@ class DataAvailabilityService:
 
         # Check if data is recent
         days_since_last_data = (date.today() - latest_date).days
-        if days_since_last_data > 60:
+        if days_since_last_data > self.config.data_recency_threshold_days:
             return DataQuality.PARTIAL
 
         # Check transaction density
         date_span = (latest_date - earliest_date).days
         if date_span > 0:
             transactions_per_day = transaction_count / date_span
-            if transactions_per_day < 0.1:  # Less than 1 transaction per 10 days
+            if transactions_per_day < self.config.transaction_density_threshold:
                 return DataQuality.PARTIAL
 
         return DataQuality.COMPLETE
@@ -425,10 +428,10 @@ class DataAvailabilityService:
         recent_accounts = sum(
             1 for acc_range in account_ranges
             if (acc_range.latest_transaction_date and
-                (date.today() - acc_range.latest_transaction_date).days <= 30)
+                (date.today() - acc_range.latest_transaction_date).days <= self.config.data_recency_threshold_days)
         )
 
-        return recent_accounts >= len(account_ranges) * 0.7  # 70% threshold
+        return recent_accounts >= len(account_ranges) * self.config.precomputation_account_threshold
 
     def _calculate_next_computation_date(self, account_ranges: List[AccountDataRange],
                                          analytic_type: AnalyticType) -> Optional[date]:
@@ -436,11 +439,7 @@ class DataAvailabilityService:
         if not account_ranges:
             return None
 
-        # For most analytics, suggest recomputation in 7 days
-        base_days = 7
+        # Get computation interval based on analytic type
+        interval_days = self.config.get_computation_interval(analytic_type.value)
 
-        # Adjust based on analytic type
-        if analytic_type in [AnalyticType.FINANCIAL_HEALTH, AnalyticType.CREDIT_UTILIZATION]:
-            base_days = 14  # Less frequent for slower-changing metrics
-
-        return date.today() + timedelta(days=base_days) 
+        return date.today() + timedelta(days=interval_days) 
