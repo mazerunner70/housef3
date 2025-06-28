@@ -113,7 +113,7 @@ resource "aws_lambda_function" "file_operations" {
   handler          = "handlers/file_operations.handler"
   runtime          = "python3.10"
   role            = aws_iam_role.lambda_exec.arn
-  timeout         = 30
+  timeout         = 300
   memory_size     = 256
   source_code_hash = base64encode(local.source_code_hash)
   depends_on      = [null_resource.prepare_lambda]

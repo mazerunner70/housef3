@@ -639,8 +639,10 @@ const ImportTransactionsView: React.FC = () => {
   }, [currentFileId, selectedAccount, initialFieldMapForStep2?.id]); // Add initialFieldMapForStep2.id to dependencies
 
   const handleSaveOpeningBalance = async (fileId: string, balanceStr: string) => {
-    const newBalance = parseFloat(balanceStr);
-    if (isNaN(newBalance)) {
+    let newBalance: Decimal;
+    try {
+      newBalance = new Decimal(balanceStr);
+    } catch (error) {
       setErrorMessage("Invalid balance amount.");
       return;
     }
@@ -650,7 +652,7 @@ const ImportTransactionsView: React.FC = () => {
 
     try {
       // Call the service to update the balance
-      const updatedFile = await updateFileBalance(fileId, new Decimal(newBalance));
+      const updatedFile = await updateFileBalance(fileId, newBalance);
       
       // Update the import history state
       setImportHistory(prevHistory => 
@@ -679,8 +681,10 @@ const ImportTransactionsView: React.FC = () => {
   };
 
   const handleSaveClosingBalance = async (fileId: string, balanceStr: string) => {
-    const newBalance = parseFloat(balanceStr);
-    if (isNaN(newBalance)) {
+    let newBalance: Decimal;
+    try {
+      newBalance = new Decimal(balanceStr);
+    } catch (error) {
       setErrorMessage("Invalid balance amount.");
       return;
     }
@@ -690,7 +694,7 @@ const ImportTransactionsView: React.FC = () => {
 
     try {
       // Call the service to update the closing balance (which calculates new opening balance)
-      const updatedFile = await updateFileClosingBalance(fileId, new Decimal(newBalance));
+      const updatedFile = await updateFileClosingBalance(fileId, newBalance);
       
       // Update the import history state with the complete updated file from backend
       setImportHistory(prevHistory => 

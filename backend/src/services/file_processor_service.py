@@ -68,9 +68,16 @@ class FileProcessorResponse:
     deleted_count: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
+        # Serialize transactions using to_dynamodb_item() which properly handles Decimal -> str conversion
+        serialized_transactions = []
+        if self.transactions:
+            for tx in self.transactions:
+                serialized_tx = tx.to_dynamodb_item()
+                serialized_transactions.append(serialized_tx)
+        
         return {
             "message": self.message,
-            "transactions": [tx.model_dump() for tx in self.transactions] if self.transactions else [],
+            "transactions": serialized_transactions,
             "transaction_count": self.transaction_count,
             "duplicate_count": self.duplicate_count,
             "updated_count": self.updated_count,

@@ -230,8 +230,8 @@ class TransactionFile(BaseModel):
         # Timestamps are already ints (milliseconds)
         
         # Debug: Log the dateRange structure
-        if 'dateRange' in data:
-            logger.info(f"Serialized dateRange: {data['dateRange']} (type: {type(data['dateRange'])})")
+        # if 'dateRange' in data:
+        #     logger.info(f"Serialized dateRange: {data['dateRange']} (type: {type(data['dateRange'])})")
         
         return data
 

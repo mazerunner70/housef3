@@ -33,7 +33,7 @@ from typing import Dict, Any, List, Optional, Union
 from decimal import Decimal
 from models.transaction_file import FileFormat, ProcessingStatus, DateRange
 from models.transaction import Transaction
-from utils.transaction_parser import file_type_selector, parse_transactions, preprocess_csv_text
+from utils.transaction_parser import file_type_selector, parse_transactions, preprocess_csv_text, parse_ofx_headers, get_ofx_encoding
 from utils.s3_dao import (
     get_presigned_post_url,
     delete_object,
@@ -678,25 +678,40 @@ def parse_ofx_preview(content: str, file_format: FileFormat) -> Dict[str, Any]:
         # Define standard columns for OFX preview
         columns = ['Date', 'Amount', 'Description', 'Type', 'Memo', 'Transaction ID']
         
-        # Check if this is a colon-separated format
-        if any(marker in content for marker in ['OFXHEADER:', 'DATA:OFXSGML']):
-            logger.info(f"Parsing colon-separated format (type {file_format}) for preview")
+        # Try to determine OFX format - don't assume XML!
+        # First check if it contains XML-like or colon-separated transaction data
+        has_xml_like_tags = '<STMTTRN>' in content or '<TRNTYPE>' in content or '<DTPOSTED>' in content
+        has_colon_format = any(':' in line and not line.startswith('<') for line in content.splitlines() if line.strip())
+        
+        if has_xml_like_tags:
+            # This could be OFX SGML (XML-like) or true XML
+            try:
+                # First try as true XML
+                logger.info(f"Trying true XML parsing for {file_format}")
+                transactions_data, total_rows = parse_ofx_xml_preview(content)
+            except ET.ParseError as e:
+                # If XML parsing fails, treat as OFX SGML (XML-like but not valid XML)
+                logger.info(f"XML parsing failed, treating as OFX SGML format: {str(e)}")
+                transactions_data, total_rows = parse_ofx_colon_separated_preview(content)
+        elif has_colon_format:
+            # Pure colon-separated format
+            logger.info(f"Parsing pure colon-separated format (type {file_format}) for preview")
             transactions_data, total_rows = parse_ofx_colon_separated_preview(content)
         else:
-            # Try parsing as XML
-            try:
-                logger.info(f"Parsing XML format (type {file_format}) for preview")
-                logger.info(f"exact type {type(file_format)} {file_format}")
-                root = ET.fromstring(content)
-                transactions_data, total_rows = parse_ofx_xml_preview(root)
-            except ET.ParseError as e:
-                logger.error(f"Failed to parse as XML: {str(e)}")
-                return {
-                    'columns': columns,
-                    'data': [],
-                    'totalRows': 0,
-                    'message': f'Error parsing {file_format.value.upper()} file: Invalid XML format'
-                }
+            # Fallback - try both approaches
+            logger.warning(f"Could not determine OFX format, trying colon-separated first")
+            transactions_data, total_rows = parse_ofx_colon_separated_preview(content)
+            if total_rows == 0:
+                try:
+                    transactions_data, total_rows = parse_ofx_xml_preview(content)
+                except ET.ParseError:
+                    logger.error("Both OFX parsing methods failed")
+                    return {
+                        'columns': columns,
+                        'data': [],
+                        'totalRows': 0,
+                        'message': f'Error parsing {file_format.value.upper()} file: Unrecognized OFX format'
+                    }
         
         # Limit preview to first 10 transactions
         preview_data = transactions_data[:10]
@@ -748,9 +763,14 @@ def parse_ofx_colon_separated_preview(content: str) -> tuple[List[Dict[str, str]
             current_transaction = {}
             in_transaction = False
         elif in_transaction and '>' in line and '</' in line:
-            # XML-style tag with value
+            # XML-style tag with value on same line with closing tag
             tag = line[1:line.index('>')]
             value = line[line.index('>')+1:line.rindex('<')]
+            current_transaction[tag] = value
+        elif in_transaction and line.startswith('<') and '>' in line and not line.endswith('>'):
+            # XML-style tag with value on same line but no closing tag
+            tag = line[1:line.index('>')]
+            value = line[line.index('>')+1:]
             current_transaction[tag] = value
         elif in_transaction and ':' in line:
             # Colon-separated style
@@ -766,34 +786,62 @@ def parse_ofx_colon_separated_preview(content: str) -> tuple[List[Dict[str, str]
     
     return transactions, total_count
 
-def parse_ofx_xml_preview(root: ET.Element) -> tuple[List[Dict[str, str]], int]:
+def parse_ofx_xml_preview(content: str) -> tuple[List[Dict[str, str]], int]:
     """Parse XML OFX content for preview."""
-    transactions = []
-    total_count = 0
-    
-    # Find all transaction elements
-    for stmttrn in root.findall('.//STMTTRN'):
-        try:
-            # Extract transaction data
-            data = {
-                'DTPOSTED': stmttrn.findtext('DTPOSTED', ''),
-                'TRNAMT': stmttrn.findtext('TRNAMT', '0'),
-                'NAME': stmttrn.findtext('NAME', ''),
-                'MEMO': stmttrn.findtext('MEMO', ''),
-                'TRNTYPE': stmttrn.findtext('TRNTYPE', ''),
-                'FITID': stmttrn.findtext('FITID', '')
-            }
-            
-            transaction_dict = format_ofx_transaction_for_preview(data)
-            if transaction_dict:
-                transactions.append(transaction_dict)
-                total_count += 1
+    try:
+        # Strip OFX headers - find the start of XML content
+        xml_start = -1
+        lines = content.splitlines()
+        
+        for i, line in enumerate(lines):
+            line = line.strip()
+            # Look for XML start - either <?xml or <OFX or first < tag
+            if line.startswith('<?xml') or line.startswith('<OFX') or (line.startswith('<') and not ':' in line):
+                xml_start = i
+                break
+        
+        if xml_start == -1:
+            raise ET.ParseError("No XML content found after OFX headers")
+        
+        # Join remaining lines as XML content
+        xml_content = '\n'.join(lines[xml_start:])
+        
+        if not xml_content.strip():
+            raise ET.ParseError("Empty XML content after stripping headers")
+        
+        logger.info(f"Attempting to parse XML content starting from line {xml_start}")
+        root = ET.fromstring(xml_content)
+        
+        transactions = []
+        total_count = 0
+        
+        # Find all transaction elements
+        for stmttrn in root.findall('.//STMTTRN'):
+            try:
+                # Extract transaction data
+                data = {
+                    'DTPOSTED': stmttrn.findtext('DTPOSTED', ''),
+                    'TRNAMT': stmttrn.findtext('TRNAMT', '0'),
+                    'NAME': stmttrn.findtext('NAME', ''),
+                    'MEMO': stmttrn.findtext('MEMO', ''),
+                    'TRNTYPE': stmttrn.findtext('TRNTYPE', ''),
+                    'FITID': stmttrn.findtext('FITID', '')
+                }
                 
-        except Exception as e:
-            logger.error(f"Error processing XML transaction for preview: {str(e)}")
-            continue
-    
-    return transactions, total_count
+                transaction_dict = format_ofx_transaction_for_preview(data)
+                if transaction_dict:
+                    transactions.append(transaction_dict)
+                    total_count += 1
+                    
+            except Exception as e:
+                logger.error(f"Error processing XML transaction for preview: {str(e)}")
+                continue
+        
+        return transactions, total_count
+        
+    except ET.ParseError as e:
+        logger.error(f"Failed to parse OFX XML for preview: {str(e)}")
+        raise e
 
 def format_ofx_transaction_for_preview(data: Dict[str, str]) -> Dict[str, str]:
     """Format OFX transaction data for preview display."""
@@ -977,8 +1025,20 @@ def get_file_preview_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
                 return handle_error(500, "Error reading file content from S3.")
 
             try:
-                content_str = content_bytes.decode('utf-8')
-                logger.info(f"Parsing {file_id}(type {file.file_format})  with content: {content_str}")
+                # Parse OFX headers to get correct encoding
+                headers = parse_ofx_headers(content_bytes)
+                encoding = get_ofx_encoding(headers)
+                
+                # Decode the content using the correct encoding
+                try:
+                    content_str = content_bytes.decode(encoding)
+                    logger.info(f"Successfully decoded OFX preview content using encoding: {encoding}")
+                    logger.info(f"Raw transactions: {content_str[:1500]}")
+                except UnicodeDecodeError as e:
+                    logger.warning(f"Failed to decode OFX preview with {encoding}, falling back to utf-8: {str(e)}")
+                    content_str = content_bytes.decode('utf-8', errors='replace')
+                
+                logger.info(f"Parsing {file_id}(type {file.file_format}) for preview")
                 preview_data = parse_ofx_preview(content_str, file.file_format)
                 
                 return create_response(200, {

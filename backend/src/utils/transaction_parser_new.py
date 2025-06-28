@@ -26,6 +26,84 @@ from models.transaction_file import FileFormat, TransactionFile
 from models.file_map import FileMap
 from utils.db_utils import checked_mandatory_file_map
 
+def parse_ofx_headers(content: bytes) -> Dict[str, str]:
+    """
+    Parse OFX headers to extract encoding and other metadata.
+    
+    Args:
+        content: Raw bytes content of the OFX file
+        
+    Returns:
+        Dictionary of header key-value pairs
+    """
+    headers = {}
+    
+    # Try to decode with common encodings to read headers
+    for encoding in ['ascii', 'utf-8', 'latin-1', 'cp1252']:
+        try:
+            text = content.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        # If all encodings fail, use utf-8 with error handling
+        text = content.decode('utf-8', errors='ignore')
+    logger.info(f"Decoded OFX content using encoding: {text}")
+    lines = text.splitlines()
+    
+    # Parse header lines (before <OFX> tag)
+    for line in lines:
+        line = line.strip()
+        if line.startswith('<'):
+            break  # End of headers
+        if ':' in line:
+            key, value = line.split(':', 1)
+            headers[key.strip()] = value.strip()
+    
+    logger.debug(f"Parsed OFX headers: {headers}")
+    return headers
+
+def get_ofx_encoding(headers: Dict[str, str]) -> str:
+    """
+    Determine the correct encoding from OFX headers.
+    
+    Args:
+        headers: Dictionary of parsed OFX headers
+        
+    Returns:
+        Encoding string to use for decoding
+    """
+    # Check CHARSET header first
+    charset = headers.get('CHARSET', '').upper()
+    encoding_header = headers.get('ENCODING', '').upper()
+    
+    # Map common OFX charset values to Python encodings
+    charset_map = {
+        '1252': 'cp1252',        # Windows-1252
+        'WINDOWS-1252': 'cp1252',
+        'CP1252': 'cp1252',
+        'ISO-8859-1': 'latin-1',
+        'UTF-8': 'utf-8',
+        'ASCII': 'ascii',
+        'USASCII': 'ascii'
+    }
+    
+    # First try charset mapping
+    if charset in charset_map:
+        encoding = charset_map[charset]
+        logger.info(f"Using encoding '{encoding}' from CHARSET header: {charset}")
+        return encoding
+    
+    # Then try encoding header
+    if encoding_header in charset_map:
+        encoding = charset_map[encoding_header]
+        logger.info(f"Using encoding '{encoding}' from ENCODING header: {encoding_header}")
+        return encoding
+    
+    # Default fallback
+    logger.warning(f"Unknown charset/encoding in headers. CHARSET: {charset}, ENCODING: {encoding_header}. Defaulting to cp1252")
+    return 'cp1252'
+
 # Configure logging
 log_conf = os.environ.get('LOGGING_CONFIG')
 if log_conf:
@@ -165,9 +243,8 @@ def apply_field_mapping(row_data: Dict[str, Any], field_map: FileMap) -> Dict[st
         if mapping.transformation:
             try:
                 logger.info(f"Applying transformation: {mapping.transformation}")
-                # For now, we only support basic Python expressions
-                # In the future, this could be expanded to more complex transformations
-                value = eval(mapping.transformation, {"value": value})
+                # Use a safer approach instead of eval()
+                value = _apply_safe_transformation(mapping.transformation, value)
                 logger.info(f"Transformed value: {value}")
             except Exception as e:
                 logger.error(f"Error applying transformation {mapping.transformation}: {str(e)}")
@@ -177,6 +254,36 @@ def apply_field_mapping(row_data: Dict[str, Any], field_map: FileMap) -> Dict[st
     
     logger.info(f"Final mapped result: {result}")
     return result
+
+
+def _apply_safe_transformation(transformation: str, value: Any) -> Any:
+    """
+    Apply transformation safely without using eval().
+    
+    Args:
+        transformation: The transformation string
+        value: The input value
+        
+    Returns:
+        Transformed value
+    """
+    # For now, support basic transformations
+    # This could be expanded to use a proper expression parser like simpleeval
+    if transformation == "value.strip()":
+        return str(value).strip()
+    elif transformation == "value.upper()":
+        return str(value).upper()
+    elif transformation == "value.lower()":
+        return str(value).lower()
+    elif transformation.startswith("-"):
+        # Handle negation: "-value"
+        if transformation == "-value":
+            return -float(value)
+    
+    # For complex transformations, consider using a library like simpleeval
+    # For now, log and return unchanged
+    logger.warning(f"Unsupported transformation: {transformation}, returning value unchanged")
+    return value
 
 
 def detect_date_order(dates: List[str]) -> str:
@@ -541,13 +648,46 @@ def extract_raw_transactions_csv(transaction_file: TransactionFile, content: byt
 
 def extract_raw_transactions_ofx(transaction_file: TransactionFile, content: bytes) -> List[Dict[str, str]]:
     """Extract raw OFX data into list of dictionaries"""
-    text_content = content.decode('utf-8')
+    # Parse OFX headers to get correct encoding
+    headers = parse_ofx_headers(content)
+    encoding = get_ofx_encoding(headers)
     
-    # Handle both XML and colon-separated formats
-    if any(marker in text_content for marker in ['OFXHEADER:', 'DATA:OFXSGML']):
+    # Decode the content using the correct encoding
+    try:
+        text_content = content.decode(encoding)
+        logger.info(f"Successfully decoded OFX content using encoding: {encoding}")
+    except UnicodeDecodeError as e:
+        logger.warning(f"Failed to decode with {encoding}, falling back to utf-8: {str(e)}")
+        text_content = content.decode('utf-8', errors='replace')
+    
+    # Try to determine OFX format - don't assume XML!
+    # Check if it contains XML-like or colon-separated transaction data
+    has_xml_like_tags = '<STMTTRN>' in text_content or '<TRNTYPE>' in text_content or '<DTPOSTED>' in text_content
+    has_colon_format = any(':' in line and not line.startswith('<') for line in text_content.splitlines() if line.strip())
+    
+    if has_xml_like_tags:
+        # This could be OFX SGML (XML-like) or true XML
+        try:
+            # First try as true XML
+            return _extract_ofx_xml(text_content)
+        except ET.ParseError:
+            # If XML parsing fails, treat as OFX SGML (XML-like but not valid XML)
+            logger.info("XML parsing failed, treating as OFX SGML format")
+            return _extract_ofx_colon_separated(text_content)
+    elif has_colon_format:
+        # Pure colon-separated format
         return _extract_ofx_colon_separated(text_content)
     else:
-        return _extract_ofx_xml(text_content)
+        # Fallback - try both approaches
+        logger.warning("Could not determine OFX format, trying colon-separated first")
+        result = _extract_ofx_colon_separated(text_content)
+        if not result:
+            try:
+                return _extract_ofx_xml(text_content)
+            except ET.ParseError:
+                logger.error("Both OFX parsing methods failed")
+                return []
+        return result
 
 
 def extract_raw_transactions_qif(transaction_file: TransactionFile, content: bytes) -> List[Dict[str, str]]:
@@ -693,7 +833,7 @@ def parse_transactions_orchestrator(transaction_file: TransactionFile, content: 
     try:
         # Step 1: Extract raw transaction data (format-specific)
         raw_transactions = extract_raw_transactions(transaction_file, content)
-        
+        # get first 500 chars of raw_transactions
         # Step 2: Apply field mappings (🔒 PROTECTED - universal)
         mapped_transactions = apply_mappings_to_transactions(raw_transactions, transaction_file)
         
@@ -769,9 +909,14 @@ def _extract_ofx_colon_separated(text_content: str) -> List[Dict[str, str]]:
             current_transaction = {}
             in_transaction = False
         elif in_transaction and '>' in line and '</' in line:
-            # XML-style tag with value
+            # XML-style tag with value on same line with closing tag
             tag = line[1:line.index('>')]
             value = line[line.index('>')+1:line.rindex('<')]
+            current_transaction[tag] = value
+        elif in_transaction and line.startswith('<') and '>' in line and not line.endswith('>'):
+            # XML-style tag with value on same line but no closing tag
+            tag = line[1:line.index('>')]
+            value = line[line.index('>')+1:]
             current_transaction[tag] = value
         elif in_transaction and ':' in line:
             # Colon-separated style
@@ -788,7 +933,28 @@ def _extract_ofx_colon_separated(text_content: str) -> List[Dict[str, str]]:
 def _extract_ofx_xml(text_content: str) -> List[Dict[str, str]]:
     """Extract OFX data from XML format"""
     try:
-        root = ET.fromstring(text_content)
+        # Strip OFX headers - find the start of XML content
+        xml_start = -1
+        lines = text_content.splitlines()
+        
+        for i, line in enumerate(lines):
+            line = line.strip()
+            # Look for XML start - either <?xml or <OFX or first < tag
+            if line.startswith('<?xml') or line.startswith('<OFX') or (line.startswith('<') and not ':' in line):
+                xml_start = i
+                break
+        
+        if xml_start == -1:
+            raise ET.ParseError("No XML content found after OFX headers")
+        
+        # Join remaining lines as XML content
+        xml_content = '\n'.join(lines[xml_start:])
+        
+        if not xml_content.strip():
+            raise ET.ParseError("Empty XML content after stripping headers")
+        
+        logger.info(f"Attempting to parse XML content starting from line {xml_start}")
+        root = ET.fromstring(xml_content)
         transactions = []
         
         # Find all transaction elements
@@ -812,8 +978,7 @@ def _extract_ofx_xml(text_content: str) -> List[Dict[str, str]]:
         
     except ET.ParseError as e:
         logger.error(f"Failed to parse OFX XML: {str(e)}")
-        return []
-
+        raise e
 
 # =============================================================================
 # FORMAT-SPECIFIC PARSERS (NOW USING ORCHESTRATOR)
@@ -900,7 +1065,17 @@ def file_type_selector(content: bytes) -> Optional[FileFormat]:
     Returns a FileFormat enum value if positively determined, otherwise None.
     """
     try:
-        text = content.decode('utf-8', errors='ignore').strip()
+        # For OFX files, try to use proper encoding from headers
+        if b'OFXHEADER:' in content or b'DATA:OFXSGML' in content:
+            headers = parse_ofx_headers(content)
+            encoding = get_ofx_encoding(headers)
+            try:
+                text = content.decode(encoding).strip()
+            except UnicodeDecodeError:
+                logger.warning(f"Failed to decode OFX content using encoding: {encoding}, falling back to utf-8")
+                text = content.decode('utf-8', errors='ignore').strip()
+        else:
+            text = content.decode('utf-8', errors='ignore').strip()
     except Exception:
         return None  # Could not decode
 
