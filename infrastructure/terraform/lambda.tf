@@ -417,7 +417,7 @@ resource "aws_cloudwatch_log_group" "analytics_operations" {
 resource "aws_lambda_function" "analytics_processor" {
   filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-analytics-processor"
-  handler          = "handlers/analytics_processor.handler"
+  handler          = "services/analytics_processor_service.handler"
   runtime          = "python3.10"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 300  # 5 minutes timeout for processing
