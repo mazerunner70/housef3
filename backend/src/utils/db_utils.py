@@ -20,7 +20,11 @@ from models import (
     AccountType,
     Currency,
     AccountCreate,
-    AccountUpdate
+    AccountUpdate,
+    AnalyticsData,
+    AnalyticsProcessingStatus,
+    AnalyticType,
+    ComputationStatus
 )
 from models.category import Category, CategoryType, CategoryUpdate
 from models.transaction import Transaction, TransactionCreate, TransactionUpdate
@@ -43,12 +47,16 @@ FILES_TABLE = os.environ.get('FILES_TABLE')
 TRANSACTIONS_TABLE = os.environ.get('TRANSACTIONS_TABLE')
 FILE_MAPS_TABLE = os.environ.get('FILE_MAPS_TABLE')
 CATEGORIES_TABLE_NAME = os.environ.get('CATEGORIES_TABLE_NAME')
+ANALYTICS_DATA_TABLE = os.environ.get('ANALYTICS_DATA_TABLE', 'housef3-analytics-data')
+ANALYTICS_STATUS_TABLE = os.environ.get('ANALYTICS_STATUS_TABLE', 'housef3-analytics-status')
 
 # Initialize table resources lazily
 _accounts_table = None
 _files_table = None
 _transactions_table = None
 _file_maps_table = None
+_analytics_data_table = None
+_analytics_status_table = None
 
 categories_table = None
 
@@ -150,6 +158,20 @@ def get_file_maps_table() -> Any:
     if _file_maps_table is None and FILE_MAPS_TABLE:
         _file_maps_table = dynamodb.Table(FILE_MAPS_TABLE)
     return _file_maps_table
+
+def get_analytics_data_table() -> Any:
+    """Get the analytics data table resource, initializing it if needed."""
+    global _analytics_data_table
+    if _analytics_data_table is None and ANALYTICS_DATA_TABLE:
+        _analytics_data_table = dynamodb.Table(ANALYTICS_DATA_TABLE)
+    return _analytics_data_table
+
+def get_analytics_status_table() -> Any:
+    """Get the analytics status table resource, initializing it if needed."""
+    global _analytics_status_table
+    if _analytics_status_table is None and ANALYTICS_STATUS_TABLE:
+        _analytics_status_table = dynamodb.Table(ANALYTICS_STATUS_TABLE)
+    return _analytics_status_table
 
 def get_account(account_id: uuid.UUID) -> Optional[Account]:
     """
@@ -1181,4 +1203,308 @@ def delete_category_from_db(category_id: uuid.UUID, user_id: str) -> bool:
         logger.warning(f"Attempt to delete category {str(category_id)} which has child categories.")
         raise ValueError("Cannot delete category: it has child categories.")
     categories_table.delete_item(Key={'categoryId': str(category_id)})
-    return True 
+    return True
+
+# =============================================================================
+# Analytics Data Functions
+# =============================================================================
+
+def store_analytics_data(analytics_data: AnalyticsData) -> None:
+    """
+    Store computed analytics data in DynamoDB.
+    
+    Args:
+        analytics_data: The AnalyticsData object to store
+        
+    Raises:
+        ClientError: If there's a DynamoDB error
+    """
+    try:
+        item = analytics_data.to_dynamodb_item()
+        get_analytics_data_table().put_item(Item=item)
+        logger.info(f"Stored analytics data: {analytics_data.analytic_type.value} for user {analytics_data.user_id}, period {analytics_data.time_period}")
+    except ClientError as e:
+        logger.error(f"Error storing analytics data: {str(e)}")
+        raise
+
+def get_analytics_data(user_id: str, analytic_type: AnalyticType, time_period: str, account_id: Optional[str] = None) -> Optional[AnalyticsData]:
+    """
+    Retrieve specific analytics data from DynamoDB.
+    
+    Args:
+        user_id: The user ID
+        analytic_type: The type of analytics
+        time_period: The time period (e.g., '2024-12')
+        account_id: Optional account ID (None for cross-account)
+        
+    Returns:
+        AnalyticsData object if found, None otherwise
+    """
+    try:
+        pk = f"{user_id}#{analytic_type.value}"
+        account_part = account_id or 'ALL'
+        sk = f"{time_period}#{account_part}"
+        
+        response = get_analytics_data_table().get_item(
+            Key={'pk': pk, 'sk': sk}
+        )
+        
+        if 'Item' in response:
+            return AnalyticsData.from_dynamodb_item(response['Item'])
+        return None
+    except ClientError as e:
+        logger.error(f"Error retrieving analytics data: {str(e)}")
+        raise
+
+def list_analytics_data_for_user(user_id: str, analytic_type: AnalyticType, time_range_prefix: Optional[str] = None) -> List[AnalyticsData]:
+    """
+    List analytics data for a user and analytic type, optionally filtered by time range.
+    
+    Args:
+        user_id: The user ID
+        analytic_type: The type of analytics
+        time_range_prefix: Optional time range prefix (e.g., '2024' for all of 2024)
+        
+    Returns:
+        List of AnalyticsData objects
+    """
+    try:
+        pk = f"{user_id}#{analytic_type.value}"
+        
+        if time_range_prefix:
+            # Query with time range filter
+            response = get_analytics_data_table().query(
+                KeyConditionExpression=Key('pk').eq(pk) & Key('sk').begins_with(time_range_prefix)
+            )
+        else:
+            # Query all for this analytic type
+            response = get_analytics_data_table().query(
+                KeyConditionExpression=Key('pk').eq(pk)
+            )
+        
+        analytics_data = []
+        for item in response.get('Items', []):
+            analytics_data.append(AnalyticsData.from_dynamodb_item(item))
+        
+        return analytics_data
+    except ClientError as e:
+        logger.error(f"Error listing analytics data: {str(e)}")
+        raise
+
+def batch_store_analytics_data(analytics_list: List[AnalyticsData]) -> None:
+    """
+    Store multiple analytics data objects in batch.
+    
+    Args:
+        analytics_list: List of AnalyticsData objects to store
+        
+    Raises:
+        ClientError: If there's a DynamoDB error
+    """
+    try:
+        # Process in batches of 25 (DynamoDB limit)
+        for i in range(0, len(analytics_list), 25):
+            batch = analytics_list[i:i+25]
+            
+            with get_analytics_data_table().batch_writer() as batch_writer:
+                for analytics_data in batch:
+                    item = analytics_data.to_dynamodb_item()
+                    batch_writer.put_item(Item=item)
+        
+        logger.info(f"Batch stored {len(analytics_list)} analytics data objects")
+    except ClientError as e:
+        logger.error(f"Error batch storing analytics data: {str(e)}")
+        raise
+
+def delete_analytics_data(user_id: str, analytic_type: AnalyticType, time_period: str, account_id: Optional[str] = None) -> bool:
+    """
+    Delete specific analytics data from DynamoDB.
+    
+    Args:
+        user_id: The user ID
+        analytic_type: The type of analytics
+        time_period: The time period
+        account_id: Optional account ID
+        
+    Returns:
+        True if deleted, False if not found
+    """
+    try:
+        pk = f"{user_id}#{analytic_type.value}"
+        account_part = account_id or 'ALL'
+        sk = f"{time_period}#{account_part}"
+        
+        response = get_analytics_data_table().delete_item(
+            Key={'pk': pk, 'sk': sk},
+            ReturnValues='ALL_OLD'
+        )
+        
+        return 'Attributes' in response
+    except ClientError as e:
+        logger.error(f"Error deleting analytics data: {str(e)}")
+        raise
+
+# =============================================================================
+# Analytics Processing Status Functions
+# =============================================================================
+
+def store_analytics_status(status: AnalyticsProcessingStatus) -> None:
+    """
+    Store analytics processing status in DynamoDB.
+    
+    Args:
+        status: The AnalyticsProcessingStatus object to store
+        
+    Raises:
+        ClientError: If there's a DynamoDB error
+    """
+    try:
+        item = status.to_dynamodb_item()
+        # Use user_id as partition key and analytic_type#account_id as sort key
+        item['pk'] = status.user_id
+        account_part = status.account_id or 'ALL'
+        item['sk'] = f"{status.analytic_type.value}#{account_part}"
+        
+        get_analytics_status_table().put_item(Item=item)
+        logger.info(f"Stored analytics status: {status.analytic_type.value} for user {status.user_id}")
+    except ClientError as e:
+        logger.error(f"Error storing analytics status: {str(e)}")
+        raise
+
+def get_analytics_status(user_id: str, analytic_type: AnalyticType, account_id: Optional[str] = None) -> Optional[AnalyticsProcessingStatus]:
+    """
+    Retrieve analytics processing status from DynamoDB.
+    
+    Args:
+        user_id: The user ID
+        analytic_type: The type of analytics
+        account_id: Optional account ID
+        
+    Returns:
+        AnalyticsProcessingStatus object if found, None otherwise
+    """
+    try:
+        account_part = account_id or 'ALL'
+        sk = f"{analytic_type.value}#{account_part}"
+        
+        response = get_analytics_status_table().get_item(
+            Key={'pk': user_id, 'sk': sk}
+        )
+        
+        if 'Item' in response:
+            return AnalyticsProcessingStatus.from_dynamodb_item(response['Item'])
+        return None
+    except ClientError as e:
+        logger.error(f"Error retrieving analytics status: {str(e)}")
+        raise
+
+def list_analytics_status_for_user(user_id: str) -> List[AnalyticsProcessingStatus]:
+    """
+    List all analytics processing status for a user.
+    
+    Args:
+        user_id: The user ID
+        
+    Returns:
+        List of AnalyticsProcessingStatus objects
+    """
+    try:
+        response = get_analytics_status_table().query(
+            KeyConditionExpression=Key('pk').eq(user_id)
+        )
+        
+        status_list = []
+        for item in response.get('Items', []):
+            status_list.append(AnalyticsProcessingStatus.from_dynamodb_item(item))
+        
+        return status_list
+    except ClientError as e:
+        logger.error(f"Error listing analytics status: {str(e)}")
+        raise
+
+def update_analytics_status(user_id: str, analytic_type: AnalyticType, updates: Dict[str, Any], account_id: Optional[str] = None) -> Optional[AnalyticsProcessingStatus]:
+    """
+    Update analytics processing status.
+    
+    Args:
+        user_id: The user ID
+        analytic_type: The type of analytics
+        updates: Dictionary of updates to apply
+        account_id: Optional account ID
+        
+    Returns:
+        Updated AnalyticsProcessingStatus object if successful, None otherwise
+    """
+    try:
+        from datetime import date, datetime
+        
+        account_part = account_id or 'ALL'
+        sk = f"{analytic_type.value}#{account_part}"
+        
+        # Build update expression
+        update_expression = "SET "
+        expression_values = {}
+        expression_names = {}
+        
+        for key, value in updates.items():
+            if key in ['lastUpdated', 'lastComputedDate', 'dataAvailableThrough']:
+                # Handle date/datetime fields
+                if isinstance(value, (date, datetime)):
+                    expression_values[f':{key}'] = value.isoformat()
+                else:
+                    expression_values[f':{key}'] = value
+            elif key == 'status' and hasattr(value, 'value'):
+                # Handle enum fields
+                expression_values[f':{key}'] = value.value
+            else:
+                expression_values[f':{key}'] = value
+            
+            expression_names[f'#{key}'] = key
+            update_expression += f"#{key} = :{key}, "
+        
+        # Remove trailing comma and space
+        update_expression = update_expression.rstrip(', ')
+        
+        response = get_analytics_status_table().update_item(
+            Key={'pk': user_id, 'sk': sk},
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_values,
+            ExpressionAttributeNames=expression_names,
+            ReturnValues='ALL_NEW'
+        )
+        
+        if 'Attributes' in response:
+            return AnalyticsProcessingStatus.from_dynamodb_item(response['Attributes'])
+        return None
+    except ClientError as e:
+        logger.error(f"Error updating analytics status: {str(e)}")
+        raise
+
+def list_stale_analytics(computation_needed_only: bool = True) -> List[AnalyticsProcessingStatus]:
+    """
+    List analytics that need recomputation (stale analytics).
+    
+    Args:
+        computation_needed_only: If True, only return items where computation_needed=True
+        
+    Returns:
+        List of AnalyticsProcessingStatus objects that need recomputation
+    """
+    try:
+        # This would typically use a GSI for efficient querying
+        # For now, we'll scan the status table (not ideal for production)
+        if computation_needed_only:
+            response = get_analytics_status_table().scan(
+                FilterExpression=Attr('computationNeeded').eq(True)
+            )
+        else:
+            response = get_analytics_status_table().scan()
+        
+        status_list = []
+        for item in response.get('Items', []):
+            status_list.append(AnalyticsProcessingStatus.from_dynamodb_item(item))
+        
+        return status_list
+    except ClientError as e:
+        logger.error(f"Error listing stale analytics: {str(e)}")
+        raise 

@@ -33,7 +33,7 @@ from typing import Dict, Any, List, Optional, Union
 from decimal import Decimal
 from models.transaction_file import FileFormat, ProcessingStatus, DateRange
 from models.transaction import Transaction
-from utils.transaction_parser import file_type_selector, parse_transactions, preprocess_csv_text, parse_ofx_headers, get_ofx_encoding
+from utils.transaction_parser_new import file_type_selector, parse_transactions, preprocess_csv_text, parse_ofx_headers, get_ofx_encoding
 from utils.s3_dao import (
     get_presigned_post_url,
     delete_object,
@@ -383,7 +383,16 @@ def unassociate_file_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
         
         # Update the file to remove account association
         logger.info(f"Removing association between file {file_id} and account {file.account_id}")
-        update_transaction_file(file_id, user_id, {'account_id': None})          
+        update_transaction_file(file_id, user_id, {'account_id': None})
+        
+        # Trigger analytics refresh for file unassociation
+        try:
+            from utils.analytics_utils import trigger_analytics_for_account_change
+            trigger_analytics_for_account_change(user_id, 'unassociate')
+            logger.info(f"Analytics refresh triggered for file unassociation: {file_id}")
+        except Exception as e:
+            logger.warning(f"Failed to trigger analytics for file unassociation: {str(e)}")
+        
         return create_response(200, {
             "message": "File successfully unassociated from account",
             "fileId": file_id,
@@ -418,6 +427,15 @@ def associate_file_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any
         logger.info(f"Associating file {file_id} with account {account_id}")
         file.account_id = account_id
         response: FileProcessorResponse = process_file(file)
+        
+        # Trigger analytics refresh for file association
+        try:
+            from utils.analytics_utils import trigger_analytics_for_account_change
+            trigger_analytics_for_account_change(user_id, 'associate')
+            logger.info(f"Analytics refresh triggered for file association: {file_id}")
+        except Exception as e:
+            logger.warning(f"Failed to trigger analytics for file association: {str(e)}")
+        
         return create_response(200, response.to_dict())
     except Exception as e:
         logger.error(f"Error associating file: {str(e)}")
@@ -585,8 +603,16 @@ def delete_file_transactions_handler(event: Dict[str, Any], user_id: str) -> Dic
         file = checked_mandatory_transaction_file(file_id, user_id)
         
         # Delete all transactions for the file
-
         deleted_count = delete_transactions_for_file(file_id)
+        
+        # Trigger analytics refresh for bulk transaction deletion
+        if deleted_count > 0:
+            try:
+                from utils.analytics_utils import trigger_analytics_for_transaction_change
+                trigger_analytics_for_transaction_change(user_id, 'bulk_delete')
+                logger.info(f"Analytics refresh triggered for bulk transaction deletion: {deleted_count} transactions")
+            except Exception as e:
+                logger.warning(f"Failed to trigger analytics for bulk transaction deletion: {str(e)}")
         
         return create_response(200, {
             'fileId': file_id,

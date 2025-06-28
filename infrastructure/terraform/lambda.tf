@@ -151,12 +151,14 @@ resource "aws_lambda_function" "file_processor" {
   
   environment {
     variables = {
-      ENVIRONMENT         = var.environment
-      FILES_TABLE         = aws_dynamodb_table.transaction_files.name
-      TRANSACTIONS_TABLE  = aws_dynamodb_table.transactions.name
-      FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.id
-      ACCOUNTS_TABLE      = aws_dynamodb_table.accounts.name
-      FILE_MAPS_TABLE    = aws_dynamodb_table.file_maps.name
+      ENVIRONMENT           = var.environment
+      FILES_TABLE           = aws_dynamodb_table.transaction_files.name
+      TRANSACTIONS_TABLE    = aws_dynamodb_table.transactions.name
+      FILE_STORAGE_BUCKET   = aws_s3_bucket.file_storage.id
+      ACCOUNTS_TABLE        = aws_dynamodb_table.accounts.name
+      FILE_MAPS_TABLE       = aws_dynamodb_table.file_maps.name
+      ANALYTICS_DATA_TABLE  = aws_dynamodb_table.analytics_data.name
+      ANALYTICS_STATUS_TABLE = aws_dynamodb_table.analytics_status.name
     }
   }
   
@@ -217,6 +219,36 @@ resource "aws_lambda_function" "transaction_operations" {
     }
   }
 
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
+# Analytics Operations Lambda
+resource "aws_lambda_function" "analytics_operations" {
+  filename         = "../../backend/lambda_deploy.zip"
+  function_name    = "${var.project_name}-${var.environment}-analytics-operations"
+  handler          = "handlers/analytics_operations.handler"
+  runtime          = "python3.10"
+  role            = aws_iam_role.lambda_exec.arn
+  timeout         = 300
+  memory_size     = 512
+  source_code_hash = base64encode(local.source_code_hash)
+  depends_on      = [null_resource.prepare_lambda]
+  
+  environment {
+    variables = {
+      ENVIRONMENT           = var.environment
+      ANALYTICS_DATA_TABLE  = aws_dynamodb_table.analytics_data.name
+      ANALYTICS_STATUS_TABLE = aws_dynamodb_table.analytics_status.name
+      TRANSACTIONS_TABLE    = aws_dynamodb_table.transactions.name
+      ACCOUNTS_TABLE        = aws_dynamodb_table.accounts.name
+      FILES_TABLE           = aws_dynamodb_table.transaction_files.name
+    }
+  }
+  
   tags = {
     Environment = var.environment
     Project     = var.project_name
@@ -289,7 +321,7 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
 }
 
 resource "aws_iam_role_policy" "lambda_dynamodb_access" {
-  name = "dynamodb-access-v2"
+  name = "dynamodb-access-v3"
   role = aws_iam_role.lambda_exec.id
 
   policy = jsonencode({
@@ -315,7 +347,11 @@ resource "aws_iam_role_policy" "lambda_dynamodb_access" {
           aws_dynamodb_table.transactions.arn,
           "${aws_dynamodb_table.transactions.arn}/index/*",
           aws_dynamodb_table.file_maps.arn,
-          "${aws_dynamodb_table.file_maps.arn}/index/*"
+          "${aws_dynamodb_table.file_maps.arn}/index/*",
+          aws_dynamodb_table.analytics_data.arn,
+          "${aws_dynamodb_table.analytics_data.arn}/index/*",
+          aws_dynamodb_table.analytics_status.arn,
+          "${aws_dynamodb_table.analytics_status.arn}/index/*"
         ]
       }
     ]
@@ -364,6 +400,85 @@ resource "aws_cloudwatch_log_group" "transaction_operations" {
     Project     = var.project_name
     ManagedBy   = "terraform"
   }
+}
+
+resource "aws_cloudwatch_log_group" "analytics_operations" {
+  name              = "/aws/lambda/${aws_lambda_function.analytics_operations.function_name}"
+  retention_in_days = 14
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
+# Analytics Processor Lambda (Scheduled)
+resource "aws_lambda_function" "analytics_processor" {
+  filename         = "../../backend/lambda_deploy.zip"
+  function_name    = "${var.project_name}-${var.environment}-analytics-processor"
+  handler          = "handlers/analytics_processor.handler"
+  runtime          = "python3.10"
+  role            = aws_iam_role.lambda_exec.arn
+  timeout         = 300  # 5 minutes timeout for processing
+  memory_size     = 512  # More memory for analytics processing
+  source_code_hash = base64encode(local.source_code_hash)
+  depends_on      = [null_resource.prepare_lambda]
+
+  environment {
+    variables = {
+      ENVIRONMENT           = var.environment
+      ANALYTICS_DATA_TABLE  = aws_dynamodb_table.analytics_data.name
+      ANALYTICS_STATUS_TABLE = aws_dynamodb_table.analytics_status.name
+      TRANSACTIONS_TABLE    = aws_dynamodb_table.transactions.name
+      ACCOUNTS_TABLE        = aws_dynamodb_table.accounts.name
+      FILES_TABLE           = aws_dynamodb_table.transaction_files.name
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_cloudwatch_log_group" "analytics_processor" {
+  name              = "/aws/lambda/${aws_lambda_function.analytics_processor.function_name}"
+  retention_in_days = 7
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
+# CloudWatch Events Rule to trigger analytics processor every 10 minutes
+resource "aws_cloudwatch_event_rule" "analytics_processor_schedule" {
+  name                = "${var.project_name}-${var.environment}-analytics-processor-schedule"
+  description         = "Trigger analytics processor every 10 minutes"
+  schedule_expression = "rate(10 minutes)"
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_cloudwatch_event_target" "analytics_processor_target" {
+  rule      = aws_cloudwatch_event_rule.analytics_processor_schedule.name
+  target_id = "AnalyticsProcessorTarget"
+  arn       = aws_lambda_function.analytics_processor.arn
+}
+
+resource "aws_lambda_permission" "allow_cloudwatch_to_call_analytics_processor" {
+  statement_id  = "AllowExecutionFromCloudWatch"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.analytics_processor.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.analytics_processor_schedule.arn
 }
 
 # Categories Lambda IAM Resources
@@ -479,6 +594,31 @@ output "lambda_account_operations_name" {
 
 output "lambda_transaction_operations_name" {
   value = aws_lambda_function.transaction_operations.function_name
+}
+
+output "lambda_analytics_operations_name" {
+  description = "Name of the Analytics Operations Lambda function"
+  value = aws_lambda_function.analytics_operations.function_name
+}
+
+output "lambda_analytics_operations_arn" {
+  description = "ARN of the Analytics Operations Lambda function"
+  value = aws_lambda_function.analytics_operations.arn
+}
+
+output "lambda_analytics_operations_invoke_arn" {
+  description = "Invoke ARN of the Analytics Operations Lambda function"
+  value = aws_lambda_function.analytics_operations.invoke_arn
+}
+
+output "lambda_analytics_processor_name" {
+  description = "Name of the Analytics Processor Lambda function"
+  value = aws_lambda_function.analytics_processor.function_name
+}
+
+output "lambda_analytics_processor_arn" {
+  description = "ARN of the Analytics Processor Lambda function"
+  value = aws_lambda_function.analytics_processor.arn
 }
 
 output "lambda_getcolors_name" {

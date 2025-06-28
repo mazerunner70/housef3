@@ -127,6 +127,14 @@ def create_account_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any
         # Validate and create the account
         create_account(account)
         
+        # Trigger analytics refresh for account creation
+        try:
+            from utils.analytics_utils import trigger_analytics_for_account_change
+            trigger_analytics_for_account_change(user_id, 'create')
+            logger.info(f"Analytics refresh triggered for account creation: {account.account_id}")
+        except Exception as e:
+            logger.warning(f"Failed to trigger analytics for account creation: {str(e)}")
+        
         # Return the created account
         account_dict = account.model_dump(by_alias=True)
         
@@ -215,6 +223,14 @@ def update_account_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any
             'default_file_map_id': default_field_map_id
         })
         
+        # Trigger analytics refresh for account update
+        try:
+            from utils.analytics_utils import trigger_analytics_for_account_change
+            trigger_analytics_for_account_change(user_id, 'update')
+            logger.info(f"Analytics refresh triggered for account update: {account_id}")
+        except Exception as e:
+            logger.warning(f"Failed to trigger analytics for account update: {str(e)}")
+        
         # Return the updated account
         account_dict = updated_account.model_dump(by_alias=True)
         
@@ -242,6 +258,14 @@ def delete_account_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any
         
         # Delete the account
         delete_account(uuid.UUID(account_id), user_id)
+        
+        # Trigger analytics refresh for account deletion
+        try:
+            from utils.analytics_utils import trigger_analytics_for_account_change
+            trigger_analytics_for_account_change(user_id, 'delete')
+            logger.info(f"Analytics refresh triggered for account deletion: {account_id}")
+        except Exception as e:
+            logger.warning(f"Failed to trigger analytics for account deletion: {str(e)}")
         
         return create_response(200, {
             'message': 'Account deleted successfully',

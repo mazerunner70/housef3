@@ -36,6 +36,18 @@ from .category import (
 
 from .money import Money
 
+from .analytics import (
+    AnalyticType,
+    ComputationStatus,
+    DataQuality,
+    AccountDataRange,
+    AnalyticDateRange,
+    AnalyticsProcessingStatus,
+    AnalyticsData,
+    DataGap,
+    DataDisclaimer
+)
+
 __all__ = [
     'Account',
     'AccountType',
@@ -57,6 +69,15 @@ __all__ = [
     'CategoryRule',
     'CategoryCreate',
     'CategoryUpdate',
+    'AnalyticType',
+    'ComputationStatus',
+    'DataQuality',
+    'AccountDataRange',
+    'AnalyticDateRange',
+    'AnalyticsProcessingStatus',
+    'AnalyticsData',
+    'DataGap',
+    'DataDisclaimer',
 ]
 
 from .account import AccountCreate, AccountUpdate
