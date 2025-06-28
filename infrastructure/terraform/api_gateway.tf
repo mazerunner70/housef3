@@ -429,6 +429,42 @@ resource "aws_apigatewayv2_route" "delete_category" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# Analytics Operations Integration
+resource "aws_apigatewayv2_integration" "analytics_operations" {
+  api_id                 = aws_apigatewayv2_api.main.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.analytics_operations.invoke_arn
+  payload_format_version = "2.0"
+  description           = "Lambda integration for analytics operations endpoints"
+}
+
+# Get analytics data by type
+resource "aws_apigatewayv2_route" "get_analytics" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /analytics/{analytic_type}"
+  target             = "integrations/${aws_apigatewayv2_integration.analytics_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Refresh analytics computation
+resource "aws_apigatewayv2_route" "refresh_analytics" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /analytics/refresh"
+  target             = "integrations/${aws_apigatewayv2_integration.analytics_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Get analytics status
+resource "aws_apigatewayv2_route" "get_analytics_status" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /analytics/status"
+  target             = "integrations/${aws_apigatewayv2_integration.analytics_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 resource "aws_apigatewayv2_stage" "main" {
   api_id      = aws_apigatewayv2_api.main.id
   name        = var.environment
@@ -531,6 +567,15 @@ resource "aws_lambda_permission" "api_gateway_categories" {
   function_name = aws_lambda_function.categories_lambda.function_name # From lambda_categories.tf
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+}
+
+# Lambda permission for analytics
+resource "aws_lambda_permission" "api_gateway_analytics" {
+  statement_id  = "AllowAPIGatewayInvokeAnalyticsLambda"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.analytics_operations.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/analytics*"
 }
 
 # Outputs

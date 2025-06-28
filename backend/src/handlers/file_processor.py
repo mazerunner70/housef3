@@ -14,7 +14,7 @@ from decimal import Decimal
 from models.transaction_file import FileFormat, ProcessingStatus, TransactionFile, TransactionFileCreate
 from models.file_map import FileMap
 from services.file_processor_service import process_file, FileProcessorResponse
-from utils.transaction_parser import parse_transactions, file_type_selector
+from utils.transaction_parser_new import file_type_selector
 from models.transaction import Transaction
 from utils.file_analyzer import analyze_file_format
 from utils.db_utils import (
@@ -197,6 +197,16 @@ def handler(event, context):
             # Process the file
             file_processor_response: FileProcessorResponse = process_file(transaction_file)
             logger.info(f"File processing via process_file service complete. Message: {file_processor_response.message}, Tx Count: {file_processor_response.transaction_count}")
+
+            # Trigger analytics update if file processing was successful
+            if file_processor_response.transaction_count > 0:
+                try:
+                    from utils.analytics_utils import trigger_analytics_refresh
+                    trigger_analytics_refresh(user_id, priority=2)  # Medium priority for file upload
+                    logger.info(f"Analytics refresh triggered for user {user_id} after successful file processing")
+                except Exception as e:
+                    logger.warning(f"Failed to trigger analytics for user {user_id}: {str(e)}")
+                    # Don't fail the file processing because of analytics trigger failure
 
             # Re-fetch the transaction file to get its latest state for the response
             updated_transaction_file = get_transaction_file(transaction_file.file_id)

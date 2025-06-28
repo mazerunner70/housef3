@@ -144,6 +144,15 @@ def delete_transaction_handler(event: Dict[str, Any], user_id: str) -> Dict[str,
         
         # Delete the transaction
         get_transactions_table().delete_item(Key={'transactionId': transaction_id})
+        
+        # Trigger analytics refresh for transaction deletion
+        try:
+            from utils.analytics_utils import trigger_analytics_for_transaction_change
+            trigger_analytics_for_transaction_change(user_id, 'delete')
+            logger.info(f"Analytics refresh triggered for transaction deletion: {transaction_id}")
+        except Exception as e:
+            logger.warning(f"Failed to trigger analytics for transaction deletion: {str(e)}")
+        
         return create_response(200, {"message": "Transaction deleted successfully"})
     except Exception as e:
         logger.error(f"Error deleting transaction {transaction_id if 'transaction_id' in locals() else 'UNKNOWN'} for user {user_id}: {str(e)}", exc_info=True)
