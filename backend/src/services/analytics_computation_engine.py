@@ -97,7 +97,7 @@ class AnalyticsComputationEngine:
             }
 
         except Exception as e:
-            self.logger.error(f"Error computing cash flow analytics: {str(e)}")
+            logger.error(f"Error computing cash flow analytics: {str(e)}")
             # Return safe defaults instead of crashing
             return {
                 "totalIncome": Decimal('0.0'),
@@ -184,7 +184,7 @@ class AnalyticsComputationEngine:
             }
 
         except Exception as e:
-            self.logger.error(f"Error computing category analytics: {str(e)}")
+            logger.error(f"Error computing category analytics: {str(e)}")
             # Return safe defaults instead of crashing
             return {
                 "categoryBreakdown": [],
@@ -227,11 +227,14 @@ class AnalyticsComputationEngine:
 
                 # Credit utilization for credit card accounts
                 credit_utilization = None
+                credit_utilization_estimated = None
                 if account.account_type == AccountType.CREDIT_CARD and account.balance:
-                    # This would need credit limit data - for now use a placeholder
+                    # TODO: Use actual credit limit data when available
+                    # For now, use a rough estimate (3x balance) but mark it as estimated
                     estimated_limit = abs(account.balance) * 3  # Rough estimate
                     if estimated_limit > 0:
                         credit_utilization = (abs(account.balance) / estimated_limit) * 100
+                        credit_utilization_estimated = True  # Mark as estimated since we don't have real credit limit data
 
                 # Account efficiency (transactions per balance)
                 account_efficiency = len(account_transactions) / max(abs(account.balance or Decimal('1')), Decimal('1'))
@@ -246,6 +249,7 @@ class AnalyticsComputationEngine:
                     "netFlow": Decimal(str(account_net_flow)),
                     "transactionCount": len(account_transactions),
                     "creditUtilization": Decimal(str(credit_utilization)) if credit_utilization is not None else None,
+                    "creditUtilizationEstimated": credit_utilization_estimated,
                     "efficiencyScore": Decimal(str(account_efficiency))
                 })
 
@@ -270,7 +274,7 @@ class AnalyticsComputationEngine:
             }
 
         except Exception as e:
-            self.logger.error(f"Error computing account analytics: {str(e)}")
+            logger.error(f"Error computing account analytics: {str(e)}")
             # Return safe defaults instead of crashing
             return {
                 "accountDetails": [],
@@ -374,7 +378,7 @@ class AnalyticsComputationEngine:
             }
 
         except Exception as e:
-            self.logger.error(f"Error computing financial health score: {str(e)}")
+            logger.error(f"Error computing financial health score: {str(e)}")
             raise
 
     def _parse_time_period(self, time_period: str) -> Tuple[date, date]:
@@ -435,7 +439,7 @@ class AnalyticsComputationEngine:
             return start_date, end_date
 
         except (ValueError, IndexError) as e:
-            self.logger.error(f"Error parsing time period '{time_period}': {str(e)}")
+            logger.error(f"Error parsing time period '{time_period}': {str(e)}")
             # Default to current month
             today = date.today()
             start_date = date(today.year, today.month, 1)
@@ -464,7 +468,7 @@ class AnalyticsComputationEngine:
             return transactions
 
         except Exception as e:
-            self.logger.error(f"Error getting transactions for period: {str(e)}")
+            logger.error(f"Error getting transactions for period: {str(e)}")
             return []
 
     def _calculate_months_in_period(self, start_date: date, end_date: date) -> float:
@@ -518,7 +522,7 @@ class AnalyticsComputationEngine:
             return Decimal(str(min(100, stability_score)))
 
         except Exception as e:
-            self.logger.error(f"Error calculating income stability: {str(e)}")
+            logger.error(f"Error calculating income stability: {str(e)}")
             return Decimal('50.0')  # Default neutral score
 
     def _calculate_category_trends(self, user_id: str, time_period: str,
@@ -576,7 +580,7 @@ class AnalyticsComputationEngine:
             return trends
 
         except Exception as e:
-            self.logger.error(f"Error calculating category trends: {str(e)}")
+            logger.error(f"Error calculating category trends: {str(e)}")
             return {}
 
     def _generate_health_recommendations(self, overall_score: float,
