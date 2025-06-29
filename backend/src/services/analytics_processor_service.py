@@ -9,17 +9,37 @@ This function runs on a CloudWatch Events schedule (every 10 minutes) and:
 """
 import json
 import logging
+import os
+import sys
 import traceback
 from datetime import datetime, date
 from typing import Dict, Any, List, Optional
 
-from services.analytics_computation_engine import AnalyticsComputationEngine
-from models.analytics import AnalyticType, AnalyticsData, AnalyticsProcessingStatus
-from utils.db_utils import list_stale_analytics, store_analytics_data, store_analytics_status
-
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+# Fix imports for Lambda environment
+try:
+    # Add the /var/task (Lambda root) to the path if not already there
+    if '/var/task' not in sys.path:
+        sys.path.insert(0, '/var/task')
+
+    # Add the parent directory to allow direct imports
+    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+
+    logger.info("Successfully adjusted Python path for Lambda environment")
+except ImportError as e:
+    logger.error(f"Import error: {str(e)}")
+    logger.error(f"Current sys.path: {sys.path}")
+    raise
+
+# Import after path fixing
+from services.analytics_computation_engine import AnalyticsComputationEngine
+from models.analytics import AnalyticType, AnalyticsData, AnalyticsProcessingStatus
+from utils.db_utils import list_stale_analytics, store_analytics_data, store_analytics_status
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """

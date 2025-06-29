@@ -1,5 +1,6 @@
 import React from 'react';
 import { AnalyticsHookResult } from '../hooks/useAnalytics';
+import { fromDecimal, toDecimal } from '../../types/Analytics';
 
 interface OverallAnalyticsTabProps {
   analytics: AnalyticsHookResult;
@@ -8,6 +9,35 @@ interface OverallAnalyticsTabProps {
 const OverallAnalyticsTab: React.FC<OverallAnalyticsTabProps> = ({ analytics }) => {
   const { overview, formatCurrency } = analytics;
   const { cashFlow, financialHealth } = overview;
+  console.log("cashFlow", cashFlow);
+  console.log("total income", cashFlow?.totalIncome);
+  console.log("total expenses", cashFlow?.totalExpenses);
+  console.log("net cash flow", cashFlow?.netCashFlow);
+  console.log("financial health", financialHealth);
+  console.log("overall score", financialHealth?.overallScore);
+  console.log("component scores", financialHealth?.componentScores);
+
+  
+  // Helper function to safely format currency with fallback
+  const safeCurrencyFormat = (value: any) => {
+    try {
+      return formatCurrency(value);
+    } catch (error) {
+      console.error('Currency formatting error:', error, 'for value:', value);
+      return '$-.--';
+    }
+  };
+  
+  // Helper function to safely convert from decimal with fallback
+  const safeFromDecimal = (value: any) => {
+    try {
+      return fromDecimal(value);
+    } catch (error) {
+      console.error('Decimal conversion error:', error, 'for value:', value);
+      return 0;
+    }
+  };
+  console.log("safe currency format", cashFlow && cashFlow.totalIncome ? safeCurrencyFormat(cashFlow.totalIncome) : '$0.00')
   return (
     <div className="overall-analytics-tab">
       {/* Key Metrics Overview */}
@@ -15,7 +45,7 @@ const OverallAnalyticsTab: React.FC<OverallAnalyticsTabProps> = ({ analytics }) 
         <div className="analytics-card">
           <h3>Total Income</h3>
           <div className="analytics-metric positive">
-            {cashFlow ? formatCurrency(cashFlow.totalIncome) : formatCurrency(0)}
+            {cashFlow && cashFlow.totalIncome ? safeCurrencyFormat(cashFlow.totalIncome) : '$0.00'}
           </div>
           <small>This period</small>
         </div>
@@ -23,15 +53,15 @@ const OverallAnalyticsTab: React.FC<OverallAnalyticsTabProps> = ({ analytics }) 
         <div className="analytics-card">
           <h3>Total Expenses</h3>
           <div className="analytics-metric negative">
-            {cashFlow ? formatCurrency(cashFlow.totalExpenses) : formatCurrency(0)}
+            {cashFlow && cashFlow.totalExpenses ? safeCurrencyFormat(cashFlow.totalExpenses) : '$0.00'}
           </div>
           <small>This period</small>
         </div>
         
         <div className="analytics-card">
           <h3>Net Cash Flow</h3>
-          <div className={`analytics-metric ${cashFlow && cashFlow.netCashFlow >= 0 ? 'positive' : 'negative'}`}>
-            {cashFlow ? formatCurrency(cashFlow.netCashFlow) : formatCurrency(0)}
+          <div className={`analytics-metric ${cashFlow && cashFlow.netCashFlow && safeFromDecimal(cashFlow.netCashFlow) >= 0 ? 'positive' : 'negative'}`}>
+            {cashFlow && cashFlow.netCashFlow ? safeCurrencyFormat(cashFlow.netCashFlow) : '$0.00'}
           </div>
           <small>Income - Expenses</small>
         </div>
@@ -39,7 +69,7 @@ const OverallAnalyticsTab: React.FC<OverallAnalyticsTabProps> = ({ analytics }) 
         <div className="analytics-card">
           <h3>Financial Health Score</h3>
           <div className="analytics-metric">
-            {financialHealth ? Math.round(financialHealth.overallScore) : 0}/100
+            {financialHealth && financialHealth.overallScore ? Math.round(safeFromDecimal(financialHealth.overallScore)) : 0}/100
           </div>
           <small>Overall wellness</small>
         </div>
@@ -86,36 +116,36 @@ const OverallAnalyticsTab: React.FC<OverallAnalyticsTabProps> = ({ analytics }) 
         <div className="analytics-chart-header">
           <h3 className="analytics-chart-title">Financial Health Breakdown</h3>
         </div>
-        {financialHealth ? (
+        {financialHealth && financialHealth.componentScores ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
             <div className="analytics-card">
               <h4>Cash Flow</h4>
-              <div className="analytics-metric">{Math.round(financialHealth.componentScores.cashFlowScore)}/100</div>
+              <div className="analytics-metric">{Math.round(safeFromDecimal(financialHealth.componentScores.cashFlowScore || toDecimal(0)))}/100</div>
               <small>Income vs Expenses</small>
             </div>
             
             <div className="analytics-card">
               <h4>Expense Stability</h4>
-              <div className="analytics-metric">{Math.round(financialHealth.componentScores.expenseStabilityScore)}/100</div>
+              <div className="analytics-metric">{Math.round(safeFromDecimal(financialHealth.componentScores.expenseStabilityScore || toDecimal(0)))}/100</div>
               <small>Spending Consistency</small>
             </div>
             
             <div className="analytics-card">
               <h4>Emergency Fund</h4>
-              <div className="analytics-metric">{Math.round(financialHealth.componentScores.emergencyFundScore)}/100</div>
-              <small>{financialHealth.healthIndicators.emergencyFundMonths.toFixed(1)} months covered</small>
+              <div className="analytics-metric">{Math.round(safeFromDecimal(financialHealth.componentScores.emergencyFundScore || toDecimal(0)))}/100</div>
+              <small>{financialHealth.healthIndicators?.emergencyFundMonths ? safeFromDecimal(financialHealth.healthIndicators.emergencyFundMonths).toFixed(1) : '0.0'} months covered</small>
             </div>
 
             <div className="analytics-card">
               <h4>Debt Management</h4>
-              <div className="analytics-metric">{Math.round(financialHealth.componentScores.debtManagementScore)}/100</div>
-              <small>{(financialHealth.healthIndicators.debtToIncomeRatio * 100).toFixed(1)}% debt-to-income</small>
+              <div className="analytics-metric">{Math.round(safeFromDecimal(financialHealth.componentScores.debtManagementScore || toDecimal(0)))}/100</div>
+              <small>{financialHealth.healthIndicators?.debtToIncomeRatio ? (safeFromDecimal(financialHealth.healthIndicators.debtToIncomeRatio) * 100).toFixed(1) : '0.0'}% debt-to-income</small>
             </div>
 
             <div className="analytics-card">
               <h4>Savings Rate</h4>
-              <div className="analytics-metric">{Math.round(financialHealth.componentScores.savingsRateScore)}/100</div>
-              <small>{(financialHealth.healthIndicators.savingsRate * 100).toFixed(1)}% of income saved</small>
+              <div className="analytics-metric">{Math.round(safeFromDecimal(financialHealth.componentScores.savingsRateScore || toDecimal(0)))}/100</div>
+              <small>{financialHealth.healthIndicators?.savingsRate ? (safeFromDecimal(financialHealth.healthIndicators.savingsRate) * 100).toFixed(1) : '0.0'}% of income saved</small>
             </div>
           </div>
         ) : (
@@ -142,9 +172,9 @@ const OverallAnalyticsTab: React.FC<OverallAnalyticsTabProps> = ({ analytics }) 
         <div className="analytics-chart-header">
           <h3 className="analytics-chart-title">Insights & Recommendations</h3>
         </div>
-        {financialHealth && (financialHealth.recommendations.length > 0 || financialHealth.riskFactors.length > 0) ? (
+        {financialHealth && ((financialHealth.recommendations && financialHealth.recommendations.length > 0) || (financialHealth.riskFactors && financialHealth.riskFactors.length > 0)) ? (
           <div style={{ display: 'grid', gap: '15px' }}>
-            {financialHealth.recommendations.length > 0 && (
+            {financialHealth.recommendations && financialHealth.recommendations.length > 0 && (
               <div className="analytics-card">
                 <h4>💡 Recommendations</h4>
                 <ul style={{ margin: '10px 0', paddingLeft: '20px' }}>
@@ -155,7 +185,7 @@ const OverallAnalyticsTab: React.FC<OverallAnalyticsTabProps> = ({ analytics }) 
               </div>
             )}
             
-            {financialHealth.riskFactors.length > 0 && (
+            {financialHealth.riskFactors && financialHealth.riskFactors.length > 0 && (
               <div className="analytics-card">
                 <h4>⚠️ Risk Factors</h4>
                 <ul style={{ margin: '10px 0', paddingLeft: '20px' }}>

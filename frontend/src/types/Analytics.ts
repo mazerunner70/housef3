@@ -1,6 +1,8 @@
 // Analytics Type Definitions
 // These interfaces match the backend analytics models and API responses
 
+import { Decimal } from 'decimal.js';
+
 export enum AnalyticType {
   CASH_FLOW = 'CASH_FLOW',
   CATEGORY_TRENDS = 'CATEGORY_TRENDS',
@@ -95,27 +97,27 @@ export interface RefreshResponse {
 
 // Cash Flow Analytics
 export interface CashFlowData {
-  totalIncome: number;
-  totalExpenses: number;
-  netCashFlow: number;
+  totalIncome: Decimal;
+  totalExpenses: Decimal;
+  netCashFlow: Decimal;
   monthlyTrends: MonthlyTrend[];
   incomeStability: {
-    score: number;
-    variance: number;
-    consistency: number;
+    score: Decimal;
+    variance: Decimal;
+    consistency: Decimal;
   };
   expensePatterns: {
-    fixed: number;
-    variable: number;
-    discretionary: number;
+    fixed: Decimal;
+    variable: Decimal;
+    discretionary: Decimal;
   };
 }
 
 export interface MonthlyTrend {
   period: string; // YYYY-MM
-  income: number;
-  expenses: number;
-  netFlow: number;
+  income: Decimal;
+  expenses: Decimal;
+  netFlow: Decimal;
   transactionCount: number;
 }
 
@@ -131,12 +133,12 @@ export interface CategoryData {
 export interface CategoryBreakdown {
   categoryId: string;
   categoryName: string;
-  totalAmount: number;
+  totalAmount: Decimal;
   transactionCount: number;
-  percentage: number;
-  avgTransactionAmount: number;
+  percentage: Decimal;
+  avgTransactionAmount: Decimal;
   trend: 'increasing' | 'decreasing' | 'stable';
-  growthRate: number;
+  growthRate: Decimal;
 }
 
 export interface CategoryTrend {
@@ -144,17 +146,17 @@ export interface CategoryTrend {
   categoryName: string;
   monthlyData: Array<{
     period: string;
-    amount: number;
+    amount: Decimal;
     transactionCount: number;
   }>;
   trendDirection: 'increasing' | 'decreasing' | 'stable';
-  seasonalFactors: Record<string, number>;
+  seasonalFactors: Record<string, Decimal>;
 }
 
 export interface CategorySummary {
   categoryId: string;
   categoryName: string;
-  amount: number;
+  amount: Decimal;
   count: number;
   rank: number;
 }
@@ -162,10 +164,10 @@ export interface CategorySummary {
 export interface BudgetVariance {
   categoryId: string;
   categoryName: string;
-  budgeted: number;
-  actual: number;
-  variance: number;
-  variancePercentage: number;
+  budgeted: Decimal;
+  actual: Decimal;
+  variance: Decimal;
+  variancePercentage: Decimal;
   onTrack: boolean;
 }
 
@@ -181,16 +183,16 @@ export interface AccountAnalytics {
   accountId: string;
   accountName: string;
   accountType: string;
-  totalSpending: number;
+  totalSpending: Decimal;
   transactionCount: number;
-  avgTransactionAmount: number;
-  currentBalance?: number;
-  creditLimit?: number;
-  utilizationRate?: number;
+  avgTransactionAmount: Decimal;
+  currentBalance?: Decimal;
+  creditLimit?: Decimal;
+  utilizationRate?: Decimal;
   trend: string;
   monthlySpending: Array<{
     period: string;
-    amount: number;
+    amount: Decimal;
     count: number;
   }>;
 }
@@ -198,54 +200,54 @@ export interface AccountAnalytics {
 export interface CreditUtilizationData {
   accountId: string;
   accountName: string;
-  currentBalance: number;
-  creditLimit: number;
-  utilizationPercentage: number;
-  availableCredit: number;
-  optimalUtilization: number;
+  currentBalance: Decimal;
+  creditLimit: Decimal;
+  utilizationPercentage: Decimal;
+  availableCredit: Decimal;
+  optimalUtilization: Decimal;
   utilizationTrend: Array<{
     date: string;
-    utilization: number;
+    utilization: Decimal;
   }>;
 }
 
 export interface PaymentPattern {
   accountId: string;
   accountName: string;
-  avgPaymentAmount: number;
-  paymentFrequency: number;
-  onTimePaymentRate: number;
-  interestCharges: number;
-  feesCharged: number;
+  avgPaymentAmount: Decimal;
+  paymentFrequency: Decimal;
+  onTimePaymentRate: Decimal;
+  interestCharges: Decimal;
+  feesCharged: Decimal;
   paymentTiming: 'optimal' | 'early' | 'late';
 }
 
 export interface AccountEfficiency {
   accountId: string;
   accountName: string;
-  rewardsEarned: number;
-  feesPaid: number;
-  interestPaid: number;
-  netBenefit: number;
-  efficiencyScore: number;
+  rewardsEarned: Decimal;
+  feesPaid: Decimal;
+  interestPaid: Decimal;
+  netBenefit: Decimal;
+  efficiencyScore: Decimal;
   recommendations: string[];
 }
 
 // Financial Health Analytics
 export interface FinancialHealthData {
-  overallScore: number;
+  overallScore: Decimal;
   componentScores: {
-    cashFlowScore: number;
-    expenseStabilityScore: number;
-    emergencyFundScore: number;
-    debtManagementScore: number;
-    savingsRateScore: number;
+    cashFlowScore: Decimal;
+    expenseStabilityScore: Decimal;
+    emergencyFundScore: Decimal;
+    debtManagementScore: Decimal;
+    savingsRateScore: Decimal;
   };
   healthIndicators: {
-    emergencyFundMonths: number;
-    debtToIncomeRatio: number;
-    savingsRate: number;
-    expenseVolatility: number;
+    emergencyFundMonths: Decimal;
+    debtToIncomeRatio: Decimal;
+    savingsRate: Decimal;
+    expenseVolatility: Decimal;
   };
   recommendations: string[];
   riskFactors: string[];
@@ -276,7 +278,7 @@ export interface AnalyticsViewState {
 // Chart Data Types
 export interface ChartDataPoint {
   x: string | number;
-  y: number;
+  y: number | Decimal; // Can be Decimal for monetary values, number for counts/percentages
   label?: string;
   color?: string;
 }
@@ -292,7 +294,7 @@ export interface TimeSeriesData {
 
 export interface PieChartData {
   labels: string[];
-  series: number[];
+  series: number[]; // Chart libraries typically expect numbers, convert from Decimal when needed
   colors: string[];
 }
 
@@ -320,4 +322,68 @@ export interface DataAvailability {
   dataQuality: DataQuality;
   missingAccounts: string[];
   recommendations: string[];
-} 
+}
+
+// Utility Types for Decimal Conversion
+export type DecimalLike = string | number | Decimal;
+
+// Helper functions for Decimal conversion
+export const toDecimal = (value: DecimalLike): Decimal => {
+  if (value instanceof Decimal) {
+    return value;
+  }
+  return new Decimal(value.toString());
+};
+
+export const fromDecimal = (decimal: Decimal | number | undefined | null): number => {
+  if (decimal === null || decimal === undefined) {
+    throw new Error('fromDecimal: Received null or undefined value');
+  }
+  if (typeof decimal === 'number') {
+    if (isNaN(decimal)) {
+      throw new Error('fromDecimal: Received NaN number');
+    }
+    return decimal;
+  }
+  if (decimal instanceof Decimal) {
+    const result = decimal.toNumber();
+    if (isNaN(result)) {
+      throw new Error(`fromDecimal: Decimal.toNumber() returned NaN for decimal: ${decimal.toString()}`);
+    }
+    return result;
+  }
+  throw new Error(`fromDecimal: Invalid type ${typeof decimal}, expected Decimal or number`);
+};
+
+export const formatDecimalCurrency = (decimal: Decimal | undefined | null): string => {
+  if (decimal === null || decimal === undefined) {
+    throw new Error('formatDecimalCurrency: Received null or undefined value');
+  }
+  if (!(decimal instanceof Decimal)) {
+    throw new Error(`formatDecimalCurrency: Invalid type ${typeof decimal}, expected Decimal`);
+  }
+  const numericValue = decimal.toNumber();
+  if (isNaN(numericValue)) {
+    throw new Error(`formatDecimalCurrency: Decimal.toNumber() returned NaN for decimal: ${decimal.toString()}`);
+  }
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(numericValue);
+};
+
+export const formatDecimalPercentage = (decimal: Decimal | undefined | null): string => {
+  if (decimal === null || decimal === undefined) {
+    throw new Error('formatDecimalPercentage: Received null or undefined value');
+  }
+  if (!(decimal instanceof Decimal)) {
+    throw new Error(`formatDecimalPercentage: Invalid type ${typeof decimal}, expected Decimal`);
+  }
+  try {
+    return `${decimal.toFixed(1)}%`;
+  } catch (error) {
+    throw new Error(`formatDecimalPercentage: Failed to format decimal ${decimal.toString()}: ${error}`);
+  }
+}; 

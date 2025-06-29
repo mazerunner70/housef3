@@ -10,8 +10,10 @@ import {
   AnalyticsStatusResponse,
   TimeRange,
   AnalyticType,
-  AnalyticsError
+  AnalyticsError,
+  toDecimal
 } from '../../types/Analytics';
+import { Decimal } from 'decimal.js';
 
 interface UseAnalyticsOptions {
   initialFilters?: Partial<AnalyticsFilters>;
@@ -46,8 +48,8 @@ export interface AnalyticsHookResult {
   clearError: () => void;
   
   // Utilities
-  formatCurrency: (amount: number) => string;
-  formatPercentage: (value: number, total: number) => string;
+  formatCurrency: (amount: number | Decimal) => string;
+  formatPercentage: (value: number | Decimal, total: number | Decimal) => string;
   formatDate: (dateString: string) => string;
 }
 
@@ -144,27 +146,27 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
       if (process.env.NODE_ENV === 'development') {
         setOverview({
           cashFlow: {
-            totalIncome: 0,
-            totalExpenses: 0,
-            netCashFlow: 0,
+            totalIncome: toDecimal(0),
+            totalExpenses: toDecimal(0),
+            netCashFlow: toDecimal(0),
             monthlyTrends: [],
-            incomeStability: { score: 0, variance: 0, consistency: 0 },
-            expensePatterns: { fixed: 0, variable: 0, discretionary: 0 }
+            incomeStability: { score: toDecimal(0), variance: toDecimal(0), consistency: toDecimal(0) },
+            expensePatterns: { fixed: toDecimal(0), variable: toDecimal(0), discretionary: toDecimal(0) }
           },
           financialHealth: {
-            overallScore: 0,
+            overallScore: toDecimal(0),
             componentScores: {
-              cashFlowScore: 0,
-              expenseStabilityScore: 0,
-              emergencyFundScore: 0,
-              debtManagementScore: 0,
-              savingsRateScore: 0
+              cashFlowScore: toDecimal(0),
+              expenseStabilityScore: toDecimal(0),
+              emergencyFundScore: toDecimal(0),
+              debtManagementScore: toDecimal(0),
+              savingsRateScore: toDecimal(0)
             },
             healthIndicators: {
-              emergencyFundMonths: 0,
-              debtToIncomeRatio: 0,
-              savingsRate: 0,
-              expenseVolatility: 0
+              emergencyFundMonths: toDecimal(0),
+              debtToIncomeRatio: toDecimal(0),
+              savingsRate: toDecimal(0),
+              expenseVolatility: toDecimal(0)
             },
             recommendations: [],
             riskFactors: []
@@ -311,11 +313,11 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
   }, [refreshInterval, checkFreshness]);
 
   // Utility functions
-  const formatCurrency = useCallback((amount: number) => {
+  const formatCurrency = useCallback((amount: number | Decimal) => {
     return analyticsService.formatCurrency(amount);
   }, []);
 
-  const formatPercentage = useCallback((value: number, total: number) => {
+  const formatPercentage = useCallback((value: number | Decimal, total: number | Decimal) => {
     return analyticsService.formatPercentage(value, total);
   }, []);
 

@@ -94,7 +94,7 @@ def get_analytics_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]
 
         # Validate and convert analytic type
         try:
-            analytic_type = AnalyticType(analytic_type_str.upper())
+            analytic_type = AnalyticType(analytic_type_str.lower())
         except ValueError:
             return create_response(400, {
                 "error": "Invalid analytic type",
@@ -183,7 +183,7 @@ def refresh_analytics_handler(event: Dict[str, Any], user_id: str) -> Dict[str, 
 
         for type_str in analytic_types:
             try:
-                analytic_type = AnalyticType(type_str.upper())
+                analytic_type = AnalyticType(type_str.lower())
                 valid_types.append(analytic_type)
             except ValueError:
                 invalid_types.append(type_str)
@@ -353,40 +353,28 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Main Lambda handler for analytics operations.
     """
     try:
-        # Log the incoming event for debugging
-        logger.info(f"Analytics operations request: {event.get('httpMethod')} {event.get('rawPath')}")
-
-        # Get user from JWT token
+        # Get user from Cognito
         user = get_user_from_event(event)
         if not user:
-            return create_response(401, {"error": "Unauthorized", "message": "Invalid or missing token"})
+            return create_response(401, {"message": "Unauthorized"})
+        user_id = user['id']
+        # Get route from event
+        route = event.get('routeKey')
+        if not route:
+            return create_response(400, {"message": "Route not specified"})
         
-        user_id = user["id"]
+        logger.info(f"Request: {route}")
 
-        # Get HTTP method and path
-        method = event.get('httpMethod', '').upper()
-        path = event.get('rawPath', '')
-
-        # Route based on method and path
-        if method == 'GET' and '/analytics/status' in path:
+        # Route to appropriate handler
+        if route == "GET /analytics/status":
             return get_analytics_status_handler(event, user_id)
-
-        elif method == 'GET' and '/analytics/' in path:
+        elif route == "GET /analytics/{analytic_type}":
             return get_analytics_handler(event, user_id)
-
-        elif method == 'POST' and '/analytics/refresh' in path:
+        elif route == "POST /analytics/refresh":
             return refresh_analytics_handler(event, user_id)
 
         else:
-            return create_response(404, {
-                "error": "Not found",
-                "message": f"No handler for {method} {path}",
-                "available_endpoints": [
-                    "GET /analytics/{analytic_type}",
-                    "POST /analytics/refresh",
-                    "GET /analytics/status"
-                ]
-            })
+            return create_response(400, {"message": f"Unsupported route: {route}"})
 
     except Exception as e:
         logger.error(f"Analytics operations handler error: {str(e)}")

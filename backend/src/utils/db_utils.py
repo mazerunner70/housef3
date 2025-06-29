@@ -1491,13 +1491,16 @@ def list_stale_analytics(computation_needed_only: bool = True) -> List[Analytics
         List of AnalyticsProcessingStatus objects that need recomputation
     """
     try:
-        # This would typically use a GSI for efficient querying
-        # For now, we'll scan the status table (not ideal for production)
         if computation_needed_only:
-            response = get_analytics_status_table().scan(
-                FilterExpression=Attr('computationNeeded').eq(True)
+            # Use the GSI to efficiently query for records that need computation
+            response = get_analytics_status_table().query(
+                IndexName='ComputationNeededIndex',
+                KeyConditionExpression=Key('computationNeeded').eq('true'),
+                # Order by priority (1=high, 2=medium, 3=low)
+                ScanIndexForward=True
             )
         else:
+            # If we need all records, fall back to scan
             response = get_analytics_status_table().scan()
         
         status_list = []
