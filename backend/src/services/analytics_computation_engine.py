@@ -8,9 +8,9 @@ from decimal import Decimal
 from typing import List, Dict, Any, Optional, Tuple
 from collections import defaultdict
 
-from ..models.account import AccountType
-from ..models.transaction import Transaction
-from ..utils.db_utils import list_user_accounts, list_user_transactions
+from models.account import AccountType
+from models.transaction import Transaction
+from utils.db_utils import list_user_accounts, list_user_transactions
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ class AnalyticsComputationEngine:
     """
 
     def __init__(self):
-        self.logger = logger
+        pass
 
     def compute_cash_flow_analytics(self, user_id: str, time_period: str,
                                     account_id: Optional[str] = None) -> Dict[str, Any]:
@@ -81,38 +81,38 @@ class AnalyticsComputationEngine:
             expense_ratio = (total_expenses / total_income * 100) if total_income > 0 else 0
 
             return {
-                "total_income": float(total_income),
-                "total_expenses": float(total_expenses),
-                "net_cash_flow": float(net_cash_flow),
-                "avg_monthly_income": float(avg_monthly_income),
-                "avg_monthly_expenses": float(avg_monthly_expenses),
-                "transaction_count": transaction_count,
-                "avg_transaction_amount": float(avg_transaction_amount),
-                "income_stability_score": income_stability_score,
-                "expense_ratio": float(expense_ratio),
-                "cash_flow_trend": "positive" if net_cash_flow > 0 else "negative",
-                "period_months": months_in_period,
-                "period_start": start_date.isoformat(),
-                "period_end": end_date.isoformat()
+                "totalIncome": Decimal(str(total_income)),
+                "totalExpenses": Decimal(str(total_expenses)),
+                "netCashFlow": Decimal(str(net_cash_flow)),
+                "avgMonthlyIncome": Decimal(str(avg_monthly_income)),
+                "avgMonthlyExpenses": Decimal(str(avg_monthly_expenses)),
+                "transactionCount": transaction_count,
+                "avgTransactionAmount": Decimal(str(avg_transaction_amount)),
+                "incomeStabilityScore": Decimal(str(income_stability_score)),
+                "expenseRatio": Decimal(str(expense_ratio)),
+                "cashFlowTrend": "positive" if net_cash_flow > 0 else "negative",
+                "periodMonths": months_in_period,
+                "periodStart": start_date.isoformat(),
+                "periodEnd": end_date.isoformat()
             }
 
         except Exception as e:
-            self.logger.error(f"Error computing cash flow analytics: {str(e)}")
+            logger.error(f"Error computing cash flow analytics: {str(e)}")
             # Return safe defaults instead of crashing
             return {
-                "total_income": 0.0,
-                "total_expenses": 0.0,
-                "net_cash_flow": 0.0,
-                "avg_monthly_income": 0.0,
-                "avg_monthly_expenses": 0.0,
-                "transaction_count": 0,
-                "avg_transaction_amount": 0.0,
-                "income_stability_score": 50.0,
-                "expense_ratio": 0.0,
-                "cash_flow_trend": "neutral",
-                "period_months": 1,
-                "period_start": date.today().isoformat(),
-                "period_end": date.today().isoformat()
+                "totalIncome": Decimal('0.0'),
+                "totalExpenses": Decimal('0.0'),
+                "netCashFlow": Decimal('0.0'),
+                "avgMonthlyIncome": Decimal('0.0'),
+                "avgMonthlyExpenses": Decimal('0.0'),
+                "transactionCount": 0,
+                "avgTransactionAmount": Decimal('0.0'),
+                "incomeStabilityScore": Decimal('50.0'),
+                "expenseRatio": Decimal('0.0'),
+                "cashFlowTrend": "neutral",
+                "periodMonths": 1,
+                "periodStart": date.today().isoformat(),
+                "periodEnd": date.today().isoformat()
             }
 
     def compute_category_analytics(self, user_id: str, time_period: str,
@@ -136,7 +136,7 @@ class AnalyticsComputationEngine:
             # Group transactions by category
             # Note: Transaction model doesn't have direct category field yet
             # For now, use transaction_type or a simple categorization
-            category_spending = defaultdict(float)
+            category_spending = defaultdict(lambda: Decimal('0'))
             category_counts = defaultdict(int)
 
             for transaction in transactions:
@@ -147,7 +147,7 @@ class AnalyticsComputationEngine:
                     # Simple categorization based on amount (positive = income, negative = expense)
                     category = 'Income' if transaction.amount > 0 else 'Expense'
                 
-                category_spending[category] += abs(float(transaction.amount))
+                category_spending[category] += abs(transaction.amount)
                 category_counts[category] += 1
 
             # Calculate category percentages
@@ -160,9 +160,9 @@ class AnalyticsComputationEngine:
                 category_percentages[category] = percentage
                 category_rankings.append({
                     "category": category,
-                    "amount": amount,
-                    "percentage": percentage,
-                    "transaction_count": category_counts[category]
+                    "amount": Decimal(str(amount)),
+                    "percentage": Decimal(str(percentage)),
+                    "transactionCount": category_counts[category]
                 })
 
             # Sort by spending amount
@@ -174,26 +174,26 @@ class AnalyticsComputationEngine:
             )
 
             return {
-                "category_breakdown": category_rankings,
-                "category_percentages": category_percentages,
-                "category_trends": category_trends,
-                "total_spending": total_spending,
-                "top_category": category_rankings[0]["category"] if category_rankings else None,
-                "category_count": len(category_spending),
-                "uncategorized_amount": 0  # No uncategorized since we're using simple categorization
+                "categoryBreakdown": category_rankings,
+                "categoryPercentages": category_percentages,
+                "categoryTrends": category_trends,
+                "totalSpending": Decimal(str(total_spending)),
+                "topCategory": category_rankings[0]["category"] if category_rankings else None,
+                "categoryCount": len(category_spending),
+                "uncategorizedAmount": Decimal('0')  # No uncategorized since we're using simple categorization
             }
 
         except Exception as e:
-            self.logger.error(f"Error computing category analytics: {str(e)}")
+            logger.error(f"Error computing category analytics: {str(e)}")
             # Return safe defaults instead of crashing
             return {
-                "category_breakdown": [],
-                "category_percentages": {},
-                "category_trends": {},
-                "total_spending": 0.0,
-                "top_category": None,
-                "category_count": 0,
-                "uncategorized_amount": 0
+                "categoryBreakdown": [],
+                "categoryPercentages": {},
+                "categoryTrends": {},
+                "totalSpending": Decimal('0.0'),
+                "topCategory": None,
+                "categoryCount": 0,
+                "uncategorizedAmount": Decimal('0')
             }
 
     def compute_account_analytics(self, user_id: str, time_period: str) -> Dict[str, Any]:
@@ -227,26 +227,30 @@ class AnalyticsComputationEngine:
 
                 # Credit utilization for credit card accounts
                 credit_utilization = None
+                credit_utilization_estimated = None
                 if account.account_type == AccountType.CREDIT_CARD and account.balance:
-                    # This would need credit limit data - for now use a placeholder
-                    estimated_limit = abs(float(account.balance)) * 3  # Rough estimate
+                    # TODO: Use actual credit limit data when available
+                    # For now, use a rough estimate (3x balance) but mark it as estimated
+                    estimated_limit = abs(account.balance) * 3  # Rough estimate
                     if estimated_limit > 0:
-                        credit_utilization = (abs(float(account.balance)) / estimated_limit) * 100
+                        credit_utilization = (abs(account.balance) / estimated_limit) * 100
+                        credit_utilization_estimated = True  # Mark as estimated since we don't have real credit limit data
 
                 # Account efficiency (transactions per balance)
-                account_efficiency = len(account_transactions) / max(float(abs(account.balance or 1)), 1)
+                account_efficiency = len(account_transactions) / max(abs(account.balance or Decimal('1')), Decimal('1'))
 
                 account_analytics.append({
-                    "account_id": str(account.account_id),
-                    "account_name": account.account_name,
-                    "account_type": account.account_type.value,
-                    "balance": float(account.balance) if account.balance else 0,
-                    "income": float(account_income),
-                    "expenses": float(account_expenses),
-                    "net_flow": float(account_net_flow),
-                    "transaction_count": len(account_transactions),
-                    "credit_utilization": credit_utilization,
-                    "efficiency_score": account_efficiency
+                    "accountId": str(account.account_id),
+                    "accountName": account.account_name,
+                    "accountType": account.account_type.value,
+                    "balance": Decimal(str(account.balance)) if account.balance else Decimal('0'),
+                    "income": Decimal(str(account_income)),
+                    "expenses": Decimal(str(account_expenses)),
+                    "netFlow": Decimal(str(account_net_flow)),
+                    "transactionCount": len(account_transactions),
+                    "creditUtilization": Decimal(str(credit_utilization)) if credit_utilization is not None else None,
+                    "creditUtilizationEstimated": credit_utilization_estimated,
+                    "efficiencyScore": Decimal(str(account_efficiency))
                 })
 
                 if account.balance:
@@ -254,31 +258,31 @@ class AnalyticsComputationEngine:
 
             # Calculate cross-account insights
             total_accounts = len(accounts)
-            avg_balance = float(total_balance) / total_accounts if total_accounts > 0 else 0
+            avg_balance = total_balance / total_accounts if total_accounts > 0 else Decimal('0')
 
             # Account performance ranking
-            account_analytics.sort(key=lambda x: x["net_flow"], reverse=True)
+            account_analytics.sort(key=lambda x: x["netFlow"], reverse=True)
 
             return {
-                "account_details": account_analytics,
-                "total_balance": float(total_balance),
-                "avg_balance": avg_balance,
-                "account_count": total_accounts,
-                "best_performing_account": account_analytics[0]["account_name"] if account_analytics else None,
-                "highest_utilization": max((a["credit_utilization"] for a in account_analytics
-                                           if a["credit_utilization"] is not None), default=0)
+                "accountDetails": account_analytics,
+                "totalBalance": total_balance,
+                "avgBalance": avg_balance,
+                "accountCount": total_accounts,
+                "bestPerformingAccount": account_analytics[0]["accountName"] if account_analytics else None,
+                "highestUtilization": max((a["creditUtilization"] for a in account_analytics
+                                           if a["creditUtilization"] is not None), default=Decimal('0'))
             }
 
         except Exception as e:
-            self.logger.error(f"Error computing account analytics: {str(e)}")
+            logger.error(f"Error computing account analytics: {str(e)}")
             # Return safe defaults instead of crashing
             return {
-                "account_details": [],
-                "total_balance": 0.0,
-                "avg_balance": 0.0,
-                "account_count": 0,
-                "best_performing_account": None,
-                "highest_utilization": 0
+                "accountDetails": [],
+                "totalBalance": Decimal('0.0'),
+                "avgBalance": Decimal('0.0'),
+                "accountCount": 0,
+                "bestPerformingAccount": None,
+                "highestUtilization": Decimal('0')
             }
 
     def compute_financial_health_score(self, user_id: str, time_period: str) -> Dict[str, Any]:
@@ -300,26 +304,26 @@ class AnalyticsComputationEngine:
             # Handle None cash_flow_data
             if cash_flow_data is None:
                 cash_flow_data = {
-                    "net_cash_flow": 0,
-                    "total_income": 0,
-                    "income_stability_score": 50,
-                    "expense_ratio": 0
+                    "netCashFlow": 0,
+                    "totalIncome": 0,
+                    "incomeStabilityScore": 50,
+                    "expenseRatio": 0
                 }
 
             # Handle None account_data
             if account_data is None:
-                account_data = {"highest_utilization": 0}
+                account_data = {"highestUtilization": 0}
 
             # Component scores (0-100)
             cash_flow_score = min(100, max(0,
-                                           (cash_flow_data["net_cash_flow"] / 
-                                            max(cash_flow_data["total_income"], 1) * 100) + 50))
+                                           (float(cash_flow_data["netCashFlow"]) / 
+                                            max(float(cash_flow_data["totalIncome"]), 1) * 100) + 50))
             
-            income_stability_score = cash_flow_data["income_stability_score"]
+            income_stability_score = float(cash_flow_data["incomeStabilityScore"])
             
-            expense_management_score = min(100, max(0, 100 - cash_flow_data["expense_ratio"]))
+            expense_management_score = min(100, max(0, 100 - float(cash_flow_data["expenseRatio"])))
             
-            account_health_score = 100 - min(100, account_data.get("highest_utilization", 0))
+            account_health_score = 100 - min(100, float(account_data.get("highestUtilization", 0)))
 
             # Weighted overall score
             overall_score = (
@@ -334,22 +338,47 @@ class AnalyticsComputationEngine:
                 overall_score, cash_flow_data, account_data
             )
 
+            # Calculate additional health indicators
+            emergency_fund_months = 0.0  # TODO: Calculate based on savings vs expenses
+            debt_to_income_ratio = 0.0   # TODO: Calculate based on debt payments vs income
+            savings_rate = 0.0           # TODO: Calculate savings rate
+            expense_volatility = 0.0     # TODO: Calculate expense variance
+            
+            # Generate risk factors based on scores
+            risk_factors = []
+            if cash_flow_score < 50:
+                risk_factors.append("Negative cash flow - expenses exceed income")
+            if float(income_stability_score) < 60:
+                risk_factors.append("Irregular income patterns detected")
+            if expense_management_score < 50:
+                risk_factors.append("High expense ratio relative to income")
+            if account_health_score < 70:
+                risk_factors.append("High credit utilization detected")
+
             return {
-                "overall_score": round(overall_score, 1),
-                "score_breakdown": {
-                    "cash_flow": round(cash_flow_score, 1),
-                    "income_stability": round(income_stability_score, 1),
-                    "expense_management": round(expense_management_score, 1),
-                    "account_health": round(account_health_score, 1)
+                "overallScore": Decimal(str(round(overall_score, 1))),
+                "componentScores": {
+                    "cashFlowScore": Decimal(str(round(cash_flow_score, 1))),
+                    "expenseStabilityScore": Decimal(str(round(expense_management_score, 1))),
+                    "emergencyFundScore": Decimal(str(round(account_health_score, 1))),  # Using account health as proxy
+                    "debtManagementScore": Decimal(str(round(account_health_score, 1))), # Using account health as proxy
+                    "savingsRateScore": Decimal(str(round(float(income_stability_score), 1)))  # Using income stability as proxy
                 },
-                "score_level": ("excellent" if overall_score >= 80 else
-                                "good" if overall_score >= 60 else
-                                "fair" if overall_score >= 40 else "poor"),
-                "recommendations": recommendations
+                "healthIndicators": {
+                    "emergencyFundMonths": Decimal(str(emergency_fund_months)),
+                    "debtToIncomeRatio": Decimal(str(debt_to_income_ratio)),
+                    "savingsRate": Decimal(str(savings_rate)),
+                    "expenseVolatility": Decimal(str(expense_volatility))
+                },
+                "scoreLevel": ("excellent" if overall_score >= 80 else
+                               "good" if overall_score >= 60 else
+                               "fair" if overall_score >= 40 else "poor"),
+                "recommendations": recommendations,
+                "riskFactors": risk_factors
             }
 
         except Exception as e:
-            self.logger.error(f"Error computing financial health score: {str(e)}")
+            logger.error(f"Error computing financial health score: {str(e)}")
             raise
 
     def _parse_time_period(self, time_period: str) -> Tuple[date, date]:
@@ -357,13 +386,19 @@ class AnalyticsComputationEngine:
         Parse time period string into start and end dates.
 
         Args:
-            time_period: Time period string (e.g., '2024-12', '2024-Q4', '2024')
+            time_period: Time period string (e.g., '2024-12', '2024-Q4', '2024', 'overall')
 
         Returns:
             Tuple of start_date and end_date
         """
         try:
-            if '-Q' in time_period:
+            if time_period.lower() == 'overall':
+                # Overall period: Use a very wide date range to capture all data
+                # Start from 10 years ago to today
+                end_date = date.today()
+                start_date = date(end_date.year - 10, 1, 1)
+                
+            elif '-Q' in time_period:
                 # Quarterly format: 2024-Q4
                 year, quarter = time_period.split('-Q')
                 year = int(year)
@@ -404,7 +439,7 @@ class AnalyticsComputationEngine:
             return start_date, end_date
 
         except (ValueError, IndexError) as e:
-            self.logger.error(f"Error parsing time period '{time_period}': {str(e)}")
+            logger.error(f"Error parsing time period '{time_period}': {str(e)}")
             # Default to current month
             today = date.today()
             start_date = date(today.year, today.month, 1)
@@ -433,7 +468,7 @@ class AnalyticsComputationEngine:
             return transactions
 
         except Exception as e:
-            self.logger.error(f"Error getting transactions for period: {str(e)}")
+            logger.error(f"Error getting transactions for period: {str(e)}")
             return []
 
     def _calculate_months_in_period(self, start_date: date, end_date: date) -> float:
@@ -441,7 +476,7 @@ class AnalyticsComputationEngine:
         return ((end_date.year - start_date.year) * 12 + end_date.month - start_date.month) + 1
 
     def _calculate_income_stability(self, income_transactions: List[Transaction],
-                                    start_date: date, end_date: date) -> float:
+                                    start_date: date, end_date: date) -> Decimal:
         """
         Calculate income stability score based on variance in monthly income.
 
@@ -455,40 +490,43 @@ class AnalyticsComputationEngine:
         """
         try:
             if not income_transactions:
-                return 0.0
+                return Decimal('0.0')
 
             # Group income by month
-            monthly_income = defaultdict(float)
+            monthly_income = defaultdict(lambda: Decimal('0'))
             for transaction in income_transactions:
                 # Convert timestamp to date
                 transaction_date = datetime.fromtimestamp(transaction.date / 1000).date()
                 month_key = f"{transaction_date.year}-{transaction_date.month:02d}"
-                monthly_income[month_key] += float(transaction.amount)
+                monthly_income[month_key] += transaction.amount
 
             if len(monthly_income) <= 1:
-                return 100.0  # Perfect stability if only one month
+                return Decimal('100.0')  # Perfect stability if only one month
 
             incomes = list(monthly_income.values())
-            avg_income = sum(incomes) / len(incomes)
+            avg_income = sum(incomes) / Decimal(str(len(incomes)))
 
             if avg_income == 0:
-                return 0.0
+                return Decimal('0.0')
 
-            # Calculate coefficient of variation
-            variance = sum((income - avg_income) ** 2 for income in incomes) / len(incomes)
+            # Calculate coefficient of variation using float for mathematical operations
+            incomes_float = [float(income) for income in incomes]
+            avg_income_float = float(avg_income)
+            
+            variance = sum((income - avg_income_float) ** 2 for income in incomes_float) / len(incomes_float)
             std_dev = variance ** 0.5
-            cv = std_dev / avg_income
+            cv = std_dev / avg_income_float
 
             # Convert to 0-100 score (lower CV = higher stability)
             stability_score = max(0, 100 - (cv * 100))
-            return min(100, stability_score)
+            return Decimal(str(min(100, stability_score)))
 
         except Exception as e:
-            self.logger.error(f"Error calculating income stability: {str(e)}")
-            return 50.0  # Default neutral score
+            logger.error(f"Error calculating income stability: {str(e)}")
+            return Decimal('50.0')  # Default neutral score
 
     def _calculate_category_trends(self, user_id: str, time_period: str,
-                                   current_spending: Dict[str, float],
+                                   current_spending: Dict[str, Decimal],
                                    account_ids: Optional[List[uuid.UUID]] = None) -> Dict[str, Any]:
         """Calculate category spending trends compared to previous period."""
         try:
@@ -507,7 +545,7 @@ class AnalyticsComputationEngine:
 
             # Calculate previous period spending by category
             # Use same categorization logic as main analytics function
-            previous_spending = defaultdict(float)
+            previous_spending = defaultdict(lambda: Decimal('0'))
             for transaction in previous_transactions:
                 # Use transaction_type if available, otherwise categorize by amount
                 if hasattr(transaction, 'transaction_type') and transaction.transaction_type:
@@ -516,12 +554,12 @@ class AnalyticsComputationEngine:
                     # Simple categorization based on amount (positive = income, negative = expense)
                     category = 'Income' if transaction.amount > 0 else 'Expense'
                     
-                previous_spending[category] += abs(float(transaction.amount))
+                previous_spending[category] += abs(transaction.amount)
 
             # Calculate trends
             trends = {}
             for category, current_amount in current_spending.items():
-                previous_amount = previous_spending.get(category, 0)
+                previous_amount = previous_spending.get(category, Decimal('0'))
                 
                 if previous_amount > 0:
                     change_percentage = ((current_amount - previous_amount) / previous_amount) * 100
@@ -534,7 +572,7 @@ class AnalyticsComputationEngine:
 
                 trends[category] = {
                     "trend": trend,
-                    "change_percentage": round(change_percentage, 1),
+                    "change_percentage": Decimal(str(round(float(change_percentage), 1))),
                     "previous_amount": previous_amount,
                     "current_amount": current_amount
                 }
@@ -542,7 +580,7 @@ class AnalyticsComputationEngine:
             return trends
 
         except Exception as e:
-            self.logger.error(f"Error calculating category trends: {str(e)}")
+            logger.error(f"Error calculating category trends: {str(e)}")
             return {}
 
     def _generate_health_recommendations(self, overall_score: float,

@@ -102,8 +102,15 @@ class AnalyticsProcessingStatus(BaseModel):
     )
 
     def to_dynamodb_item(self) -> Dict[str, Any]:
-        """Serialize to DynamoDB format"""
+        """Serialize to DynamoDB format with partition key and sort key"""
         item = self.model_dump(mode='python', by_alias=True, exclude_none=True)
+
+        # Create DynamoDB partition key: user_id
+        item['pk'] = self.user_id
+
+        # Create DynamoDB sort key: analytic_type#account_id (or 'ALL' for cross-account)
+        account_part = self.account_id or 'ALL'
+        item['sk'] = f"{self.analytic_type.value}#{account_part}"
 
         # Convert dates to ISO strings for DynamoDB
         if 'lastComputedDate' in item and item['lastComputedDate']:
@@ -127,11 +134,27 @@ class AnalyticsProcessingStatus(BaseModel):
                 else str(item['status'])
             )
 
+        # Convert boolean to string for DynamoDB GSI compatibility
+        if 'computationNeeded' in item:
+            item['computationNeeded'] = str(item['computationNeeded']).lower()
+
         return item
 
     @classmethod
     def from_dynamodb_item(cls, data: Dict[str, Any]) -> Self:
         """Deserialize from DynamoDB format"""
+        # Extract user_id from partition key
+        if 'pk' in data:
+            data['userId'] = data['pk']
+
+        # Extract analytic_type and account_id from sort key
+        if 'sk' in data:
+            sk_parts = data['sk'].split('#')
+            if len(sk_parts) == 2:
+                data['analyticType'] = sk_parts[0]
+                if sk_parts[1] != 'ALL':
+                    data['accountId'] = sk_parts[1]
+
         # Convert ISO strings back to dates/datetimes
         if 'lastComputedDate' in data and data['lastComputedDate']:
             data['lastComputedDate'] = date.fromisoformat(data['lastComputedDate'])
@@ -145,6 +168,10 @@ class AnalyticsProcessingStatus(BaseModel):
             data['analyticType'] = AnalyticType(data['analyticType'])
         if 'status' in data and isinstance(data['status'], str):
             data['status'] = ComputationStatus(data['status'])
+
+        # Convert string back to boolean for computationNeeded
+        if 'computationNeeded' in data and isinstance(data['computationNeeded'], str):
+            data['computationNeeded'] = data['computationNeeded'].lower() == 'true'
 
         return cls.model_validate(data)
 

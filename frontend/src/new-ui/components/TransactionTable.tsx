@@ -194,13 +194,69 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
               />
             </th>
             {/* Ensure these keys are valid for TransactionViewItem */}
-            <th onClick={() => handleSort('date')}>Date{getSortIndicator('date')}</th>
-            <th onClick={() => handleSort('description')}>Description/Payee{getSortIndicator('description')}</th>
-            <th onClick={() => handleSort('category')}>Category{getSortIndicator('category')}</th>
-            <th onClick={() => handleSort('account')}>Account{getSortIndicator('account')}</th>
-            <th onClick={() => handleSort('amount')}>Amount{getSortIndicator('amount')}</th>
-            <th onClick={() => handleSort('balance')}>Balance{getSortIndicator('balance')}</th>
-            <th onClick={() => handleSort('importOrder')}>Import Order{getSortIndicator('importOrder')}</th>
+            <th 
+              onClick={() => handleSort('date')}
+              onKeyDown={(e) => e.key === 'Enter' && handleSort('date')}
+              tabIndex={0}
+              role="button"
+              aria-label="Sort by date"
+            >
+              Date{getSortIndicator('date')}
+            </th>
+            <th 
+              onClick={() => handleSort('description')}
+              onKeyDown={(e) => e.key === 'Enter' && handleSort('description')}
+              tabIndex={0}
+              role="button"
+              aria-label="Sort by description"
+            >
+              Description/Payee{getSortIndicator('description')}
+            </th>
+            <th 
+              onClick={() => handleSort('category')}
+              onKeyDown={(e) => e.key === 'Enter' && handleSort('category')}
+              tabIndex={0}
+              role="button"
+              aria-label="Sort by category"
+            >
+              Category{getSortIndicator('category')}
+            </th>
+            <th 
+              onClick={() => handleSort('account')}
+              onKeyDown={(e) => e.key === 'Enter' && handleSort('account')}
+              tabIndex={0}
+              role="button"
+              aria-label="Sort by account"
+            >
+              Account{getSortIndicator('account')}
+            </th>
+            <th 
+              onClick={() => handleSort('amount')}
+              onKeyDown={(e) => e.key === 'Enter' && handleSort('amount')}
+              tabIndex={0}
+              role="button"
+              aria-label="Sort by amount"
+            >
+              Amount{getSortIndicator('amount')}
+            </th>
+            <th 
+              onClick={() => handleSort('balance')}
+              onKeyDown={(e) => e.key === 'Enter' && handleSort('balance')}
+              tabIndex={0}
+              role="button"
+              aria-label="Sort by balance"
+            >
+              Balance{getSortIndicator('balance')}
+            </th>
+            <th 
+              onClick={() => handleSort('importOrder')}
+              onKeyDown={(e) => e.key === 'Enter' && handleSort('importOrder')}
+              tabIndex={0}
+              role="button"
+              aria-label="Sort by import order"
+            >
+              Import Order{getSortIndicator('importOrder')}
+            </th>
             <th>Actions</th>
           </tr>
         </thead>

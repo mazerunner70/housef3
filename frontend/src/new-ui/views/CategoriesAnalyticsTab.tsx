@@ -1,18 +1,27 @@
 import React, { useState } from 'react';
+import { AnalyticsHookResult } from '../hooks/useAnalytics';
 
-const CategoriesAnalyticsTab: React.FC = () => {
-  const [selectedPeriod, setSelectedPeriod] = useState('12months');
+interface CategoriesAnalyticsTabProps {
+  analytics: AnalyticsHookResult;
+}
 
-  // Mock category data
-  const categoryData = [
-    { name: 'Food & Dining', amount: 3456.78, percentage: 27.8, transactions: 89, trend: '+5.2%' },
-    { name: 'Transportation', amount: 2234.56, percentage: 17.9, transactions: 34, trend: '-2.1%' },
-    { name: 'Shopping', amount: 1899.34, percentage: 15.3, transactions: 45, trend: '+12.4%' },
-    { name: 'Bills & Utilities', amount: 1567.89, percentage: 12.6, transactions: 12, trend: '+1.1%' },
-    { name: 'Entertainment', amount: 1234.50, percentage: 9.9, transactions: 28, trend: '+8.7%' },
-    { name: 'Healthcare', amount: 987.65, percentage: 7.9, transactions: 15, trend: '-1.2%' },
-    { name: 'Other', amount: 1076.06, percentage: 8.6, transactions: 23, trend: '+3.4%' }
-  ];
+const CategoriesAnalyticsTab: React.FC<CategoriesAnalyticsTabProps> = ({ analytics }) => {
+  const { categories, formatCurrency, formatPercentage, filters, setFilters } = analytics;
+  const [selectedPeriod, setSelectedPeriod] = useState(filters.timeRange);
+
+  // Calculate total for percentages
+  const totalAmount = categories?.categories.reduce((sum, cat) => sum + cat.totalAmount, 0) || 0;
+
+  // Transform category data for display
+  const categoryData = categories?.categories.map(cat => ({
+    name: cat.categoryName,
+    amount: cat.totalAmount,
+    percentage: totalAmount > 0 ? ((cat.totalAmount / totalAmount) * 100) : 0,
+    transactions: cat.transactionCount,
+    trend: cat.trend === 'increasing' ? `+${cat.growthRate.toFixed(1)}%` : 
+           cat.trend === 'decreasing' ? `-${cat.growthRate.toFixed(1)}%` : 
+           `${cat.growthRate.toFixed(1)}%`
+  })) || [];
 
   return (
     <div className="categories-analytics-tab">
@@ -22,7 +31,11 @@ const CategoriesAnalyticsTab: React.FC = () => {
           <h3 className="analytics-chart-title">Category Spending Analysis</h3>
           <select 
             value={selectedPeriod} 
-            onChange={(e) => setSelectedPeriod(e.target.value)}
+            onChange={(e) => {
+              const newTimeRange = e.target.value as any;
+              setSelectedPeriod(newTimeRange);
+              setFilters({ timeRange: newTimeRange });
+            }}
             className="analytics-chart-filter"
           >
             <option value="1month">Last Month</option>
@@ -34,9 +47,25 @@ const CategoriesAnalyticsTab: React.FC = () => {
         
         {/* Category Pie Chart Placeholder */}
         <div className="analytics-placeholder">
-          🥧 Category spending pie chart will be displayed here
-          <br />
-          <small>Visual breakdown of spending by category</small>
+          {analytics.loading ? (
+            <>
+              🔄 Loading category breakdown...
+              <br />
+              <small>Analyzing your spending by category</small>
+            </>
+          ) : categoryData.length > 0 ? (
+            <>
+              🥧 Category data available for {categoryData.length} categories
+              <br />
+              <small>Chart visualization coming soon - data is ready for display</small>
+            </>
+          ) : (
+            <>
+              📊 No category data available yet
+              <br />
+              <small>Upload transaction files to see your spending breakdown</small>
+            </>
+          )}
         </div>
       </div>
 
@@ -111,26 +140,52 @@ const CategoriesAnalyticsTab: React.FC = () => {
       <div className="analytics-overview-grid">
         <div className="analytics-card">
           <h3>Highest Category</h3>
-          <div className="analytics-metric negative">$3,456.78</div>
-          <small>Food & Dining (27.8%)</small>
+          <div className="analytics-metric negative">
+            {categoryData.length > 0 ? formatCurrency(categoryData[0].amount) : formatCurrency(0)}
+          </div>
+          <small>
+            {categoryData.length > 0 ? `${categoryData[0].name} (${categoryData[0].percentage.toFixed(1)}%)` : 'No data'}
+          </small>
         </div>
         
         <div className="analytics-card">
           <h3>Fastest Growing</h3>
-          <div className="analytics-metric positive">+12.4%</div>
-          <small>Shopping category</small>
+          <div className="analytics-metric positive">
+            {categoryData.length > 0 ? 
+              categoryData.find(cat => cat.trend.startsWith('+'))?.trend || 'N/A' : 
+              'N/A'
+            }
+          </div>
+          <small>
+            {categoryData.length > 0 ? 
+              categoryData.find(cat => cat.trend.startsWith('+'))?.name || 'No growth trends' :
+              'No data'
+            }
+          </small>
         </div>
         
         <div className="analytics-card">
           <h3>Most Transactions</h3>
-          <div className="analytics-metric">89</div>
-          <small>Food & Dining</small>
+          <div className="analytics-metric">
+            {categoryData.length > 0 ? 
+              Math.max(...categoryData.map(cat => cat.transactions)) : 
+              0
+            }
+          </div>
+          <small>
+            {categoryData.length > 0 ? 
+              categoryData.find(cat => cat.transactions === Math.max(...categoryData.map(c => c.transactions)))?.name || 'No data' :
+              'No data'
+            }
+          </small>
         </div>
         
         <div className="analytics-card">
           <h3>Average per Category</h3>
-          <div className="analytics-metric">$1,779.54</div>
-          <small>Across all categories</small>
+          <div className="analytics-metric">
+            {categoryData.length > 0 ? formatCurrency(totalAmount / categoryData.length) : formatCurrency(0)}
+          </div>
+          <small>Across {categoryData.length} categories</small>
         </div>
       </div>
 

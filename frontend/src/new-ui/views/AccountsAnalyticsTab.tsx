@@ -1,51 +1,25 @@
 import React, { useState } from 'react';
+import { AnalyticsHookResult } from '../hooks/useAnalytics';
 
-const AccountsAnalyticsTab: React.FC = () => {
+interface AccountsAnalyticsTabProps {
+  analytics: AnalyticsHookResult;
+}
+
+const AccountsAnalyticsTab: React.FC<AccountsAnalyticsTabProps> = ({ analytics }) => {
+  const { accounts, formatCurrency, filters, setFilters } = analytics;
   const [selectedView, setSelectedView] = useState('spending');
 
-  // Mock account data
-  const accountData = [
-    { 
-      name: 'Chase Freedom Credit Card', 
-      type: 'Credit Card',
-      spending: 8456.78, 
-      transactions: 156, 
-      avgTransaction: 54.21,
-      balance: -2345.67,
-      utilizationRate: 23.5,
-      trend: '+8.3%'
-    },
-    { 
-      name: 'Bank of America Checking', 
-      type: 'Checking',
-      spending: 3234.56, 
-      transactions: 89, 
-      avgTransaction: 36.34,
-      balance: 4567.89,
-      utilizationRate: null,
-      trend: '-5.2%'
-    },
-    { 
-      name: 'Capital One Venture Card', 
-      type: 'Credit Card',
-      spending: 2899.34, 
-      transactions: 67, 
-      avgTransaction: 43.27,
-      balance: -890.12,
-      utilizationRate: 8.9,
-      trend: '+12.1%'
-    },
-    { 
-      name: 'Wells Fargo Savings', 
-      type: 'Savings',
-      spending: 567.89, 
-      transactions: 12, 
-      avgTransaction: 47.32,
-      balance: 15678.90,
-      utilizationRate: null,
-      trend: '+2.1%'
-    }
-  ];
+  // Transform account data for display
+  const accountData = accounts?.accounts.map(acc => ({
+    name: acc.accountName,
+    type: acc.accountType,
+    spending: acc.totalSpending,
+    transactions: acc.transactionCount,
+    avgTransaction: acc.avgTransactionAmount,
+    balance: acc.currentBalance || 0,
+    utilizationRate: acc.utilizationRate,
+    trend: acc.trend
+  })) || [];
 
   const creditCards = accountData.filter(acc => acc.type === 'Credit Card');
   const otherAccounts = accountData.filter(acc => acc.type !== 'Credit Card');
@@ -69,9 +43,25 @@ const AccountsAnalyticsTab: React.FC = () => {
         
         {/* Account Comparison Chart */}
         <div className="analytics-placeholder">
-          📊 Account comparison chart will be displayed here
-          <br />
-          <small>Visual comparison of account activity and balances</small>
+          {analytics.loading ? (
+            <>
+              🔄 Loading account analysis...
+              <br />
+              <small>Analyzing your account performance</small>
+            </>
+          ) : accountData.length > 0 ? (
+            <>
+              📊 Account data available for {accountData.length} accounts
+              <br />
+              <small>Chart visualization coming soon - data is ready for display</small>
+            </>
+          ) : (
+            <>
+              🏦 No account data available yet
+              <br />
+              <small>Upload transaction files to see your account analysis</small>
+            </>
+          )}
         </div>
       </div>
 

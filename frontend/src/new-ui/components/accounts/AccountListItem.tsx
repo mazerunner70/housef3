@@ -37,9 +37,13 @@ const AccountListItem: React.FC<AccountListItemProps> = ({ account, onEdit, onDe
             <div className="account-card-header">
                 <div className="account-primary-info">
                     <h3 
-                        onClick={handleViewDetailsClick} 
+                        onClick={handleViewDetailsClick}
+                        onKeyDown={(e) => e.key === 'Enter' && handleViewDetailsClick()}
                         className="account-name" 
                         title="Click to view details"
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`View details for ${name} account`}
                     >
                         {name}
                     </h3>
