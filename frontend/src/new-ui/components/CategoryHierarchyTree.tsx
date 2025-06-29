@@ -62,6 +62,13 @@ const CategoryHierarchyTree: React.FC<CategoryHierarchyTreeProps> = ({
     setDraggedCategory(null);
   }, []);
 
+  const handleKeyDown = useCallback((e: React.KeyboardEvent, category: Category) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onSelectCategory(category);
+    }
+  }, [onSelectCategory]);
+
   const renderCategoryNode = (node: CategoryHierarchy, depth: number = 0): React.ReactNode => {
     const { category } = node;
     const isExpanded = expandedNodes.has(category.categoryId);
@@ -74,7 +81,8 @@ const CategoryHierarchyTree: React.FC<CategoryHierarchyTreeProps> = ({
     const inheritedRulesCount = node.inheritedRules.length;
 
     // Mock suggestion count - in real implementation this would come from the backend
-    const suggestionCount: number = Math.floor(Math.random() * 3); // TODO: Get from backend API
+    // Deterministic count based on category name length to avoid security-sensitive random number usage
+    const suggestionCount: number = (category.name.length % 3); // TODO: Get from backend API
 
     return (
       <div
@@ -84,6 +92,10 @@ const CategoryHierarchyTree: React.FC<CategoryHierarchyTreeProps> = ({
         <div
           className={`category-node-content depth-${depth} ${isSelected ? 'selected' : ''}`}
           onClick={() => onSelectCategory(category)}
+          onKeyDown={(e) => handleKeyDown(e, category)}
+          tabIndex={0}
+          role="button"
+          aria-label={`Select category ${category.name}`}
           draggable={!!onMoveCategory}
           onDragStart={(e) => handleDragStart(e, category.categoryId)}
           onDragOver={handleDragOver}

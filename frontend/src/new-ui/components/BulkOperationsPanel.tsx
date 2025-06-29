@@ -152,21 +152,23 @@ const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
         case 'generate_suggestions':
           results = selectedTransactions
             .filter(t => !t.category) // Only uncategorized
-            .map(t => ({
+            .map((t, index) => ({
               transactionId: t.transactionId,
               description: t.description,
               strategy: suggestionStrategy,
-              estimatedSuggestions: Math.floor(Math.random() * 3) + 1
+              // Deterministic estimate based on description length and index
+              estimatedSuggestions: Math.min(((t.description?.length || 10) % 3) + 1, 3)
             }));
           break;
 
         case 'confirm_suggestions':
           results = selectedTransactions
             .filter(t => t.category && t.category.includes('pending')) // Mock pending check
-            .map(t => ({
+            .map((t, index) => ({
               transactionId: t.transactionId,
               description: t.description,
-              pendingSuggestions: Math.floor(Math.random() * 2) + 1
+              // Deterministic estimate based on transaction amount and index
+              pendingSuggestions: Math.min(((Number(t.amount) || 0) % 2) + 1, 2)
             }));
           break;
 

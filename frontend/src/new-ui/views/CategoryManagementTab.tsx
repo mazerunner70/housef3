@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Category, CategorySuggestionStrategy } from '../../types/Category';
 import { useCategories } from '../hooks/useCategories';
 import { useRealTimeRuleTesting } from '../hooks/useRealTimeRuleTesting';
@@ -256,6 +256,18 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Handle escape key to close modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onCancel();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onCancel]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -283,8 +295,22 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
     ? availableCategories.find(cat => cat.categoryId === parentCategoryId)
     : null;
 
+  const handleOverlayKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onCancel();
+    }
+  };
+
   return (
-    <div className="modal-overlay" onClick={onCancel}>
+    <div 
+      className="modal-overlay" 
+      onClick={onCancel}
+      onKeyDown={handleOverlayKeyDown}
+      tabIndex={0}
+      role="button"
+      aria-label="Close modal"
+    >
       <div className="create-category-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Create New Category</h3>
