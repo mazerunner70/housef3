@@ -8,7 +8,11 @@ from .account import (
     Currency,
 )
 
-from .transaction import Transaction
+from .transaction import (
+    Transaction, 
+    TransactionCategoryAssignment, 
+    CategoryAssignmentStatus
+)
 
 from .transaction_file import (
     TransactionFile,
@@ -53,6 +57,8 @@ __all__ = [
     'AccountType',
     'Currency',
     'Transaction',
+    'TransactionCategoryAssignment',
+    'CategoryAssignmentStatus',
     'TransactionFile',
     'FileFormat',
     'ProcessingStatus',

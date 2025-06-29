@@ -1,12 +1,14 @@
 import json
 import logging
+import uuid
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
-from models.transaction import Transaction
+from models.transaction import Transaction, TransactionCategoryAssignment, CategoryAssignmentStatus
+from models.category import Category
 from utils.auth import get_user_from_event
 from utils.db_utils import list_user_transactions, get_transactions_table
-from utils.lambda_utils import create_response
+from utils.lambda_utils import create_response, mandatory_path_parameter
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -158,6 +160,225 @@ def delete_transaction_handler(event: Dict[str, Any], user_id: str) -> Dict[str,
         logger.error(f"Error deleting transaction {transaction_id if 'transaction_id' in locals() else 'UNKNOWN'} for user {user_id}: {str(e)}", exc_info=True)
         return create_response(500, {"message": "Internal server error deleting transaction."})
 
+# --- Category Assignment Confirmation Handlers ---
+
+def confirm_category_suggestions_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """
+    Confirm category suggestions for a transaction
+    POST /transactions/{transactionId}/confirm-suggestions
+    Body: { "confirmedCategoryIds": ["uuid1", "uuid2"], "primaryCategoryId": "uuid1" }
+    """
+    try:
+        transaction_id = mandatory_path_parameter(event, 'transactionId')
+        
+        body_str = event.get('body')
+        if not body_str:
+            return create_response(400, {"error": "Request body is missing or empty"})
+        
+        try:
+            body_data = json.loads(body_str)
+            confirmed_category_ids = body_data.get('confirmedCategoryIds', [])
+            primary_category_id = body_data.get('primaryCategoryId')
+        except json.JSONDecodeError:
+            return create_response(400, {"error": "Invalid JSON format in request body"})
+        
+        if not confirmed_category_ids:
+            return create_response(400, {"error": "At least one category must be confirmed"})
+        
+        # Get transaction from database
+        response = get_transactions_table().get_item(Key={'transactionId': transaction_id})
+        if 'Item' not in response:
+            return create_response(404, {"error": "Transaction not found"})
+        
+        transaction = Transaction.from_dynamodb_item(response['Item'])
+        if transaction.user_id != user_id:
+            return create_response(403, {"error": "Unauthorized to modify this transaction"})
+        
+        # Confirm the specified category suggestions
+        confirmed_count = 0
+        for category_id_str in confirmed_category_ids:
+            category_uuid = uuid.UUID(category_id_str)
+            if transaction.confirm_category_assignment(category_uuid):
+                confirmed_count += 1
+        
+        # Set primary category if specified
+        if primary_category_id:
+            primary_uuid = uuid.UUID(primary_category_id)
+            if primary_uuid in [uuid.UUID(cid) for cid in confirmed_category_ids]:
+                transaction.set_primary_category(primary_uuid)
+            else:
+                return create_response(400, {"error": "Primary category must be one of the confirmed categories"})
+        
+        # Update transaction in database
+        transaction_item = transaction.to_dynamodb_item()
+        get_transactions_table().put_item(Item=transaction_item)
+        
+        return create_response(200, {
+            "transactionId": transaction_id,
+            "confirmedCount": confirmed_count,
+            "primaryCategoryId": str(transaction.primary_category_id) if transaction.primary_category_id else None,
+            "totalCategories": len(transaction.confirmed_categories)
+        })
+        
+    except ValueError as ve:
+        logger.warning(f"Invalid transaction ID or category ID: {str(ve)}")
+        return create_response(400, {"error": str(ve)})
+    except Exception as e:
+        logger.error(f"Error confirming category suggestions: {str(e)}", exc_info=True)
+        return create_response(500, {"error": "Internal server error", "message": str(e)})
+
+def remove_category_assignment_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """
+    Remove a category assignment from a transaction
+    DELETE /transactions/{transactionId}/categories/{categoryId}
+    """
+    try:
+        transaction_id = mandatory_path_parameter(event, 'transactionId')
+        category_id = mandatory_path_parameter(event, 'categoryId')
+        
+        # Get transaction from database
+        response = get_transactions_table().get_item(Key={'transactionId': transaction_id})
+        if 'Item' not in response:
+            return create_response(404, {"error": "Transaction not found"})
+        
+        transaction = Transaction.from_dynamodb_item(response['Item'])
+        if transaction.user_id != user_id:
+            return create_response(403, {"error": "Unauthorized to modify this transaction"})
+        
+        # Remove the category assignment
+        category_uuid = uuid.UUID(category_id)
+        removed = transaction.remove_category_assignment(category_uuid)
+        
+        if not removed:
+            return create_response(404, {"error": "Category assignment not found"})
+        
+        # Update transaction in database
+        transaction_item = transaction.to_dynamodb_item()
+        get_transactions_table().put_item(Item=transaction_item)
+        
+        return create_response(200, {
+            "transactionId": transaction_id,
+            "categoryId": category_id,
+            "removed": True,
+            "remainingCategories": len(transaction.confirmed_categories)
+        })
+        
+    except ValueError as ve:
+        logger.warning(f"Invalid transaction ID or category ID: {str(ve)}")
+        return create_response(400, {"error": str(ve)})
+    except Exception as e:
+        logger.error(f"Error removing category assignment: {str(e)}", exc_info=True)
+        return create_response(500, {"error": "Internal server error", "message": str(e)})
+
+def set_primary_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """
+    Set the primary category for a transaction
+    PUT /transactions/{transactionId}/primary-category
+    Body: { "categoryId": "uuid" }
+    """
+    try:
+        transaction_id = mandatory_path_parameter(event, 'transactionId')
+        
+        body_str = event.get('body')
+        if not body_str:
+            return create_response(400, {"error": "Request body is missing or empty"})
+        
+        try:
+            body_data = json.loads(body_str)
+            category_id = body_data.get('categoryId')
+        except json.JSONDecodeError:
+            return create_response(400, {"error": "Invalid JSON format in request body"})
+        
+        if not category_id:
+            return create_response(400, {"error": "Category ID is required"})
+        
+        # Get transaction from database
+        response = get_transactions_table().get_item(Key={'transactionId': transaction_id})
+        if 'Item' not in response:
+            return create_response(404, {"error": "Transaction not found"})
+        
+        transaction = Transaction.from_dynamodb_item(response['Item'])
+        if transaction.user_id != user_id:
+            return create_response(403, {"error": "Unauthorized to modify this transaction"})
+        
+        # Set primary category
+        category_uuid = uuid.UUID(category_id)
+        success = transaction.set_primary_category(category_uuid)
+        
+        if not success:
+            return create_response(400, {"error": "Category must be assigned to transaction before setting as primary"})
+        
+        # Update transaction in database
+        transaction_item = transaction.to_dynamodb_item()
+        get_transactions_table().put_item(Item=transaction_item)
+        
+        return create_response(200, {
+            "transactionId": transaction_id,
+            "primaryCategoryId": category_id,
+            "success": True
+        })
+        
+    except ValueError as ve:
+        logger.warning(f"Invalid transaction ID or category ID: {str(ve)}")
+        return create_response(400, {"error": str(ve)})
+    except Exception as e:
+        logger.error(f"Error setting primary category: {str(e)}", exc_info=True)
+        return create_response(500, {"error": "Internal server error", "message": str(e)})
+
+def add_manual_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """
+    Add a manual category assignment to a transaction
+    POST /transactions/{transactionId}/categories
+    Body: { "categoryId": "uuid", "isPrimary": false }
+    """
+    try:
+        transaction_id = mandatory_path_parameter(event, 'transactionId')
+        
+        body_str = event.get('body')
+        if not body_str:
+            return create_response(400, {"error": "Request body is missing or empty"})
+        
+        try:
+            body_data = json.loads(body_str)
+            category_id = body_data.get('categoryId')
+            is_primary = body_data.get('isPrimary', False)
+        except json.JSONDecodeError:
+            return create_response(400, {"error": "Invalid JSON format in request body"})
+        
+        if not category_id:
+            return create_response(400, {"error": "Category ID is required"})
+        
+        # Get transaction from database
+        response = get_transactions_table().get_item(Key={'transactionId': transaction_id})
+        if 'Item' not in response:
+            return create_response(404, {"error": "Transaction not found"})
+        
+        transaction = Transaction.from_dynamodb_item(response['Item'])
+        if transaction.user_id != user_id:
+            return create_response(403, {"error": "Unauthorized to modify this transaction"})
+        
+        # Add manual category
+        category_uuid = uuid.UUID(category_id)
+        transaction.add_manual_category(category_uuid, set_as_primary=is_primary)
+        
+        # Update transaction in database
+        transaction_item = transaction.to_dynamodb_item()
+        get_transactions_table().put_item(Item=transaction_item)
+        
+        return create_response(201, {
+            "transactionId": transaction_id,
+            "categoryId": category_id,
+            "isPrimary": is_primary,
+            "totalCategories": len(transaction.confirmed_categories)
+        })
+        
+    except ValueError as ve:
+        logger.warning(f"Invalid transaction ID or category ID: {str(ve)}")
+        return create_response(400, {"error": str(ve)})
+    except Exception as e:
+        logger.error(f"Error adding manual category: {str(e)}", exc_info=True)
+        return create_response(500, {"error": "Internal server error", "message": str(e)})
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main handler for transaction operations."""
     # Get route from event
@@ -183,6 +404,15 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             logger.warning(f"Missing transaction ID in DELETE request path: {event.get('path')}")
             return create_response(400, {"message": "Transaction ID missing in path."})
         return delete_transaction_handler(event, user_id)
+    elif route == "POST /transactions/{transactionId}/confirm-suggestions":
+        return confirm_category_suggestions_handler(event, user_id)
+    elif route == "DELETE /transactions/{transactionId}/categories/{categoryId}":
+        return remove_category_assignment_handler(event, user_id)
+    elif route == "PUT /transactions/{transactionId}/primary-category":
+        return set_primary_category_handler(event, user_id)
+    elif route == "POST /transactions/{transactionId}/categories":
+        return add_manual_category_handler(event, user_id)
+    
     logger.warning(f"Unsupported route: {route}")
     return create_response(400, {"message": f"Unsupported route: {route}"})
             

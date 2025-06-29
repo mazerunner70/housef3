@@ -212,10 +212,12 @@ resource "aws_lambda_function" "transaction_operations" {
 
   environment {
     variables = {
-      ENVIRONMENT        = var.environment
-      TRANSACTIONS_TABLE = aws_dynamodb_table.transactions.name
-      FILES_TABLE        = aws_dynamodb_table.transaction_files.name
-      ACCOUNTS_TABLE     = aws_dynamodb_table.accounts.name
+      ENVIRONMENT                               = var.environment
+      TRANSACTIONS_TABLE                        = aws_dynamodb_table.transactions.name
+      FILES_TABLE                              = aws_dynamodb_table.transaction_files.name
+      ACCOUNTS_TABLE                           = aws_dynamodb_table.accounts.name
+      TRANSACTION_CATEGORY_ASSIGNMENTS_TABLE   = aws_dynamodb_table.transaction_category_assignments.name
+      CATEGORIES_TABLE_NAME                    = aws_dynamodb_table.categories.name
     }
   }
 
@@ -351,7 +353,11 @@ resource "aws_iam_role_policy" "lambda_dynamodb_access" {
           aws_dynamodb_table.analytics_data.arn,
           "${aws_dynamodb_table.analytics_data.arn}/index/*",
           aws_dynamodb_table.analytics_status.arn,
-          "${aws_dynamodb_table.analytics_status.arn}/index/*"
+          "${aws_dynamodb_table.analytics_status.arn}/index/*",
+          aws_dynamodb_table.categories.arn,
+          "${aws_dynamodb_table.categories.arn}/index/*",
+          aws_dynamodb_table.transaction_category_assignments.arn,
+          "${aws_dynamodb_table.transaction_category_assignments.arn}/index/*"
         ]
       }
     ]
@@ -516,7 +522,11 @@ data "aws_iam_policy_document" "categories_lambda_dynamodb_policy_doc" {
       # Ensure aws_dynamodb_table.categories is defined, if not, this will need adjustment
       # Assuming it's defined in another .tf file (e.g., dynamo_categories.tf)
       aws_dynamodb_table.categories.arn,
-      "${aws_dynamodb_table.categories.arn}/index/*"
+      "${aws_dynamodb_table.categories.arn}/index/*",
+      aws_dynamodb_table.transaction_category_assignments.arn,
+      "${aws_dynamodb_table.transaction_category_assignments.arn}/index/*",
+      aws_dynamodb_table.transactions.arn,
+      "${aws_dynamodb_table.transactions.arn}/index/*"
     ]
   }
 }
@@ -553,9 +563,11 @@ resource "aws_lambda_function" "categories_lambda" {
 
   environment {
     variables = {
-      CATEGORIES_TABLE_NAME = aws_dynamodb_table.categories.name # Ensure aws_dynamodb_table.categories is defined
-      ENVIRONMENT           = var.environment
-      LOG_LEVEL             = "INFO"
+      CATEGORIES_TABLE_NAME                    = aws_dynamodb_table.categories.name # Ensure aws_dynamodb_table.categories is defined
+      TRANSACTION_CATEGORY_ASSIGNMENTS_TABLE  = aws_dynamodb_table.transaction_category_assignments.name
+      TRANSACTIONS_TABLE                       = aws_dynamodb_table.transactions.name
+      ENVIRONMENT                              = var.environment
+      LOG_LEVEL                                = "INFO"
       # Add other necessary environment variables if any, e.g. for utils
     }
   }
