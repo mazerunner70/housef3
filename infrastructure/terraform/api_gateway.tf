@@ -429,6 +429,62 @@ resource "aws_apigatewayv2_route" "delete_category" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# Phase 2.1 Rule Testing & Preview API Endpoints
+
+# Test Category Rule route
+resource "aws_apigatewayv2_route" "test_category_rule" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /categories/test-rule"
+  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Preview Category Matches route
+resource "aws_apigatewayv2_route" "preview_category_matches" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /categories/{categoryId}/preview-matches"
+  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Validate Regex Pattern route
+resource "aws_apigatewayv2_route" "validate_regex_pattern" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /categories/validate-regex"
+  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Generate Pattern route
+resource "aws_apigatewayv2_route" "generate_pattern" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /categories/generate-pattern"
+  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Generate Category Suggestions route
+resource "aws_apigatewayv2_route" "generate_category_suggestions" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /transactions/{transactionId}/category-suggestions"
+  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Apply Category Rules Bulk route
+resource "aws_apigatewayv2_route" "apply_category_rules_bulk" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /categories/apply-rules-bulk"
+  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 # Analytics Operations Integration
 resource "aws_apigatewayv2_integration" "analytics_operations" {
   api_id                 = aws_apigatewayv2_api.main.id
