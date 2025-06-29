@@ -1341,15 +1341,15 @@ CREATE INDEX IF NOT EXISTS categories_parent_idx ON categories(parentCategoryId)
 #### 1.2 Basic Rule Engine Service (Week 2)
 | Task | Deliverable | Status | Assigned | Due Date |
 |------|-------------|--------|----------|----------|
-| Implement `CategoryRuleEngine` service | New service in `backend/src/services/` | 🔴 Not Started | - | Week 2.3 |
-| Add regex pattern matching | Core matching logic | 🔴 Not Started | - | Week 2.4 |
-| Create suggestion generation | Basic suggestion workflow | 🔴 Not Started | - | Week 2.5 |
+| Implement `CategoryRuleEngine` service | New service in `backend/src/services/` | ✅ Complete | 22380cb | Week 2.3 |
+| Add regex pattern matching | Core matching logic | ✅ Complete | 22380cb | Week 2.4 |
+| Create suggestion generation | Basic suggestion workflow | ✅ Complete | 22380cb | Week 2.5 |
 
 **Acceptance Criteria:**
-- [ ] Rule engine can match transactions against category patterns
-- [ ] Generates suggestions with confidence scores
-- [ ] Handles multiple category matches per transaction
-- [ ] Basic error handling for invalid regex patterns
+- [x] Rule engine can match transactions against category patterns
+- [x] Generates suggestions with confidence scores
+- [x] Handles multiple category matches per transaction
+- [x] Basic error handling for invalid regex patterns
 
 **Dependencies:** Completion of 1.1  
 **Risk Level:** Medium - Complex pattern matching logic

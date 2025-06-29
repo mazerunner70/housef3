@@ -305,7 +305,8 @@ class CategoryRuleEngine:
     def _get_user_transactions(self, user_id: str, limit: int = 1000) -> List[Transaction]:
         """Get user's transactions for rule testing"""
         try:
-            return list_user_transactions(user_id, limit=limit)
+            transactions, _, _ = list_user_transactions(user_id, limit=limit)
+            return transactions
         except Exception as e:
             logger.error(f"Error fetching transactions for user {user_id}: {str(e)}")
             return []
@@ -352,6 +353,10 @@ class CategoryRuleEngine:
             # Determine field to match
             if field_to_match is None:
                 field_to_match = getattr(rule, 'fieldToMatch', 'description')
+            
+            # Ensure field_to_match is not None
+            if field_to_match is None:
+                field_to_match = 'description'
             
             # Get transaction field value
             transaction_value = self._get_transaction_field_value(transaction, field_to_match)
