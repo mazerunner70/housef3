@@ -24,7 +24,7 @@ class AnalyticsComputationEngine:
     """
 
     def __init__(self):
-        self.logger = logger
+        pass
 
     def compute_cash_flow_analytics(self, user_id: str, time_period: str,
                                     account_id: Optional[str] = None) -> Dict[str, Any]:

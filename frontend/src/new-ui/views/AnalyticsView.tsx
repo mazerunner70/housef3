@@ -62,7 +62,14 @@ const AnalyticsView: React.FC = () => {
             <span className="status-refreshing">Refreshing...</span>
           )}
           {analytics.error && (
-            <span className="status-error" onClick={analytics.clearError}>
+            <span 
+              className="status-error" 
+              onClick={analytics.clearError}
+              onKeyDown={(e) => e.key === 'Enter' && analytics.clearError()}
+              tabIndex={0}
+              role="button"
+              aria-label="Dismiss error message"
+            >
               ⚠️ {analytics.error} (click to dismiss)
             </span>
           )}

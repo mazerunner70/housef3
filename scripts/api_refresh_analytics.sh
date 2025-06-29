@@ -105,16 +105,29 @@ refresh_analytics() {
     
     echo -e "${GREEN}🔄 Triggering analytics refresh...${NC}"
     
-    # Build request body
-    local request_body='{"force": false}'
+    # Build request body safely without sed manipulation
+    local request_body=""
+    local force_value="false"
     if [[ "$force" == "true" ]]; then
-        request_body='{"force": true}'
+        force_value="true"
     fi
     
     if [[ -n "$analytic_types" ]]; then
-        # Convert comma-separated types to JSON array
-        local types_array=$(echo "$analytic_types" | sed 's/,/","/g' | sed 's/^/"/' | sed 's/$/"/')
-        request_body=$(echo "$request_body" | sed 's/}$/, "analytic_types": ['$types_array']}/')
+        # Convert comma-separated types to JSON array using safe string construction
+        local types_json=""
+        IFS=',' read -ra TYPE_ARRAY <<< "$analytic_types"
+        for i in "${!TYPE_ARRAY[@]}"; do
+            if [[ $i -gt 0 ]]; then
+                types_json+=","
+            fi
+            # Escape quotes and backslashes in the type name
+            local escaped_type="${TYPE_ARRAY[i]//\\/\\\\}"  # Escape backslashes first
+            escaped_type="${escaped_type//\"/\\\"}"         # Then escape quotes
+            types_json+="\"$escaped_type\""
+        done
+        request_body="{\"force\": $force_value, \"analytic_types\": [$types_json]}"
+    else
+        request_body="{\"force\": $force_value}"
     fi
     
     echo -e "${BLUE}📤 Request body: $request_body${NC}"
