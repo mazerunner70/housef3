@@ -70,7 +70,7 @@ def create_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
         new_category_data = category_data.model_dump()
         new_category = Category(userId=user_id, **new_category_data)
         created_category = create_category_in_db(new_category)
-        return create_response(201, created_category.model_dump())
+        return create_response(201, created_category.model_dump(mode='json'))
     except ConnectionError as ce:
         logger.critical(f"DB Connection Error creating category: {str(ce)}", exc_info=True)
         return create_response(500, {"error": "Server configuration error", "message": "Database not initialized"})
@@ -104,7 +104,7 @@ def get_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
         # Use new DB util function
         category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
         if category:
-            return create_response(200, category.model_dump())
+            return create_response(200, category.model_dump(mode='json'))
         else:
             return create_response(404, {"error": "Category not found or access denied"})
     except ValueError as ve: 
@@ -141,7 +141,7 @@ def update_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
         # Use new DB util function
         updated_category = update_category_in_db(uuid.UUID(category_id), user_id, update_payload)
         if updated_category:
-            return create_response(200, updated_category.model_dump())
+            return create_response(200, updated_category.model_dump(mode='json'))
         else:
             # This could be 404 if not found, or if update_data was empty leading to no change
             # db_util returns None if not found, or the same object if no changes from update_data
@@ -180,6 +180,56 @@ def delete_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
     except Exception as e:
         logger.error(f"Error deleting category: {str(e)}", exc_info=True)
         return create_response(500, {"error": "Could not delete category", "message": str(e)})
+
+def get_category_hierarchy_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """
+    Get category hierarchy for the user
+    GET /categories/hierarchy
+    Returns hierarchical structure of all user categories with parent-child relationships
+    """
+    try:
+        # Get all user categories
+        categories = list_categories_by_user_from_db(user_id)
+        
+        # Initialize rule engine
+        rule_engine = CategoryRuleEngine()
+        
+        # Build category hierarchy using existing method
+        hierarchy_dict = rule_engine.build_category_hierarchy(categories)
+        
+        # Convert to list of root-level hierarchies (categories without parents)
+        root_hierarchies = []
+        for cat_id, hierarchy in hierarchy_dict.items():
+            if hierarchy.category.parentCategoryId is None:
+                root_hierarchies.append(hierarchy)
+        
+        # Sort by category name for consistent ordering
+        root_hierarchies.sort(key=lambda h: h.category.name)
+        
+        # Serialize hierarchies
+        serialized_hierarchies = []
+        for hierarchy in root_hierarchies:
+            serialized_hierarchy = serialize_hierarchy(hierarchy)
+            serialized_hierarchies.append(serialized_hierarchy)
+        
+        return create_response(200, serialized_hierarchies)
+        
+    except ConnectionError as ce:
+        logger.critical(f"DB Connection Error getting category hierarchy: {str(ce)}", exc_info=True)
+        return create_response(500, {"error": "Server configuration error", "message": "Database not initialized"})
+    except Exception as e:
+        logger.error(f"Error getting category hierarchy: {str(e)}", exc_info=True)
+        return create_response(500, {"error": "Could not get category hierarchy", "message": str(e)})
+
+def serialize_hierarchy(hierarchy):
+    """Helper function to serialize CategoryHierarchy for JSON response"""
+    return {
+        "category": hierarchy.category.model_dump(by_alias=True, mode='json'),
+        "children": [serialize_hierarchy(child) for child in hierarchy.children],
+        "depth": hierarchy.depth,
+        "fullPath": hierarchy.full_path,
+        "inheritedRules": [rule.model_dump(by_alias=True, mode='json') for rule in hierarchy.inherited_rules]
+    }
 
 # --- Category Rule Testing & Suggestion Handlers (Phase 2.1 Enhanced) ---
 
@@ -241,10 +291,10 @@ def test_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[str,
             confidence = rule_engine.calculate_rule_confidence(rule, transaction)
             confidence_scores.append(confidence)
         
-        # Serialize transactions
+                # Serialize transactions
         serialized_transactions = []
         for i, transaction in enumerate(matching_transactions):
-            tx_data = transaction.model_dump(by_alias=True)
+            tx_data = transaction.model_dump(by_alias=True, mode='json')
             # Convert Decimals to strings for JSON serialization
             if tx_data.get("amount") is not None:
                 tx_data["amount"] = str(tx_data["amount"])
@@ -253,11 +303,11 @@ def test_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[str,
             # Add confidence score
             tx_data["matchConfidence"] = confidence_scores[i]
             serialized_transactions.append(tx_data)
-        
+
         return create_response(200, {
             "matchingTransactions": serialized_transactions,
             "totalMatches": len(matching_transactions),
-            "rule": rule.model_dump(by_alias=True),
+            "rule": rule.model_dump(by_alias=True, mode='json'),
             "limit": limit,
             "averageConfidence": sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0.0
         })
@@ -307,7 +357,7 @@ def preview_category_matches_handler(event: Dict[str, Any], user_id: str) -> Dic
                     confidence = rule_engine.calculate_rule_confidence(rule, transaction)
                     matched_rules.append({
                         "ruleId": rule.rule_id,
-                        "rule": rule.model_dump(by_alias=True),
+                        "rule": rule.model_dump(by_alias=True, mode='json'),
                         "confidence": confidence
                     })
             
@@ -318,10 +368,10 @@ def preview_category_matches_handler(event: Dict[str, Any], user_id: str) -> Dic
                 if len(matching_transactions) >= limit:
                     break
         
-        # Serialize transactions
+                # Serialize transactions
         serialized_transactions = []
         for transaction in matching_transactions:
-            tx_data = transaction.model_dump(by_alias=True)
+            tx_data = transaction.model_dump(by_alias=True, mode='json')
             # Convert Decimals to strings for JSON serialization
             if tx_data.get("amount") is not None:
                 tx_data["amount"] = str(tx_data["amount"])
@@ -330,13 +380,13 @@ def preview_category_matches_handler(event: Dict[str, Any], user_id: str) -> Dic
             # Add rule match information
             tx_data["matchedRules"] = rule_matches.get(str(transaction.transaction_id), [])
             serialized_transactions.append(tx_data)
-        
+
         return create_response(200, {
             "categoryId": category_id,
             "categoryName": category.name,
             "matchingTransactions": serialized_transactions,
             "totalMatches": len(matching_transactions),
-            "effectiveRules": [rule.model_dump(by_alias=True) for rule in effective_rules],
+            "effectiveRules": [rule.model_dump(by_alias=True, mode='json') for rule in effective_rules],
             "totalRules": len(effective_rules),
             "includeInherited": include_inherited,
             "limit": limit
@@ -390,7 +440,7 @@ def generate_category_suggestions_handler(event: Dict[str, Any], user_id: str) -
         # Serialize suggestions
         serialized_suggestions = []
         for suggestion in suggestions:
-            suggestion_data = suggestion.model_dump(by_alias=True)
+            suggestion_data = suggestion.model_dump(by_alias=True, mode='json')
             serialized_suggestions.append(suggestion_data)
         
         return create_response(200, {
@@ -554,6 +604,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return create_category_handler(event, user_id)
         elif route == "GET /categories":
             return list_categories_handler(event, user_id)
+        elif route == "GET /categories/hierarchy":
+            return get_category_hierarchy_handler(event, user_id)
         elif route == "GET /categories/{categoryId}":
             return get_category_handler(event, user_id)
         elif route == "PUT /categories/{categoryId}":
