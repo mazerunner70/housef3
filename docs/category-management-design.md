@@ -1324,14 +1324,14 @@ CREATE INDEX IF NOT EXISTS categories_parent_idx ON categories(parentCategoryId)
 #### 1.1 Data Models & Infrastructure (Week 1)
 | Task | Deliverable | Status | Assigned | Due Date |
 |------|-------------|--------|----------|----------|
-| Create `TransactionCategoryAssignment` model | New Pydantic model in `backend/src/models/` | 🔴 Not Started | - | Week 1.3 |
+| Create `TransactionCategoryAssignment` model | New Pydantic model in `backend/src/models/` | ✅ Complete | b2cad0a | Week 1.3 |
 | Create assignment DynamoDB table | Terraform config in `infrastructure/terraform/` | 🔴 Not Started | - | Week 1.4 |
-| Update Transaction model | Add multiple category support | 🔴 Not Started | - | Week 1.5 |
+| Update Transaction model | Add multiple category support | ✅ Complete | b2cad0a | Week 1.5 |
 
 **Acceptance Criteria:**
-- [ ] `TransactionCategoryAssignment` model with status tracking
+- [x] `TransactionCategoryAssignment` model with status tracking
 - [ ] DynamoDB table with proper GSIs for querying
-- [ ] Transaction model supports multiple category assignments
+- [x] Transaction model supports multiple category assignments
 - [ ] Database migration plan documented
 
 **Dependencies:** None  
