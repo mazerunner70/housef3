@@ -302,6 +302,11 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
     }
   };
 
+  const handleModalKeyDown = (e: React.KeyboardEvent) => {
+    // Prevent keyboard events from bubbling to overlay
+    e.stopPropagation();
+  };
+
   return (
     <div 
       className="modal-overlay" 
@@ -311,7 +316,11 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
       role="button"
       aria-label="Close modal"
     >
-      <div className="create-category-modal" onClick={(e) => e.stopPropagation()}>
+      <div 
+        className="create-category-modal" 
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleModalKeyDown}
+      >
         <div className="modal-header">
           <h3>Create New Category</h3>
           <button className="close-btn" onClick={onCancel}>×</button>
