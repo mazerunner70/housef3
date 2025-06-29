@@ -402,6 +402,15 @@ resource "aws_apigatewayv2_route" "list_categories" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# Get Categories Hierarchy route
+resource "aws_apigatewayv2_route" "get_categories_hierarchy" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /categories/hierarchy"
+  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 # Get Category by ID route
 resource "aws_apigatewayv2_route" "get_category" {
   api_id             = aws_apigatewayv2_api.main.id

@@ -1151,7 +1151,7 @@ def update_category_in_db(category_id: uuid.UUID, user_id: str, update_data: Dic
         attr_val_placeholder = f":rulesVal"
         update_expression_parts.append(f"{attr_key_placeholder} = {attr_val_placeholder}")
         expression_attribute_names[attr_key_placeholder] = "rules"
-        expression_attribute_values[attr_val_placeholder] = [rule.model_dump() if isinstance(rule, BaseModel) else rule for rule in update_data["rules"]]
+        expression_attribute_values[attr_val_placeholder] = [rule.model_dump(mode='json') if isinstance(rule, BaseModel) else rule for rule in update_data["rules"]]
 
     if not update_expression_parts:
         logger.info(f"DB: No valid fields to update for category {str(category_id)} after filtering.")
