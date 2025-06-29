@@ -9,9 +9,9 @@ from typing import Dict, Any, List, Optional
 
 from pydantic import ValidationError
 
-from models.category import Category, CategoryCreate, CategoryUpdate, CategoryRule
+from models.category import Category, CategoryCreate, CategoryUpdate, CategoryRule, MatchCondition, CategorySuggestionStrategy
 from models.transaction import Transaction
-from services.category_rule_engine import CategoryRuleEngine, CategorySuggestionStrategy
+from services.category_rule_engine import CategoryRuleEngine
 from utils.db_utils import create_category_in_db, delete_category_from_db, get_category_by_id_from_db, list_categories_by_user_from_db, update_category_in_db, list_user_transactions
 from utils.lambda_utils import mandatory_path_parameter, optional_query_parameter
 from utils.auth import get_user_from_event
@@ -181,13 +181,20 @@ def delete_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
         logger.error(f"Error deleting category: {str(e)}", exc_info=True)
         return create_response(500, {"error": "Could not delete category", "message": str(e)})
 
-# --- Category Rule Testing & Suggestion Handlers ---
+# --- Category Rule Testing & Suggestion Handlers (Phase 2.1 Enhanced) ---
 
 def test_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """
     Test a category rule against user's transactions
     POST /categories/test-rule
-    Body: { "fieldToMatch": "description", "condition": "contains", "value": "AMAZON" }
+    Body: {
+        "fieldToMatch": "description", 
+        "condition": "contains", 
+        "value": "AMAZON",
+        "caseSensitive": false,
+        "priority": 0,
+        "confidence": 1.0
+    }
     """
     try:
         body_str = event.get('body')
@@ -196,12 +203,22 @@ def test_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[str,
         
         try:
             rule_data = json.loads(body_str)
+            
+            # Create enhanced CategoryRule with Phase 2.1 fields
             rule = CategoryRule(
                 fieldToMatch=rule_data.get('fieldToMatch', 'description'),
-                condition=rule_data.get('condition', 'contains'),
-                value=rule_data.get('value', '')
+                condition=MatchCondition(rule_data.get('condition', 'contains')),
+                value=rule_data.get('value', ''),
+                caseSensitive=rule_data.get('caseSensitive', False),
+                priority=rule_data.get('priority', 0),
+                confidence=rule_data.get('confidence', 1.0),
+                enabled=rule_data.get('enabled', True),
+                allowMultipleMatches=rule_data.get('allowMultipleMatches', True),
+                autoSuggest=rule_data.get('autoSuggest', True),
+                amountMin=rule_data.get('amountMin'),
+                amountMax=rule_data.get('amountMax')
             )
-        except (json.JSONDecodeError, ValidationError) as e:
+        except (json.JSONDecodeError, ValidationError, ValueError) as e:
             logger.error(f"Error parsing rule data: {str(e)}")
             return create_response(400, {"error": "Invalid rule data", "details": str(e)})
         
@@ -215,9 +232,91 @@ def test_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[str,
         matching_transactions = rule_engine.test_rule_against_transactions(
             user_id=user_id,
             rule=rule,
-            field_to_match=rule.fieldToMatch,
             limit=limit
         )
+        
+        # Calculate confidence scores for matched transactions
+        confidence_scores = []
+        for transaction in matching_transactions:
+            confidence = rule_engine.calculate_rule_confidence(rule, transaction)
+            confidence_scores.append(confidence)
+        
+        # Serialize transactions
+        serialized_transactions = []
+        for i, transaction in enumerate(matching_transactions):
+            tx_data = transaction.model_dump(by_alias=True)
+            # Convert Decimals to strings for JSON serialization
+            if tx_data.get("amount") is not None:
+                tx_data["amount"] = str(tx_data["amount"])
+            if tx_data.get("balance") is not None:
+                tx_data["balance"] = str(tx_data["balance"])
+            # Add confidence score
+            tx_data["matchConfidence"] = confidence_scores[i]
+            serialized_transactions.append(tx_data)
+        
+        return create_response(200, {
+            "matchingTransactions": serialized_transactions,
+            "totalMatches": len(matching_transactions),
+            "rule": rule.model_dump(by_alias=True),
+            "limit": limit,
+            "averageConfidence": sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0.0
+        })
+        
+    except Exception as e:
+        logger.error(f"Error testing category rule: {str(e)}", exc_info=True)
+        return create_response(500, {"error": "Internal server error", "message": str(e)})
+
+def preview_category_matches_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """
+    Preview all transactions that would match a category's rules
+    GET /categories/{categoryId}/preview-matches
+    """
+    try:
+        category_id = mandatory_path_parameter(event, 'categoryId')
+        
+        # Get category from database
+        category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
+        if not category:
+            return create_response(404, {"error": "Category not found or access denied"})
+        
+        # Get optional parameters
+        query_params = event.get('queryStringParameters', {}) or {}
+        include_inherited = query_params.get('includeInherited', 'true').lower() == 'true'
+        limit = int(query_params.get('limit', 200))
+        
+        # Get all user categories for hierarchy processing
+        all_categories = list_categories_by_user_from_db(user_id)
+        
+        # Initialize rule engine
+        rule_engine = CategoryRuleEngine()
+        
+        # Get effective rules for this category (including inherited)
+        effective_rules = rule_engine.get_effective_rules(category, all_categories)
+        
+        # Get user transactions
+        transactions, _, _ = list_user_transactions(user_id, limit=limit * 2)
+        
+        # Find matching transactions
+        matching_transactions = []
+        rule_matches = {}  # Track which rules matched each transaction
+        
+        for transaction in transactions:
+            matched_rules = []
+            for rule in effective_rules:
+                if rule_engine.rule_matches_transaction(rule, transaction):
+                    confidence = rule_engine.calculate_rule_confidence(rule, transaction)
+                    matched_rules.append({
+                        "ruleId": rule.rule_id,
+                        "rule": rule.model_dump(by_alias=True),
+                        "confidence": confidence
+                    })
+            
+            if matched_rules:
+                matching_transactions.append(transaction)
+                rule_matches[str(transaction.transaction_id)] = matched_rules
+                
+                if len(matching_transactions) >= limit:
+                    break
         
         # Serialize transactions
         serialized_transactions = []
@@ -228,17 +327,26 @@ def test_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[str,
                 tx_data["amount"] = str(tx_data["amount"])
             if tx_data.get("balance") is not None:
                 tx_data["balance"] = str(tx_data["balance"])
+            # Add rule match information
+            tx_data["matchedRules"] = rule_matches.get(str(transaction.transaction_id), [])
             serialized_transactions.append(tx_data)
         
         return create_response(200, {
+            "categoryId": category_id,
+            "categoryName": category.name,
             "matchingTransactions": serialized_transactions,
             "totalMatches": len(matching_transactions),
-            "rule": rule.model_dump(),
+            "effectiveRules": [rule.model_dump(by_alias=True) for rule in effective_rules],
+            "totalRules": len(effective_rules),
+            "includeInherited": include_inherited,
             "limit": limit
         })
         
+    except ValueError as ve:
+        logger.warning(f"Missing category ID: {str(ve)}")
+        return create_response(400, {"error": str(ve)})
     except Exception as e:
-        logger.error(f"Error testing category rule: {str(e)}", exc_info=True)
+        logger.error(f"Error previewing category matches: {str(e)}", exc_info=True)
         return create_response(500, {"error": "Internal server error", "message": str(e)})
 
 def generate_category_suggestions_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
@@ -258,7 +366,7 @@ def generate_category_suggestions_handler(event: Dict[str, Any], user_id: str) -
             return create_response(404, {"error": "Transaction not found"})
         
         # Get optional parameters
-        query_params = event.get('queryStringParameters', {})
+        query_params = event.get('queryStringParameters', {}) or {}
         strategy = query_params.get('strategy', 'all_matches')
         
         try:
@@ -266,14 +374,17 @@ def generate_category_suggestions_handler(event: Dict[str, Any], user_id: str) -
         except ValueError:
             suggestion_strategy = CategorySuggestionStrategy.ALL_MATCHES
         
-        # Initialize rule engine
-        rule_engine = CategoryRuleEngine(suggestion_strategy)
+        # Get all user categories
+        user_categories = list_categories_by_user_from_db(user_id)
         
-        # Generate suggestions
+        # Initialize rule engine
+        rule_engine = CategoryRuleEngine()
+        
+        # Generate suggestions using Phase 2.1 enhanced method
         suggestions = rule_engine.categorize_transaction(
             transaction=transaction,
-            user_id=user_id,
-            create_suggestions=False  # Just return suggestions, don't modify transaction
+            user_categories=user_categories,
+            suggestion_strategy=suggestion_strategy
         )
         
         # Serialize suggestions
@@ -300,7 +411,7 @@ def apply_category_rules_bulk_handler(event: Dict[str, Any], user_id: str) -> Di
     """
     Apply category rules to transactions in bulk
     POST /categories/apply-rules-bulk
-    Body: { "categoryId": "uuid", "transactionIds": ["uuid1", "uuid2"], "strategy": "all_matches" }
+    Body: { "transactionIds": ["uuid1", "uuid2"], "strategy": "all_matches" }
     """
     try:
         body_str = event.get('body')
@@ -312,7 +423,6 @@ def apply_category_rules_bulk_handler(event: Dict[str, Any], user_id: str) -> Di
         except json.JSONDecodeError:
             return create_response(400, {"error": "Invalid JSON format in request body"})
         
-        category_id = body_data.get('categoryId')
         transaction_ids = body_data.get('transactionIds')
         strategy = body_data.get('strategy', 'all_matches')
         
@@ -322,13 +432,13 @@ def apply_category_rules_bulk_handler(event: Dict[str, Any], user_id: str) -> Di
             suggestion_strategy = CategorySuggestionStrategy.ALL_MATCHES
         
         # Initialize rule engine
-        rule_engine = CategoryRuleEngine(suggestion_strategy)
+        rule_engine = CategoryRuleEngine()
         
-        # Apply rules in bulk
+        # Apply rules in bulk using Phase 2.1 enhanced method
         results = rule_engine.apply_category_rules_bulk(
             user_id=user_id,
-            category_id=category_id,
-            transaction_ids=transaction_ids
+            transaction_ids=transaction_ids,
+            suggestion_strategy=suggestion_strategy
         )
         
         return create_response(200, {
@@ -344,7 +454,7 @@ def validate_regex_pattern_handler(event: Dict[str, Any], user_id: str) -> Dict[
     """
     Validate a regex pattern
     POST /categories/validate-regex
-    Body: { "pattern": "AM[AZ]ON.*" }
+    Body: { "pattern": "AMAZON.*" }
     """
     try:
         body_str = event.get('body')
@@ -363,24 +473,28 @@ def validate_regex_pattern_handler(event: Dict[str, Any], user_id: str) -> Dict[
         # Initialize rule engine
         rule_engine = CategoryRuleEngine()
         
-        # Validate pattern
-        is_valid, error_message = rule_engine.validate_regex_pattern(pattern)
+        # Validate pattern using Phase 2.1 enhanced method
+        validation_result = rule_engine.validate_regex_pattern(pattern)
         
         return create_response(200, {
             "pattern": pattern,
-            "isValid": is_valid,
-            "errorMessage": error_message
+            "valid": validation_result['valid'],
+            "message": validation_result['message'],
+            "suggestions": validation_result['suggestions']
         })
         
     except Exception as e:
         logger.error(f"Error validating regex pattern: {str(e)}", exc_info=True)
         return create_response(500, {"error": "Internal server error", "message": str(e)})
 
-def generate_simple_pattern_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+def generate_pattern_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """
-    Generate a simple pattern from sample descriptions
+    Generate a pattern from sample descriptions
     POST /categories/generate-pattern
-    Body: { "descriptions": ["AMAZON.COM PURCHASE", "AMAZON PRIME", "AMAZON MARKETPLACE"] }
+    Body: { 
+        "descriptions": ["AMAZON.COM PURCHASE", "AMAZON PRIME", "AMAZON MARKETPLACE"],
+        "patternType": "contains"  // or "regex"
+    }
     """
     try:
         body_str = event.get('body')
@@ -390,6 +504,7 @@ def generate_simple_pattern_handler(event: Dict[str, Any], user_id: str) -> Dict
         try:
             body_data = json.loads(body_str)
             descriptions = body_data.get('descriptions', [])
+            pattern_type = body_data.get('patternType', 'contains')
         except json.JSONDecodeError:
             return create_response(400, {"error": "Invalid JSON format in request body"})
         
@@ -399,17 +514,21 @@ def generate_simple_pattern_handler(event: Dict[str, Any], user_id: str) -> Dict
         # Initialize rule engine
         rule_engine = CategoryRuleEngine()
         
-        # Generate pattern
-        generated_pattern = rule_engine.generate_simple_pattern(descriptions)
+        # Generate pattern using Phase 2.1 enhanced method
+        pattern_result = rule_engine.generate_pattern_from_descriptions(
+            descriptions=descriptions,
+            pattern_type=pattern_type
+        )
         
         return create_response(200, {
             "descriptions": descriptions,
-            "generatedPattern": generated_pattern,
-            "confidence": 0.8 if generated_pattern else 0.0  # Simple confidence scoring
+            "patternType": pattern_type,
+            "generatedPattern": pattern_result.get('pattern', ''),
+            "confidence": pattern_result.get('confidence', 0.0)
         })
         
     except Exception as e:
-        logger.error(f"Error generating simple pattern: {str(e)}", exc_info=True)
+        logger.error(f"Error generating pattern: {str(e)}", exc_info=True)
         return create_response(500, {"error": "Internal server error", "message": str(e)})
 
 # --- Main Lambda Handler (Router) ---
@@ -430,6 +549,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
         logger.info(f"Processing {route} request for user {user_id}")
 
+        # Basic CRUD operations
         if route == "POST /categories":
             return create_category_handler(event, user_id)
         elif route == "GET /categories":
@@ -440,16 +560,22 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return update_category_handler(event, user_id)
         elif route == "DELETE /categories/{categoryId}":
             return delete_category_handler(event, user_id)
+        
+        # Phase 2.1 Rule Testing & Preview APIs
         elif route == "POST /categories/test-rule":
             return test_category_rule_handler(event, user_id)
+        elif route == "GET /categories/{categoryId}/preview-matches":
+            return preview_category_matches_handler(event, user_id)
+        elif route == "POST /categories/validate-regex":
+            return validate_regex_pattern_handler(event, user_id)
+        elif route == "POST /categories/generate-pattern":
+            return generate_pattern_handler(event, user_id)
+        
+        # Category suggestion and bulk operations
         elif route == "POST /transactions/{transactionId}/category-suggestions":
             return generate_category_suggestions_handler(event, user_id)
         elif route == "POST /categories/apply-rules-bulk":
             return apply_category_rules_bulk_handler(event, user_id)
-        elif route == "POST /categories/validate-regex":
-            return validate_regex_pattern_handler(event, user_id)
-        elif route == "POST /categories/generate-pattern":
-            return generate_simple_pattern_handler(event, user_id)
         else:
             return create_response(404, {"error": "Not Found: Invalid path or method"})
 
