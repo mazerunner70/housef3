@@ -1357,15 +1357,15 @@ CREATE INDEX IF NOT EXISTS categories_parent_idx ON categories(parentCategoryId)
 #### 1.3 Category Assignment API (Week 3)
 | Task | Deliverable | Status | Assigned | Due Date |
 |------|-------------|--------|----------|----------|
-| Create suggestion endpoints | API endpoints in transaction operations | 🔴 Not Started | - | Week 3.2 |
-| Implement confirmation workflow | Assignment confirmation API | 🔴 Not Started | - | Week 3.4 |
+| Create suggestion endpoints | API endpoints in transaction operations | ✅ Complete | 172456b | Week 3.2 |
+| Implement confirmation workflow | Assignment confirmation API | ✅ Complete | 8e189d8 | Week 3.4 |
 | Add bulk operations | Batch suggestion processing | 🔴 Not Started | - | Week 3.5 |
 
 **Acceptance Criteria:**
-- [ ] POST `/transactions/{id}/category-suggestions` endpoint
-- [ ] PUT `/transactions/{id}/category-assignments/{assignmentId}/confirm` endpoint
+- [x] POST `/transactions/{id}/category-suggestions` endpoint
+- [x] PUT `/transactions/{id}/category-assignments/{assignmentId}/confirm` endpoint (+ enhanced workflow)
 - [ ] Bulk suggestion generation for transaction sets
-- [ ] Proper error handling and validation
+- [x] Proper error handling and validation
 
 **Dependencies:** Completion of 1.2  
 **Risk Level:** Medium - API design complexity
