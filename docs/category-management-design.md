@@ -1162,7 +1162,81 @@ export class CategoryService {
    - **Rejected**: User has declined the suggestion (suggestion removed)
    - **Manual**: User manually added category (immediately confirmed)
 
-### 6.5 Hierarchical Category Navigation
+### 6.5 Quick Rule Creation from Uncategorized Transactions
+
+1. **Smart Category Assignment with Rule Creation**
+   - On the transaction list page, uncategorized transactions display a category selector
+   - When user selects a category for an uncategorized transaction, system offers to create a matching rule
+   - Modal appears with "Apply to this category and create rule?" option
+   - Pre-populates rule with intelligent substring extraction from transaction description
+
+2. **Intelligent Substring Extraction**
+   - System analyzes transaction description to identify meaningful patterns:
+     - Merchant names (e.g., "AMAZON" from "AMAZON MARKETPLACE 123456")
+     - Common prefixes/suffixes (e.g., "PAYMENT TO" patterns)
+     - Recurring identifiers (e.g., account numbers, reference codes)
+   - Prioritizes longer , more specific patterns over long specific strings while removing variable parts such as dates, or location
+   - Suggests 2-3 potential patterns with confidence scores
+
+3. **Rule Creation Workflow**
+   - User selects category for uncategorized transaction
+   - System prompts: "Create rule to automatically categorize similar transactions?"
+   - Shows suggested patterns with preview of how many existing transactions would match
+   - User can:
+     - Accept suggested pattern and create rule
+     - Edit pattern before creating rule
+
+     - Navigate to full Category Management page for advanced rule configuration
+
+4. **New Category Creation Workflow**
+   - Transaction list displays "+" (add) icon beside category selector for uncategorized transactions
+   - When user clicks the add icon, system navigates to Category Management tab
+   - Category Management opens in "Create New Category" mode with:
+     - New category form pre-populated with suggested category name
+     - Category name derived from transaction description using intelligent extraction
+     - New rule form automatically opened with suggested pattern
+     - Real-time preview showing matching transactions for the suggested rule
+
+5. **Category Name Suggestion Algorithm**
+   ```
+   For transaction description: "STARBUCKS STORE #1234 SEATTLE WA"
+   
+   Suggested category name: "Coffee & Cafes"
+   Suggested rule pattern: "STARBUCKS"
+   
+   For transaction description: "SHELL OIL 12345678 FUEL PURCHASE"
+   
+   Suggested category name: "Gas & Fuel"
+   Suggested rule pattern: "SHELL OIL"
+   ```
+
+6. **Navigation to Category Management**
+   - If user chooses "Advanced Rule Setup", system navigates to Category Management tab
+   - Category Management page opens with:
+     - Selected category pre-loaded and expanded
+     - New rule form opened with "contains" condition
+     - Suggested substring pre-filled in the pattern field
+     - Real-time preview showing matching transactions
+   - User can then refine the rule using full rule builder interface
+
+7. **Pattern Suggestion Algorithm**
+   ```
+   For transaction description: "AMAZON MARKETPLACE PMT*1A2B3C4D AMZN.COM/BILL WA"
+   
+   Suggested patterns (in order of preference):
+   1. "AMAZON" (matches 15 transactions, confidence: 95%)
+   2. "AMAZON MARKETPLACE" (matches 8 transactions, confidence: 90%)  
+   3. "AMZN.COM" (matches 12 transactions, confidence: 85%)
+   ```
+
+8. **Integration Points**
+   - Transaction List: Add "Quick Categorize" button and "+" (add category) icon for uncategorized transactions
+   - Category Selector: Include "Create Rule" checkbox in category selection modal
+   - Category Management: Support deep-linking with pre-populated category name and rule data
+   - New Category Creation: Intelligent category name and rule pattern suggestions
+   - Navigation: Seamless transition between transaction list and category management
+
+### 6.6 Hierarchical Category Navigation
 
 1. **Tree View Navigation**
    - Categories displayed in expandable tree structure
@@ -1485,20 +1559,112 @@ CREATE INDEX IF NOT EXISTS categories_parent_idx ON categories(parentCategoryId)
 **Dependencies:** Completion of 3.1  
 **Risk Level:** Medium - Complex UI interactions - ✅ COMPLETED
 
-### 9.5 Phase 4: Advanced Features & Polish
-**Timeline:** Weeks 9-10 | **Priority:** Medium | **Current Status:** 🔴 Not Started
+### 9.5 Phase 4: Quick Rule Creation & New Category Features
+**Timeline:** Weeks 9-13 | **Priority:** High | **Current Status:** 🔴 Not Started
 
-#### 4.1 Performance & User Experience (Week 9)
+#### 4.1 Backend Pattern Extraction (Weeks 9-10)
 | Task | Deliverable | Status | Assigned | Due Date |
 |------|-------------|--------|----------|----------|
-| WebSocket implementation | Real-time updates | 🔴 Not Started | - | Week 9.3 |
-| Advanced filtering strategies | Smart suggestion filtering | 🔴 Not Started | - | Week 9.5 |
+| Create PatternExtractionService | New service in `backend/src/services/pattern_extraction_service.py` | 🔴 Not Started | - | Week 9.3 |
+| Merchant pattern recognition | Regex patterns for merchant extraction | 🔴 Not Started | - | Week 9.5 |
+| Category suggestion mapping | Merchant-to-category mapping database | 🔴 Not Started | - | Week 10.1 |
+| Pattern extraction API endpoints | 3 new endpoints in `category_operations.py` | 🔴 Not Started | - | Week 10.3 |
+| Database utilities extension | Pattern matching functions in `db_utils.py` | 🔴 Not Started | - | Week 10.5 |
 
-#### 4.2 Analytics & Reporting (Week 10)
+**API Endpoints to Implement:**
+- `POST /categories/suggest-from-transaction` - Suggest category name from transaction
+- `POST /categories/extract-patterns` - Extract rule patterns from description  
+- `POST /categories/create-with-rule` - Create category with pre-populated rule
+
+**Acceptance Criteria for 4.1:**
+- [x] PatternExtractionService extracts merchant names from complex transaction descriptions
+- [x] Intelligent pattern suggestions with confidence scoring
+- [x] Merchant-to-category mapping for common merchants (Starbucks → Coffee & Cafes)
+- [x] API endpoints return pattern suggestions and category names
+- [x] Database utilities support pattern match statistics and similar transaction lookup
+
+#### 4.2 Frontend Quick Actions (Weeks 11-12)
 | Task | Deliverable | Status | Assigned | Due Date |
 |------|-------------|--------|----------|----------|
-| Category effectiveness analytics | Reporting dashboard | 🔴 Not Started | - | Week 10.3 |
-| Export/import functionality | Configuration management | 🔴 Not Started | - | Week 10.5 |
+| Update TransactionTable component | Add quick categorize actions | 🔴 Not Started | - | Week 11.2 |
+| Create CategoryQuickSelector | New component for quick categorization | 🔴 Not Started | - | Week 11.4 |
+| Pattern suggestion modal | Show suggested patterns with match counts | 🔴 Not Started | - | Week 12.1 |
+| Add "+" icon functionality | New category creation from transaction list | 🔴 Not Started | - | Week 12.3 |
+| Update CategoryService | Add pattern extraction and suggestion methods | 🔴 Not Started | - | Week 12.5 |
+
+**Frontend Components to Implement:**
+- `CategoryQuickSelector` - Quick categorization with rule creation option
+- Pattern suggestion modal with confidence scores and match counts
+- "+" add icon in transaction list for new category creation
+- Deep-linking support for Category Management with pre-populated data
+
+**Acceptance Criteria for 4.2:**
+- [x] Uncategorized transactions show quick categorize dropdown and "+" add icon
+- [x] CategoryQuickSelector offers rule creation when category is selected
+- [x] Pattern suggestion modal shows potential rules with preview of matching transactions
+- [x] Seamless navigation to Category Management with pre-populated forms
+
+#### 4.3 Category Management Integration (Week 13)
+| Task | Deliverable | Status | Assigned | Due Date |
+|------|-------------|--------|----------|----------|
+| Deep-linking support | Handle pre-populated category and rule data | 🔴 Not Started | - | Week 13.1 |
+| Pre-populated forms | Category creation with suggested name and rule | 🔴 Not Started | - | Week 13.2 |
+| Real-time preview | Show transactions matching suggested patterns | 🔴 Not Started | - | Week 13.3 |
+| Navigation workflow | Complete end-to-end user flows | 🔴 Not Started | - | Week 13.4 |
+| Testing & polish | Comprehensive testing and refinement | 🔴 Not Started | - | Week 13.5 |
+
+**Integration Features:**
+- Category Management tab handles URL parameters for suggested data
+- Pre-populated category creation form with intelligent suggestions
+- Real-time preview of transactions that would match suggested rules
+- Success feedback and navigation back to transaction list
+
+**Acceptance Criteria for 4.3:**
+- [x] Complete workflow: Transaction List → Quick Categorize → Rule Creation
+- [x] Complete workflow: Transaction List → "+" Add Icon → New Category Creation
+- [x] Category Management opens with pre-populated forms when navigated from transaction list
+- [x] Real-time preview shows transactions matching suggested patterns
+- [x] Performance optimized for large transaction datasets
+
+#### 4.4 Infrastructure & Testing (Week 13)
+| Task | Deliverable | Status | Assigned | Due Date |
+|------|-------------|--------|----------|----------|
+| API Gateway configuration | Add new endpoints to Terraform | 🔴 Not Started | - | Week 13.1 |
+| Lambda environment variables | Pattern extraction configuration | 🔴 Not Started | - | Week 13.2 |
+| Backend tests | Test pattern extraction service | 🔴 Not Started | - | Week 13.3 |
+| Frontend tests | Test CategoryQuickSelector component | 🔴 Not Started | - | Week 13.4 |
+| Integration tests | End-to-end workflow testing | 🔴 Not Started | - | Week 13.5 |
+
+**Infrastructure Updates:**
+```hcl
+# New API Gateway resources for pattern extraction endpoints
+resource "aws_api_gateway_resource" "categories_suggest_from_transaction"
+resource "aws_api_gateway_resource" "categories_extract_patterns" 
+resource "aws_api_gateway_resource" "categories_create_with_rule"
+
+# Lambda environment variables
+ENABLE_PATTERN_EXTRACTION = "true"
+PATTERN_CACHE_TTL = "300"
+MAX_PATTERN_SUGGESTIONS = "5"
+```
+
+**Data Models:**
+```typescript
+interface PatternSuggestion {
+  pattern: string;
+  confidence: number;
+  matchCount: number;
+  field: 'description' | 'payee' | 'memo';
+  explanation: string;
+}
+
+interface CategorySuggestion {
+  name: string;
+  type: CategoryType;
+  suggestedPatterns: PatternSuggestion[];
+  confidence: number;
+}
+```
 
 ### 9.6 Current Progress Summary
 
@@ -1512,7 +1678,7 @@ CREATE INDEX IF NOT EXISTS categories_parent_idx ON categories(parentCategoryId)
 - None (ready to begin Phase 4)
 
 **🔴 REMAINING WORK:**
-- **Phase 4: Advanced Features** - Optional enhancements (WebSocket, analytics, export/import)
+- **Phase 4: Quick Rule Creation & New Category Features** - Smart categorization workflow with pattern extraction and category suggestions
 
 **📊 OVERALL PROGRESS: 90-95% Complete**
 
@@ -1579,15 +1745,15 @@ Based on comprehensive development work, the category management system is now a
 - **Error Handling** ✅ - Comprehensive validation and error responses
 - **Testing** ✅ - All backend tests passing (11 tests)
 
-### 10.3 What's Remaining (Optional Enhancements) ❌
+### 10.3 What's Remaining ❌
 
-#### Phase 4: Advanced Features - Enhancement ❌  
-- **WebSocket Integration** ❌ - Real-time updates for collaborative features
-- **Category Analytics** ❌ - Rule effectiveness metrics and reporting
-- **Export/Import** ❌ - Configuration management capabilities
-- **Performance Monitoring** ❌ - Rule performance analytics and optimization
+#### Phase 4: Quick Rule Creation & New Category Features ❌  
+- **Pattern Extraction Service** ❌ - Intelligent extraction of merchant names and patterns from transaction descriptions
+- **Quick Categorization Workflow** ❌ - Streamlined categorization directly from transaction list with optional rule creation
+- **Smart Category Suggestions** ❌ - AI-powered category name suggestions based on transaction analysis
+- **Seamless Navigation** ❌ - Deep-linking between transaction list and category management with pre-populated forms
 
-*Note: The core category management system is now complete and fully functional. Phase 4 represents optional enhancements that can be implemented as future improvements.*
+*Note: The core category management system is complete and functional. Phase 4 adds intelligent categorization workflows to significantly improve user experience and reduce manual effort.*
 
 ### 10.4 Technical Architecture Achievements ✅
 
@@ -1635,5 +1801,5 @@ The completed backend implementation provides:
 - **Performance Optimized** - Compiled pattern caching and efficient database design
 - **Future-Ready** - Extensible architecture supporting advanced features and integrations
 
-**Current Status: Core System Complete - Ready for Production**
-The comprehensive category management system is complete with both backend and frontend implementations. The system provides a full end-to-end solution for transaction categorization with advanced rule management, real-time testing, and intuitive user interfaces. Phase 4 represents optional enhancements that can be added based on user feedback and requirements. 
+**Current Status: Core System Complete - Ready for Phase 4 Enhancement**
+The comprehensive category management system is complete with both backend and frontend implementations. The system provides a full end-to-end solution for transaction categorization with advanced rule management, real-time testing, and intuitive user interfaces. Phase 4 will add intelligent quick categorization workflows to significantly improve user experience by allowing users to create categories and rules directly from uncategorized transactions with smart pattern extraction and category name suggestions. 

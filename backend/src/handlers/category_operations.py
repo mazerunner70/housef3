@@ -20,8 +20,7 @@ from utils.auth import get_user_from_event
 logger = logging.getLogger(__name__) # Use __name__ for module-specific logger
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
 
-
-categories_table = None # Will be initialized in the main handler
+# Database tables are initialized by db_utils when functions are called
 
 # --- Local Utility Functions (kept as per account_operations.py pattern) ---
 class DecimalEncoder(json.JSONEncoder):
@@ -70,7 +69,7 @@ def create_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
         new_category_data = category_data.model_dump()
         new_category = Category(userId=user_id, **new_category_data)
         created_category = create_category_in_db(new_category)
-        return create_response(201, created_category.model_dump(mode='json'))
+        return create_response(201, created_category.model_dump(by_alias=True, mode='json'))
     except ConnectionError as ce:
         logger.critical(f"DB Connection Error creating category: {str(ce)}", exc_info=True)
         return create_response(500, {"error": "Server configuration error", "message": "Database not initialized"})
@@ -89,7 +88,7 @@ def list_categories_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
              categories = list_categories_by_user_from_db(user_id, parent_category_id=uuid.UUID(parent_category_id))
         else: 
              categories = list_categories_by_user_from_db(user_id, top_level_only=top_level_only)
-        return create_response(200, [cat.model_dump() for cat in categories])
+        return create_response(200, [cat.model_dump(by_alias=True, mode='json') for cat in categories])
     except ConnectionError as ce:
         logger.critical(f"DB Connection Error listing categories: {str(ce)}", exc_info=True)
         return create_response(500, {"error": "Server configuration error", "message": "Database not initialized"})
@@ -104,7 +103,7 @@ def get_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
         # Use new DB util function
         category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
         if category:
-            return create_response(200, category.model_dump(mode='json'))
+            return create_response(200, category.model_dump(by_alias=True, mode='json'))
         else:
             return create_response(404, {"error": "Category not found or access denied"})
     except ValueError as ve: 
@@ -141,7 +140,7 @@ def update_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
         # Use new DB util function
         updated_category = update_category_in_db(uuid.UUID(category_id), user_id, update_payload)
         if updated_category:
-            return create_response(200, updated_category.model_dump(mode='json'))
+            return create_response(200, updated_category.model_dump(by_alias=True, mode='json'))
         else:
             # This could be 404 if not found, or if update_data was empty leading to no change
             # db_util returns None if not found, or the same object if no changes from update_data
@@ -252,28 +251,31 @@ def test_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[str,
             return create_response(400, {"error": "Request body is missing or empty"})
         
         try:
-            rule_data = json.loads(body_str)
+            request_data = json.loads(body_str)
             
-            # Create enhanced CategoryRule with Phase 2.1 fields
-            rule = CategoryRule(
-                fieldToMatch=rule_data.get('fieldToMatch', 'description'),
-                condition=MatchCondition(rule_data.get('condition', 'contains')),
-                value=rule_data.get('value', ''),
-                caseSensitive=rule_data.get('caseSensitive', False),
-                priority=rule_data.get('priority', 0),
-                confidence=rule_data.get('confidence', 1.0),
-                enabled=rule_data.get('enabled', True),
-                allowMultipleMatches=rule_data.get('allowMultipleMatches', True),
-                autoSuggest=rule_data.get('autoSuggest', True),
-                amountMin=rule_data.get('amountMin'),
-                amountMax=rule_data.get('amountMax')
-            )
+            # Extract rule from the request (frontend sends { rule: {...}, limit: 50 })
+            if 'rule' not in request_data:
+                return create_response(400, {"error": "Missing 'rule' field in request body"})
+            
+            rule_data = request_data['rule']
+            
+            # Create enhanced CategoryRule with Phase 2.1 fields using Pydantic parsing
+            # This ensures proper alias mapping from camelCase to snake_case
+            rule = CategoryRule(**rule_data)
+            
+            # Get limit from request body or query params, defaulting to 100
+            limit = request_data.get('limit', 100)
+            if isinstance(limit, str):
+                limit = int(limit)
+                
         except (json.JSONDecodeError, ValidationError, ValueError) as e:
             logger.error(f"Error parsing rule data: {str(e)}")
             return create_response(400, {"error": "Invalid rule data", "details": str(e)})
         
-        # Get optional parameters
-        limit = int(event.get('queryStringParameters', {}).get('limit', 100))
+        # Also check query parameters for limit as fallback
+        query_limit = event.get('queryStringParameters', {}).get('limit') if event.get('queryStringParameters') else None
+        if query_limit:
+            limit = int(query_limit)
         
         # Initialize rule engine
         rule_engine = CategoryRuleEngine()
@@ -581,6 +583,175 @@ def generate_pattern_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
         logger.error(f"Error generating pattern: {str(e)}", exc_info=True)
         return create_response(500, {"error": "Internal server error", "message": str(e)})
 
+# --- Category Rule Management Handlers (Individual Rules) ---
+
+def add_rule_to_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """
+    Add a rule to a category
+    POST /categories/{categoryId}/rules
+    Body: { "fieldToMatch": "description", "condition": "contains", "value": "AMAZON", ... }
+    """
+    try:
+        category_id = mandatory_path_parameter(event, 'categoryId')
+        
+        body_str = event.get('body')
+        if not body_str:
+            return create_response(400, {"error": "Request body is missing or empty"})
+        
+        try:
+            rule_data = json.loads(body_str)
+            # Create new rule with generated ID
+            rule = CategoryRule(**rule_data)
+        except (json.JSONDecodeError, ValidationError, ValueError) as e:
+            logger.error(f"Error parsing rule data: {str(e)}")
+            return create_response(400, {"error": "Invalid rule data", "details": str(e)})
+        
+        # Get existing category
+        category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
+        if not category:
+            return create_response(404, {"error": "Category not found or access denied"})
+        
+        # Diagnostic logging
+        logger.info(f"DIAG: Retrieved category {category_id} with {len(category.rules)} existing rules")
+        for i, existing_rule in enumerate(category.rules):
+            logger.info(f"DIAG: Existing rule {i}: type={type(existing_rule)}, is_dict={isinstance(existing_rule, dict)}, is_CategoryRule={isinstance(existing_rule, CategoryRule)}")
+            if isinstance(existing_rule, dict):
+                logger.info(f"DIAG: Dict rule {i} keys: {list(existing_rule.keys())}")
+        
+        # Ensure all existing rules are CategoryRule objects and add the new rule
+        rules_list = []
+        for i, existing_rule in enumerate(category.rules):
+            if isinstance(existing_rule, CategoryRule):
+                logger.info(f"DIAG: Rule {i} is already CategoryRule, appending directly")
+                rules_list.append(existing_rule)
+            elif isinstance(existing_rule, dict):
+                logger.info(f"DIAG: Rule {i} is dict, converting to CategoryRule")
+                # Convert string amount fields back to Decimal objects if needed
+                if 'amountMin' in existing_rule and existing_rule['amountMin'] is not None:
+                    existing_rule['amountMin'] = Decimal(str(existing_rule['amountMin']))
+                if 'amountMax' in existing_rule and existing_rule['amountMax'] is not None:
+                    existing_rule['amountMax'] = Decimal(str(existing_rule['amountMax']))
+                
+                # Convert dict to CategoryRule object
+                converted_rule = CategoryRule(**existing_rule)
+                rules_list.append(converted_rule)
+                logger.info(f"DIAG: Successfully converted dict rule {i} to CategoryRule")
+            else:
+                logger.warning(f"DIAG: Rule {i} has unexpected type {type(existing_rule)}, skipping")
+        
+        # Add the new rule
+        logger.info(f"DIAG: Adding new rule: type={type(rule)}")
+        rules_list.append(rule)
+        logger.info(f"DIAG: Final rules list has {len(rules_list)} rules")
+        
+        # Update category in database
+        updated_category = update_category_in_db(uuid.UUID(category_id), user_id, {"rules": rules_list})
+        if not updated_category:
+            return create_response(500, {"error": "Failed to update category with new rule"})
+        
+        return create_response(201, updated_category.model_dump(by_alias=True, mode='json'))
+        
+    except ValueError as ve:
+        logger.warning(f"Invalid category ID: {str(ve)}")
+        return create_response(400, {"error": str(ve)})
+    except Exception as e:
+        logger.error(f"Error adding rule to category: {str(e)}", exc_info=True)
+        return create_response(500, {"error": "Internal server error", "message": str(e)})
+
+def update_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """
+    Update a specific rule in a category
+    PUT /categories/{categoryId}/rules/{ruleId}
+    Body: { "value": "NEW VALUE", "enabled": true, ... }
+    """
+    try:
+        category_id = mandatory_path_parameter(event, 'categoryId')
+        rule_id = mandatory_path_parameter(event, 'ruleId')
+        
+        body_str = event.get('body')
+        if not body_str:
+            return create_response(400, {"error": "Request body is missing or empty"})
+        
+        try:
+            update_data = json.loads(body_str)
+        except json.JSONDecodeError:
+            return create_response(400, {"error": "Invalid JSON format in request body"})
+        
+        # Get existing category
+        category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
+        if not category:
+            return create_response(404, {"error": "Category not found or access denied"})
+        
+        # Find rule to update
+        rule_index = None
+        for i, rule in enumerate(category.rules):
+            if rule.rule_id == rule_id:
+                rule_index = i
+                break
+        
+        if rule_index is None:
+            return create_response(404, {"error": "Rule not found in category"})
+        
+        # Update rule fields
+        existing_rule = category.rules[rule_index]
+        rule_dict = existing_rule.model_dump()
+        rule_dict.update(update_data)
+        
+        try:
+            updated_rule = CategoryRule(**rule_dict)
+            category.rules[rule_index] = updated_rule
+        except ValidationError as e:
+            return create_response(400, {"error": "Invalid rule update data", "details": e.errors()})
+        
+        # Update category in database
+        updated_category = update_category_in_db(uuid.UUID(category_id), user_id, {"rules": category.rules})
+        if not updated_category:
+            return create_response(500, {"error": "Failed to update category rule"})
+        
+        return create_response(200, updated_category.model_dump(by_alias=True, mode='json'))
+        
+    except ValueError as ve:
+        logger.warning(f"Invalid category or rule ID: {str(ve)}")
+        return create_response(400, {"error": str(ve)})
+    except Exception as e:
+        logger.error(f"Error updating category rule: {str(e)}", exc_info=True)
+        return create_response(500, {"error": "Internal server error", "message": str(e)})
+
+def delete_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """
+    Delete a specific rule from a category
+    DELETE /categories/{categoryId}/rules/{ruleId}
+    """
+    try:
+        category_id = mandatory_path_parameter(event, 'categoryId')
+        rule_id = mandatory_path_parameter(event, 'ruleId')
+        
+        # Get existing category
+        category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
+        if not category:
+            return create_response(404, {"error": "Category not found or access denied"})
+        
+        # Find and remove rule
+        original_count = len(category.rules)
+        category.rules = [rule for rule in category.rules if rule.rule_id != rule_id]
+        
+        if len(category.rules) == original_count:
+            return create_response(404, {"error": "Rule not found in category"})
+        
+        # Update category in database
+        updated_category = update_category_in_db(uuid.UUID(category_id), user_id, {"rules": category.rules})
+        if not updated_category:
+            return create_response(500, {"error": "Failed to delete category rule"})
+        
+        return create_response(200, updated_category.model_dump(by_alias=True, mode='json'))
+        
+    except ValueError as ve:
+        logger.warning(f"Invalid category or rule ID: {str(ve)}")
+        return create_response(400, {"error": str(ve)})
+    except Exception as e:
+        logger.error(f"Error deleting category rule: {str(e)}", exc_info=True)
+        return create_response(500, {"error": "Internal server error", "message": str(e)})
+
 # --- Main Lambda Handler (Router) ---
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -628,6 +799,15 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return generate_category_suggestions_handler(event, user_id)
         elif route == "POST /categories/apply-rules-bulk":
             return apply_category_rules_bulk_handler(event, user_id)
+        
+        # Category rule management
+        elif route == "POST /categories/{categoryId}/rules":
+            return add_rule_to_category_handler(event, user_id)
+        elif route == "PUT /categories/{categoryId}/rules/{ruleId}":
+            return update_category_rule_handler(event, user_id)
+        elif route == "DELETE /categories/{categoryId}/rules/{ruleId}":
+            return delete_category_rule_handler(event, user_id)
+        
         else:
             return create_response(404, {"error": "Not Found: Invalid path or method"})
 

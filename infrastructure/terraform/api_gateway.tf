@@ -494,6 +494,35 @@ resource "aws_apigatewayv2_route" "apply_category_rules_bulk" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# Category Rule Management routes
+
+# Add Rule to Category route
+resource "aws_apigatewayv2_route" "add_rule_to_category" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /categories/{categoryId}/rules"
+  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Update Category Rule route
+resource "aws_apigatewayv2_route" "update_category_rule" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "PUT /categories/{categoryId}/rules/{ruleId}"
+  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Delete Category Rule route
+resource "aws_apigatewayv2_route" "delete_category_rule" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "DELETE /categories/{categoryId}/rules/{ruleId}"
+  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 # Analytics Operations Integration
 resource "aws_apigatewayv2_integration" "analytics_operations" {
   api_id                 = aws_apigatewayv2_api.main.id
