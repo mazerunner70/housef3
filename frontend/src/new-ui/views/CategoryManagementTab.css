@@ -320,7 +320,9 @@
 /* Rules List */
 .rules-list {
   margin-top: 16px;
-  space-y: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .rule-item {
@@ -328,7 +330,6 @@
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   padding: 16px;
-  margin-bottom: 12px;
   transition: shadow 0.2s ease;
 }
 

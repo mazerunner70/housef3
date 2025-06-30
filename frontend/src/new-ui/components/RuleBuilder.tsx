@@ -279,11 +279,36 @@ const TestResultsDialog: React.FC<TestResultsDialogProps> = ({
 
   const transactions = results?.matchingTransactions || [];
 
+  const handleOverlayKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onClose();
+    }
+  };
+
+  const handleDialogKeyDown = (e: React.KeyboardEvent) => {
+    e.stopPropagation();
+  };
+
   return (
-    <div className="test-results-overlay" onClick={onClose}>
-      <div className="test-results-dialog" onClick={(e) => e.stopPropagation()}>
+    <div 
+      className="test-results-overlay" 
+      onClick={onClose}
+      onKeyDown={handleOverlayKeyDown}
+      role="button"
+      tabIndex={0}
+      aria-label="Close dialog"
+    >
+      <div 
+        className="test-results-dialog" 
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleDialogKeyDown}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dialog-title"
+      >
         <div className="dialog-header">
-          <h3>🧪 Test Results</h3>
+          <h3 id="dialog-title">🧪 Test Results</h3>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
         
@@ -302,16 +327,16 @@ const TestResultsDialog: React.FC<TestResultsDialogProps> = ({
             <div className="results-content">
               <div className="results-summary">
                 <strong>{transactions.length} matching transactions found</strong>
-                {results?.totalMatches !== undefined && (
+                {results?.totalMatches !== undefined ? (
                   <div style={{fontSize: '0.9rem', marginTop: '8px', color: '#666'}}>
                     API reported total matches: {results.totalMatches}
                   </div>
-                )}
-                {results?.averageConfidence !== undefined && (
+                ) : null}
+                {results?.averageConfidence !== undefined ? (
                   <div style={{fontSize: '0.9rem', marginTop: '4px', color: '#666'}}>
                     Average confidence: {Math.round(results.averageConfidence * 100)}%
                   </div>
-                )}
+                ) : null}
                 {/* Debug info showing what rule was actually tested */}
                 <div style={{
                   marginTop: '12px', 
@@ -322,11 +347,11 @@ const TestResultsDialog: React.FC<TestResultsDialogProps> = ({
                   color: '#333'
                 }}>
                   <strong>Rule tested:</strong> {rule.fieldToMatch} {rule.condition} "{rule.value || '(empty)'}"
-                  {rule.caseSensitive && ' (case sensitive)'}
-                  {rule.condition === 'amount_between' && rule.amountMin && rule.amountMax && 
-                    ` (between ${rule.amountMin} and ${rule.amountMax})`}
-                  {!rule.value && rule.condition !== 'amount_between' && 
-                    ' ⚠️ Note: Empty value matches all transactions!'}
+                  {rule.caseSensitive ? ' (case sensitive)' : ''}
+                  {rule.condition === 'amount_between' && rule.amountMin && rule.amountMax ? 
+                    ` (between ${rule.amountMin} and ${rule.amountMax})` : ''}
+                  {!rule.value && rule.condition !== 'amount_between' ? 
+                    ' ⚠️ Note: Empty value matches all transactions!' : ''}
                 </div>
               </div>
               
@@ -342,23 +367,23 @@ const TestResultsDialog: React.FC<TestResultsDialogProps> = ({
                           ${Math.abs(Number(transaction.amount) || 0).toFixed(2)}
                         </span>
                       </div>
-                      {transaction.date && (
+                      {transaction.date ? (
                         <div className="transaction-date">
                           {new Date(transaction.date).toLocaleDateString()}
                         </div>
-                      )}
-                      {transaction.payee && (
+                      ) : null}
+                      {transaction.payee ? (
                         <div className="transaction-payee">
                           Payee: {transaction.payee}
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   ))}
-                  {transactions.length > 50 && (
+                  {transactions.length > 50 ? (
                     <div className="more-results">
                       And {transactions.length - 50} more transactions...
                     </div>
-                  )}
+                  ) : null}
                 </div>
               ) : (
                 <div className="no-matches">
