@@ -523,6 +523,35 @@ resource "aws_apigatewayv2_route" "delete_category_rule" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# Phase 4.1 Pattern Extraction & Smart Category Creation routes
+
+# Suggest Category from Transaction route
+resource "aws_apigatewayv2_route" "suggest_category_from_transaction" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /categories/suggest-from-transaction"
+  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Extract Patterns route
+resource "aws_apigatewayv2_route" "extract_patterns" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /categories/extract-patterns"
+  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Create Category with Rule route
+resource "aws_apigatewayv2_route" "create_category_with_rule" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /categories/create-with-rule"
+  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 # Analytics Operations Integration
 resource "aws_apigatewayv2_integration" "analytics_operations" {
   api_id                 = aws_apigatewayv2_api.main.id
