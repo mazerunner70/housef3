@@ -382,7 +382,7 @@ class CategoryRuleEngine:
                 children=[],
                 depth=0,
                 full_path=category.name,
-                inherited_rules=list(category.rules)
+                inherited_rules=[]  # Start empty - only actual inherited rules from parents go here
             )
         
         # Second pass: build parent-child relationships and calculate paths
@@ -401,11 +401,12 @@ class CategoryRuleEngine:
                     
                     # Inherit rules from parent
                     if category.inherit_parent_rules:
-                        parent_rules = parent_hierarchy.inherited_rules
+                        # Combine parent's own rules with parent's inherited rules
+                        all_parent_rules = list(parent_hierarchy.category.rules) + list(parent_hierarchy.inherited_rules)
                         if category.rule_inheritance_mode == "additive":
-                            hierarchy_dict[cat_id].inherited_rules.extend(parent_rules)
+                            hierarchy_dict[cat_id].inherited_rules.extend(all_parent_rules)
                         elif category.rule_inheritance_mode == "override":
-                            hierarchy_dict[cat_id].inherited_rules = list(parent_rules)
+                            hierarchy_dict[cat_id].inherited_rules = all_parent_rules
         
         return hierarchy_dict
     

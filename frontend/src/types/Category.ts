@@ -39,9 +39,9 @@ export interface CategoryRule {
   condition: MatchCondition;
   value: string; // The pattern/value to match
   caseSensitive: boolean;
-  priority: number; // Higher priority rules checked first
+  priority: number; // Higher priority rules checked first (0-100)
   enabled: boolean;
-  confidence: number; // 0.0-1.0 confidence score
+  confidence: number; // 0-100 confidence score
   
   // For amount-based rules
   amountMin?: Decimal;
@@ -95,7 +95,7 @@ export interface CategoryUpdate {
 // Transaction Category Assignment Model (Phase 1)
 export interface TransactionCategoryAssignment {
   categoryId: string;
-  confidence: number; // 0.0 to 1.0 confidence score
+  confidence: number; // 0 to 100 confidence score
   status: CategoryAssignmentStatus; // "suggested" or "confirmed"
   isManual: boolean; // Manually assigned vs auto-assigned
   assignedAt: number;
@@ -119,9 +119,11 @@ export interface RuleTestRequest {
 }
 
 export interface RuleTestResponse {
-  transactions: any[]; // Will reference Transaction type from main types
-  matchCount: number;
-  confidence: number;
+  matchingTransactions: any[]; // Array of transaction objects  
+  totalMatches: number; // Total number of matches
+  rule: CategoryRule; // The rule that was tested
+  limit: number; // The limit that was applied
+  averageConfidence: number; // Average confidence score
 }
 
 export interface CategoryPreviewResponse {

@@ -23,18 +23,13 @@ const RuleBuilder: React.FC<RuleBuilderProps> = ({
 }) => {
   const [localRule, setLocalRule] = useState<CategoryRule>(rule);
   const [isSaving, setIsSaving] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showPatternBuilder, setShowPatternBuilder] = useState(false);
+  const [showTestResults, setShowTestResults] = useState(false);
 
   const {
     isTestingRule,
     testResults,
     error: testError,
-    isLivePreviewEnabled,
-    toggleLivePreview,
-    testRuleImmediate,
-    generateSmartSuggestions,
-    validatePattern
+    testRuleImmediate
   } = useRealTimeRuleTesting();
 
   // Update parent when local rule changes
@@ -59,28 +54,12 @@ const RuleBuilder: React.FC<RuleBuilderProps> = ({
 
   const handleTestRule = useCallback(() => {
     testRuleImmediate(localRule);
+    setShowTestResults(true);
   }, [localRule, testRuleImmediate]);
-
-  const handleGeneratePattern = useCallback(async (sampleDescriptions: string[]) => {
-    try {
-      const generatedPattern = await generateSmartSuggestions(sampleDescriptions);
-      if (generatedPattern) {
-        setLocalRule(prev => ({
-          ...prev,
-          value: generatedPattern.pattern,
-          condition: 'regex' as MatchCondition
-        }));
-      }
-    } catch (error) {
-      console.error('Error generating pattern:', error);
-    }
-  }, [generateSmartSuggestions]);
 
   const isAmountCondition = localRule.condition === 'amount_greater' || 
                            localRule.condition === 'amount_less' || 
                            localRule.condition === 'amount_between';
-
-  const isRegexCondition = localRule.condition === 'regex';
 
   const conditionOptions = [
     { value: 'contains', label: 'Contains', description: 'Text contains the specified value' },
@@ -100,6 +79,16 @@ const RuleBuilder: React.FC<RuleBuilderProps> = ({
     { value: 'amount', label: 'Amount', description: 'Transaction amount (for amount-based conditions)' }
   ];
 
+  const isValidRuleForTesting = (rule: CategoryRule): boolean => {
+    if (rule.condition === 'amount_between') {
+      return rule.amountMin !== undefined && rule.amountMax !== undefined;
+    } else if (isAmountCondition) {
+      return Boolean(rule.value && rule.value.trim() !== '');
+    } else {
+      return Boolean(rule.value && rule.value.trim() !== '');
+    }
+  };
+
   return (
     <div className="rule-builder">
       <div className="rule-builder-header">
@@ -107,21 +96,11 @@ const RuleBuilder: React.FC<RuleBuilderProps> = ({
           <h3>{isNew ? '🆕 Create New Rule' : '✏️ Edit Rule'}</h3>
           <p>Define matching criteria for <strong>{categoryName}</strong></p>
         </div>
-        
-        <div className="header-actions">
-          <button
-            className={`live-preview-toggle ${isLivePreviewEnabled ? 'active' : ''}`}
-            onClick={() => toggleLivePreview(!isLivePreviewEnabled)}
-            title="Toggle live preview"
-          >
-            {isLivePreviewEnabled ? '👁️ Live' : '👁️‍🗨️ Manual'}
-          </button>
-        </div>
       </div>
 
       <div className="rule-builder-content">
         <div className="rule-form">
-          {/* Basic Rule Configuration */}
+          {/* Rule Configuration */}
           <div className="form-section">
             <h4>📋 Rule Configuration</h4>
             
@@ -192,156 +171,39 @@ const RuleBuilder: React.FC<RuleBuilderProps> = ({
                   />
                 </div>
               ) : (
-                <div className="value-input-group">
-                  <input
-                    id="rule-value"
-                    type={isAmountCondition ? 'number' : 'text'}
-                    step={isAmountCondition ? '0.01' : undefined}
-                    value={localRule.value}
-                    onChange={(e) => handleFieldChange('value', e.target.value)}
-                    className="form-input"
-                    placeholder={
-                      isAmountCondition ? 'Enter amount...' :
-                      isRegexCondition ? 'Enter regex pattern...' :
-                      'Enter text to match...'
-                    }
-                  />
-                  
-                  {!isAmountCondition && (
-                    <button
-                      type="button"
-                      className="pattern-builder-btn"
-                      onClick={() => setShowPatternBuilder(true)}
-                      title="Smart pattern builder"
-                    >
-                      🧠 Smart
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {isRegexCondition && (
-                <RegexValidator
-                  pattern={localRule.value}
-                  onValidate={async (pattern) => {
-                    const result = await validatePattern(pattern, localRule.condition);
-                    return result || { isValid: false, error: 'Validation failed' };
-                  }}
+                <input
+                  id="rule-value"
+                  type={isAmountCondition ? 'number' : 'text'}
+                  step={isAmountCondition ? '0.01' : undefined}
+                  value={localRule.value}
+                  onChange={(e) => handleFieldChange('value', e.target.value)}
+                  className="form-input"
+                  placeholder={
+                    isAmountCondition ? 'Enter amount...' :
+                    localRule.condition === 'regex' ? 'Enter regex pattern...' :
+                    'Enter text to match...'
+                  }
                 />
               )}
             </div>
-          </div>
 
-          {/* Advanced Settings */}
-          <div className="form-section">
-            <div className="section-header">
-              <h4>⚙️ Advanced Settings</h4>
-              <button
-                type="button"
-                className="toggle-advanced"
-                onClick={() => setShowAdvanced(!showAdvanced)}
-              >
-                {showAdvanced ? '▼ Hide' : '▶ Show'}
-              </button>
-            </div>
-
-            {showAdvanced && (
-              <div className="advanced-settings">
-                <div className="form-row">
-                  <div className="form-group">
-                    <label htmlFor="rule-priority">Priority</label>
-                    <input
-                      id="rule-priority"
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={localRule.priority}
-                      onChange={(e) => handleFieldChange('priority', parseInt(e.target.value) || 0)}
-                      className="form-input"
-                    />
-                    <small className="form-help">Higher priority rules are evaluated first</small>
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="rule-confidence">Confidence</label>
-                    <input
-                      id="rule-confidence"
-                      type="number"
-                      min="0"
-                      max="1"
-                      step="0.1"
-                      value={localRule.confidence}
-                      onChange={(e) => handleFieldChange('confidence', parseFloat(e.target.value) || 1.0)}
-                      className="form-input"
-                    />
-                    <small className="form-help">How confident we are in this rule (0.0 - 1.0)</small>
-                  </div>
-                </div>
-
-                <div className="form-row">
-                  <div className="form-group checkbox-group">
-                    <label className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={localRule.caseSensitive}
-                        onChange={(e) => handleFieldChange('caseSensitive', e.target.checked)}
-                      />
-                      <span className="checkbox-text">Case Sensitive</span>
-                    </label>
-                    <small className="form-help">Make text matching case-sensitive</small>
-                  </div>
-
-                  <div className="form-group checkbox-group">
-                    <label className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={localRule.enabled}
-                        onChange={(e) => handleFieldChange('enabled', e.target.checked)}
-                      />
-                      <span className="checkbox-text">Enabled</span>
-                    </label>
-                    <small className="form-help">Enable or disable this rule</small>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Test Section */}
-          <div className="form-section">
-            <div className="section-header">
-              <h4>🧪 Test Rule</h4>
+            {/* Test Button */}
+            <div className="test-section">
               <button
                 type="button"
                 className="test-rule-btn"
                 onClick={handleTestRule}
-                disabled={isTestingRule || !localRule.value}
+                disabled={isTestingRule || !isValidRuleForTesting(localRule)}
               >
-                {isTestingRule ? '🔄 Testing...' : '🎯 Test Rule'}
+                {isTestingRule ? '🔄 Testing...' : '🧪 Test'}
               </button>
+              <small className="form-help">
+                {!isValidRuleForTesting(localRule) 
+                  ? 'Enter a value or amount to test the rule'
+                  : 'Test this rule against existing transactions'
+                }
+              </small>
             </div>
-
-            {testError && (
-              <div className="test-error">
-                <span className="error-icon">❌</span>
-                <span>{testError}</span>
-              </div>
-            )}
-
-            {testResults && testResults.transactions && testResults.transactions.length > 0 && (
-              <TestResults
-                results={testResults.transactions}
-                rule={localRule}
-                highlightMatches={true}
-              />
-            )}
-
-            {isLivePreviewEnabled && (
-              <div className="live-preview-indicator">
-                <span className="live-indicator">🔴 Live Preview Active</span>
-                <small>Results update automatically as you type</small>
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -361,239 +223,182 @@ const RuleBuilder: React.FC<RuleBuilderProps> = ({
           type="button"
           className="save-btn"
           onClick={handleSave}
-          disabled={isSaving || !localRule.value}
+          disabled={isSaving || !isValidRuleForTesting(localRule)}
         >
           {isSaving ? '💾 Saving...' : isNew ? '✅ Create Rule' : '💾 Save Changes'}
         </button>
       </div>
 
-      {/* Smart Pattern Builder Modal */}
-      {showPatternBuilder && (
-        <SmartPatternBuilder
-          onPatternGenerated={handleGeneratePattern}
-          onClose={() => setShowPatternBuilder(false)}
-          currentField={localRule.fieldToMatch}
+      {/* Test Results Dialog */}
+      {showTestResults && (
+        <TestResultsDialog
+          isOpen={showTestResults}
+          results={testResults}
+          rule={localRule}
+          error={testError}
+          isLoading={isTestingRule}
+          onClose={() => setShowTestResults(false)}
         />
       )}
     </div>
   );
 };
 
-// Supporting Components
-
-interface RegexValidatorProps {
-  pattern: string;
-  onValidate: (pattern: string) => Promise<{ isValid: boolean; error?: string; suggestion?: string }>;
+// Test Results Dialog Component
+interface TestResultsDialogProps {
+  isOpen: boolean;
+  results: any;
+  rule: CategoryRule;
+  error: string | null;
+  isLoading: boolean;
+  onClose: () => void;
 }
 
-const RegexValidator: React.FC<RegexValidatorProps> = ({ pattern, onValidate }) => {
-  const [validation, setValidation] = useState<{ isValid: boolean; error?: string; suggestion?: string } | null>(null);
-  const [isValidating, setIsValidating] = useState(false);
-
+const TestResultsDialog: React.FC<TestResultsDialogProps> = ({
+  isOpen,
+  results,
+  rule,
+  error,
+  isLoading,
+  onClose
+}) => {
   useEffect(() => {
-    if (pattern) {
-      setIsValidating(true);
-      const timer = setTimeout(async () => {
-        try {
-          const result = await onValidate(pattern);
-          setValidation(result);
-        } catch (error) {
-          setValidation({ isValid: false, error: 'Validation failed' });
-        } finally {
-          setIsValidating(false);
-        }
-      }, 300);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
 
-      return () => clearTimeout(timer);
-    } else {
-      setValidation(null);
+    if (isOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+      return () => document.removeEventListener('keydown', handleKeyDown);
     }
-  }, [pattern, onValidate]);
+  }, [isOpen, onClose]);
 
-  if (!pattern) return null;
+  if (!isOpen) return null;
+
+  const transactions = results?.matchingTransactions || [];
+
+  const handleOverlayKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onClose();
+    }
+  };
+
+  const handleDialogKeyDown = (e: React.KeyboardEvent) => {
+    e.stopPropagation();
+  };
 
   return (
-    <div className="regex-validator">
-      {isValidating ? (
-        <div className="validation-loading">🔄 Validating...</div>
-      ) : validation ? (
-        <div className={`validation-result ${validation.isValid ? 'valid' : 'invalid'}`}>
-          <span className="validation-icon">
-            {validation.isValid ? '✅' : '❌'}
-          </span>
-          <span className="validation-message">
-            {validation.isValid ? 'Valid regex pattern' : validation.error}
-          </span>
-          {validation.suggestion && (
-            <div className="validation-suggestion">
-              💡 Suggestion: {validation.suggestion}
+    <div 
+      className="test-results-overlay" 
+      onClick={onClose}
+      onKeyDown={handleOverlayKeyDown}
+      role="button"
+      tabIndex={0}
+      aria-label="Close dialog"
+    >
+      <div 
+        className="test-results-dialog" 
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleDialogKeyDown}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dialog-title"
+      >
+        <div className="dialog-header">
+          <h3 id="dialog-title">🧪 Test Results</h3>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+        
+        <div className="dialog-content">
+          {isLoading ? (
+            <div className="loading-state">
+              <div className="loading-spinner">🔄</div>
+              <p>Testing rule against transactions...</p>
+            </div>
+          ) : error ? (
+            <div className="error-state">
+              <div className="error-icon">❌</div>
+              <p>Error testing rule: {error}</p>
+            </div>
+          ) : (
+            <div className="results-content">
+              <div className="results-summary">
+                <strong>{transactions.length} matching transactions found</strong>
+                {results?.totalMatches !== undefined ? (
+                  <div style={{fontSize: '0.9rem', marginTop: '8px', color: '#666'}}>
+                    API reported total matches: {results.totalMatches}
+                  </div>
+                ) : null}
+                {results?.averageConfidence !== undefined ? (
+                  <div style={{fontSize: '0.9rem', marginTop: '4px', color: '#666'}}>
+                    Average confidence: {Math.round(results.averageConfidence * 100)}%
+                  </div>
+                ) : null}
+                {/* Debug info showing what rule was actually tested */}
+                <div style={{
+                  marginTop: '12px', 
+                  padding: '8px', 
+                  backgroundColor: '#f0f0f0', 
+                  borderRadius: '4px',
+                  fontSize: '0.8rem',
+                  color: '#333'
+                }}>
+                  <strong>Rule tested:</strong> {rule.fieldToMatch} {rule.condition} "{rule.value || '(empty)'}"
+                  {rule.caseSensitive ? ' (case sensitive)' : ''}
+                  {rule.condition === 'amount_between' && rule.amountMin && rule.amountMax ? 
+                    ` (between ${rule.amountMin} and ${rule.amountMax})` : ''}
+                  {!rule.value && rule.condition !== 'amount_between' ? 
+                    ' ⚠️ Note: Empty value matches all transactions!' : ''}
+                </div>
+              </div>
+              
+              {transactions.length > 0 ? (
+                <div className="transactions-list">
+                  {transactions.slice(0, 50).map((transaction: Transaction, index: number) => (
+                    <div key={index} className="transaction-item">
+                      <div className="transaction-main">
+                        <span className="transaction-description">
+                          {transaction.description || 'No description'}
+                        </span>
+                        <span className="transaction-amount">
+                          ${Math.abs(Number(transaction.amount) || 0).toFixed(2)}
+                        </span>
+                      </div>
+                      {transaction.date ? (
+                        <div className="transaction-date">
+                          {new Date(transaction.date).toLocaleDateString()}
+                        </div>
+                      ) : null}
+                      {transaction.payee ? (
+                        <div className="transaction-payee">
+                          Payee: {transaction.payee}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                  {transactions.length > 50 ? (
+                    <div className="more-results">
+                      And {transactions.length - 50} more transactions...
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="no-matches">
+                  <p>No transactions match this rule.</p>
+                  <small>Try adjusting your matching criteria.</small>
+                </div>
+              )}
             </div>
           )}
         </div>
-      ) : null}
-    </div>
-  );
-};
-
-interface TestResultsProps {
-  results: Transaction[];
-  rule: CategoryRule;
-  highlightMatches: boolean;
-}
-
-const TestResults: React.FC<TestResultsProps> = ({ results, rule, highlightMatches }) => {
-  const highlightText = useCallback((text: string, pattern: string, condition: MatchCondition): string => {
-    if (!highlightMatches || !pattern || rule.fieldToMatch === 'amount') return text;
-
-    try {
-      let regex: RegExp;
-      
-      switch (condition) {
-        case 'contains':
-          regex = new RegExp(`(${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, rule.caseSensitive ? 'g' : 'gi');
-          break;
-        case 'starts_with':
-          regex = new RegExp(`^(${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, rule.caseSensitive ? 'g' : 'gi');
-          break;
-        case 'ends_with':
-          regex = new RegExp(`(${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})$`, rule.caseSensitive ? 'g' : 'gi');
-          break;
-        case 'equals':
-          regex = new RegExp(`^(${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})$`, rule.caseSensitive ? 'g' : 'gi');
-          break;
-        case 'regex':
-          regex = new RegExp(`(${pattern})`, rule.caseSensitive ? 'g' : 'gi');
-          break;
-        default:
-          return text;
-      }
-
-      return text.replace(regex, '<mark>$1</mark>');
-    } catch (error) {
-      return text;
-    }
-  }, [rule.caseSensitive, rule.fieldToMatch]);
-
-  const getFieldValue = useCallback((transaction: Transaction, field: string): string => {
-    switch (field) {
-      case 'description':
-        return transaction.description || '';
-      case 'payee':
-        return transaction.payee || '';
-      case 'memo':
-        return transaction.memo || '';
-      case 'amount':
-        return transaction.amount?.toString() || '';
-      default:
-        return '';
-    }
-  }, []);
-
-  return (
-    <div className="test-results">
-      <div className="test-results-header">
-        <h5>🎯 Match Results ({results.length} transactions)</h5>
-        {results.length > 10 && (
-          <small>Showing first 10 results</small>
-        )}
-      </div>
-
-      <div className="test-results-list">
-        {results.slice(0, 10).map((transaction, index) => {
-          const fieldValue = getFieldValue(transaction, rule.fieldToMatch);
-          const highlightedValue = highlightText(fieldValue, rule.value, rule.condition);
-          
-          return (
-            <div key={transaction.transactionId || index} className="test-result-item">
-              <div className="result-field">
-                <strong>{rule.fieldToMatch}:</strong>
-                <span 
-                  className="field-value"
-                  dangerouslySetInnerHTML={{ __html: highlightedValue }}
-                />
-              </div>
-              <div className="result-details">
-                <span className="transaction-date">
-                  {new Date(transaction.date).toLocaleDateString()}
-                </span>
-                <span className="transaction-amount">
-                  ${Math.abs(Number(transaction.amount) || 0).toFixed(2)}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
-
-interface SmartPatternBuilderProps {
-  onPatternGenerated: (descriptions: string[]) => void;
-  onClose: () => void;
-  currentField: string;
-}
-
-const SmartPatternBuilder: React.FC<SmartPatternBuilderProps> = ({
-  onPatternGenerated,
-  onClose,
-  currentField
-}) => {
-  const [sampleText, setSampleText] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-
-  const handleGenerate = useCallback(async () => {
-    const descriptions = sampleText.split('\n').filter(line => line.trim());
-    if (descriptions.length === 0) return;
-
-    setIsGenerating(true);
-    try {
-      await onPatternGenerated(descriptions);
-      onClose();
-    } catch (error) {
-      console.error('Error generating pattern:', error);
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [sampleText, onPatternGenerated, onClose]);
-
-  return (
-    <div className="modal-overlay">
-      <div className="smart-pattern-builder">
-        <div className="builder-header">
-          <h3>🧠 Smart Pattern Builder</h3>
-          <button className="close-btn" onClick={onClose}>✕</button>
-        </div>
         
-        <div className="builder-content">
-          <p>
-            Paste sample {currentField} values to auto-generate a matching pattern:
-          </p>
-          
-          <textarea
-            value={sampleText}
-            onChange={(e) => setSampleText(e.target.value)}
-            placeholder={`Example ${currentField} values:\nAMAZON.COM PURCHASE\nAMAZON PRIME MEMBERSHIP\nAMAZON MARKETPLACE\n\nEach line should be a separate example`}
-            rows={8}
-            className="sample-textarea"
-          />
-          
-          <div className="builder-actions">
-            <button
-              className="cancel-btn"
-              onClick={onClose}
-              disabled={isGenerating}
-            >
-              Cancel
-            </button>
-            <button
-              className="generate-btn"
-              onClick={handleGenerate}
-              disabled={isGenerating || !sampleText.trim()}
-            >
-              {isGenerating ? '🔄 Generating...' : '✨ Generate Pattern'}
-            </button>
-          </div>
+        <div className="dialog-actions">
+          <button className="close-dialog-btn" onClick={onClose}>
+            Close
+          </button>
         </div>
       </div>
     </div>

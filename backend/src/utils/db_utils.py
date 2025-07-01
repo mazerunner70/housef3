@@ -12,7 +12,7 @@ from botocore.exceptions import ClientError
 from decimal import Decimal
 import decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from models import (
     Account, 
@@ -26,7 +26,7 @@ from models import (
     AnalyticType,
     ComputationStatus
 )
-from models.category import Category, CategoryType, CategoryUpdate
+from models.category import Category, CategoryType, CategoryUpdate, CategoryRule
 from models.transaction import Transaction, TransactionCreate, TransactionUpdate
 from models.transaction_file import TransactionFileCreate, TransactionFileUpdate
 from boto3.dynamodb.conditions import Key, Attr
@@ -57,8 +57,8 @@ _transactions_table = None
 _file_maps_table = None
 _analytics_data_table = None
 _analytics_status_table = None
+_categories_table = None
 
-categories_table = None
 
 class NotAuthorized(Exception):
     """Raised when a user is not authorized to access a resource."""
@@ -1029,16 +1029,12 @@ def update_transaction(transaction: Transaction) -> None:
         logger.error(f"Error updating transaction {str(transaction.transaction_id)}: {str(e)}")
         raise e
 
-def get_categories_table():
-    global categories_table
-    if categories_table is None:
-        if CATEGORIES_TABLE_NAME:
-            categories_table = dynamodb.Table(CATEGORIES_TABLE_NAME)
-            logger.info(f"DynamoDB Categories table {CATEGORIES_TABLE_NAME} initialized.")
-        else:
-            logger.critical("CRITICAL: CATEGORIES_TABLE_NAME env var not set.")
-            raise ConnectionError("CATEGORIES_TABLE_NAME not set") # Or some other appropriate error
-    return categories_table
+def get_categories_table() -> Any:
+    """Get the categories table resource, initializing it if needed."""
+    global _categories_table
+    if _categories_table is None and CATEGORIES_TABLE_NAME:
+        _categories_table = dynamodb.Table(CATEGORIES_TABLE_NAME)
+    return _categories_table
 
 def create_category_in_db(category: Category) -> Category:
     """Persist a new category to DynamoDB."""
@@ -1060,11 +1056,12 @@ def create_category_in_db(category: Category) -> Category:
         raise
 
 def get_category_by_id_from_db(category_id: uuid.UUID, user_id: str) -> Optional[Category]:
-    if not categories_table:
+    table = get_categories_table()
+    if not table:
         logger.error("DB: Categories table not initialized for get_category_by_id_from_db")
         return None
     logger.debug(f"DB: Getting category {str(category_id)} for user {user_id}")
-    response = categories_table.get_item(Key={'categoryId': str(category_id)})
+    response = table.get_item(Key={'categoryId': str(category_id)})
     item = response.get('Item')
     if item and item.get('userId') == user_id:
         return Category.from_dynamodb_item(item)
@@ -1074,7 +1071,8 @@ def get_category_by_id_from_db(category_id: uuid.UUID, user_id: str) -> Optional
     return None
 
 def list_categories_by_user_from_db(user_id: str, parent_category_id: Optional[uuid.UUID] = None, top_level_only: bool = False) -> List[Category]:
-    if not categories_table:
+    table = get_categories_table()
+    if not table:
         logger.error("DB: Categories table not initialized for list_categories_by_user_from_db")
         return []
     logger.debug(f"DB: Listing categories for user {user_id}, parent: {str(parent_category_id) if parent_category_id else None}, top_level: {top_level_only}")
@@ -1099,7 +1097,7 @@ def list_categories_by_user_from_db(user_id: str, parent_category_id: Optional[u
     all_items_raw = []
     current_params = params.copy() # To avoid modifying params for subsequent calls if pagination is added here
     while True:
-        response = categories_table.query(**current_params)
+        response = table.query(**current_params)
         all_items_raw.extend(response.get('Items', []))
         if 'LastEvaluatedKey' not in response:
             break
@@ -1107,91 +1105,77 @@ def list_categories_by_user_from_db(user_id: str, parent_category_id: Optional[u
     return [Category.from_dynamodb_item(item) for item in all_items_raw]
 
 def update_category_in_db(category_id: uuid.UUID, user_id: str, update_data: Dict[str, Any]) -> Optional[Category]:
-    """Update an existing category in DynamoDB using a dictionary of update fields."""
-    table = get_categories_table()
-    if not table:
-        logger.error("DB: Categories table not initialized for update_category_in_db")
-        raise ConnectionError("Database table not initialized") 
-
-    existing_category = get_category_by_id_from_db(category_id, user_id)
-    if not existing_category:
+    """
+    Update an existing category in DynamoDB.
+    
+    Args:
+        category_id: The unique identifier of the category to update
+        user_id: The ID of the user making the request
+        update_data: Dictionary containing fields to update
+        
+    Returns:
+        Updated Category object if successful, None if category not found
+    """
+    # Retrieve the existing category
+    category = get_category_by_id_from_db(category_id, user_id)
+    if not category:
         logger.warning(f"DB: Category {str(category_id)} not found or user {user_id} has no access.")
         return None
 
-    if not update_data: 
+    if not update_data:
         logger.info(f"DB: No update data provided for category {str(category_id)}. Returning existing.")
-        return existing_category 
-
-    update_expression_parts = []
-    expression_attribute_values = {}
-    expression_attribute_names = {}
-
-    allowed_fields_to_update = ["name", "type", "parentCategoryId", "icon", "color"]
-    for key, value in update_data.items():
-        if key in allowed_fields_to_update:
-            attr_key_placeholder = f"#{key}Attr"
-            attr_val_placeholder = f":{key}Val"
-            update_expression_parts.append(f"{attr_key_placeholder} = {attr_val_placeholder}")
-            expression_attribute_names[attr_key_placeholder] = key
-            if key == "type" and isinstance(value, CategoryType):
-                 expression_attribute_values[attr_val_placeholder] = value.value
-            elif key == "parentCategoryId": 
-                 if value is None or value == "": # Treat empty string as null for parentCategoryId. UUID will not be empty string.
-                    update_expression_parts[-1] = f"REMOVE {attr_key_placeholder}"
-                    if attr_val_placeholder in expression_attribute_values: # only delete if it was added
-                        del expression_attribute_values[attr_val_placeholder]
-                    continue 
-                 else:
-                    expression_attribute_values[attr_val_placeholder] = str(value) # Convert UUID to string
-            else:
-                expression_attribute_values[attr_val_placeholder] = value
-    
-    if "rules" in update_data and update_data["rules"] is not None: # Ensure rules is not None
-        attr_key_placeholder = f"#rulesAttr"
-        attr_val_placeholder = f":rulesVal"
-        update_expression_parts.append(f"{attr_key_placeholder} = {attr_val_placeholder}")
-        expression_attribute_names[attr_key_placeholder] = "rules"
-        expression_attribute_values[attr_val_placeholder] = [rule.model_dump(mode='json') if isinstance(rule, BaseModel) else rule for rule in update_data["rules"]]
-
-    if not update_expression_parts:
-        logger.info(f"DB: No valid fields to update for category {str(category_id)} after filtering.")
-        return existing_category
-
-    updated_at_key_placeholder = "#updatedAtAttr"
-    updated_at_val_placeholder = ":updatedAtVal"
-    update_expression_parts.append(f"{updated_at_key_placeholder} = {updated_at_val_placeholder}")
-    expression_attribute_names[updated_at_key_placeholder] = "updatedAt"
-    expression_attribute_values[updated_at_val_placeholder] = int(datetime.now(timezone.utc).timestamp() * 1000)
-
-    update_expression = "SET " + ", ".join(update_expression_parts)
-
-    logger.debug(f"DB: Updating category {str(category_id)}. Expression: {update_expression}, Values: {expression_attribute_values}, Names: {expression_attribute_names}")
+        return category
 
     try:
-        response = table.update_item(
-            Key={'categoryId': str(category_id), 'userId': user_id}, 
-            UpdateExpression=update_expression,
-            ExpressionAttributeValues=expression_attribute_values,
-            ExpressionAttributeNames=expression_attribute_names,
-            ReturnValues="ALL_NEW"
-        )
+        # Diagnostic logging
+        logger.info(f"DIAG: update_category_in_db called with update_data keys: {list(update_data.keys())}")
+        if 'rules' in update_data:
+            rules = update_data['rules']
+            logger.info(f"DIAG: update_data contains {len(rules)} rules")
+            for i, rule in enumerate(rules):
+                logger.info(f"DIAG: update_data rule {i}: type={type(rule)}, is_CategoryRule={isinstance(rule, CategoryRule)}")
+        
+        # Create a CategoryUpdate DTO from the update_data
+        logger.info(f"DIAG: Creating CategoryUpdate DTO...")
+        category_update_dto = CategoryUpdate(**update_data)
+        logger.info(f"DIAG: CategoryUpdate DTO created successfully")
+        
+        # Check the DTO's rules
+        if hasattr(category_update_dto, 'rules') and category_update_dto.rules:
+            logger.info(f"DIAG: CategoryUpdate DTO has {len(category_update_dto.rules)} rules")
+            for i, rule in enumerate(category_update_dto.rules):
+                logger.info(f"DIAG: DTO rule {i}: type={type(rule)}, is_CategoryRule={isinstance(rule, CategoryRule)}")
+        
+        # Use the model's method to update details
+        logger.info(f"DIAG: Calling update_category_details...")
+        category.update_category_details(category_update_dto)
+        logger.info(f"DIAG: update_category_details completed")
+        
+        # Check category rules after update
+        logger.info(f"DIAG: After update, category has {len(category.rules)} rules")
+        for i, rule in enumerate(category.rules):
+            logger.info(f"DIAG: Post-update rule {i}: type={type(rule)}, is_CategoryRule={isinstance(rule, CategoryRule)}")
+        
+        # Save updates to DynamoDB
+        logger.info(f"DIAG: Calling to_dynamodb_item...")
+        get_categories_table().put_item(Item=category.to_dynamodb_item())
+        
         logger.info(f"DB: Category {str(category_id)} updated successfully.")
-        return Category.from_dynamodb_item(response['Attributes'])
+        return category
+        
+    except ValidationError as e:
+        logger.error(f"DB: Validation error updating category {str(category_id)}: {str(e)}")
+        raise ValueError(f"Invalid update data: {str(e)}")
     except ClientError as e:
         logger.error(f"DB: Error updating category {str(category_id)}: {str(e)}", exc_info=True)
-        # Safer access to error details
-        error_info = e.response.get('Error', {})
-        error_code = error_info.get('Code')
-        if error_code == "ConditionalCheckFailedException":
-            logger.warning(f"DB: Conditional check failed for category {str(category_id)}. Item might not exist or condition not met.")
-            return None
         raise 
     except Exception as e:
         logger.error(f"DB: Unexpected error updating category {str(category_id)}: {str(e)}", exc_info=True)
         raise
 
 def delete_category_from_db(category_id: uuid.UUID, user_id: str) -> bool:
-    if not categories_table:
+    table = get_categories_table()
+    if not table:
         logger.error("DB: Categories table not initialized for delete_category_from_db")
         return False
     logger.debug(f"DB: Deleting category {str(category_id)} for user {user_id}")
@@ -1202,7 +1186,7 @@ def delete_category_from_db(category_id: uuid.UUID, user_id: str) -> bool:
     if child_categories:
         logger.warning(f"Attempt to delete category {str(category_id)} which has child categories.")
         raise ValueError("Cannot delete category: it has child categories.")
-    categories_table.delete_item(Key={'categoryId': str(category_id)})
+    table.delete_item(Key={'categoryId': str(category_id)})
     return True
 
 # =============================================================================
