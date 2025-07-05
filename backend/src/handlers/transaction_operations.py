@@ -76,6 +76,11 @@ def get_transactions_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
             ignore_dup=ignore_dup
         )
         
+        # Get all user categories to populate category information
+        from utils.db_utils import list_categories_by_user_from_db
+        user_categories = list_categories_by_user_from_db(user_id)
+        categories_map = {str(cat.categoryId): cat for cat in user_categories}
+        
         total_items_for_response = items_on_this_page
 
         if items_on_this_page == 0:
@@ -96,15 +101,40 @@ def get_transactions_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
                 # Items on this page, but no key for the next page (this is the last page).
                 total_pages_for_response = current_page_for_response
 
-        # Serialize transactions with string conversion for amount and balance
+        # Transform transactions to TransactionViewItem format with populated category information
         serialized_transactions = []
         for t in transactions_list:
             transaction_data = t.model_dump(by_alias=True)
+            
+            # Convert Decimal fields to strings for JSON compatibility
             if transaction_data.get("amount") is not None:
                 transaction_data["amount"] = str(transaction_data["amount"])
             if transaction_data.get("balance") is not None:
                 transaction_data["balance"] = str(transaction_data["balance"])
-            serialized_transactions.append(transaction_data)
+            
+            # Transform to TransactionViewItem format
+            view_item = {
+                'id': transaction_data.get('transactionId'),  # Map transactionId to id
+                'date': transaction_data.get('date'),
+                'description': transaction_data.get('description'),
+                'payee': transaction_data.get('payee'),
+                'amount': transaction_data.get('amount'),
+                'balance': transaction_data.get('balance'),
+                'currency': transaction_data.get('currency'),
+                'importOrder': transaction_data.get('importOrder'),
+                'accountId': transaction_data.get('accountId'),  # Keep as accountId for frontend mapping
+                'type': 'income' if float(transaction_data.get('amount', 0)) >= 0 else 'expense',  # Determine type from amount
+                'memo': transaction_data.get('memo'),
+                'checkNumber': transaction_data.get('checkNumber'),
+                'transactionType': transaction_data.get('transactionType'),
+                'status': transaction_data.get('status'),
+                'userId': transaction_data.get('userId'),
+                'fileId': transaction_data.get('fileId'),
+                'primaryCategoryId': transaction_data.get('primaryCategoryId'),
+                'categories': transaction_data.get('categories')
+            }
+            
+            serialized_transactions.append(view_item)
 
         response_data: Dict[str, Any] = {
             "transactions": serialized_transactions,
@@ -379,6 +409,58 @@ def add_manual_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str
         logger.error(f"Error adding manual category: {str(e)}", exc_info=True)
         return create_response(500, {"error": "Internal server error", "message": str(e)})
 
+def quick_update_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """
+    Quick update transaction category (for dropdown selection)
+    PUT /transactions/{transactionId}/category
+    Body: { "categoryId": "uuid" }
+    """
+    try:
+        transaction_id = mandatory_path_parameter(event, 'transactionId')
+        
+        body_str = event.get('body')
+        if not body_str:
+            return create_response(400, {"error": "Request body is missing or empty"})
+        
+        try:
+            body_data = json.loads(body_str)
+            category_id = body_data.get('categoryId')
+        except json.JSONDecodeError:
+            return create_response(400, {"error": "Invalid JSON format in request body"})
+        
+        if not category_id:
+            return create_response(400, {"error": "Category ID is required"})
+        
+        # Get transaction from database
+        response = get_transactions_table().get_item(Key={'transactionId': transaction_id})
+        if 'Item' not in response:
+            return create_response(404, {"error": "Transaction not found"})
+        
+        transaction = Transaction.from_dynamodb_item(response['Item'])
+        if transaction.user_id != user_id:
+            return create_response(403, {"error": "Unauthorized to modify this transaction"})
+        
+        # Add the category as a manual assignment and set as primary
+        category_uuid = uuid.UUID(category_id)
+        transaction.add_manual_category(category_uuid, set_as_primary=True)
+        
+        # Update transaction in database
+        transaction_item = transaction.to_dynamodb_item()
+        get_transactions_table().put_item(Item=transaction_item)
+        
+        return create_response(200, {
+            "success": True,
+            "transactionId": transaction_id,
+            "categoryId": category_id
+        })
+        
+    except ValueError as ve:
+        logger.warning(f"Invalid transaction ID or category ID: {str(ve)}")
+        return create_response(400, {"error": str(ve)})
+    except Exception as e:
+        logger.error(f"Error updating transaction category: {str(e)}", exc_info=True)
+        return create_response(500, {"error": "Internal server error", "message": str(e)})
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main handler for transaction operations."""
     # Get route from event
@@ -404,6 +486,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             logger.warning(f"Missing transaction ID in DELETE request path: {event.get('path')}")
             return create_response(400, {"message": "Transaction ID missing in path."})
         return delete_transaction_handler(event, user_id)
+    elif route == "PUT /transactions/{transactionId}/category":
+        return quick_update_category_handler(event, user_id)
     elif route == "POST /transactions/{transactionId}/confirm-suggestions":
         return confirm_category_suggestions_handler(event, user_id)
     elif route == "DELETE /transactions/{transactionId}/categories/{categoryId}":

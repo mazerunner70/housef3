@@ -15,7 +15,6 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
   const [files, setFiles] = useState<FileMetadata[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<boolean>(false);
   const [deleting, setDeleting] = useState<boolean>(false);
   const [sortField, setSortField] = useState<keyof Transaction>('importOrder');
@@ -35,7 +34,6 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
 
   const fetchAccountDetails = async (id: string) => {
     setLoading(true);
-    setError(null);
     
     try {
       const accountData = await getAccount(id);
@@ -63,7 +61,6 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ accountId, onAccountDelet
       setTransactions(transactionsData.transactions || []);
     } catch (err) {
       console.error('Error fetching account details:', err);
-      setError('Failed to load account details');
     } finally {
       setLoading(false);
     }

@@ -130,7 +130,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ files, onFileClick, onGapCl
       show: false
     },
     tooltip: {
-      custom: function({ seriesIndex, dataPointIndex, w }: any) {
+      custom: function({ dataPointIndex }: any) {
         const item = chartData[dataPointIndex];
         const startDate = new Date(item.y[0]).toLocaleDateString();
         const endDate = new Date(item.y[1]).toLocaleDateString();

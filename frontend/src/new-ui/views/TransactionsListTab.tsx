@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useEffect, useCallback, useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getUserTransactions,
@@ -83,6 +83,7 @@ const TransactionsListTab: React.FC = () => {
     try {
       const accountsResponse = await listAccounts();
       setAccounts(accountsResponse.accounts);
+      
       const categoriesResponse = await getCategories();
       setCategories(categoriesResponse);
     } catch (err) {
@@ -183,6 +184,32 @@ const TransactionsListTab: React.FC = () => {
     }
   };
   
+  // Transform transactions to include full category info
+  const transformedTransactions = useMemo(() => {
+    if (!transactionsData?.transactions || categories.length === 0) {
+      return transactionsData?.transactions || [];
+    }
+    
+    // Create a map of category IDs to category info
+    const categoriesMap = new Map<string, CategoryInfo>();
+    categories.forEach(cat => {
+      categoriesMap.set(cat.categoryId, cat);
+    });
+    
+    // Transform transactions to include full category info
+    return transactionsData.transactions.map(transaction => {
+      let category: CategoryInfo | undefined = undefined;
+      if (transaction.primaryCategoryId) {
+        category = categoriesMap.get(transaction.primaryCategoryId);
+      }
+      
+      return {
+        ...transaction,
+        category
+      };
+    });
+  }, [transactionsData?.transactions, categories]);
+  
   const initialFilterValuesProvided = !initialDataLoading && accounts.length > 0;
   const apiError = transactionsErrorObj;
 
@@ -210,7 +237,7 @@ const TransactionsListTab: React.FC = () => {
       {apiError && <div className="error-message">Error loading transactions: {apiError.message || 'Unknown error'}</div>}
       
       <TransactionTable
-        transactions={transactionsData?.transactions || []}
+        transactions={transformedTransactions}
         isLoading={transactionsLoading || transactionsIsFetching || isQuickUpdating || initialDataLoading}
         error={null}
         categories={categories}
@@ -224,10 +251,10 @@ const TransactionsListTab: React.FC = () => {
         totalItems={transactionsData?.pagination?.totalItems || 0}
         onPageSizeChange={handlePageSizeChange}
       />
-      {(transactionsLoading || transactionsIsFetching) && (!transactionsData?.transactions || transactionsData.transactions.length === 0) && 
+      {(transactionsLoading || transactionsIsFetching) && (!transformedTransactions || transformedTransactions.length === 0) && 
         <div className="loading-spinner">Loading transactions...</div>
       }
-      {!transactionsLoading && !transactionsIsFetching && !initialDataLoading && (!transactionsData?.transactions || transactionsData.transactions.length === 0) && 
+      {!transactionsLoading && !transactionsIsFetching && !initialDataLoading && (!transformedTransactions || transformedTransactions.length === 0) && 
         <div className="transaction-table-empty">No transactions found for the current filters.</div>
       }
     </>

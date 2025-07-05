@@ -5,12 +5,11 @@ import NewUILayout from './new-ui/layouts/NewUILayout';
 import AccountsView from './new-ui/views/AccountsView';
 import TransactionsView from './new-ui/views/TransactionsView';
 import AnalyticsView from './new-ui/views/AnalyticsView';
-import { AuthUser, getCurrentUser, isAuthenticated, refreshToken } from './services/AuthService';
+import { getCurrentUser, isAuthenticated, refreshToken } from './services/AuthService';
 import './App.css'
 
 function App() {
   const [authenticated, setAuthenticated] = useState<boolean>(false);
-  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
   // Check authentication status on component mount
@@ -27,13 +26,11 @@ function App() {
           // If token expired, try to refresh
           if (!isAuthenticated() && currentUser.refreshToken) {
             try {
-              const refreshedUser = await refreshToken(currentUser.refreshToken);
-              setUser(refreshedUser);
+              await refreshToken(currentUser.refreshToken);
               setAuthenticated(true);
               return;
             } catch (error) {
               console.error('Failed to refresh token:', error);
-              setUser(null);
               setAuthenticated(false);
               return;
             }
@@ -41,18 +38,15 @@ function App() {
           
           // Token still valid
           if (isAuthenticated()) {
-            setUser(currentUser);
             setAuthenticated(true);
             return;
           }
         }
         
         // No user or invalid token
-        setUser(null);
         setAuthenticated(false);
       } catch (error) {
         console.error('Authentication check error:', error);
-        setUser(null);
         setAuthenticated(false);
       } finally {
         setLoading(false);
@@ -63,13 +57,11 @@ function App() {
   }, []);
 
   const handleLoginSuccess = () => {
-    setUser(getCurrentUser());
     setAuthenticated(true);
   };
 
   const handleSignOut = () => {
     setAuthenticated(false);
-    setUser(null);
   };
 
   if (loading) {

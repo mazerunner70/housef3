@@ -1,12 +1,29 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Category, CategorySuggestionStrategy, CategoryRule, MatchCondition } from '../../types/Category';
+import { Category, CategorySuggestionStrategy, CategoryRule, MatchCondition, CategoryHierarchy, RuleTestResponse, CategoryCreate, CategoryType } from '../../types/Category';
 import { useCategories, useCategoryRules } from '../hooks/useCategories';
 import { useRealTimeRuleTesting } from '../hooks/useRealTimeRuleTesting';
+import { CategoryService } from '../../services/CategoryService';
 import CategoryHierarchyTree from '../components/CategoryHierarchyTree';
 import RuleBuilder from '../components/RuleBuilder';
+import ConfirmationModal from '../components/ConfirmationModal';
 import './CategoryManagementTab.css';
 
-const CategoryManagementTab: React.FC = () => {
+interface CategoryManagementTabProps {
+  // Deep-linking support for pre-populated category creation
+  initialCategoryData?: {
+    suggestedName?: string;
+    suggestedType?: CategoryType;
+    suggestedPattern?: string;
+    transactionDescription?: string;
+    autoOpenCreateModal?: boolean;
+  };
+  onCategoryCreated?: (category: Category) => void;
+}
+
+const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({ 
+  initialCategoryData,
+  onCategoryCreated
+}) => {
   const {
     categories,
     hierarchy,
@@ -24,6 +41,19 @@ const CategoryManagementTab: React.FC = () => {
   const [suggestionStrategy, setSuggestionStrategy] = useState<CategorySuggestionStrategy>(CategorySuggestionStrategy.ALL_MATCHES);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createParentId, setCreateParentId] = useState<string | undefined>();
+  
+  // Deep-linking state
+  const [prePopulatedData, setPrePopulatedData] = useState<{
+    categoryName?: string;
+    categoryType?: CategoryType;
+    suggestedPatterns?: Array<{
+      pattern: string;
+      confidence: number;
+      explanation: string;
+    }>;
+    transactionDescription?: string;
+  } | null>(null);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
 
   // Real-time rule testing for selected category
   const {
@@ -31,6 +61,69 @@ const CategoryManagementTab: React.FC = () => {
     testResults,
     error: testError
   } = useRealTimeRuleTesting();
+  
+  // Reset categories state
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetResults, setResetResults] = useState<any>(null);
+  
+  // Handle initial category data from deep-linking
+  useEffect(() => {
+    if (initialCategoryData) {
+      handleInitialCategoryData(initialCategoryData);
+    }
+  }, [initialCategoryData]);
+  
+  const handleInitialCategoryData = useCallback(async (data: typeof initialCategoryData) => {
+    if (!data) return;
+    
+    // Load suggestions if we have a transaction description
+    if (data.transactionDescription) {
+      setIsLoadingSuggestions(true);
+      try {
+        const suggestions = await CategoryService.getQuickCategorySuggestions(data.transactionDescription);
+        
+        setPrePopulatedData({
+          categoryName: data.suggestedName || suggestions.suggestedCategory.name,
+          categoryType: data.suggestedType || (suggestions.suggestedCategory.type === 'INCOME' ? CategoryType.INCOME : CategoryType.EXPENSE),
+          suggestedPatterns: suggestions.suggestedPatterns,
+          transactionDescription: data.transactionDescription
+        });
+      } catch (error) {
+        console.error('Error loading category suggestions:', error);
+        // Fallback to provided data
+        setPrePopulatedData({
+          categoryName: data.suggestedName || 'New Category',
+          categoryType: data.suggestedType || CategoryType.EXPENSE,
+          suggestedPatterns: data.suggestedPattern ? [{
+            pattern: data.suggestedPattern,
+            confidence: 80,
+            explanation: 'Manual pattern suggestion'
+          }] : [],
+          transactionDescription: data.transactionDescription
+        });
+      } finally {
+        setIsLoadingSuggestions(false);
+      }
+    } else {
+      // Use provided data directly
+      setPrePopulatedData({
+        categoryName: data.suggestedName || 'New Category',
+        categoryType: data.suggestedType || CategoryType.EXPENSE,
+        suggestedPatterns: data.suggestedPattern ? [{
+          pattern: data.suggestedPattern,
+          confidence: 80,
+          explanation: 'Manual pattern suggestion'
+        }] : [],
+        transactionDescription: data.transactionDescription
+      });
+    }
+    
+    // Auto-open create modal if requested
+    if (data.autoOpenCreateModal !== false) {
+      setShowCreateModal(true);
+    }
+  }, []);
 
   const handleSelectCategory = useCallback((category: Category) => {
     selectCategory(category);
@@ -48,6 +141,26 @@ const CategoryManagementTab: React.FC = () => {
       console.log(`Moving category ${categoryId} to parent ${newParentId || 'root'} - feature not yet implemented`);
     } catch (error) {
       console.error('Error moving category:', error);
+    }
+  }, []);
+
+  const handleResetAndReapplyCategories = useCallback(async () => {
+    setIsResetting(true);
+    try {
+      const results = await CategoryService.resetAndReapplyCategories();
+      setResetResults(results);
+      setShowResetModal(false);
+      
+      // Show success message and reload categories
+      alert(`Categories reset successfully! ${results.results.totalApplicationsApplied} category assignments were applied to ${results.results.totalTransactionsProcessed} transactions.`);
+      
+      // Refresh the categories list
+      window.location.reload();
+    } catch (error) {
+      console.error('Error resetting categories:', error);
+      alert('Failed to reset categories. Please try again.');
+    } finally {
+      setIsResetting(false);
     }
   }, []);
 
@@ -95,6 +208,15 @@ const CategoryManagementTab: React.FC = () => {
           >
             {showSuggestions ? '👁️ Hide' : '👁️‍🗨️ Show'} Suggestions
           </button>
+          
+          <button 
+            className="reset-categories-btn"
+            onClick={() => setShowResetModal(true)}
+            disabled={isResetting}
+            title="Reset all category assignments and re-apply rules"
+          >
+            {isResetting ? '🔄 Resetting...' : '🔄 Reset All Categories'}
+          </button>
         </div>
       </div>
       
@@ -129,25 +251,47 @@ const CategoryManagementTab: React.FC = () => {
         </div>
       </div>
 
-      {/* Create Category Modal - TODO: Implement */}
+      {/* Create Category Modal */}
       {showCreateModal && (
         <CreateCategoryModal
           parentCategoryId={createParentId}
           availableCategories={categories}
+          prePopulatedData={prePopulatedData}
+          isLoadingSuggestions={isLoadingSuggestions}
           onCreate={async (categoryData) => {
             const newCategory = await createCategory(categoryData);
             if (newCategory) {
               setShowCreateModal(false);
               setCreateParentId(undefined);
+              setPrePopulatedData(null);
               selectCategory(newCategory);
+              
+              // Call callback if provided
+              if (onCategoryCreated) {
+                onCategoryCreated(newCategory);
+              }
             }
           }}
           onCancel={() => {
             setShowCreateModal(false);
             setCreateParentId(undefined);
+            setPrePopulatedData(null);
           }}
         />
       )}
+      
+      {/* Reset Categories Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showResetModal}
+        title="Reset All Category Assignments"
+        message="⚠️ This will permanently remove ALL category assignments from your transactions and re-apply category rules from scratch. This action cannot be undone. Are you sure you want to continue?"
+        confirmButtonText="Reset Categories"
+        cancelButtonText="Cancel"
+        type="danger"
+        onConfirm={handleResetAndReapplyCategories}
+        onCancel={() => setShowResetModal(false)}
+        isLoading={isResetting}
+      />
     </div>
   );
 };
@@ -155,10 +299,10 @@ const CategoryManagementTab: React.FC = () => {
 // Real category editor implementation
 interface CategoryEditorProps {
   category: Category;
-  hierarchy: any[];
+  hierarchy: CategoryHierarchy[];
   suggestionStrategy: CategorySuggestionStrategy;
   isTestingRule: boolean;
-  testResults: any;
+  testResults: RuleTestResponse | null;
   testError: string | null;
   onUpdateCategory: (id: string, data: any) => Promise<any>;
   onDeleteCategory: (id: string) => Promise<boolean>;
@@ -190,6 +334,17 @@ const CategoryEditor: React.FC<CategoryEditorProps> = ({
     deleteRule,
     toggleRuleEnabled
   } = useCategoryRules(category.categoryId);
+
+  // Debug logging for rules returned by hook
+  console.log(`CategoryEditor - useCategoryRules hook for category ${category.name}:`);
+  console.log(`CategoryEditor - category.rules directly:`, category.rules);
+  console.log(`CategoryEditor - category.rules length:`, category.rules?.length);
+  console.log(`CategoryEditor - rules from hook:`, rules);
+  console.log(`CategoryEditor - rules from hook length:`, rules.length);
+  console.log(`CategoryEditor - rules from hook type:`, typeof rules);
+  console.log(`CategoryEditor - rules from hook is array:`, Array.isArray(rules));
+  console.log(`CategoryEditor - isLoading:`, rulesLoading);
+  console.log(`CategoryEditor - error:`, rulesError);
 
   // Create new rule template
   const createNewRule = useCallback((): CategoryRule => ({
@@ -479,26 +634,63 @@ const EmptyStateMessage: React.FC = () => (
 interface CreateCategoryModalProps {
   parentCategoryId?: string;
   availableCategories: Category[];
-  onCreate: (data: any) => Promise<void>;
+  prePopulatedData?: {
+    categoryName?: string;
+    categoryType?: CategoryType;
+    suggestedPatterns?: Array<{
+      pattern: string;
+      confidence: number;
+      explanation: string;
+      field?: string;
+      condition?: string;
+    }>;
+    transactionDescription?: string;
+  } | null;
+  isLoadingSuggestions?: boolean;
+  onCreate: (data: CategoryCreate) => Promise<void>;
   onCancel: () => void;
 }
 
 const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
   parentCategoryId,
   availableCategories,
+  prePopulatedData,
+  isLoadingSuggestions,
   onCreate,
   onCancel
 }) => {
   const [formData, setFormData] = useState({
-    name: '',
-    type: 'EXPENSE' as const,
+    name: prePopulatedData?.categoryName || '',
+    type: prePopulatedData?.categoryType === 'INCOME' ? CategoryType.INCOME : CategoryType.EXPENSE,
     icon: '',
     color: '#667eea',
     inheritParentRules: true,
-    ruleInheritanceMode: 'additive' as const
+    ruleInheritanceMode: 'additive' as 'additive' | 'override' | 'disabled'
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Rule creation state for pre-populated patterns
+  const [showRuleCreation, setShowRuleCreation] = useState(!!prePopulatedData?.suggestedPatterns?.length);
+  const [selectedPattern, setSelectedPattern] = useState(
+    prePopulatedData?.suggestedPatterns?.[0]?.pattern || ''
+  );
+  
+  // Update form when pre-populated data changes
+  useEffect(() => {
+    if (prePopulatedData) {
+      setFormData(prev => ({
+        ...prev,
+        name: prePopulatedData.categoryName || prev.name,
+        type: prePopulatedData.categoryType === 'INCOME' ? CategoryType.INCOME : CategoryType.EXPENSE
+      }));
+      
+      if (prePopulatedData.suggestedPatterns?.length) {
+        setShowRuleCreation(true);
+        setSelectedPattern(prePopulatedData.suggestedPatterns[0].pattern);
+      }
+    }
+  }, [prePopulatedData]);
 
   // Handle escape key to close modal
   useEffect(() => {
@@ -524,10 +716,33 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
     setError(null);
 
     try {
-      await onCreate({
-        ...formData,
-        parentCategoryId: parentCategoryId || undefined
-      });
+      // If we have a selected pattern and rule creation is enabled, use the createWithRule API
+      if (showRuleCreation && selectedPattern) {
+        // Find the selected pattern data to get field and condition
+        const selectedPatternData = prePopulatedData?.suggestedPatterns?.find(
+          p => p.pattern === selectedPattern
+        );
+        
+        const response = await CategoryService.createWithRule(
+          formData.name,
+          formData.type,
+          selectedPattern,
+          selectedPatternData?.field || 'description', // Default to 'description' field
+          selectedPatternData?.condition || 'contains' // Default to 'contains' condition
+        );
+        
+        // Call the onCreate callback with the created category
+        await onCreate({
+          ...response.category,
+          parentCategoryId: parentCategoryId || undefined
+        });
+      } else {
+        // Standard category creation
+        await onCreate({
+          ...formData,
+          parentCategoryId: parentCategoryId || undefined
+        });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create category');
     } finally {
@@ -577,6 +792,60 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
                 <strong>Parent Category:</strong> {parentCategory.name}
               </div>
             )}
+            
+            {/* Deep-linking context */}
+            {prePopulatedData?.transactionDescription && (
+              <div className="deep-link-context">
+                <div className="context-header">
+                  <h4>💡 Creating category for transaction:</h4>
+                </div>
+                <div className="transaction-description">
+                  "{prePopulatedData.transactionDescription}"
+                </div>
+                
+                {isLoadingSuggestions && (
+                  <div className="loading-suggestions">
+                    <span className="loading-spinner">⏳</span> Analyzing transaction...
+                  </div>
+                )}
+                
+                {prePopulatedData.suggestedPatterns && prePopulatedData.suggestedPatterns.length > 0 && (
+                  <div className="suggested-patterns">
+                    <h5>Suggested patterns for auto-categorization:</h5>
+                    {prePopulatedData.suggestedPatterns.map((pattern, index) => (
+                      <div 
+                        key={index}
+                        className={`pattern-suggestion ${selectedPattern === pattern.pattern ? 'selected' : ''}`}
+                        onClick={() => setSelectedPattern(pattern.pattern)}
+                      >
+                        <div className="pattern-header">
+                          <input
+                            type="radio"
+                            name="suggestedPattern"
+                            checked={selectedPattern === pattern.pattern}
+                            onChange={() => setSelectedPattern(pattern.pattern)}
+                          />
+                          <span className="pattern-text">"{pattern.pattern}"</span>
+                          <span className="pattern-confidence">{pattern.confidence}%</span>
+                        </div>
+                        <div className="pattern-explanation">{pattern.explanation}</div>
+                      </div>
+                    ))}
+                    
+                    <div className="rule-creation-toggle">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={showRuleCreation}
+                          onChange={(e) => setShowRuleCreation(e.target.checked)}
+                        />
+                        Create rule with selected pattern (recommended)
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {error && (
               <div className="error-message">
@@ -602,10 +871,10 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
               <select
                 id="category-type"
                 value={formData.type}
-                onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value as any }))}
+                onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value as CategoryType }))}
               >
-                <option value="EXPENSE">💸 Expense</option>
-                <option value="INCOME">💰 Income</option>
+                <option value={CategoryType.EXPENSE}>💸 Expense</option>
+                <option value={CategoryType.INCOME}>💰 Income</option>
               </select>
             </div>
 

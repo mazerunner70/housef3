@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import FieldMapService, { FieldMap } from '../services/FileMapService';
 import { DataPreviewPanel } from './DataPreviewPanel';
-import FileService, { FileMetadata } from '../services/FileService';
+import FileService from '../services/FileService';
 import './FieldMapForm.css';
 import { transactionFields } from '../services/TransactionService';
 import { parseCSV as parseCSVContent } from '../utils/csvParser';
@@ -23,7 +23,6 @@ export const FieldMapForm: React.FC<FieldMapFormProps> = ({
   fieldMap,
   onSave,
   onCancel,
-  accountId,
   fileId
 }) => {
   const [name, setName] = useState(fieldMap?.name || '');
@@ -38,7 +37,7 @@ export const FieldMapForm: React.FC<FieldMapFormProps> = ({
     console.log('Mappings:', mappings);
     return mappings;
   });
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [previewData, setPreviewData] = useState<Array<Record<string, any>>>([]);
   const [loadingPreview, setLoadingPreview] = useState(false);

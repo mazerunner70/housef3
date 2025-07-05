@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Color, ColorListResponse, listColors } from '../services/ColorService';
+import { Color, listColors } from '../services/ColorService';
 import './ColorDisplay.css';
 
 export const ColorDisplay = () => {

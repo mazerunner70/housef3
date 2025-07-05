@@ -122,7 +122,7 @@ const TransactionFilters: React.FC<TransactionFiltersProps> = ({
             className="filter-select multi-select"
           >
             {categories.map(category => (
-              <option key={category.id} value={category.id}>{category.name}</option>
+              <option key={category.categoryId} value={category.categoryId}>{category.name}</option>
             ))}
           </select>
         </div>

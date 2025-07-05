@@ -17,7 +17,6 @@ interface FileFieldMapStatusProps {
 const FileFieldMapStatus: React.FC<FileFieldMapStatusProps> = ({
   fieldMap,
   onSelectMap,
-  onCreateMap,
   className = ''
 }) => {
   console.log('FileFieldMapStatus rendering with props:', { fieldMap, className });

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Account, listAccounts, AccountType, Currency, createAccount } from '../services/AccountService';
+import { Account, listAccounts, createAccount } from '../services/AccountService';
 import AccountForm from './AccountForm';
 import './AccountList.css';
 

@@ -524,12 +524,26 @@ def list_user_transactions(
     transaction_type: Optional[str] = None,
     search_term: Optional[str] = None,
     sort_order_date: str = 'desc',
-    ignore_dup: bool = False
+    ignore_dup: bool = False,
+    uncategorized_only: bool = False
 ) -> Tuple[List[Transaction], Optional[Dict[str, Any]], int]:
     """
     List transactions for a user with filtering, date sorting, and pagination.
     Assumes 'UserIdIndex' GSI with 'userId' as PK and 'date' (ms since epoch) as SK or other suitable SK for date sorting.
     And that 'date' attribute in DynamoDB is stored as numeric milliseconds since epoch.
+    
+    Args:
+        user_id: The user ID to filter by
+        limit: Maximum number of transactions to return
+        last_evaluated_key: For pagination
+        start_date_ts: Start date filter (milliseconds since epoch)
+        end_date_ts: End date filter (milliseconds since epoch)
+        account_ids: List of account IDs to filter by
+        transaction_type: Transaction type to filter by
+        search_term: Search term to filter descriptions
+        sort_order_date: Sort order ('asc' or 'desc')
+        ignore_dup: Whether to ignore duplicate transactions
+        uncategorized_only: If True, only return transactions without categories
     """
     try:
         table = get_transactions_table()
@@ -537,9 +551,20 @@ def list_user_transactions(
             logger.error("TRANSACTIONS_TABLE is not configured.")
             return [], None, 0
 
+        # Build the key condition expression with date range if specified
+        # Since date is now the range key in UserIdIndex GSI, we need to use it in KeyConditionExpression
+        key_condition = Key('userId').eq(user_id)
+        
+        if start_date_ts is not None and end_date_ts is not None:
+            key_condition = key_condition & Key('date').between(start_date_ts, end_date_ts)
+        elif start_date_ts is not None:
+            key_condition = key_condition & Key('date').gte(start_date_ts)
+        elif end_date_ts is not None:
+            key_condition = key_condition & Key('date').lte(end_date_ts)
+
         query_params: Dict[str, Any] = {
             'IndexName': 'UserIdIndex',
-            'KeyConditionExpression': Key('userId').eq(user_id),
+            'KeyConditionExpression': key_condition,
             'Limit': limit,
             'ScanIndexForward': sort_order_date.lower() == 'asc'
         }
@@ -547,37 +572,26 @@ def list_user_transactions(
         if last_evaluated_key:
             query_params['ExclusiveStartKey'] = last_evaluated_key
 
+        # Build filter expressions using a more pythonic approach
         filter_expressions = []
-
-        # Date range filter using integer timestamps
-        if start_date_ts is not None and end_date_ts is not None:
-            # Frontend should ensure end_date_ts is end of day if a full day range is intended.
-            # Or, if frontend sends start of day for end_date_ts, add (24*60*60*1000 - 1) ms to make it inclusive.
-            # For now, using the timestamps as provided.
-            filter_expressions.append(Attr('date').between(start_date_ts, end_date_ts))
-        elif start_date_ts is not None:
-            filter_expressions.append(Attr('date').gte(start_date_ts))
-        elif end_date_ts is not None:
-            filter_expressions.append(Attr('date').lte(end_date_ts))
         
-        if account_ids:
-            filter_expressions.append(Attr('accountId').is_in([str(aid) for aid in account_ids])) # Convert UUIDs to strings
-
-        if transaction_type and transaction_type.lower() != 'all':
-            filter_expressions.append(Attr('transactionType').eq(transaction_type))
+        # Build conditional filters using dict comprehension pattern
+        filters = {
+            'account_ids': account_ids and Attr('accountId').is_in([str(aid) for aid in account_ids]),
+            'transaction_type': (transaction_type and transaction_type.lower() != 'all') and Attr('transactionType').eq(transaction_type),
+            'search_term': search_term and Attr('description').contains(search_term),
+            'ignore_dup': ignore_dup and Attr('status').ne('duplicate'),
+            'uncategorized_only': uncategorized_only and Attr('primaryCategoryId').not_exists()
+        }
         
-        if search_term:
-            filter_expressions.append(Attr('description').contains(search_term))
-
-        if ignore_dup:
-            filter_expressions.append(Attr('status').ne('duplicate'))
-
+        # Add non-None filters to the list
+        filter_expressions.extend(filter_expr for filter_expr in filters.values() if filter_expr)
+        
+        # Combine all filters with AND logic
         if filter_expressions:
-            final_filter_expression = filter_expressions[0]
-            if len(filter_expressions) > 1:
-                for i in range(1, len(filter_expressions)):
-                    final_filter_expression = final_filter_expression & filter_expressions[i]
-            query_params['FilterExpression'] = final_filter_expression
+            from functools import reduce
+            import operator
+            query_params['FilterExpression'] = reduce(operator.and_, filter_expressions)
 
         logger.debug(f"DynamoDB query params: {query_params}")
         response = table.query(**query_params)

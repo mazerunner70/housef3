@@ -55,9 +55,12 @@ export interface TransactionListResponse {
 // --- New interfaces and functions for Transactions View ---
 
 export interface CategoryInfo {
-  id: string;
+  categoryId: string;
   name: string;
-  // Add other fields if your API returns more, e.g., type, parentId
+  userId: string;
+  type: string;
+  parentCategoryId: string | null;
+  // Add other fields if your API returns more
 }
 
 export interface AccountInfo {
@@ -71,7 +74,9 @@ export interface TransactionViewItem extends Omit<Transaction, 'category' | 'acc
   date: number; // milliseconds since epoch
   description: string;
   payee?: string;
-  category: CategoryInfo; // Use new CategoryInfo
+  category?: CategoryInfo; // Optional - will be populated from primaryCategoryId
+  primaryCategoryId?: string; // From backend response
+  categories?: any[]; // Category assignments from backend
   account?: string;   // Changed to string (accountId)
   amount: Decimal; 
   balance: Decimal; 
@@ -131,13 +136,14 @@ export const getUserTransactions = async (params: TransactionRequestParams): Pro
   const endpoint = `${API_ENDPOINT}/api/transactions?${query.toString()}`; 
   try {
     const response = await authenticatedRequest(endpoint);
-    const data = response as TransactionsViewResponse; // Cast to the expected response type
+    const data = response as any; // Backend response format
 
-    // Ensure financial values are Decimal instances
-    const processedTransactions = data.transactions.map(tx => ({
+    // Transform backend response to match TransactionViewItem interface
+    const processedTransactions = data.transactions.map((tx: any) => ({
       ...tx,
       amount: new Decimal(tx.amount),
       balance: new Decimal(tx.balance),
+      // Leave primaryCategoryId as-is, will be transformed in the component
     }));
 
     const processedResponse: TransactionsViewResponse = {
@@ -158,8 +164,17 @@ export const getCategories = async (): Promise<CategoryInfo[]> => {
   const endpoint = `${API_ENDPOINT}/api/categories`;
   try {
     const response = await authenticatedRequest(endpoint);
-    // Assuming API returns [{ id: "cat_abc", name: "Groceries" }, ...]
-    return response as CategoryInfo[]; // Adjust if API returns a more complex object e.g. { categories: [] }
+    
+    // Backend returns { categories: [...], metadata: {...} }
+    if (response && response.categories && Array.isArray(response.categories)) {
+      return response.categories as CategoryInfo[];
+    }
+    // Fallback: if response is already an array (for backward compatibility)
+    if (Array.isArray(response)) {
+      return response as CategoryInfo[];
+    }
+    console.warn('Categories response is not in expected format:', response);
+    return [];
   } catch (error) {
     console.error('Error fetching categories:', error);
     throw error;

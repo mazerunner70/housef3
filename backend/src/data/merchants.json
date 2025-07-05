@@ -1,0 +1,217 @@
+{
+  "merchants": {
+    "starbucks": {
+      "name": "Starbucks",
+      "normalized_name": "STARBUCKS",
+      "suggested_category": "Coffee & Cafes",
+      "category_type": "EXPENSE",
+      "confidence": 95,
+      "common_patterns": ["STARBUCKS", "SBX", "STARBUCK"],
+      "mcc_codes": ["5814"]
+    },
+    "mcdonalds": {
+      "name": "McDonald's",
+      "normalized_name": "MCDONALDS",
+      "suggested_category": "Fast Food",
+      "category_type": "EXPENSE",
+      "confidence": 95,
+      "common_patterns": ["MCDONALDS", "MCD", "MCDONALD"],
+      "mcc_codes": ["5814"]
+    },
+    "subway": {
+      "name": "Subway",
+      "normalized_name": "SUBWAY",
+      "suggested_category": "Fast Food",
+      "category_type": "EXPENSE",
+      "confidence": 90,
+      "common_patterns": ["SUBWAY"],
+      "mcc_codes": ["5814"]
+    },
+    "dominos": {
+      "name": "Domino's Pizza",
+      "normalized_name": "DOMINOS",
+      "suggested_category": "Restaurants",
+      "category_type": "EXPENSE",
+      "confidence": 92,
+      "common_patterns": ["DOMINOS", "DOMINO'S"],
+      "mcc_codes": ["5814"]
+    },
+    "amazon": {
+      "name": "Amazon",
+      "normalized_name": "AMAZON", 
+      "suggested_category": "Online Shopping",
+      "category_type": "EXPENSE",
+      "confidence": 98,
+      "common_patterns": ["AMAZON", "AMZN", "AMZ"],
+      "mcc_codes": ["5968", "5999"]
+    },
+    "walmart": {
+      "name": "Walmart",
+      "normalized_name": "WALMART",
+      "suggested_category": "Shopping",
+      "category_type": "EXPENSE",
+      "confidence": 95,
+      "common_patterns": ["WALMART", "WAL-MART", "WM"],
+      "mcc_codes": ["5411", "5300"]
+    },
+    "target": {
+      "name": "Target",
+      "normalized_name": "TARGET",
+      "suggested_category": "Shopping",
+      "category_type": "EXPENSE",
+      "confidence": 90,
+      "common_patterns": ["TARGET", "TGT"],
+      "mcc_codes": ["5411", "5300"]
+    },
+    "costco": {
+      "name": "Costco",
+      "normalized_name": "COSTCO",
+      "suggested_category": "Shopping",
+      "category_type": "EXPENSE",
+      "confidence": 95,
+      "common_patterns": ["COSTCO", "COSTCO WHOLESALE"],
+      "mcc_codes": ["5300"]
+    },
+    "shell": {
+      "name": "Shell",
+      "normalized_name": "SHELL",
+      "suggested_category": "Gas & Fuel",
+      "category_type": "EXPENSE",
+      "confidence": 95,
+      "common_patterns": ["SHELL", "SHELL OIL"],
+      "mcc_codes": ["5542"]
+    },
+    "exxon": {
+      "name": "Exxon",
+      "normalized_name": "EXXON",
+      "suggested_category": "Gas & Fuel",
+      "category_type": "EXPENSE",
+      "confidence": 95,
+      "common_patterns": ["EXXON", "EXXONMOBIL", "ESSO"],
+      "mcc_codes": ["5542"]
+    },
+    "bp": {
+      "name": "BP",
+      "normalized_name": "BP",
+      "suggested_category": "Gas & Fuel",
+      "category_type": "EXPENSE",
+      "confidence": 90,
+      "common_patterns": ["BP", "BRITISH PETROLEUM"],
+      "mcc_codes": ["5542"]
+    },
+    "chevron": {
+      "name": "Chevron",
+      "normalized_name": "CHEVRON",
+      "suggested_category": "Gas & Fuel",
+      "category_type": "EXPENSE",
+      "confidence": 95,
+      "common_patterns": ["CHEVRON", "TEXACO"],
+      "mcc_codes": ["5542"]
+    },
+    "bank_of_america": {
+      "name": "Bank of America",
+      "normalized_name": "BANK OF AMERICA",
+      "suggested_category": "Bank Fees",
+      "category_type": "EXPENSE",
+      "confidence": 95,
+      "common_patterns": ["BANK OF AMERICA", "BofA", "BOA"],
+      "mcc_codes": ["6011"]
+    },
+    "chase": {
+      "name": "Chase Bank",
+      "normalized_name": "CHASE",
+      "suggested_category": "Bank Fees",
+      "category_type": "EXPENSE",
+      "confidence": 92,
+      "common_patterns": ["CHASE", "JPMORGAN CHASE"],
+      "mcc_codes": ["6011"]
+    },
+    "wells_fargo": {
+      "name": "Wells Fargo",
+      "normalized_name": "WELLS FARGO",
+      "suggested_category": "Bank Fees",
+      "category_type": "EXPENSE",
+      "confidence": 95,
+      "common_patterns": ["WELLS FARGO", "WF", "WFARGO"],
+      "mcc_codes": ["6011"]
+    },
+    "uber": {
+      "name": "Uber",
+      "normalized_name": "UBER",
+      "suggested_category": "Transportation",
+      "category_type": "EXPENSE",
+      "confidence": 98,
+      "common_patterns": ["UBER", "UBER TRIP"],
+      "mcc_codes": ["4121"]
+    },
+    "lyft": {
+      "name": "Lyft",
+      "normalized_name": "LYFT",
+      "suggested_category": "Transportation",
+      "category_type": "EXPENSE",
+      "confidence": 98,
+      "common_patterns": ["LYFT"],
+      "mcc_codes": ["4121"]
+    },
+    "electric": {
+      "name": "Electric Company",
+      "normalized_name": "ELECTRIC",
+      "suggested_category": "Utilities",
+      "category_type": "EXPENSE",
+      "confidence": 85,
+      "common_patterns": ["ELECTRIC", "POWER", "ENERGY"],
+      "mcc_codes": ["4900"]
+    },
+    "gas_company": {
+      "name": "Gas Company",
+      "normalized_name": "GAS COMPANY",
+      "suggested_category": "Utilities",
+      "category_type": "EXPENSE",
+      "confidence": 85,
+      "common_patterns": ["GAS COMPANY", "NATURAL GAS"],
+      "mcc_codes": ["4900"]
+    },
+    "netflix": {
+      "name": "Netflix", 
+      "normalized_name": "NETFLIX",
+      "suggested_category": "Entertainment",
+      "category_type": "EXPENSE",
+      "confidence": 98,
+      "common_patterns": ["NETFLIX"],
+      "mcc_codes": ["4899"]
+    },
+    "spotify": {
+      "name": "Spotify",
+      "normalized_name": "SPOTIFY",
+      "suggested_category": "Entertainment",
+      "category_type": "EXPENSE",
+      "confidence": 98,
+      "common_patterns": ["SPOTIFY"],
+      "mcc_codes": ["4899"]
+    },
+    "apple": {
+      "name": "Apple",
+      "normalized_name": "APPLE",
+      "suggested_category": "Software & Apps",
+      "category_type": "EXPENSE",
+      "confidence": 85,
+      "common_patterns": ["APPLE", "ITUNES", "APP STORE"],
+      "mcc_codes": ["5968", "5815"]
+    }
+  },
+  "category_mappings": {
+    "mcc_codes": {
+      "5814": "Restaurants",
+      "5968": "Online Shopping",
+      "5999": "General Retail",
+      "5411": "Grocery Stores",
+      "5300": "Wholesale Clubs",
+      "5542": "Gas Stations",
+      "6011": "Bank Fees",
+      "4121": "Transportation",
+      "4899": "Entertainment",
+      "4900": "Utilities",
+      "5815": "Digital Services"
+    }
+  }
+} 
