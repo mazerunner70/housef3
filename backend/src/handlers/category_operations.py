@@ -845,6 +845,15 @@ def suggest_category_from_transaction_handler(event: Dict[str, Any], user_id: st
         # Generate category suggestion
         suggestion = extractor.suggest_category_from_transaction(transaction)
         
+        if not suggestion:
+            return create_response(200, {
+                "categoryName": "General",
+                "categoryType": "EXPENSE",
+                "confidence": 0.5,
+                "icon": "📁",
+                "suggestedPatterns": []
+            })
+        
         return create_response(200, {
             "categoryName": suggestion.name,
             "categoryType": suggestion.category_type,
