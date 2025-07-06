@@ -81,6 +81,43 @@
   font-weight: 500;
 }
 
+/* Category cell with quick selector and add button */
+.transaction-table-container .category-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.transaction-table-container .add-category-button {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.transaction-table-container .add-category-button:hover:not(:disabled) {
+  background-color: #218838;
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+}
+
+.transaction-table-container .add-category-button:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 .transaction-table-container .balance-cell {
   font-family: monospace;
   text-align: right !important;

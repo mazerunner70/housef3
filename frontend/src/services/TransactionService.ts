@@ -55,9 +55,12 @@ export interface TransactionListResponse {
 // --- New interfaces and functions for Transactions View ---
 
 export interface CategoryInfo {
-  id: string;
+  categoryId: string;
   name: string;
-  // Add other fields if your API returns more, e.g., type, parentId
+  userId: string;
+  type: string;
+  parentCategoryId: string | null;
+  // Add other fields if your API returns more
 }
 
 export interface AccountInfo {
@@ -71,7 +74,9 @@ export interface TransactionViewItem extends Omit<Transaction, 'category' | 'acc
   date: number; // milliseconds since epoch
   description: string;
   payee?: string;
-  category: CategoryInfo; // Use new CategoryInfo
+  category?: CategoryInfo; // Optional - will be populated from primaryCategoryId
+  primaryCategoryId?: string; // From backend response
+  categories?: any[]; // Category assignments from backend
   account?: string;   // Changed to string (accountId)
   amount: Decimal; 
   balance: Decimal; 
@@ -111,46 +116,114 @@ export interface TransactionRequestParams {
 
 // Function to fetch transactions for the main transaction view
 export const getUserTransactions = async (params: TransactionRequestParams): Promise<TransactionsViewResponse> => {
-  const query = new URLSearchParams();
-  if (params.page) query.append('page', params.page.toString());
-  if (params.pageSize) query.append('pageSize', params.pageSize.toString());
+  const desiredPageSize = params.pageSize || 25;
+  let allTransactions: any[] = [];
+  let currentLastEvaluatedKey = params.lastEvaluatedKey;
+  let totalPagesFromBackend = 0;
+  let totalItemsFromBackend = 0;
+  let requestCount = 0;
+  const maxRequests = 10; // Prevent infinite loops
   
-  // Append timestamps as strings
-  if (params.startDate !== undefined) query.append('startDate', params.startDate.toString());
-  if (params.endDate !== undefined) query.append('endDate', params.endDate.toString());
+  console.log(`Frontend pagination: Starting to fetch ${desiredPageSize} transactions`);
   
-  if (params.accountIds && params.accountIds.length > 0) query.append('accountIds', params.accountIds.join(','));
-  if (params.categoryIds && params.categoryIds.length > 0) query.append('categoryIds', params.categoryIds.join(','));
-  if (params.transactionType) query.append('transactionType', params.transactionType);
-  if (params.searchTerm) query.append('searchTerm', params.searchTerm);
-  if (params.sortBy) query.append('sortBy', params.sortBy as string);
-  if (params.sortOrder) query.append('sortOrder', params.sortOrder);
-  if (params.lastEvaluatedKey) query.append('lastEvaluatedKey', JSON.stringify(params.lastEvaluatedKey));
-  if (params.ignoreDup !== undefined) query.append('ignoreDup', params.ignoreDup.toString());
-
-  const endpoint = `${API_ENDPOINT}/api/transactions?${query.toString()}`; 
-  try {
-    const response = await authenticatedRequest(endpoint);
-    const data = response as TransactionsViewResponse; // Cast to the expected response type
-
-    // Ensure financial values are Decimal instances
-    const processedTransactions = data.transactions.map(tx => ({
-      ...tx,
-      amount: new Decimal(tx.amount),
-      balance: new Decimal(tx.balance),
-    }));
-
-    const processedResponse: TransactionsViewResponse = {
-      ...data,
-      transactions: processedTransactions,
-    };
+  while (allTransactions.length < desiredPageSize && requestCount < maxRequests) {
+    requestCount++;
     
-    console.log('processedResponse size', processedResponse.transactions.length);
-    return processedResponse;
-  } catch (error) {
-    console.error('Error fetching user transactions:', error);
-    throw error;
+    // Build query parameters for this request
+    const query = new URLSearchParams();
+    if (params.page) query.append('page', params.page.toString());
+    if (params.pageSize) query.append('pageSize', desiredPageSize.toString()); // Always request the full desired amount
+    
+    // Append timestamps as strings
+    if (params.startDate !== undefined) query.append('startDate', params.startDate.toString());
+    if (params.endDate !== undefined) query.append('endDate', params.endDate.toString());
+    
+    if (params.accountIds && params.accountIds.length > 0) query.append('accountIds', params.accountIds.join(','));
+    if (params.categoryIds && params.categoryIds.length > 0) query.append('categoryIds', params.categoryIds.join(','));
+    if (params.transactionType) query.append('transactionType', params.transactionType);
+    if (params.searchTerm) query.append('searchTerm', params.searchTerm);
+         if (params.sortBy) query.append('sortBy', params.sortBy as string);
+     if (params.sortOrder) query.append('sortOrder', params.sortOrder);
+     if (currentLastEvaluatedKey) {
+       // Fix data types for DynamoDB compatibility: convert date from string to number
+       // This happens because JSON serialization converts numbers to strings
+       const processedKey = { ...currentLastEvaluatedKey };
+       if (processedKey.date && typeof processedKey.date === 'string') {
+         const dateNum = parseInt(processedKey.date, 10);
+         if (!isNaN(dateNum)) {
+           processedKey.date = dateNum;
+           console.log(`Frontend: Converted lastEvaluatedKey date from string "${currentLastEvaluatedKey.date}" to number ${dateNum}`);
+         } else {
+           console.warn(`Frontend: Failed to convert lastEvaluatedKey date "${processedKey.date}" to number`);
+         }
+       }
+       query.append('lastEvaluatedKey', JSON.stringify(processedKey));
+     }
+     if (params.ignoreDup !== undefined) query.append('ignoreDup', params.ignoreDup.toString());
+
+    const endpoint = `${API_ENDPOINT}/api/transactions?${query.toString()}`;
+    
+    console.log(`Frontend pagination: Request ${requestCount}, currentLastEvaluatedKey:`, currentLastEvaluatedKey);
+    
+    try {
+      const response = await authenticatedRequest(endpoint);
+      const data = response as any; // Backend response format
+
+      // Transform backend response to match TransactionViewItem interface
+      const processedTransactions = data.transactions.map((tx: any) => ({
+        ...tx,
+        amount: new Decimal(tx.amount),
+        balance: new Decimal(tx.balance),
+        // Leave primaryCategoryId as-is, will be transformed in the component
+      }));
+
+      console.log(`Frontend pagination: Request ${requestCount} returned ${processedTransactions.length} transactions`);
+      
+      // Add to our collection
+      allTransactions = allTransactions.concat(processedTransactions);
+      
+      // Update pagination info from the most recent response
+      totalPagesFromBackend = data.pagination?.totalPages || 0;
+      totalItemsFromBackend = data.pagination?.totalItems || 0;
+      currentLastEvaluatedKey = data.pagination?.lastEvaluatedKey;
+      
+      // If we got no transactions in this request, stop
+      if (processedTransactions.length === 0) {
+        console.log(`Frontend pagination: No transactions in request ${requestCount}, stopping`);
+        break;
+      }
+      
+      // If there's no more data available (no lastEvaluatedKey), stop
+      if (!currentLastEvaluatedKey) {
+        console.log(`Frontend pagination: No more data available, stopping after ${requestCount} requests`);
+        break;
+      }
+      
+    } catch (error) {
+      console.error(`Frontend pagination: Error on request ${requestCount}:`, error);
+      throw error;
+    }
   }
+  
+  // Trim to exactly the desired page size if we got more
+  if (allTransactions.length > desiredPageSize) {
+    allTransactions = allTransactions.slice(0, desiredPageSize);
+  }
+  
+  console.log(`Frontend pagination: Completed after ${requestCount} requests, returning ${allTransactions.length} transactions`);
+  
+  const processedResponse: TransactionsViewResponse = {
+    transactions: allTransactions,
+    pagination: {
+      currentPage: params.page || 1,
+      pageSize: desiredPageSize,
+      totalItems: totalItemsFromBackend,
+      totalPages: totalPagesFromBackend,
+      lastEvaluatedKey: currentLastEvaluatedKey
+    }
+  };
+  
+  return processedResponse;
 };
 
 // Function to fetch all categories
@@ -158,8 +231,17 @@ export const getCategories = async (): Promise<CategoryInfo[]> => {
   const endpoint = `${API_ENDPOINT}/api/categories`;
   try {
     const response = await authenticatedRequest(endpoint);
-    // Assuming API returns [{ id: "cat_abc", name: "Groceries" }, ...]
-    return response as CategoryInfo[]; // Adjust if API returns a more complex object e.g. { categories: [] }
+    
+    // Backend returns { categories: [...], metadata: {...} }
+    if (response && response.categories && Array.isArray(response.categories)) {
+      return response.categories as CategoryInfo[];
+    }
+    // Fallback: if response is already an array (for backward compatibility)
+    if (Array.isArray(response)) {
+      return response as CategoryInfo[];
+    }
+    console.warn('Categories response is not in expected format:', response);
+    return [];
   } catch (error) {
     console.error('Error fetching categories:', error);
     throw error;
@@ -302,4 +384,4 @@ export default {
   getCategories,
   getAccounts,
   quickUpdateTransactionCategory
-}; 
+};

@@ -1,8 +1,12 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import './TransactionTable.css';
 import Pagination from './Pagination'; // Import Pagination
+import CategoryQuickSelector from './CategoryQuickSelector';
+import PatternSuggestionModal from './PatternSuggestionModal';
 import { TransactionViewItem, CategoryInfo } from '../../services/TransactionService'; // IMPORT SERVICE TYPES
 import { Account as AccountDetail } from '../../services/AccountService'; // IMPORT ACCOUNT SERVICE
+import { Category, CategoryRule } from '../../types/Category';
+import { CategoryService } from '../../services/CategoryService';
 import { Decimal } from 'decimal.js';
 
 export interface SortConfig {
@@ -18,6 +22,26 @@ interface TransactionTableProps {
   accountsData: AccountDetail[]; // NEW PROP for accounts from parent
   onEditTransaction: (transactionId: string) => void;
   onQuickCategoryChange: (transactionId: string, newCategoryId: string) => void;
+  onCreateNewCategory?: (transactionData: {
+    description: string;
+    amount?: string;
+    suggestedCategory?: {
+      name: string;
+      type: 'INCOME' | 'EXPENSE';
+      confidence: number;
+    };
+    suggestedPatterns?: Array<{
+      pattern: string;
+      confidence: number;
+      explanation: string;
+    }>;
+  }) => void;
+  onNavigateToCategoryManagement?: (categoryData?: {
+    suggestedName?: string;
+    suggestedType?: 'INCOME' | 'EXPENSE';
+    suggestedPattern?: string;
+    transactionDescription?: string;
+  }) => void;
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
@@ -34,6 +58,8 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   accountsData, // Destructure new prop
   onEditTransaction,
   onQuickCategoryChange,
+  onCreateNewCategory,
+  onNavigateToCategoryManagement,
   currentPage,
   totalPages,
   onPageChange,
@@ -44,6 +70,15 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'date', direction: 'descending' });
   const [selectedTransactionIds, setSelectedTransactionIds] = useState<Set<string>>(new Set());
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
+  
+  // Pattern suggestion modal state
+  const [isPatternModalOpen, setIsPatternModalOpen] = useState(false);
+  const [patternModalTransaction, setPatternModalTransaction] = useState<{
+    id: string;
+    description: string;
+    amount?: string;
+  } | null>(null);
+  const [patternModalCategory, setPatternModalCategory] = useState<Category | null>(null);
 
   // Create accountsMap from the accountsData prop using useMemo
   const accountsMap = useMemo(() => {
@@ -57,19 +92,108 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
     return newMap;
   }, [accountsData]);
 
-  // Dummy categories for inline editing example - ensure it conforms to CategoryInfo[]
-  const DUMMY_CATEGORIES: CategoryInfo[] = [ // USE CategoryInfo
-    { id: 'cat_food', name: 'Food & Drink' },
-    { id: 'cat_transport', name: 'Transport' },
-    { id: 'cat_bills', name: 'Bills' },
-    { id: 'cat_entertainment', name: 'Entertainment' },
-    { id: 'cat_uncategorized', name: 'Uncategorized' },
-  ];
-  
   const availableCategories = useMemo(() => {
-    // categories prop is already CategoryInfo[] or undefined
-    return categories && categories.length > 0 ? categories : DUMMY_CATEGORIES;
+    // Only return real categories, no dummy fallbacks
+    return categories || [];
   }, [categories]);
+  
+  // Convert CategoryInfo to Category format for CategoryQuickSelector
+  const convertedCategories = useMemo(() => {
+    return availableCategories.map(cat => ({
+      categoryId: cat.categoryId,
+      userId: cat.userId, // Use the actual userId from CategoryInfo
+      name: cat.name,
+      type: cat.type as 'EXPENSE' | 'INCOME', // Use the actual type from CategoryInfo
+      icon: '📁', // Default icon
+      color: '#6c757d', // Default color
+      rules: [], // Empty rules array
+      parentCategoryId: cat.parentCategoryId,
+      inheritParentRules: false,
+      ruleInheritanceMode: 'additive' as const,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    } as Category));
+  }, [availableCategories]);
+  
+  // Handle new category creation
+  const handleCreateNewCategory = (transactionData: {
+    description: string;
+    amount?: string;
+    suggestedCategory?: {
+      name: string;
+      type: 'INCOME' | 'EXPENSE';
+      confidence: number;
+    };
+    suggestedPatterns?: Array<{
+      pattern: string;
+      confidence: number;
+      explanation: string;
+    }>;
+  }) => {
+    if (onCreateNewCategory) {
+      onCreateNewCategory(transactionData);
+    } else if (onNavigateToCategoryManagement) {
+      // Fallback to navigation with pre-populated data
+      onNavigateToCategoryManagement({
+        suggestedName: transactionData.suggestedCategory?.name,
+        suggestedType: transactionData.suggestedCategory?.type,
+        suggestedPattern: transactionData.suggestedPatterns?.[0]?.pattern,
+        transactionDescription: transactionData.description
+      });
+    }
+  };
+  
+  // Handle pattern confirmation from modal
+const handlePatternConfirm = async (pattern: string, rule: Partial<CategoryRule>) => {
+  if (!patternModalTransaction || !patternModalCategory) return;
+  
+  try {
+    // Add rule to category - Type assertion needed until PatternSuggestionModal provides complete rule
+    await CategoryService.addRuleToCategory(patternModalCategory.categoryId, rule as Omit<CategoryRule, 'ruleId'>);
+      
+      // Apply category to transaction
+      onQuickCategoryChange(patternModalTransaction.id, patternModalCategory.categoryId);
+      
+      // Close modal
+      setIsPatternModalOpen(false);
+      setPatternModalTransaction(null);
+      setPatternModalCategory(null);
+    } catch (error) {
+      console.error('Error creating rule and applying category:', error);
+    }
+  };
+  
+  // Handle new category creation from pattern modal
+  const handlePatternModalCreateCategory = async (
+    categoryName: string, 
+    categoryType: 'INCOME' | 'EXPENSE', 
+    pattern: string,
+    fieldToMatch: string,
+    condition: string
+  ) => {
+    if (!patternModalTransaction) return;
+    
+    try {
+      // Create category with rule using the new API
+      const response = await CategoryService.createWithRule(
+        categoryName,
+        categoryType,
+        pattern,
+        fieldToMatch,
+        condition
+      );
+      
+      // Apply the new category to the transaction
+      onQuickCategoryChange(patternModalTransaction.id, response.category.categoryId);
+      
+      // Close modal
+      setIsPatternModalOpen(false);
+      setPatternModalTransaction(null);
+      setPatternModalCategory(null);
+    } catch (error) {
+      console.error('Error creating category with rule:', error);
+    }
+  };
 
   const handleSort = (key: keyof TransactionViewItem) => { // USE TransactionViewItem
     let direction: 'ascending' | 'descending' = 'ascending';
@@ -286,27 +410,46 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                 {transaction.payee && <span className="payee-details"> ({transaction.payee})</span>}
               </td>
               <td>
-                <select 
-                  value={transaction.category?.id || ''} // Safely access and provide fallback
-                  onChange={(e) => onQuickCategoryChange(transaction.id, e.target.value)}
-                  className="category-quick-select"
-                  onClick={(e) => e.stopPropagation()} 
-                >
-                  {availableCategories.map(cat => ( // cat is CategoryInfo
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                  ))}
-                  {/* Ensure the currently selected category is in the list */}
-                  {transaction.category && !availableCategories.find(c => c.id === transaction.category!.id) && (
-                    <option key={transaction.category.id} value={transaction.category.id} disabled>
-                      {transaction.category.name} (Current)
-                    </option>
+                <div className="category-cell">
+                  <CategoryQuickSelector
+                    transactionId={transaction.id}
+                    transactionDescription={transaction.description}
+                    transactionAmount={transaction.amount?.toString()}
+                    availableCategories={convertedCategories}
+                    currentCategoryId={transaction.category?.categoryId}
+                    onCategorySelect={onQuickCategoryChange}
+                    onCreateNewCategory={handleCreateNewCategory}
+                    disabled={isLoadingTransactions}
+                  />
+                  {/* Add Category Icon - shows for uncategorized transactions */}
+                  {!transaction.category?.categoryId && (
+                    <button
+                      className="add-category-button"
+                      onClick={() => {
+                        if (onNavigateToCategoryManagement) {
+                          onNavigateToCategoryManagement({
+                            transactionDescription: transaction.description,
+                            suggestedName: '', // Will be suggested by backend
+                            suggestedPattern: '' // Will be suggested by backend
+                          });
+                        } else {
+                          // Fallback: trigger pattern modal for new category creation
+                          setPatternModalTransaction({
+                            id: transaction.id,
+                            description: transaction.description,
+                            amount: transaction.amount?.toString()
+                          });
+                          setPatternModalCategory(null); // No selected category for new creation
+                          setIsPatternModalOpen(true);
+                        }
+                      }}
+                      title="Create new category for this transaction"
+                      disabled={isLoadingTransactions}
+                    >
+                      +
+                    </button>
                   )}
-                  {!transaction.category && (
-                     <option key="uncategorized-current" value="" disabled>
-                       Uncategorized (Current)
-                     </option>
-                  )}
-                </select>
+                </div>
               </td>
               {/* Updated to use accountsMap */}
               <td>{accountsMap.get(transaction.accountId || '') || 'N/A'}</td>
@@ -399,6 +542,20 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
           totalItems={totalItems}
         />
       )}
+      
+      {/* Pattern Suggestion Modal */}
+      <PatternSuggestionModal
+        isOpen={isPatternModalOpen}
+        onClose={() => {
+          setIsPatternModalOpen(false);
+          setPatternModalTransaction(null);
+          setPatternModalCategory(null);
+        }}
+        transactionDescription={patternModalTransaction?.description || ''}
+        selectedCategory={patternModalCategory!}
+        onConfirmPattern={handlePatternConfirm}
+        onCreateCategory={handlePatternModalCreateCategory}
+      />
     </div>
   );
 };

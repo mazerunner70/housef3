@@ -7,7 +7,6 @@ import {
 
 // Get these values from your Terraform outputs
 const CLIENT_ID = import.meta.env.VITE_COGNITO_CLIENT_ID || '';
-const USER_POOL_ID = import.meta.env.VITE_COGNITO_USER_POOL_ID || '';
 const REGION = import.meta.env.VITE_AWS_REGION || 'eu-west-2';
 
 // Create a Cognito client

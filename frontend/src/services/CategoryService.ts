@@ -64,13 +64,48 @@ export class CategoryService {
   // ===== Core Category CRUD Operations =====
   
   static async getCategories(): Promise<Category[]> {
+    console.log('CategoryService.getCategories() - Making request to /api/categories');
     const response = await authenticatedRequest('/api/categories');
-    return response;
+    console.log('CategoryService.getCategories() - Backend response:', response);
+    console.log('CategoryService.getCategories() - Response type:', typeof response);
+    console.log('CategoryService.getCategories() - Is array?', Array.isArray(response));
+    if (response && typeof response === 'object') {
+      console.log('CategoryService.getCategories() - Response keys:', Object.keys(response));
+    }
+    
+    // Extract the categories array from the response
+    const categories = response.categories || [];
+    console.log('CategoryService.getCategories() - Extracted categories:', categories);
+    console.log('CategoryService.getCategories() - Categories is array?', Array.isArray(categories));
+    
+    // Debug individual categories and their rules
+    if (Array.isArray(categories)) {
+      categories.forEach((category: any, index: number) => {
+        console.log(`CategoryService.getCategories() - Category ${index}:`, category);
+        console.log(`CategoryService.getCategories() - Category ${index} name:`, category.name);
+        console.log(`CategoryService.getCategories() - Category ${index} rules:`, category.rules);
+        console.log(`CategoryService.getCategories() - Category ${index} rules type:`, typeof category.rules);
+        console.log(`CategoryService.getCategories() - Category ${index} rules is array:`, Array.isArray(category.rules));
+        if (category.rules && Array.isArray(category.rules)) {
+          console.log(`CategoryService.getCategories() - Category ${index} rules length:`, category.rules.length);
+          category.rules.forEach((rule: any, ruleIndex: number) => {
+            console.log(`CategoryService.getCategories() - Category ${index} rule ${ruleIndex}:`, rule);
+          });
+        }
+      });
+    }
+    
+    return categories;
   }
 
   static async getCategoryById(categoryId: string): Promise<Category> {
+    console.log(`CategoryService.getCategoryById(${categoryId}) - Making request`);
     const response = await authenticatedRequest(`/api/categories/${categoryId}`);
-    return response;
+    console.log(`CategoryService.getCategoryById(${categoryId}) - Response:`, response);
+    console.log(`CategoryService.getCategoryById(${categoryId}) - Response.category:`, response.category);
+    console.log(`CategoryService.getCategoryById(${categoryId}) - Response.category.rules:`, response.category?.rules);
+    console.log(`CategoryService.getCategoryById(${categoryId}) - Response.category.rules length:`, response.category?.rules?.length);
+    return response.category;
   }
 
   static async createCategory(categoryData: CategoryCreate): Promise<Category> {
@@ -98,7 +133,25 @@ export class CategoryService {
   // ===== Hierarchical Category Management =====
   
   static async getCategoryHierarchy(): Promise<CategoryHierarchy[]> {
+    console.log('CategoryService.getCategoryHierarchy() - Making request to /api/categories/hierarchy');
     const response = await authenticatedRequest('/api/categories/hierarchy');
+    console.log('CategoryService.getCategoryHierarchy() - Backend response:', response);
+    console.log('CategoryService.getCategoryHierarchy() - Response type:', typeof response);
+    console.log('CategoryService.getCategoryHierarchy() - Is array?', Array.isArray(response));
+    
+    // Debug individual hierarchy nodes and their categories
+    if (Array.isArray(response)) {
+      response.forEach((node: any, index: number) => {
+        console.log(`CategoryService.getCategoryHierarchy() - Node ${index}:`, node);
+        console.log(`CategoryService.getCategoryHierarchy() - Node ${index} category:`, node.category);
+        console.log(`CategoryService.getCategoryHierarchy() - Node ${index} category name:`, node.category?.name);
+        console.log(`CategoryService.getCategoryHierarchy() - Node ${index} category rules:`, node.category?.rules);
+        console.log(`CategoryService.getCategoryHierarchy() - Node ${index} category rules length:`, node.category?.rules?.length);
+        console.log(`CategoryService.getCategoryHierarchy() - Node ${index} inheritedRules:`, node.inheritedRules);
+        console.log(`CategoryService.getCategoryHierarchy() - Node ${index} inheritedRules length:`, node.inheritedRules?.length);
+      });
+    }
+    
     return response;
   }
 
@@ -152,6 +205,196 @@ export class CategoryService {
     return response;
   }
 
+  // ===== Pattern Extraction & Smart Category Creation (Phase 4.2) =====
+  
+  static async suggestFromTransaction(transactionData: {
+    description: string;
+    amount?: string;
+    payee?: string;
+    memo?: string;
+  }): Promise<{
+    categoryName: string;
+    categoryType: 'INCOME' | 'EXPENSE';
+    confidence: number;
+    icon: string;
+    suggestedPatterns: Array<{
+      pattern: string;
+      confidence: number;
+      field: string;
+      condition: string;
+      explanation: string;
+    }>;
+  }> {
+    const response = await authenticatedRequest('/api/categories/suggest-from-transaction', {
+      method: 'POST',
+      body: JSON.stringify(transactionData)
+    });
+    return response;
+  }
+
+  static async extractPatterns(descriptions: string[]): Promise<{
+    patterns: Array<{
+      pattern: string;
+      confidence: number;
+      matchCount: number;
+      field: string;
+      condition: string;
+      explanation: string;
+    }>;
+    totalDescriptions: number;
+    totalPatterns: number;
+  }> {
+    const response = await authenticatedRequest('/api/categories/extract-patterns', {
+      method: 'POST',
+      body: JSON.stringify({ descriptions })
+    });
+    return response;
+  }
+
+  static async createWithRule(
+    categoryName: string,
+    categoryType: 'INCOME' | 'EXPENSE',
+    pattern: string,
+    fieldToMatch: string,
+    condition: string
+  ): Promise<{
+    message: string;
+    category: Category;
+    rule: CategoryRule;
+  }> {
+    const response = await authenticatedRequest('/api/categories/create-with-rule', {
+      method: 'POST',
+      body: JSON.stringify({
+        categoryName,
+        categoryType,
+        pattern,
+        fieldToMatch,
+        condition
+      })
+    });
+    
+    // No need to manually apply rules - the backend automatically applies rules to uncategorized transactions
+    return response;
+  }
+
+  // ===== Smart Category Suggestions (Phase 4.2) =====
+  
+  // Simple fallback for API failures - backend now handles intelligent name derivation
+  private static getSimpleFallbackName(description: string): string {
+    if (!description || description.trim().length === 0) {
+      return 'General';
+    }
+    
+    // Extract first meaningful word and capitalize it
+    const words = description.trim().split(/\s+/);
+    const meaningfulWords = words.filter(word => 
+      word.length >= 3 && 
+      !/^\d+$/.test(word) && // Skip pure numbers
+      !['THE', 'AND', 'OR', 'AT', 'TO', 'FROM', 'FOR', 'WITH'].includes(word.toUpperCase())
+    );
+    
+    if (meaningfulWords.length > 0) {
+      const firstWord = meaningfulWords[0];
+      return firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase();
+    }
+    
+    return 'General';
+  }
+  
+  static async getQuickCategorySuggestions(transactionDescription: string): Promise<{
+    suggestedCategory: {
+      name: string;
+      type: 'INCOME' | 'EXPENSE';
+      confidence: number;
+      merchantName?: string;
+    };
+    suggestedPatterns: Array<{
+      pattern: string;
+      confidence: number;
+      explanation: string;
+      matchCount: number;
+    }>;
+  }> {
+    try {
+      const suggestionResponse = await this.suggestFromTransaction({
+        description: transactionDescription
+      });
+      
+      return {
+        suggestedCategory: {
+          name: suggestionResponse.categoryName,
+          type: suggestionResponse.categoryType,
+          confidence: suggestionResponse.confidence,
+          merchantName: suggestionResponse.suggestedPatterns.find(p => p.explanation.includes('merchant'))?.pattern
+        },
+        suggestedPatterns: suggestionResponse.suggestedPatterns.map(p => ({
+          pattern: p.pattern,
+          confidence: p.confidence,
+          explanation: p.explanation,
+          matchCount: 0 // Will be populated by additional API call if needed
+        }))
+      };
+    } catch (error) {
+      console.error('Error getting quick category suggestions:', error);
+      // Use simple fallback for API failures
+      const fallbackName = this.getSimpleFallbackName(transactionDescription);
+      return {
+        suggestedCategory: {
+          name: fallbackName,
+          type: 'EXPENSE',
+          confidence: 50
+        },
+        suggestedPatterns: []
+      };
+    }
+  }
+
+  static async previewPatternMatches(pattern: string, field: string, condition: string): Promise<{
+    matchCount: number;
+    sampleMatches: Array<{
+      transactionId: string;
+      description: string;
+      amount: string;
+      date: string;
+      matchedText: string;
+    }>;
+  }> {
+    try {
+      // Create a temporary rule to test the pattern
+      const testRule: CategoryRule = {
+        ruleId: 'temp',
+        fieldToMatch: field,
+        condition: condition as MatchCondition,
+        value: pattern,
+        caseSensitive: false,
+        priority: 0,
+        enabled: true,
+        confidence: 100,
+        allowMultipleMatches: true,
+        autoSuggest: true
+      };
+
+      const testResponse = await this.testRule(testRule, 10);
+      
+      return {
+        matchCount: testResponse.totalMatches || 0,
+        sampleMatches: testResponse.matchingTransactions?.slice(0, 5).map(t => ({
+          transactionId: t.transactionId,
+          description: t.description,
+          amount: t.amount,
+          date: t.date,
+          matchedText: pattern // Simplified - in real implementation would highlight exact match
+        })) || []
+      };
+    } catch (error) {
+      console.error('Error previewing pattern matches:', error);
+      return {
+        matchCount: 0,
+        sampleMatches: []
+      };
+    }
+  }
+
   // ===== Category Rule Management =====
   
   static async addRuleToCategory(categoryId: string, rule: Omit<CategoryRule, 'ruleId'>): Promise<Category> {
@@ -159,6 +402,8 @@ export class CategoryService {
       method: 'POST',
       body: JSON.stringify(rule)
     });
+    
+    // No need to manually apply rules - if the backend supports auto-application, it will handle it
     return response;
   }
 
@@ -264,12 +509,31 @@ export class CategoryService {
     createSuggestions: boolean = true,
     strategy: CategorySuggestionStrategy = CategorySuggestionStrategy.ALL_MATCHES
   ): Promise<BulkOperationResponse> {
-    const request: BulkRuleApplicationRequest = { categoryId, createSuggestions, strategy };
+    const request: BulkRuleApplicationRequest = { 
+      categoryId, 
+      createSuggestions, 
+      strategy 
+    };
     const response = await authenticatedRequest('/api/categories/apply-rules-bulk', {
       method: 'POST',
       body: JSON.stringify(request)
     });
     return response;
+  }
+
+  static async applyCategoryRulesToAllTransactions(
+    categoryId: string,
+    createSuggestions: boolean = true
+  ): Promise<BulkOperationResponse> {
+    console.log(`Applying all rules for category ${categoryId} to existing transactions...`);
+    try {
+      const result = await this.applyCategoryRules(categoryId, createSuggestions, CategorySuggestionStrategy.ALL_MATCHES);
+      console.log(`Successfully applied category rules to existing transactions:`, result);
+      return result;
+    } catch (error) {
+      console.error(`Failed to apply category rules to existing transactions:`, error);
+      throw error;
+    }
   }
 
   static async bulkConfirmSuggestions(transactionIds: string[]): Promise<BulkOperationResponse> {
@@ -397,9 +661,11 @@ export class CategoryService {
       } catch (error) {
         console.error('Error testing rule:', error);
         callback({
-          transactions: [],
-          matchCount: 0,
-          confidence: 0
+          matchingTransactions: [],
+          totalMatches: 0,
+          rule: rule,
+          limit: 100,
+          averageConfidence: 0
         });
       }
     }, delay);
@@ -426,6 +692,31 @@ export class CategoryService {
 
   static isValidRuleId(ruleId: string): boolean {
     return /^rule_[a-zA-Z0-9]{8}$/.test(ruleId);
+  }
+
+  // ===== Category Reset and Reapply =====
+  
+  static async resetAndReapplyCategories(): Promise<{
+    message: string;
+    results: {
+      totalTransactionsProcessed: number;
+      transactionsClearedFromCategories: number;
+      totalCategoriesProcessed: number;
+      totalApplicationsApplied: number;
+      categoryResults: Array<{
+        categoryId: string;
+        categoryName: string;
+        appliedCount: number;
+        processed: number;
+        errors: number;
+      }>;
+    };
+  }> {
+    const response = await authenticatedRequest('/api/categories/reset-and-reapply', {
+      method: 'POST',
+      body: JSON.stringify({ confirmReset: true })
+    });
+    return response;
   }
 }
 

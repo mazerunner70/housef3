@@ -465,7 +465,9 @@ export const useCategoryRules = (categoryId: string | null) => {
   const [error, setError] = useState<string | null>(null);
 
   const loadCategoryRules = useCallback(async () => {
+    console.log(`useCategoryRules.loadCategoryRules - categoryId: ${categoryId}`);
     if (!categoryId) {
+      console.log(`useCategoryRules.loadCategoryRules - No categoryId, setting rules to empty array`);
       setRules([]);
       return;
     }
@@ -474,9 +476,14 @@ export const useCategoryRules = (categoryId: string | null) => {
     setError(null);
 
     try {
+      console.log(`useCategoryRules.loadCategoryRules - Calling CategoryService.getCategoryById(${categoryId})`);
       const category = await CategoryService.getCategoryById(categoryId);
+      console.log(`useCategoryRules.loadCategoryRules - Got category:`, category);
+      console.log(`useCategoryRules.loadCategoryRules - Category rules:`, category.rules);
+      console.log(`useCategoryRules.loadCategoryRules - Setting rules to:`, category.rules || []);
       setRules(category.rules || []);
     } catch (error) {
+      console.error(`useCategoryRules.loadCategoryRules - Error:`, error);
       setError(error instanceof Error ? error.message : 'Failed to load category rules');
       setRules([]);
     } finally {

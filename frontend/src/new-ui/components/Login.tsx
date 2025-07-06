@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react';
-import { signIn } from '../services/AuthService';
+import { signIn } from '../../services/AuthService';
 import './Login.css';
 
 interface LoginProps {

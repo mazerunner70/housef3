@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import AccountList from '../components/accounts/AccountList';
 import AccountForm from '../components/accounts/AccountForm';
 import ConfirmationModal from '../components/accounts/ConfirmationModal';

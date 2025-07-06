@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './TransactionFilters.css';
 import { CategoryInfo } from '../../services/TransactionService'; // Keep CategoryInfo
 import { Account } from '../../services/AccountService'; // Import Account from AccountService
+import CustomMultiSelect from './CustomMultiSelect';
 
 export interface FilterValues {
   startDate?: string;
@@ -46,12 +47,12 @@ const TransactionFilters: React.FC<TransactionFiltersProps> = ({
     setFilters(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleMultiSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const { name, options } = e.target;
-    const selectedValues = Array.from(options)
-      .filter(option => option.selected)
-      .map(option => option.value);
-    setFilters(prev => ({ ...prev, [name]: selectedValues }));
+  const handleAccountSelectionChange = (selectedValues: string[]) => {
+    setFilters(prev => ({ ...prev, accountIds: selectedValues }));
+  };
+
+  const handleCategorySelectionChange = (selectedValues: string[]) => {
+    setFilters(prev => ({ ...prev, categoryIds: selectedValues }));
   };
   
   const handleTransactionTypeChange = (type: FilterValues['transactionType']) => {
@@ -96,35 +97,31 @@ const TransactionFilters: React.FC<TransactionFiltersProps> = ({
         {/* Account Filter */}
         <div className="filter-group">
           <label htmlFor="accountIds">Accounts:</label>
-          <select 
-            id="accountIds" 
-            name="accountIds" 
-            multiple 
-            value={filters.accountIds || []} 
-            onChange={handleMultiSelectChange} 
-            className="filter-select multi-select"
-          >
-            {accounts.map(account => (
-              <option key={account.accountId} value={account.accountId}>{account.accountName}</option>
-            ))}
-          </select>
+          <CustomMultiSelect
+            options={accounts.map(account => ({
+              value: account.accountId,
+              label: account.accountName
+            }))}
+            selectedValues={filters.accountIds || []}
+            onSelectionChange={handleAccountSelectionChange}
+            placeholder="Select accounts..."
+            className="filter-select"
+          />
         </div>
 
         {/* Category Filter */}
         <div className="filter-group">
           <label htmlFor="categoryIds">Categories:</label>
-          <select 
-            id="categoryIds" 
-            name="categoryIds" 
-            multiple 
-            value={filters.categoryIds || []} 
-            onChange={handleMultiSelectChange} 
-            className="filter-select multi-select"
-          >
-            {categories.map(category => (
-              <option key={category.id} value={category.id}>{category.name}</option>
-            ))}
-          </select>
+          <CustomMultiSelect
+            options={categories.map(category => ({
+              value: category.categoryId,
+              label: category.name
+            }))}
+            selectedValues={filters.categoryIds || []}
+            onSelectionChange={handleCategorySelectionChange}
+            placeholder="Select categories..."
+            className="filter-select"
+          />
         </div>
         
         {/* Transaction Type Filter */}

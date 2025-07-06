@@ -80,6 +80,20 @@ const CategoryHierarchyTree: React.FC<CategoryHierarchyTreeProps> = ({
     const ownRulesCount = category.rules.length;
     const inheritedRulesCount = node.inheritedRules.length;
 
+    // Debug logging for the Sainsburys category
+    if (category.name === 'Sainsburys' || category.name.toLowerCase().includes('sainsbury')) {
+      console.log(`CategoryHierarchyTree - DEBUG: Category ${category.name}:`, category);
+      console.log(`CategoryHierarchyTree - DEBUG: Category ${category.name} rules:`, category.rules);
+      console.log(`CategoryHierarchyTree - DEBUG: Category ${category.name} rules type:`, typeof category.rules);
+      console.log(`CategoryHierarchyTree - DEBUG: Category ${category.name} rules is array:`, Array.isArray(category.rules));
+      console.log(`CategoryHierarchyTree - DEBUG: Category ${category.name} rules length:`, category.rules?.length);
+      console.log(`CategoryHierarchyTree - DEBUG: Category ${category.name} ownRulesCount:`, ownRulesCount);
+      console.log(`CategoryHierarchyTree - DEBUG: Category ${category.name} inheritedRulesCount:`, inheritedRulesCount);
+      console.log(`CategoryHierarchyTree - DEBUG: Category ${category.name} totalRules:`, totalRules);
+      console.log(`CategoryHierarchyTree - DEBUG: Node inherited rules:`, node.inheritedRules);
+      console.log(`CategoryHierarchyTree - DEBUG: RENDERING TEXT: "${totalRules} rule${totalRules !== 1 ? 's' : ''}"`);
+    }
+
     // Mock suggestion count - in real implementation this would come from the backend
     // Deterministic count based on category name length to avoid security-sensitive random number usage
     const suggestionCount: number = (category.name.length % 3); // TODO: Get from backend API

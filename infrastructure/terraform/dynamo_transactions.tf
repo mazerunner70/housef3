@@ -68,10 +68,11 @@ resource "aws_dynamodb_table" "transactions" {
     projection_type    = "ALL"
   }
   
-  # GSI to query transactions by user ID
+  # GSI to query transactions by user ID and sort by date
   global_secondary_index {
     name               = "UserIdIndex"
     hash_key           = "userId"
+    range_key          = "date"
     projection_type    = "ALL"
   }
   

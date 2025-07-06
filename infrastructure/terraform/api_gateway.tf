@@ -552,6 +552,15 @@ resource "aws_apigatewayv2_route" "create_category_with_rule" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# Reset and Reapply Categories route
+resource "aws_apigatewayv2_route" "reset_and_reapply_categories" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /categories/reset-and-reapply"
+  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 # Analytics Operations Integration
 resource "aws_apigatewayv2_integration" "analytics_operations" {
   api_id                 = aws_apigatewayv2_api.main.id

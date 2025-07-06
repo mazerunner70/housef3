@@ -5,7 +5,9 @@ This service provides smart pattern extraction from transaction descriptions,
 merchant recognition, and category name suggestions for quick categorization workflows.
 """
 
+import json
 import logging
+import os
 import re
 import uuid
 from collections import Counter
@@ -25,7 +27,7 @@ logger.setLevel(logging.INFO)
 class PatternSuggestion:
     """Represents a suggested pattern for category rules"""
     pattern: str
-    confidence: float
+    confidence: int  # 0-100 to match CategoryRule
     match_count: int
     field: str  # 'description', 'payee', 'memo'
     explanation: str
@@ -39,6 +41,8 @@ class PatternSuggestion:
             return MatchCondition.STARTS_WITH
         elif self.pattern_type == 'suffix':
             return MatchCondition.ENDS_WITH
+        elif self.pattern_type == 'regex':
+            return MatchCondition.REGEX
         else:
             return MatchCondition.CONTAINS
 
@@ -49,7 +53,7 @@ class CategorySuggestion:
     name: str
     category_type: CategoryType
     suggested_patterns: List[PatternSuggestion]
-    confidence: float
+    confidence: int  # 0-100 to match CategoryRule
     merchant_name: str = ""
     icon: str = "📁"
 
@@ -61,7 +65,7 @@ class MerchantInfo:
     normalized_name: str
     suggested_category: str
     category_type: CategoryType
-    confidence: float
+    confidence: int  # 0-100 to match CategoryRule
     common_patterns: List[str]
 
 
@@ -75,195 +79,84 @@ class PatternExtractionService:
     
     def _build_merchant_database(self) -> Dict[str, MerchantInfo]:
         """Build a database of known merchants and their category mappings"""
+        try:
+            # Try to load from JSON file first
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            json_path = os.path.join(current_dir, '..', 'data', 'merchants.json')
+            
+            if os.path.exists(json_path):
+                with open(json_path, 'r') as f:
+                    data = json.load(f)
+                    
+                merchant_database = {}
+                for merchant_key, merchant_data in data.get('merchants', {}).items():
+                    try:
+                        category_type = CategoryType(merchant_data['category_type'])
+                        merchant_database[merchant_key] = MerchantInfo(
+                            name=merchant_data['name'],
+                            normalized_name=merchant_data['normalized_name'],
+                            suggested_category=merchant_data['suggested_category'],
+                            category_type=category_type,
+                            confidence=merchant_data['confidence'],
+                            common_patterns=merchant_data['common_patterns']
+                        )
+                    except (KeyError, ValueError) as e:
+                        logger.warning(f"Error loading merchant {merchant_key}: {str(e)}")
+                        continue
+                
+                logger.info(f"Loaded {len(merchant_database)} merchants from JSON file")
+                return merchant_database
+                
+        except Exception as e:
+            logger.error(f"Error loading merchants from JSON: {str(e)}")
+        
+        # Fallback to essential hardcoded merchants
+        logger.info("Using fallback merchant database")
+        return self._build_fallback_merchant_database()
+    
+    def _build_fallback_merchant_database(self) -> Dict[str, MerchantInfo]:
+        """Build a minimal fallback database of essential merchants"""
         return {
-            # Food & Dining
+            # Essential merchants for basic pattern recognition
+            'amazon': MerchantInfo(
+                name='Amazon',
+                normalized_name='AMAZON',
+                suggested_category='Online Shopping',
+                category_type=CategoryType.EXPENSE,
+                confidence=98,
+                common_patterns=['AMAZON', 'AMZN', 'AMZ']
+            ),
             'starbucks': MerchantInfo(
                 name='Starbucks',
                 normalized_name='STARBUCKS',
                 suggested_category='Coffee & Cafes',
                 category_type=CategoryType.EXPENSE,
-                confidence=0.95,
+                confidence=95,
                 common_patterns=['STARBUCKS', 'SBX', 'STARBUCK']
+            ),
+            'uber': MerchantInfo(
+                name='Uber',
+                normalized_name='UBER',
+                suggested_category='Transportation',
+                category_type=CategoryType.EXPENSE,
+                confidence=98,
+                common_patterns=['UBER', 'UBER TRIP']
+            ),
+            'netflix': MerchantInfo(
+                name='Netflix',
+                normalized_name='NETFLIX',
+                suggested_category='Entertainment',
+                category_type=CategoryType.EXPENSE,
+                confidence=98,
+                common_patterns=['NETFLIX']
             ),
             'mcdonalds': MerchantInfo(
                 name="McDonald's",
                 normalized_name='MCDONALDS',
                 suggested_category='Fast Food',
                 category_type=CategoryType.EXPENSE,
-                confidence=0.95,
+                confidence=95,
                 common_patterns=['MCDONALDS', 'MCD', 'MCDONALD']
-            ),
-            'subway': MerchantInfo(
-                name='Subway',
-                normalized_name='SUBWAY',
-                suggested_category='Fast Food',
-                category_type=CategoryType.EXPENSE,
-                confidence=0.90,
-                common_patterns=['SUBWAY']
-            ),
-            'dominos': MerchantInfo(
-                name="Domino's Pizza",
-                normalized_name='DOMINOS',
-                suggested_category='Restaurants',
-                category_type=CategoryType.EXPENSE,
-                confidence=0.92,
-                common_patterns=['DOMINOS', "DOMINO'S"]
-            ),
-            
-            # Shopping
-            'amazon': MerchantInfo(
-                name='Amazon',
-                normalized_name='AMAZON',
-                suggested_category='Online Shopping',
-                category_type=CategoryType.EXPENSE,
-                confidence=0.98,
-                common_patterns=['AMAZON', 'AMZN', 'AMZ']
-            ),
-            'walmart': MerchantInfo(
-                name='Walmart',
-                normalized_name='WALMART',
-                suggested_category='Shopping',
-                category_type=CategoryType.EXPENSE,
-                confidence=0.95,
-                common_patterns=['WALMART', 'WAL-MART', 'WM']
-            ),
-            'target': MerchantInfo(
-                name='Target',
-                normalized_name='TARGET',
-                suggested_category='Shopping',
-                category_type=CategoryType.EXPENSE,
-                confidence=0.90,
-                common_patterns=['TARGET', 'TGT']
-            ),
-            'costco': MerchantInfo(
-                name='Costco',
-                normalized_name='COSTCO',
-                suggested_category='Shopping',
-                category_type=CategoryType.EXPENSE,
-                confidence=0.95,
-                common_patterns=['COSTCO', 'COSTCO WHOLESALE']
-            ),
-            
-            # Gas & Fuel
-            'shell': MerchantInfo(
-                name='Shell',
-                normalized_name='SHELL',
-                suggested_category='Gas & Fuel',
-                category_type=CategoryType.EXPENSE,
-                confidence=0.95,
-                common_patterns=['SHELL', 'SHELL OIL']
-            ),
-            'exxon': MerchantInfo(
-                name='Exxon',
-                normalized_name='EXXON',
-                suggested_category='Gas & Fuel',
-                category_type=CategoryType.EXPENSE,
-                confidence=0.95,
-                common_patterns=['EXXON', 'EXXONMOBIL', 'ESSO']
-            ),
-            'bp': MerchantInfo(
-                name='BP',
-                normalized_name='BP',
-                suggested_category='Gas & Fuel',
-                category_type=CategoryType.EXPENSE,
-                confidence=0.90,
-                common_patterns=['BP', 'BRITISH PETROLEUM']
-            ),
-            'chevron': MerchantInfo(
-                name='Chevron',
-                normalized_name='CHEVRON',
-                suggested_category='Gas & Fuel',
-                category_type=CategoryType.EXPENSE,
-                confidence=0.95,
-                common_patterns=['CHEVRON', 'TEXACO']
-            ),
-            
-            # Banking & Finance
-            'bank of america': MerchantInfo(
-                name='Bank of America',
-                normalized_name='BANK OF AMERICA',
-                suggested_category='Bank Fees',
-                category_type=CategoryType.EXPENSE,
-                confidence=0.95,
-                common_patterns=['BANK OF AMERICA', 'BofA', 'BOA']
-            ),
-            'chase': MerchantInfo(
-                name='Chase Bank',
-                normalized_name='CHASE',
-                suggested_category='Bank Fees',
-                category_type=CategoryType.EXPENSE,
-                confidence=0.92,
-                common_patterns=['CHASE', 'JPMORGAN CHASE']
-            ),
-            'wells fargo': MerchantInfo(
-                name='Wells Fargo',
-                normalized_name='WELLS FARGO',
-                suggested_category='Bank Fees',
-                category_type=CategoryType.EXPENSE,
-                confidence=0.95,
-                common_patterns=['WELLS FARGO', 'WF', 'WFARGO']
-            ),
-            
-            # Transportation
-            'uber': MerchantInfo(
-                name='Uber',
-                normalized_name='UBER',
-                suggested_category='Transportation',
-                category_type=CategoryType.EXPENSE,
-                confidence=0.98,
-                common_patterns=['UBER', 'UBER TRIP']
-            ),
-            'lyft': MerchantInfo(
-                name='Lyft',
-                normalized_name='LYFT',
-                suggested_category='Transportation',
-                category_type=CategoryType.EXPENSE,
-                confidence=0.98,
-                common_patterns=['LYFT']
-            ),
-            
-            # Utilities
-            'electric': MerchantInfo(
-                name='Electric Company',
-                normalized_name='ELECTRIC',
-                suggested_category='Utilities',
-                category_type=CategoryType.EXPENSE,
-                confidence=0.85,
-                common_patterns=['ELECTRIC', 'POWER', 'ENERGY']
-            ),
-            'gas company': MerchantInfo(
-                name='Gas Company',
-                normalized_name='GAS COMPANY',
-                suggested_category='Utilities',
-                category_type=CategoryType.EXPENSE,
-                confidence=0.85,
-                common_patterns=['GAS COMPANY', 'NATURAL GAS']
-            ),
-            
-            # Subscriptions
-            'netflix': MerchantInfo(
-                name='Netflix',
-                normalized_name='NETFLIX',
-                suggested_category='Entertainment',
-                category_type=CategoryType.EXPENSE,
-                confidence=0.98,
-                common_patterns=['NETFLIX']
-            ),
-            'spotify': MerchantInfo(
-                name='Spotify',
-                normalized_name='SPOTIFY',
-                suggested_category='Entertainment',
-                category_type=CategoryType.EXPENSE,
-                confidence=0.98,
-                common_patterns=['SPOTIFY']
-            ),
-            'apple': MerchantInfo(
-                name='Apple',
-                normalized_name='APPLE',
-                suggested_category='Software & Apps',
-                category_type=CategoryType.EXPENSE,
-                confidence=0.85,
-                common_patterns=['APPLE', 'ITUNES', 'APP STORE']
             ),
         }
     
@@ -347,7 +240,7 @@ class PatternExtractionService:
                     normalized_name=merchant_name,
                     suggested_category='General',
                     category_type=CategoryType.EXPENSE,
-                    confidence=0.60,
+                    confidence=60,
                     common_patterns=[merchant_name]
                 )
         
@@ -358,46 +251,59 @@ class PatternExtractionService:
         patterns = []
         
         if not description:
+            logger.warning("PATTERN_DEBUG: Empty description provided")
             return patterns
+        
+        logger.info(f"PATTERN_DEBUG: Generating patterns for description: '{description}'")
         
         # Extract merchant info
         merchant_info = self.extract_merchant_from_description(description)
         
         if merchant_info:
+            logger.info(f"PATTERN_DEBUG: Found merchant info: {merchant_info.name} with patterns: {merchant_info.common_patterns}")
             # Create patterns for known merchant
             for pattern in merchant_info.common_patterns:
+                # Determine appropriate condition for merchant pattern
+                # If the pattern is likely a prefix (single word, uppercase), use starts_with
+                if len(pattern.split()) == 1 and pattern.isupper() and len(pattern) >= 4:
+                    pattern_type = 'prefix'
+                    explanation = f"Matches transactions starting with '{pattern}' ({merchant_info.name})"
+                else:
+                    pattern_type = 'merchant'
+                    explanation = f"Matches transactions from {merchant_info.name}"
+                
                 patterns.append(PatternSuggestion(
                     pattern=pattern,
                     confidence=merchant_info.confidence,
-                    match_count=0,  # Will be calculated when testing
+                    match_count=0,
                     field='description',
-                    explanation=f"Matches {merchant_info.name} transactions",
-                    pattern_type='merchant'
+                    explanation=explanation,
+                    pattern_type=pattern_type
                 ))
         
-        # Generate keyword-based patterns
-        normalized = description.upper()
-        
-        # Look for meaningful keywords
-        keywords = self._extract_keywords(normalized)
-        for keyword in keywords:
-            patterns.append(PatternSuggestion(
-                pattern=keyword,
-                confidence=0.75,
-                match_count=0,
-                field='description',
-                explanation=f"Matches transactions containing '{keyword}'",
-                pattern_type='keyword'
-            ))
+        # Normalize description for pattern extraction
+        normalized = description.upper().strip()
         
         # Generate prefix/suffix patterns if applicable
         prefix_pattern = self._extract_prefix_pattern(normalized)
         if prefix_pattern:
+            logger.info(f"PATTERN_DEBUG: Generated prefix pattern: {prefix_pattern.pattern}, pattern_type: {prefix_pattern.pattern_type}")
             patterns.append(prefix_pattern)
         
         suffix_pattern = self._extract_suffix_pattern(normalized)
         if suffix_pattern:
+            logger.info(f"PATTERN_DEBUG: Generated suffix pattern: {suffix_pattern.pattern}, pattern_type: {suffix_pattern.pattern_type}")
             patterns.append(suffix_pattern)
+        
+        # Also generate regex patterns for more flexible matching
+        regex_pattern = self._extract_regex_pattern(normalized)
+        if regex_pattern:
+            logger.info(f"PATTERN_DEBUG: Generated regex pattern: {regex_pattern.pattern}, pattern_type: {regex_pattern.pattern_type}")
+            patterns.append(regex_pattern)
+        
+        # Log final patterns with their conditions
+        for i, pattern in enumerate(patterns):
+            logger.info(f"PATTERN_DEBUG: Pattern {i}: pattern='{pattern.pattern}', pattern_type='{pattern.pattern_type}', condition='{pattern.condition.value if hasattr(pattern.condition, 'value') else pattern.condition}'")
         
         return patterns[:5]  # Return top 5 patterns
     
@@ -414,12 +320,12 @@ class PatternExtractionService:
     
     def _extract_prefix_pattern(self, description: str) -> Optional[PatternSuggestion]:
         """Extract prefix-based pattern if description follows common pattern"""
-        # Look for patterns like "AMAZON.*", "STARBUCKS.*"
+        # Look for patterns like "SAINSBURYS", "AMAZON"
         words = description.split()
         if words and len(words[0]) >= 4:
             return PatternSuggestion(
-                pattern=f"{words[0]}.*",
-                confidence=0.80,
+                pattern=words[0],  # Use simple string, not regex
+                confidence=80,
                 match_count=0,
                 field='description',
                 explanation=f"Matches transactions starting with '{words[0]}'",
@@ -435,8 +341,8 @@ class PatternExtractionService:
         for suffix in common_suffixes:
             if description.endswith(suffix):
                 return PatternSuggestion(
-                    pattern=f".*{suffix}",
-                    confidence=0.70,
+                    pattern=suffix,  # Use simple string, not regex
+                    confidence=70,
                     match_count=0,
                     field='description',
                     explanation=f"Matches transactions ending with '{suffix}'",
@@ -444,12 +350,30 @@ class PatternExtractionService:
                 )
         return None
     
+    def _extract_regex_pattern(self, description: str) -> Optional[PatternSuggestion]:
+        """Extract regex-based pattern for flexible matching"""
+        # Generate a regex pattern for the first meaningful word plus optional text
+        words = description.split()
+        if words and len(words[0]) >= 4:
+            first_word = words[0]
+            # Create a regex that matches the first word followed by anything
+            regex_pattern = f"{re.escape(first_word)}.*"
+            return PatternSuggestion(
+                pattern=regex_pattern,
+                confidence=85,
+                match_count=0,
+                field='description',
+                explanation=f"Matches transactions starting with '{first_word}' (flexible)",
+                pattern_type='regex'
+            )
+        return None
+    
     def suggest_category_from_transaction(self, transaction: Transaction) -> Optional[CategorySuggestion]:
         """Suggest category name and type based on transaction data"""
         # First try merchant recognition
         merchant_info = self.extract_merchant_from_description(transaction.description)
         
-        if merchant_info and merchant_info.confidence > 0.8:
+        if merchant_info and merchant_info.confidence > 80:
             patterns = self.generate_patterns_from_description(transaction.description)
             return CategorySuggestion(
                 name=merchant_info.suggested_category,
@@ -477,14 +401,14 @@ class PatternExtractionService:
                         name=keyword.title(),
                         category_type=CategoryType.INCOME,
                         suggested_patterns=self.generate_patterns_from_description(transaction.description),
-                        confidence=0.75
+                        confidence=75
                     )
             
             return CategorySuggestion(
                 name='Income',
                 category_type=CategoryType.INCOME,
                 suggested_patterns=self.generate_patterns_from_description(transaction.description),
-                confidence=0.60
+                confidence=60
             )
         
         # Check for expense categories by keywords
@@ -510,16 +434,77 @@ class PatternExtractionService:
                     name=category_name,
                     category_type=CategoryType.EXPENSE,
                     suggested_patterns=self.generate_patterns_from_description(transaction.description),
-                    confidence=0.70
+                    confidence=70
                 )
         
-        # Default to general expense
+        # Use smart category name derivation instead of "General"
+        derived_name = self._derive_category_name_from_description(transaction.description)
         return CategorySuggestion(
-            name='General',
+            name=derived_name,
             category_type=CategoryType.EXPENSE,
             suggested_patterns=self.generate_patterns_from_description(transaction.description),
-            confidence=0.50
+            confidence=50
         )
+    
+    def _derive_category_name_from_description(self, description: str) -> str:
+        """Derive a meaningful category name from transaction description"""
+        if not description or not description.strip():
+            return 'General'
+        
+        # Clean up the description
+        clean_description = description.strip().lower()
+        
+        # Common patterns to extract meaningful parts
+        patterns = [
+            # Direct transfers and payments
+            (r'transfer to (.+?)(?:\s|$)', lambda m: m.group(1)),
+            (r'payment to (.+?)(?:\s|$)', lambda m: m.group(1)),
+            (r'direct debit (.+?)(?:\s|$)', lambda m: m.group(1)),
+            
+            # Merchant names (often at the beginning)
+            (r'^([a-zA-Z0-9\s&.\'-]+?)(?:\s+\d|\s+[A-Z]{2,}|\s+card|\s+purchase|$)', lambda m: m.group(1)),
+            
+            # Common purchase patterns
+            (r'purchase at (.+?)(?:\s|$)', lambda m: m.group(1)),
+            (r'pos purchase (.+?)(?:\s|$)', lambda m: m.group(1)),
+            (r'card purchase (.+?)(?:\s|$)', lambda m: m.group(1)),
+            
+            # ATM and withdrawal patterns
+            (r'atm withdrawal', lambda m: 'ATM Withdrawal'),
+            (r'cash withdrawal', lambda m: 'Cash Withdrawal'),
+            
+            # Utility and service patterns
+            (r'(electricity|gas|water|phone|internet|mobile)', lambda m: m.group(1).title()),
+            (r'(insurance|mortgage|loan|rent)', lambda m: m.group(1).title()),
+            
+            # Shopping and retail
+            (r'(supermarket|grocery|food|restaurant|cafe|coffee)', lambda m: m.group(1).title()),
+            (r'(petrol|fuel|gas station)', lambda m: 'Fuel'),
+            (r'(pharmacy|medical|health)', lambda m: 'Healthcare'),
+            
+            # Generic fallback - take first meaningful word(s)
+            (r'^([a-zA-Z]+(?:\s+[a-zA-Z]+)?)', lambda m: m.group(1))
+        ]
+        
+        for pattern, extract_func in patterns:
+            match = re.search(pattern, clean_description, re.IGNORECASE)
+            if match:
+                extracted = extract_func(match)
+                # Clean up the extracted text
+                extracted = re.sub(r'[^a-zA-Z0-9\s&.\'-]', '', extracted).strip()
+                
+                # Capitalize first letter of each word
+                extracted = ' '.join(word.capitalize() for word in extracted.split())
+                
+                # Limit length and return
+                if extracted and len(extracted) <= 30:
+                    return extracted
+        
+        # Final fallback - take first few words, capitalize them
+        words = clean_description.split()[:2]
+        result = ' '.join(word.capitalize() for word in words)
+        
+        return result if result else 'General'
     
     def generate_patterns_from_samples(self, descriptions: List[str]) -> List[PatternSuggestion]:
         """Generate patterns from multiple sample descriptions"""
@@ -532,7 +517,7 @@ class PatternExtractionService:
         # Convert to pattern suggestions
         suggestions = []
         for pattern, frequency in common_patterns.items():
-            confidence = min(0.95, 0.5 + (frequency / len(descriptions)) * 0.5)
+            confidence = int(min(95, 50 + (frequency / len(descriptions)) * 50))
             suggestions.append(PatternSuggestion(
                 pattern=pattern,
                 confidence=confidence,
@@ -562,7 +547,7 @@ class PatternExtractionService:
         return {pattern: count for pattern, count in substring_counts.items() 
                 if count >= 2 and len(pattern) >= 3}
     
-    async def calculate_pattern_match_count(self, pattern: str, user_id: str, field: str = 'description') -> int:
+    def calculate_pattern_match_count(self, pattern: str, user_id: str, field: str = 'description') -> int:
         """Calculate how many transactions would match a given pattern"""
         try:
             # Get user's transactions - unpack the tuple
@@ -637,7 +622,7 @@ class PatternExtractionService:
         # Check pattern matches
         for pattern in patterns:
             if self._pattern_matches(pattern.pattern, t2.description):
-                score += pattern.confidence * 0.6  # 60% weight for pattern match
+                score += (pattern.confidence / 100.0) * 0.6  # 60% weight for pattern match
         
         # Check amount similarity (if amounts are close)
         if t1.amount and t2.amount:

@@ -6,12 +6,14 @@ generates category suggestions with confidence scores, and manages the suggestio
 """
 
 import logging
+from math import log
 import re
 import uuid
 from typing import Dict, List, Optional, Tuple, Any
 from decimal import Decimal
 from enum import Enum
 from collections import defaultdict
+from datetime import datetime, timezone
 
 from models.category import Category, CategoryRule, MatchCondition, CategoryHierarchy, CategorySuggestionStrategy
 from models.transaction import Transaction, TransactionCategoryAssignment, CategoryAssignmentStatus
@@ -31,26 +33,154 @@ class CategoryRuleEngine:
         self, 
         user_id: str, 
         rule: CategoryRule, 
-        limit: int = 100
-    ) -> List[Transaction]:
-        """Test a rule against transactions and return matches"""
+        limit: int = 100,
+        uncategorized_only: bool = False
+    ) -> Dict[str, Any]:
+        """Test a rule against transactions and return matches with full count information"""
         try:
-            # Get transactions for the user
-            transactions, _, _ = list_user_transactions(user_id, limit=limit * 2)  # Get more to account for filtering
+            logger.info(f"RULE_DEBUG: Testing rule - field: {rule.field_to_match}, condition: {rule.condition}, value: '{rule.value}'")
             
-            matching_transactions = []
-            for transaction in transactions:
-                if self.rule_matches_transaction(rule, transaction):
-                    matching_transactions.append(transaction)
-                    if len(matching_transactions) >= limit:
+            # For pattern testing, we want to check more transactions to ensure we find matches
+            if uncategorized_only:
+                # When testing against uncategorized only, get ALL uncategorized transactions using pagination
+                transactions = []
+                last_evaluated_key = None
+                batch_size = 1000
+                
+                while True:
+                    batch, last_evaluated_key, _ = list_user_transactions(
+                        user_id, 
+                        limit=batch_size,
+                        last_evaluated_key=last_evaluated_key,
+                        uncategorized_only=True
+                    )
+                    
+                    if not batch:
                         break
+                    
+                    transactions.extend(batch)
+                    logger.info(f"RULE_DEBUG: Retrieved batch of {len(batch)} uncategorized transactions (total so far: {len(transactions)})")
+                    
+                    if not last_evaluated_key:
+                        break
+                
+                logger.info(f"RULE_DEBUG: Found {len(transactions)} total uncategorized transactions to test against")
+            else:
+                # For all transactions, use a reasonable search limit to avoid performance issues
+                search_limit = max(1000, limit * 10)  # Search at least 1000 transactions or 10x the result limit
+                logger.info(f"RULE_DEBUG: Searching through {search_limit} transactions (sample limit: {limit})")
+                
+                transactions, _, _ = list_user_transactions(user_id, limit=search_limit, uncategorized_only=False)
+                logger.info(f"RULE_DEBUG: Found {len(transactions)} total transactions to test against")
             
-            logger.info(f"Rule testing: {len(matching_transactions)} matches found out of {len(transactions)} transactions")
-            return matching_transactions
+            # Check if we might be hitting the limit (only relevant when not using pagination)
+            if not uncategorized_only and len(transactions) >= search_limit:
+                logger.warning(f"RULE_DEBUG: Retrieved {len(transactions)} transactions which equals our search limit of {search_limit}. There may be more transactions that weren't checked!")
+            
+            # Log some sample transaction descriptions for debugging
+            sample_count = min(10, len(transactions))
+            if sample_count > 0:
+                logger.info(f"RULE_DEBUG: Sample transaction descriptions (first {sample_count}):")
+                for i in range(sample_count):
+                    tx = transactions[i]
+                    desc = getattr(tx, 'description', 'NO_DESCRIPTION')
+                    logger.info(f"RULE_DEBUG: Sample {i+1}: '{desc}'")
+                
+                # Check specifically for SAINSBURYS transactions (for debugging)
+                sainsburys_count = 0
+                for tx in transactions:
+                    desc = getattr(tx, 'description', '')
+                    if desc and 'SAINSBURYS' in desc.upper():
+                        sainsburys_count += 1
+                        if sainsburys_count <= 3:  # Log first 3 SAINSBURYS transactions
+                            logger.info(f"RULE_DEBUG: Found SAINSBURYS transaction: '{desc}'")
+                
+                logger.info(f"RULE_DEBUG: Total SAINSBURYS transactions found: {sainsburys_count}")
+            else:
+                logger.warning("RULE_DEBUG: No transactions found for user!")
+            
+            # First pass: count ALL matching transactions and collect time-span info
+            total_matches = 0
+            sample_transactions = []
+            earliest_date = None
+            latest_date = None
+            
+            for i, transaction in enumerate(transactions):
+                try:
+                    # Track time-span of all transactions scanned
+                    if transaction.date:
+                        # Convert timestamp (milliseconds since epoch) to datetime
+                        tx_date = datetime.fromtimestamp(transaction.date / 1000, timezone.utc)
+                        if earliest_date is None or tx_date < earliest_date:
+                            earliest_date = tx_date
+                        if latest_date is None or tx_date > latest_date:
+                            latest_date = tx_date
+                    
+                    field_value = self._get_transaction_field_value(transaction, rule.field_to_match)
+                    logger.debug(f"RULE_DEBUG: Transaction {i+1}: '{field_value}' (ID: {getattr(transaction, 'transaction_id', 'N/A')})")
+                    
+                    if self.rule_matches_transaction(rule, transaction):
+                        total_matches += 1
+                        
+                        # Only collect sample transactions up to the limit
+                        if len(sample_transactions) < limit:
+                            logger.info(f"RULE_DEBUG: MATCH found! Transaction {i+1}: '{field_value}' (Sample #{len(sample_transactions)+1})")
+                            sample_transactions.append(transaction)
+                        elif len(sample_transactions) == limit:
+                            logger.info(f"RULE_DEBUG: MATCH found! Transaction {i+1}: '{field_value}' (Not included in sample - sample limit reached)")
+                        
+                    else:
+                        logger.debug(f"RULE_DEBUG: No match for transaction {i+1}")
+                        
+                except Exception as e:
+                    logger.warning(f"RULE_DEBUG: Error processing transaction {i+1}: {str(e)}")
+                    continue
+            
+            logger.info(f"RULE_DEBUG: Rule testing completed: {total_matches} total matches found out of {len(transactions)} transactions (returning {len(sample_transactions)} sample transactions)")
+            
+            # Format time-span information
+            time_span_info = {
+                'earliest_date': earliest_date.isoformat() if earliest_date else None,
+                'latest_date': latest_date.isoformat() if latest_date else None,
+                'days_span': None
+            }
+            
+            if earliest_date and latest_date:
+                days_span = (latest_date - earliest_date).days
+                time_span_info['days_span'] = days_span
+                logger.info(f"RULE_DEBUG: Time span scanned: {days_span} days (from {earliest_date.date()} to {latest_date.date()})")
+            
+            # Calculate search truncation info
+            if uncategorized_only:
+                # When using pagination for uncategorized transactions, we checked all of them
+                truncated_search = False
+                effective_search_limit = len(transactions)  # We got all uncategorized transactions
+            else:
+                # For all transactions, we may have hit the search limit
+                truncated_search = len(transactions) >= search_limit
+                effective_search_limit = search_limit
+            
+            return {
+                'total_matches': total_matches,
+                'total_transactions_checked': len(transactions),
+                'sample_transactions': sample_transactions,
+                'sample_limit': limit,
+                'truncated_search': truncated_search,
+                'search_limit': effective_search_limit,
+                'time_span': time_span_info
+            }
             
         except Exception as e:
-            logger.error(f"Error testing rule against transactions: {str(e)}")
-            return []
+            logger.error(f"RULE_DEBUG: Error testing rule against transactions: {str(e)}")
+            return {
+                'total_matches': 0,
+                'total_transactions_checked': 0,
+                'sample_transactions': [],
+                'sample_limit': limit,
+                'truncated_search': False,
+                'search_limit': 0,
+                'error': str(e)
+            }
     
     def rule_matches_transaction(self, rule: CategoryRule, transaction: Transaction) -> bool:
         """Check if a single rule matches a transaction"""
@@ -100,26 +230,38 @@ class CategoryRuleEngine:
     def _match_text_condition(self, rule: CategoryRule, field_value: str) -> bool:
         """Match text-based conditions"""
         if not field_value:
+            logger.debug(f"RULE_DEBUG: No field value to match against")
             return False
             
         # Apply case sensitivity
         search_value = field_value if rule.case_sensitive else field_value.lower()
         pattern_value = rule.value if rule.case_sensitive else rule.value.lower()
         
+        logger.debug(f"RULE_DEBUG: Matching condition '{rule.condition}' - pattern: '{pattern_value}' against value: '{search_value}'")
+        
         try:
+            result = False
             if rule.condition == MatchCondition.CONTAINS:
-                return pattern_value in search_value
+                result = pattern_value in search_value
+                logger.debug(f"RULE_DEBUG: CONTAINS check: '{pattern_value}' in '{search_value}' = {result}")
             elif rule.condition == MatchCondition.STARTS_WITH:
-                return search_value.startswith(pattern_value)
+                result = search_value.startswith(pattern_value)
+                logger.debug(f"RULE_DEBUG: STARTS_WITH check: '{search_value}'.startswith('{pattern_value}') = {result}")
             elif rule.condition == MatchCondition.ENDS_WITH:
-                return search_value.endswith(pattern_value)
+                result = search_value.endswith(pattern_value)
+                logger.debug(f"RULE_DEBUG: ENDS_WITH check: '{search_value}'.endswith('{pattern_value}') = {result}")
             elif rule.condition == MatchCondition.EQUALS:
-                return search_value == pattern_value
+                result = search_value == pattern_value
+                logger.debug(f"RULE_DEBUG: EQUALS check: '{search_value}' == '{pattern_value}' = {result}")
             elif rule.condition == MatchCondition.REGEX:
-                return self._match_regex_pattern(rule, search_value)
+                result = self._match_regex_pattern(rule, search_value)
+                logger.debug(f"RULE_DEBUG: REGEX check: pattern '{rule.value}' against '{search_value}' = {result}")
+            
+            logger.debug(f"RULE_DEBUG: Match result: {result}")
+            return result
                 
         except Exception as e:
-            logger.warning(f"Error matching text condition: {str(e)}")
+            logger.warning(f"RULE_DEBUG: Error matching text condition: {str(e)}")
             
         return False
     
@@ -139,36 +281,36 @@ class CategoryRuleEngine:
             logger.warning(f"Invalid regex pattern '{rule.value}': {str(e)}")
             return False
     
-    def calculate_rule_confidence(self, rule: CategoryRule, transaction: Transaction) -> float:
+    def calculate_rule_confidence(self, rule: CategoryRule, transaction: Transaction) -> int:
         """Calculate confidence score for a rule match"""
         base_confidence = rule.confidence
         
         # Adjust confidence based on match type
         confidence_adjustments = {
-            MatchCondition.EQUALS: 0.1,  # Exact matches get bonus
-            MatchCondition.REGEX: 0.05,  # Regex gets slight bonus
-            MatchCondition.STARTS_WITH: 0.02,
-            MatchCondition.ENDS_WITH: 0.02,
-            MatchCondition.CONTAINS: 0.0,  # No adjustment
-            MatchCondition.AMOUNT_BETWEEN: 0.05,  # Amount ranges get bonus
-            MatchCondition.AMOUNT_GREATER: 0.02,
-            MatchCondition.AMOUNT_LESS: 0.02
+            MatchCondition.EQUALS: 10,  # Exact matches get bonus
+            MatchCondition.REGEX: 5,  # Regex gets slight bonus
+            MatchCondition.STARTS_WITH: 2,
+            MatchCondition.ENDS_WITH: 2,
+            MatchCondition.CONTAINS: 0,  # No adjustment
+            MatchCondition.AMOUNT_BETWEEN: 5,  # Amount ranges get bonus
+            MatchCondition.AMOUNT_GREATER: 2,
+            MatchCondition.AMOUNT_LESS: 2
         }
         
-        adjustment = confidence_adjustments.get(rule.condition, 0.0)
+        adjustment = confidence_adjustments.get(rule.condition, 0)
         
         # Adjust based on field being matched
         field_adjustments = {
-            'description': 0.0,  # Base field
-            'payee': 0.05,  # Payee matches are often more reliable
-            'memo': -0.02,  # Memo might be less reliable
-            'amount': 0.03   # Amount matches are quite reliable
+            'description': 0,  # Base field
+            'payee': 5,  # Payee matches are often more reliable
+            'memo': -2,  # Memo might be less reliable
+            'amount': 3   # Amount matches are quite reliable
         }
         
-        field_adjustment = field_adjustments.get(rule.field_to_match, 0.0)
+        field_adjustment = field_adjustments.get(rule.field_to_match, 0)
         
         # Calculate final confidence, ensuring it stays within bounds
-        final_confidence = min(1.0, max(0.0, base_confidence + adjustment + field_adjustment))
+        final_confidence = min(100, max(0, int(base_confidence + adjustment + field_adjustment)))
         return final_confidence
     
     def categorize_transaction(
@@ -208,7 +350,7 @@ class CategoryRuleEngine:
     def create_category_suggestions(
         self,
         transaction: Transaction,
-        potential_matches: List[Tuple[Category, CategoryRule, float]],
+        potential_matches: List[Tuple[Category, CategoryRule, int]],
         strategy: CategorySuggestionStrategy = CategorySuggestionStrategy.ALL_MATCHES
     ) -> List[TransactionCategoryAssignment]:
         """Create category suggestions based on strategy"""
@@ -230,7 +372,7 @@ class CategoryRuleEngine:
         elif strategy == CategorySuggestionStrategy.TOP_N_MATCHES:
             suggestions = self._create_top_n_suggestions(sorted_matches, n=3)
         elif strategy == CategorySuggestionStrategy.CONFIDENCE_THRESHOLD:
-            suggestions = self._create_threshold_suggestions(sorted_matches, threshold=0.6)
+            suggestions = self._create_threshold_suggestions(sorted_matches, threshold=60)
         else:  # PRIORITY_FILTERED
             suggestions = self._create_priority_filtered_suggestions(sorted_matches)
         
@@ -239,7 +381,7 @@ class CategoryRuleEngine:
     
     def _create_suggestions_from_all_matches(
         self, 
-        matches: List[Tuple[Category, CategoryRule, float]]
+        matches: List[Tuple[Category, CategoryRule, int]]
     ) -> List[TransactionCategoryAssignment]:
         """Create suggestions from all matches"""
         suggestions = []
@@ -261,7 +403,7 @@ class CategoryRuleEngine:
     
     def _create_top_n_suggestions(
         self, 
-        matches: List[Tuple[Category, CategoryRule, float]], 
+        matches: List[Tuple[Category, CategoryRule, int]], 
         n: int = 3
     ) -> List[TransactionCategoryAssignment]:
         """Create suggestions from top N highest confidence matches"""
@@ -284,8 +426,8 @@ class CategoryRuleEngine:
     
     def _create_threshold_suggestions(
         self, 
-        matches: List[Tuple[Category, CategoryRule, float]], 
-        threshold: float = 0.6
+        matches: List[Tuple[Category, CategoryRule, int]], 
+        threshold: int = 60
     ) -> List[TransactionCategoryAssignment]:
         """Create suggestions only above confidence threshold"""
         suggestions = []
@@ -307,7 +449,7 @@ class CategoryRuleEngine:
     
     def _create_priority_filtered_suggestions(
         self, 
-        matches: List[Tuple[Category, CategoryRule, float]]
+        matches: List[Tuple[Category, CategoryRule, int]]
     ) -> List[TransactionCategoryAssignment]:
         """Create suggestions filtered by rule priority"""
         if not matches:
@@ -423,16 +565,33 @@ class CategoryRuleEngine:
             categories = list_categories_by_user_from_db(user_id)
             
             if transaction_ids:
-                # Apply to specific transactions (would need additional implementation)
-                # For now, get all user transactions
+                # Apply to specific transactions - get all transactions then filter
+                # This is less efficient but necessary for specific transaction IDs
                 transactions, _, _ = list_user_transactions(user_id)
-                # Filter by transaction_ids if provided
-                if transaction_ids:
-                    transaction_id_set = set(transaction_ids)
-                    transactions = [t for t in transactions if str(t.transaction_id) in transaction_id_set]
+                transaction_id_set = set(transaction_ids)
+                transactions = [t for t in transactions if str(t.transaction_id) in transaction_id_set]
             else:
-                # Apply to all user transactions
-                transactions, _, _ = list_user_transactions(user_id)
+                # Apply to all uncategorized transactions using pagination to ensure none are missed
+                transactions = []
+                last_evaluated_key = None
+                batch_size = 1000
+                
+                while True:
+                    batch, last_evaluated_key, _ = list_user_transactions(
+                        user_id, 
+                        limit=batch_size,
+                        last_evaluated_key=last_evaluated_key,
+                        uncategorized_only=True
+                    )
+                    
+                    if not batch:
+                        break
+                    
+                    transactions.extend(batch)
+                    logger.info(f"Retrieved batch of {len(batch)} uncategorized transactions (total so far: {len(transactions)})")
+                    
+                    if not last_evaluated_key:
+                        break
             
             stats = {
                 'processed': 0,
@@ -461,6 +620,124 @@ class CategoryRuleEngine:
         except Exception as e:
             logger.error(f"Error in bulk rule application: {str(e)}")
             return {'processed': 0, 'suggestions_created': 0, 'errors': 1}
+    
+    def apply_category_rules_for_category(
+        self,
+        user_id: str,
+        category_id: str,
+        transaction_ids: Optional[List[str]] = None,
+        suggestion_strategy: CategorySuggestionStrategy = CategorySuggestionStrategy.ALL_MATCHES,
+        create_suggestions: bool = True
+    ) -> Dict[str, int]:
+        """Apply rules from a specific category to existing transactions"""
+        
+        try:
+            from utils.db_utils import get_category_by_id_from_db, update_transaction
+            from models.transaction import Transaction
+            import uuid
+            
+            # Get the specific category
+            category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
+            if not category:
+                logger.error(f"Category {category_id} not found for user {user_id}")
+                return {'processed': 0, 'categorized': 0, 'errors': 1}
+            
+            # Get all categories for hierarchy processing
+            all_categories = list_categories_by_user_from_db(user_id)
+            
+            # Get effective rules for this category (including inherited)
+            effective_rules = self.get_effective_rules(category, all_categories)
+            
+            if not effective_rules:
+                logger.info(f"No rules found for category {category_id}")
+                return {'processed': 0, 'categorized': 0, 'errors': 0}
+            
+            # Get transactions to process
+            if transaction_ids:
+                # Get specific transactions - get all transactions then filter
+                # This is less efficient but necessary for specific transaction IDs
+                transactions, _, _ = list_user_transactions(user_id)
+                transaction_id_set = set(transaction_ids)
+                transactions = [t for t in transactions if str(t.transaction_id) in transaction_id_set]
+            else:
+                # Get all uncategorized transactions using pagination to ensure none are missed
+                transactions = []
+                last_evaluated_key = None
+                batch_size = 1000
+                
+                while True:
+                    batch, last_evaluated_key, _ = list_user_transactions(
+                        user_id, 
+                        limit=batch_size,
+                        last_evaluated_key=last_evaluated_key,
+                        uncategorized_only=True
+                    )
+                    
+                    if not batch:
+                        break
+                    
+                    transactions.extend(batch)
+                    logger.info(f"Retrieved batch of {len(batch)} uncategorized transactions (total so far: {len(transactions)})")
+                    
+                    if not last_evaluated_key:
+                        break
+            
+            logger.info(f"Processing {len(transactions)} transactions for category {category.name} with {len(effective_rules)} rules")
+            
+            stats = {
+                'processed': 0,
+                'categorized': 0,
+                'errors': 0,
+                'applied_count': 0  # Add this for consistency with handler expectations
+            }
+            
+            for transaction in transactions:
+                try:
+                    # Check if transaction matches any rule from this category
+                    matched_rules = []
+                    for rule in effective_rules:
+                        if rule.enabled and self.rule_matches_transaction(rule, transaction):
+                            matched_rules.append(rule)
+                    
+                    if matched_rules:
+                        # Apply the category to the transaction
+                        if create_suggestions:
+                            # Create suggestions for manual review
+                            for rule in matched_rules:
+                                confidence = self.calculate_rule_confidence(rule, transaction)
+                                # Add as suggestion to transaction
+                                transaction.add_category_suggestion(
+                                    category_id=uuid.UUID(category_id),
+                                    confidence=confidence,
+                                    rule_id=rule.rule_id
+                                )
+                        else:
+                            # Apply category directly
+                            transaction.add_manual_category(
+                                category_id=uuid.UUID(category_id),
+                                set_as_primary=True
+                            )
+                        logger.info(f"Transaction {transaction} categorized with category {category.name}")
+                        # Save updated transaction using db_utils (proper architectural layer)
+                        logger.info(f"Saving updated transaction {transaction}")
+                        update_transaction(transaction)
+                        
+                        stats['categorized'] += 1
+                        stats['applied_count'] += 1  # Track applied count for handler
+                        logger.debug(f"Applied category {category.name} to transaction {transaction.transaction_id}")
+                    
+                    stats['processed'] += 1
+                    
+                except Exception as e:
+                    logger.error(f"Error processing transaction {transaction.transaction_id}: {str(e)}")
+                    stats['errors'] += 1
+            
+            logger.info(f"Category rule application completed for {category.name}: {stats}")
+            return stats
+            
+        except Exception as e:
+            logger.error(f"Error in category rule application: {str(e)}")
+            return {'processed': 0, 'categorized': 0, 'errors': 1, 'applied_count': 0}
     
     def generate_pattern_from_descriptions(
         self, 

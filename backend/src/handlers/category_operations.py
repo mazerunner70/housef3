@@ -12,7 +12,7 @@ from pydantic import ValidationError
 from models.category import Category, CategoryCreate, CategoryUpdate, CategoryRule, MatchCondition, CategorySuggestionStrategy
 from models.transaction import Transaction
 from services.category_rule_engine import CategoryRuleEngine
-from utils.db_utils import create_category_in_db, delete_category_from_db, get_category_by_id_from_db, list_categories_by_user_from_db, update_category_in_db, list_user_transactions
+from utils.db_utils import create_category_in_db, delete_category_from_db, get_category_by_id_from_db, list_categories_by_user_from_db, update_category_in_db, list_user_transactions, update_transaction
 from utils.lambda_utils import mandatory_path_parameter, optional_query_parameter, mandatory_body_parameter, optional_body_parameter, mandatory_query_parameter
 from utils.auth import get_user_from_event
 
@@ -305,66 +305,102 @@ def serialize_hierarchy(hierarchy):
 def test_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Test a category rule against user's transactions."""
     try:
+        logger.info(f"API_DEBUG: test_category_rule_handler called for user {user_id}")
+        
         body_str = event.get('body')
         if not body_str:
+            logger.warning("API_DEBUG: Request body is missing or empty")
             return create_response(400, {"message": "Request body is missing or empty"})
+        
+        logger.info(f"API_DEBUG: Request body: {body_str}")
         
         try:
             request_data = json.loads(body_str)
+            logger.info(f"API_DEBUG: Parsed request data: {request_data}")
             
             # Extract rule from the request (frontend sends { rule: {...}, limit: 50 })
             if 'rule' not in request_data:
+                logger.warning("API_DEBUG: Missing 'rule' field in request body")
                 return create_response(400, {"message": "Missing 'rule' field in request body"})
             
             rule_data = request_data['rule']
+            logger.info(f"API_DEBUG: Rule data from request: {rule_data}")
             
             # Create enhanced CategoryRule with Phase 2.1 fields using Pydantic parsing
             # This ensures proper alias mapping from camelCase to snake_case
             rule = CategoryRule(**rule_data)
+            logger.info(f"API_DEBUG: Created CategoryRule object: field={rule.field_to_match}, condition={rule.condition}, value='{rule.value}'")
             
             # Get limit from request body or query params, defaulting to 100
             limit = request_data.get('limit', 100)
             if isinstance(limit, str):
                 limit = int(limit)
+            logger.info(f"API_DEBUG: Using limit: {limit}")
                 
         except (json.JSONDecodeError, ValidationError, ValueError) as e:
-            logger.error(f"Error parsing rule data: {str(e)}")
+            logger.error(f"API_DEBUG: Error parsing rule data: {str(e)}")
             return create_response(400, {"message": "Invalid rule data"})
         
         # Also check query parameters for limit as fallback
         query_limit = optional_query_parameter(event, 'limit')
         if query_limit:
             limit = int(query_limit)
+            logger.info(f"API_DEBUG: Updated limit from query param: {limit}")
         
         # Initialize rule engine using utility function
         rule_engine = get_rule_engine()
+        logger.info(f"API_DEBUG: Initialized rule engine")
         
         # Test rule against transactions
-        matching_transactions = rule_engine.test_rule_against_transactions(
+        logger.info(f"API_DEBUG: Starting rule test against transactions")
+        rule_test_result = rule_engine.test_rule_against_transactions(
             user_id=user_id,
             rule=rule,
             limit=limit
         )
+        logger.info(f"API_DEBUG: Rule test completed, found {rule_test_result.get('total_matches', 0)} total matches")
+        
+        # Extract sample transactions from result
+        sample_transactions = rule_test_result.get('sample_transactions', [])
         
         # Calculate confidence scores for matched transactions
         confidence_data = {}
-        for transaction in matching_transactions:
+        for transaction in sample_transactions:
             confidence = rule_engine.calculate_rule_confidence(rule, transaction)
             confidence_data[str(transaction.transaction_id)] = {"matchConfidence": confidence}
         
         # Use utility function for transaction serialization
-        serialized_transactions = serialize_transactions(matching_transactions, confidence_data)
+        serialized_transactions = serialize_transactions(sample_transactions, confidence_data)
         confidence_scores = [data["matchConfidence"] for data in confidence_data.values()]
 
-        return create_response(200, {
+        # Extract time-span information
+        time_span = rule_test_result.get('time_span', {})
+        
+        response_data = {
             "matchingTransactions": serialized_transactions,
-            "totalMatches": len(matching_transactions),
+            "totalMatches": rule_test_result.get('total_matches', 0),
+            "totalTransactionsChecked": rule_test_result.get('total_transactions_checked', 0),
+            "sampleCount": len(sample_transactions),
+            "truncatedSearch": rule_test_result.get('truncated_search', False),
+            "searchLimit": rule_test_result.get('search_limit', 1000),
+            "timeSpan": {
+                "earliestDate": time_span.get('earliest_date'),
+                "latestDate": time_span.get('latest_date'),
+                "daysSpan": time_span.get('days_span'),
+                "summary": f"Scanned {time_span.get('days_span', 0)} days of transactions" if time_span.get('days_span') else "No date range available"
+            },
             "rule": serialize_model(rule),
             "limit": limit,
             "averageConfidence": sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0.0
-        })
+        }
+        
+        # Enhanced logging with time-span information
+        time_span_summary = f"across {time_span.get('days_span', 0)} days" if time_span.get('days_span') else "with no date range"
+        logger.info(f"API_DEBUG: Returning response with {len(serialized_transactions)} sample transactions out of {rule_test_result.get('total_matches', 0)} total matches, scanned {rule_test_result.get('total_transactions_checked', 0)} transactions {time_span_summary}")
+        return create_response(200, response_data)
         
     except Exception as e:
+        logger.error(f"API_DEBUG: Unexpected error in test_category_rule_handler: {str(e)}", exc_info=True)
         return handle_server_error("testing category rule", e)
 
 def preview_category_matches_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
@@ -512,7 +548,7 @@ def apply_category_rules_bulk_handler(event: Dict[str, Any], user_id: str) -> Di
     """
     Apply category rules to transactions in bulk
     POST /categories/apply-rules-bulk
-    Body: { "transactionIds": ["uuid1", "uuid2"], "strategy": "all_matches" }
+    Body: { "categoryId": "uuid", "transactionIds": ["uuid1", "uuid2"], "strategy": "all_matches", "createSuggestions": true }
     """
     try:
         body_str = event.get('body')
@@ -524,8 +560,10 @@ def apply_category_rules_bulk_handler(event: Dict[str, Any], user_id: str) -> Di
         except json.JSONDecodeError:
             return create_response(400, {"error": "Invalid JSON format in request body"})
         
+        category_id = body_data.get('categoryId')
         transaction_ids = body_data.get('transactionIds')
         strategy = body_data.get('strategy', 'all_matches')
+        create_suggestions = body_data.get('createSuggestions', True)
         
         try:
             suggestion_strategy = CategorySuggestionStrategy(strategy)
@@ -535,16 +573,29 @@ def apply_category_rules_bulk_handler(event: Dict[str, Any], user_id: str) -> Di
         # Initialize rule engine
         rule_engine = CategoryRuleEngine()
         
-        # Apply rules in bulk using Phase 2.1 enhanced method
-        results = rule_engine.apply_category_rules_bulk(
-            user_id=user_id,
-            transaction_ids=transaction_ids,
-            suggestion_strategy=suggestion_strategy
-        )
+        # Apply rules from specific category or all categories
+        if category_id:
+            # Apply rules from specific category
+            results = rule_engine.apply_category_rules_for_category(
+                user_id=user_id,
+                category_id=category_id,
+                transaction_ids=transaction_ids,
+                suggestion_strategy=suggestion_strategy,
+                create_suggestions=create_suggestions
+            )
+        else:
+            # Apply rules from all categories (existing behavior)
+            results = rule_engine.apply_category_rules_bulk(
+                user_id=user_id,
+                transaction_ids=transaction_ids,
+                suggestion_strategy=suggestion_strategy
+            )
         
         return create_response(200, {
             "results": results,
-            "strategy": strategy
+            "strategy": strategy,
+            "categoryId": category_id,
+            "createSuggestions": create_suggestions
         })
         
     except Exception as e:
@@ -856,7 +907,7 @@ def suggest_category_from_transaction_handler(event: Dict[str, Any], user_id: st
         
         return create_response(200, {
             "categoryName": suggestion.name,
-            "categoryType": suggestion.category_type,
+            "categoryType": suggestion.category_type.value,
             "confidence": suggestion.confidence,
             "icon": suggestion.icon,
             "suggestedPatterns": [
@@ -931,11 +982,12 @@ def extract_patterns_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
         logger.error(f"Error extracting patterns: {str(e)}")
         return create_response(500, {"message": "Error extracting patterns"})
 
-def create_category_with_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
-    """Create category with pre-populated rule."""
+def  create_category_with_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """Create category with pre-populated rule and apply to uncategorized transactions."""
     try:
         from services.pattern_extraction_service import PatternExtractionService
         from models.category import MatchCondition
+        from utils.db_utils import update_transaction
         
         # Extract required parameters
         category_name = mandatory_body_parameter(event, 'categoryName')
@@ -945,6 +997,9 @@ def create_category_with_rule_handler(event: Dict[str, Any], user_id: str) -> Di
         # Extract optional parameters
         field_to_match = optional_body_parameter(event, 'fieldToMatch') or 'description'
         condition_str = optional_body_parameter(event, 'condition') or 'contains'
+        apply_to_existing = optional_body_parameter(event, 'applyToExisting')
+        if apply_to_existing is None:
+            apply_to_existing = True  # Default to applying to existing transactions
         
         # Validate condition
         try:
@@ -975,10 +1030,39 @@ def create_category_with_rule_handler(event: Dict[str, Any], user_id: str) -> Di
             category = Category(**category_data)
             created_category = create_category_in_db(category)
             
+            # Initialize counts for response
+            applied_count = 0
+            total_uncategorized = 0
+            
+            # Apply rule to existing uncategorized transactions if requested
+            if apply_to_existing:
+                logger.info(f"Applying new category rule to existing uncategorized transactions for user {user_id}")
+                
+                # Use apply_category_rules_for_category to handle all uncategorized transaction fetching
+                rule_engine = get_rule_engine()
+                bulk_results = rule_engine.apply_category_rules_for_category(
+                    user_id=user_id,
+                    category_id=str(created_category.categoryId),
+                    transaction_ids=None,  # None means apply to all uncategorized transactions
+                    suggestion_strategy=CategorySuggestionStrategy.ALL_MATCHES,
+                    create_suggestions=False  # Apply directly, don't create suggestions
+                )
+                
+                # Extract counts from bulk results
+                applied_count = bulk_results.get('applied_count', 0)
+                total_uncategorized = bulk_results.get('processed', 0)
+                logger.info(f"Bulk rule application completed: applied category to {applied_count} out of {total_uncategorized} transactions")
+            
             return create_response(201, {
                 'message': 'Category with rule created successfully',
                 "category": created_category.model_dump(by_alias=True, mode='json'),
-                "rule": result['rule']
+                "rule": result['rule'],
+                "applicationResults": {
+                    "appliedToExisting": apply_to_existing,
+                    "totalUncategorized": total_uncategorized,
+                    "appliedCount": applied_count,
+                    "summary": f"Applied category to {applied_count} out of {total_uncategorized} uncategorized transactions" if apply_to_existing else "Rule not applied to existing transactions"
+                }
             })
             
         except ValidationError as e:
@@ -991,6 +1075,119 @@ def create_category_with_rule_handler(event: Dict[str, Any], user_id: str) -> Di
     except Exception as e:
         logger.error(f"Error creating category with rule: {str(e)}")
         return create_response(500, {"message": "Error creating category with rule"})
+
+def reset_and_reapply_categories_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """
+    Reset all category assignments and re-apply category rules
+    POST /categories/reset-and-reapply
+    Body: { "confirmReset": true }
+    """
+    try:
+        body_str = event.get('body')
+        if not body_str:
+            return create_response(400, {"error": "Request body is missing or empty"})
+        
+        try:
+            body_data = json.loads(body_str)
+        except json.JSONDecodeError:
+            return create_response(400, {"error": "Invalid JSON format in request body"})
+        
+        # Safety check - require explicit confirmation
+        if not body_data.get('confirmReset'):
+            return create_response(400, {"error": "Reset confirmation required"})
+        
+        logger.info(f"Starting category reset and reapply for user {user_id}")
+        
+        # Step 1: Get all user transactions and clear category assignments
+        transactions = []
+        last_evaluated_key = None
+        batch_size = 1000
+        cleared_transactions = 0
+        
+        while True:
+            batch, last_evaluated_key, _ = list_user_transactions(
+                user_id, 
+                limit=batch_size,
+                last_evaluated_key=last_evaluated_key,
+                uncategorized_only=False  # Get ALL transactions
+            )
+            
+            if not batch:
+                break
+            
+            transactions.extend(batch)
+            logger.info(f"Retrieved batch of {len(batch)} transactions (total so far: {len(transactions)})")
+            
+            if not last_evaluated_key:
+                break
+        
+        logger.info(f"Found {len(transactions)} total transactions to reset")
+        
+        # Step 2: Clear all category assignments from transactions
+        for transaction in transactions:
+            if transaction.categories or transaction.primary_category_id:
+                # Clear all category assignments
+                if  transaction.categories  or len(transaction.categories) > 0 or transaction.primary_category_id :
+                    transaction.categories = []
+                    transaction.primary_category_id = None
+                    
+                    # Update the transaction in the database
+                    update_transaction(transaction)
+                    cleared_transactions += 1
+                
+                if cleared_transactions % 100 == 0:
+                    logger.info(f"Cleared categories from {cleared_transactions} transactions")
+        
+        logger.info(f"Cleared categories from {cleared_transactions} transactions")
+        
+        # Step 3: Get all user categories and re-apply rules
+        categories = list_categories_by_user_from_db(user_id)
+        rule_engine = CategoryRuleEngine()
+        
+        total_applied = 0
+        category_results = []
+        
+        for category in categories:
+            logger.info(f"Applying rules for category: {category.name}")
+            
+            # Apply rules from this category to all transactions
+            results = rule_engine.apply_category_rules_for_category(
+                user_id=user_id,
+                category_id=str(category.categoryId),
+                transaction_ids=None,  # Apply to all transactions
+                suggestion_strategy=CategorySuggestionStrategy.ALL_MATCHES,
+                create_suggestions=False  # Apply directly, don't create suggestions
+            )
+            
+            applied_count = results.get('applied_count', 0)
+            total_applied += applied_count
+            
+            category_results.append({
+                'categoryId': str(category.categoryId),
+                'categoryName': category.name,
+                'appliedCount': applied_count,
+                'processed': results.get('processed', 0),
+                'errors': results.get('errors', 0)
+            })
+            
+            logger.info(f"Applied category {category.name} to {applied_count} transactions")
+        
+        logger.info(f"Category reset and reapply completed for user {user_id}")
+        
+        return create_response(200, {
+            "message": "Category reset and reapply completed successfully",
+            "results": {
+                "totalTransactionsProcessed": len(transactions),
+                "transactionsClearedFromCategories": cleared_transactions,
+                "totalCategoriesProcessed": len(categories),
+                "totalApplicationsApplied": total_applied,
+                "categoryResults": category_results
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in reset and reapply categories: {str(e)}", exc_info=True)
+        return create_response(500, {"error": "Internal server error", "message": str(e)})
 
 # --- Main Lambda Handler (Router) ---
 
@@ -1055,6 +1252,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return extract_patterns_handler(event, user_id)
         elif route == "POST /categories/create-with-rule":
             return create_category_with_rule_handler(event, user_id)
+        
+        elif route == "POST /categories/reset-and-reapply":
+            return reset_and_reapply_categories_handler(event, user_id)
         
         else:
             return create_response(404, {"error": "Not Found: Invalid path or method"})

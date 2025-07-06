@@ -35,7 +35,7 @@ interface TransactionsUIStore {
 
 export const useTransactionsUIStore = create<TransactionsUIStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       filters: initialFilters,
       currentPage: 1,
       pageSize: DEFAULT_TRANSACTIONS_PAGE_SIZE,

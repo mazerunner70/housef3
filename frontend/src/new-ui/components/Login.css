@@ -1,0 +1,98 @@
+/* frontend/src/new-ui/components/Login.css */
+
+.login-container {
+  max-width: 400px;
+  margin: calc(var(--spacing-xxl) * 2) auto;
+  padding: var(--spacing-xxl);
+  border-radius: var(--border-radius-medium);
+  box-shadow: var(--shadow-subtle);
+  background-color: var(--color-white);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group {
+  margin-bottom: var(--spacing-xl);
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: var(--spacing-s);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  font-size: var(--form-label-font-size);
+}
+
+.form-group input {
+  width: 100%;
+  padding: var(--form-input-padding-vertical) var(--form-input-padding-horizontal);
+  border: var(--border-width) solid var(--form-input-border-color);
+  border-radius: var(--border-radius-small);
+  font-size: var(--font-size-body);
+  font-family: var(--font-primary);
+  background-color: var(--form-input-background);
+  color: var(--color-text-primary);
+  transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+  box-sizing: border-box;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--form-input-focus-border-color);
+  box-shadow: 0 0 0 3px var(--color-secondary-brand-focus);
+}
+
+.form-group input:disabled {
+  background-color: var(--color-background-subtle);
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+
+.login-button {
+  width: 100%;
+  padding: var(--button-padding-standard-vertical) var(--button-padding-standard-horizontal);
+  background-color: var(--color-primary-brand);
+  color: var(--color-white);
+  border: var(--border-width) solid var(--color-primary-brand);
+  border-radius: var(--border-radius-small);
+  font-size: var(--font-size-button);
+  font-weight: var(--font-weight-semibold);
+  font-family: var(--font-primary);
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+  min-height: var(--button-height-standard);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-button:hover:not(:disabled) {
+  background-color: var(--color-primary-brand-hover);
+  border-color: var(--color-primary-brand-hover);
+}
+
+.login-button:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-primary-brand-focus);
+}
+
+.login-button:disabled {
+  background-color: var(--color-background-subtle);
+  color: var(--color-text-disabled);
+  border-color: var(--color-borders-dividers);
+  cursor: not-allowed;
+}
+
+.error-message {
+  padding: var(--spacing-m);
+  background-color: var(--color-error-danger-light);
+  color: var(--color-error-danger);
+  border: var(--border-width) solid var(--color-error-danger-border);
+  border-radius: var(--border-radius-small);
+  margin-bottom: var(--spacing-xl);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+} 

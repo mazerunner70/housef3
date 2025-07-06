@@ -32,7 +32,7 @@ class TransactionCategoryAssignment(BaseModel):
     Supports suggestion workflow where assignments start as 'suggested' and must be confirmed by user.
     """
     category_id: uuid.UUID = Field(alias="categoryId")
-    confidence: float = Field(default=1.0, ge=0.0, le=1.0)  # 0.0 to 1.0 confidence score
+    confidence: int = Field(default=100, ge=0, le=100)  # 0-100 confidence score
     status: CategoryAssignmentStatus = Field(default=CategoryAssignmentStatus.SUGGESTED)
     is_manual: bool = Field(default=False, alias="isManual")  # Manually assigned vs auto-assigned
     assigned_at: int = Field(
@@ -65,9 +65,12 @@ class TransactionCategoryAssignment(BaseModel):
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format."""
         data = self.model_dump(by_alias=True, exclude_none=True)
-        # Ensure UUID is string
-        if isinstance(data.get('categoryId'), uuid.UUID):
-            data['categoryId'] = str(data['categoryId'])
+        
+        # Ensure all UUID fields are converted to strings for DynamoDB
+        for key, value in data.items():
+            if isinstance(value, uuid.UUID):
+                data[key] = str(value)
+        
         return data
 
     @classmethod
@@ -175,7 +178,7 @@ class Transaction(BaseModel):
     def add_category_suggestion(
         self, 
         category_id: uuid.UUID, 
-        confidence: float = 1.0, 
+        confidence: int = 100, 
         rule_id: Optional[str] = None
     ) -> None:
         """Add a new category suggestion that requires user review"""
@@ -205,6 +208,11 @@ class Transaction(BaseModel):
 
     def add_manual_category(self, category_id: uuid.UUID, set_as_primary: bool = False) -> None:
         """Add a manually assigned category (immediately confirmed)"""
+        logger.info(f"Adding manual category {category_id} to transaction {self.transaction_id}")
+        logger.info(f"Categories: {self.categories}")
+        logger.info(f"Primary category ID: {self.primary_category_id}")
+        if self.categories is None:
+            self.categories = []
         # Check if category is already assigned
         existing = next((cat for cat in self.categories if cat.category_id == category_id), None)
         if existing:
@@ -215,12 +223,12 @@ class Transaction(BaseModel):
         
         assignment = TransactionCategoryAssignment(
             categoryId=category_id,
-            confidence=1.0,
+            confidence=100,
             status=CategoryAssignmentStatus.CONFIRMED,
             isManual=True
         )
         assignment.confirm_assignment()
-        self.categories.append(assignment)
+        self.categories.append(assignment) 
         
         if set_as_primary or self.primary_category_id is None:
             self.primary_category_id = category_id
@@ -361,6 +369,12 @@ class Transaction(BaseModel):
         Uses Pydantic's model_dump and ensures nested Money objects are also flattened via to_flat_map.
         Ensures UUID fields are converted to strings.
         """
+        # Convert category assignments to DynamoDB format before calling model_dump
+        processed_categories = []
+        if self.categories:
+            for assignment in self.categories:
+                processed_categories.append(assignment.to_dynamodb_item())
+        
         data = self.model_dump(by_alias=True, exclude_none=True)
 
         # Ensure UUID fields are strings for DynamoDB
@@ -371,13 +385,13 @@ class Transaction(BaseModel):
             # elif isinstance(value, list) and all(isinstance(item, uuid.UUID) for item in value):
             #     data[key] = [str(item) for item in value]
 
-        # Convert category assignments to DynamoDB format
-        if 'categories' in data and data['categories']:
-            data['categories'] = [
-                assignment.to_dynamodb_item() if hasattr(assignment, 'to_dynamodb_item') 
-                else assignment 
-                for assignment in data['categories']
-            ]
+        # Replace the categories with the processed ones
+        if processed_categories:
+            data['categories'] = processed_categories
+        
+        # Explicitly ensure primaryCategoryId is converted to string if it's a UUID
+        if 'primaryCategoryId' in data and isinstance(data['primaryCategoryId'], uuid.UUID):
+            data['primaryCategoryId'] = str(data['primaryCategoryId'])
 
         return data
 
@@ -401,12 +415,37 @@ class Transaction(BaseModel):
 
         # Handle category assignments reconstruction
         if 'categories' in data and data['categories']:
-            data['categories'] = [
-                TransactionCategoryAssignment.from_dynamodb_item(assignment)
-                if isinstance(assignment, dict)
-                else assignment
-                for assignment in data['categories']
-            ]
+            processed_categories = []
+            for assignment in data['categories']:
+                if isinstance(assignment, dict):
+                    # New format: dictionary
+                    processed_categories.append(
+                        TransactionCategoryAssignment.from_dynamodb_item(assignment)
+                    )
+                elif isinstance(assignment, str):
+                    # Legacy format: string representation of dictionary
+                    try:
+                        import json
+                        import ast
+                        # Try to parse as JSON first
+                        try:
+                            assignment_dict = json.loads(assignment)
+                        except json.JSONDecodeError:
+                            # If JSON parsing fails, try ast.literal_eval for Python dict format
+                            assignment_dict = ast.literal_eval(assignment)
+                        
+                        processed_categories.append(
+                            TransactionCategoryAssignment.from_dynamodb_item(assignment_dict)
+                        )
+                    except (json.JSONDecodeError, ValueError, SyntaxError) as e:
+                        # If we can't parse the string, skip this assignment and log it
+                        logger.warning(f"Unable to parse category assignment string: {assignment}, error: {e}")
+                        continue
+                else:
+                    # Already a TransactionCategoryAssignment object
+                    processed_categories.append(assignment)
+            
+            data['categories'] = processed_categories
 
         return cls.model_validate(data, context={'from_database': True})
 
