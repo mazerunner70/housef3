@@ -1,70 +1,120 @@
-import { useState, useEffect, useCallback } from 'react';
-import { UITransaction } from '../components/accounts/TransactionList'; // Import placeholder type
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  getAccountTransactions,
+  getCategories,
+  quickUpdateTransactionCategory,
+  TransactionViewItem,
+  CategoryInfo,
+  TransactionListResponse,
+} from '../../services/TransactionService';
+import { listAccounts, Account } from '../../services/AccountService';
+import { Decimal } from 'decimal.js';
 
-// Placeholder for actual ServiceTransaction type from backend/service
-interface ServiceTransaction {
-  transactionId: string;
-  transactionDate: string; // Or number (timestamp)
-  description: string;
-  // ... other fields from backend ...
-  amount: number; // Or string if backend sends as string
-  type: string; // e.g. "DEBIT" or "CREDIT"
-  category?: string;
-  status?: string;
-}
-
-// Example mapping function - adjust based on actual ServiceTransaction structure
-const mapServiceTransactionToUITransaction = (st: ServiceTransaction): UITransaction => ({
-  id: st.transactionId,
-  date: new Date(st.transactionDate).toLocaleDateString(), // Basic date formatting
-  description: st.description,
-  category: st.category,
-  amount: st.amount.toFixed(2), // Basic amount formatting, assumes number
-  type: st.type === 'DEBIT' ? 'Debit' : 'Credit', // Example mapping
-  status: st.status,
-});
+// Transform the response to match TransactionViewItem format
+const transformAccountTransactions = (response: TransactionListResponse, categories: CategoryInfo[]): TransactionViewItem[] => {
+  if (!response.transactions || categories.length === 0) {
+    return response.transactions?.map(tx => ({
+      ...tx,
+      id: tx.transactionId,
+      account: tx.accountId || '',
+      category: undefined,
+      type: (tx.debitOrCredit === 'DEBIT' ? 'expense' : 'income') as 'income' | 'expense' | 'transfer',
+    })) || [];
+  }
+  
+  // Create a map of category IDs to category info
+  const categoriesMap = new Map<string, CategoryInfo>();
+  categories.forEach(cat => {
+    categoriesMap.set(cat.categoryId, cat);
+  });
+  
+  // Transform transactions to include full category info
+  return response.transactions.map(tx => {
+    let category: CategoryInfo | undefined = undefined;
+    if (tx.category) {
+      category = categoriesMap.get(tx.category);
+    }
+    
+    return {
+      ...tx,
+      id: tx.transactionId,
+      account: tx.accountId || '',
+      category,
+      primaryCategoryId: tx.category,
+      type: (tx.debitOrCredit === 'DEBIT' ? 'expense' : 'income') as 'income' | 'expense' | 'transfer',
+    };
+  });
+};
 
 const useAccountTransactions = (accountId: string | null) => {
-  const [transactions, setTransactions] = useState<UITransaction[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const [categories, setCategories] = useState<CategoryInfo[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
 
-  const fetchTransactions = useCallback(async () => {
-    if (!accountId) return; // Don't fetch if no accountId
-
-    setLoading(true);
-    setError(null);
+  // Fetch categories for transformation
+  const fetchCategories = useCallback(async () => {
+    setCategoriesLoading(true);
+    setCategoriesError(null);
     try {
-      // TODO: Replace with actual API call to GET /api/transactions?accountId={accountId}
-      // Potentially via a TransactionService.ts
-      // const response = await fetch(`/api/transactions?accountId=${accountId}`);
-      // if (!response.ok) throw new Error('Failed to fetch transactions');
-      // const data: ServiceTransaction[] = await response.json();
-      // setTransactions(data.map(mapServiceTransactionToUITransaction));
-      console.log(`Simulating fetch for transactions for account ${accountId}`);
-      await new Promise(resolve => setTimeout(resolve, 700)); // Simulate network delay
-      
-      // Placeholder data
-      const placeholderData: UITransaction[] = [
-        { id: 'tx1', date: '2024-03-01', description: 'Coffee Shop', category: 'Food & Drink', amount: '5.50', type: 'Debit', status: 'Cleared' },
-        { id: 'tx2', date: '2024-03-02', description: 'Salary Deposit', category: 'Income', amount: '2500.00', type: 'Credit', status: 'Cleared' },
-        { id: 'tx3', date: '2024-03-03', description: 'Online Subscription', category: 'Bills', amount: '15.00', type: 'Debit', status: 'Pending' },
-      ];
-      setTransactions(placeholderData);
-
+      const categoriesResponse = await getCategories();
+      setCategories(categoriesResponse);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred while fetching transactions');
-      console.error("Error fetching transactions:", err);
+      console.error("Error fetching categories:", err);
+      setCategoriesError("Failed to load categories.");
     } finally {
-      setLoading(false);
+      setCategoriesLoading(false);
     }
-  }, [accountId]);
+  }, []);
 
   useEffect(() => {
-    fetchTransactions();
-  }, [fetchTransactions]);
+    fetchCategories();
+  }, [fetchCategories]);
 
-  return { transactions, loading, error, refetchTransactions: fetchTransactions };
+  // Fetch transactions for the account
+  const {
+    data: transactionsData,
+    isLoading: transactionsLoading,
+    error: transactionsError,
+    refetch: refetchTransactions,
+  } = useQuery({
+    queryKey: ['account-transactions', accountId],
+    queryFn: async () => {
+      if (!accountId) return null;
+      return await getAccountTransactions(accountId, 100); // Fetch up to 100 transactions
+    },
+    enabled: !!accountId,
+    staleTime: 60000, // 1 minute
+  });
+
+  // Transform transactions
+  const transformedTransactions = useMemo(() => {
+    if (!transactionsData || categories.length === 0) {
+      return [];
+    }
+    return transformAccountTransactions(transactionsData, categories);
+  }, [transactionsData, categories]);
+
+  // Quick category update
+  const handleQuickCategoryChange = async (transactionId: string, newCategoryId: string) => {
+    try {
+      await quickUpdateTransactionCategory(transactionId, newCategoryId);
+      queryClient.invalidateQueries({ queryKey: ['account-transactions', accountId] });
+    } catch (err) {
+      console.error("Error updating category:", err);
+      throw err;
+    }
+  };
+
+  return {
+    transactions: transformedTransactions,
+    loading: transactionsLoading || categoriesLoading,
+    error: transactionsError?.message || categoriesError,
+    categories,
+    refetch: refetchTransactions,
+    handleQuickCategoryChange,
+  };
 };
 
 export default useAccountTransactions; 

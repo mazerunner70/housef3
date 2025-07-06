@@ -1229,8 +1229,94 @@ def delete_category_from_db(category_id: uuid.UUID, user_id: str) -> bool:
     if child_categories:
         logger.warning(f"Attempt to delete category {str(category_id)} which has child categories.")
         raise ValueError("Cannot delete category: it has child categories.")
+    
+    # Clean up transaction references before deleting the category
+    logger.info(f"DB: Cleaning up transaction references for category {str(category_id)}")
+    transactions_cleaned = _cleanup_transaction_category_references(category_id, user_id)
+    logger.info(f"DB: Cleaned up {transactions_cleaned} transactions that referenced category {str(category_id)}")
+    
     table.delete_item(Key={'categoryId': str(category_id)})
     return True
+
+
+def _cleanup_transaction_category_references(category_id: uuid.UUID, user_id: str) -> int:
+    """
+    Clean up all transaction references to a category before deleting it.
+    
+    Args:
+        category_id: The category ID to remove from transactions
+        user_id: The user ID to limit scope of cleanup
+        
+    Returns:
+        Number of transactions that were cleaned up
+    """
+    try:
+        cleaned_count = 0
+        
+        # Get all transactions that reference this category either as primary or in categories list
+        # We need to scan through all user transactions since DynamoDB doesn't have a direct way
+        # to query by category references efficiently
+        
+        # Get transactions in batches to avoid memory issues
+        last_evaluated_key = None
+        batch_size = 1000
+        
+        while True:
+            # Get batch of transactions
+            transactions, last_evaluated_key, _ = list_user_transactions(
+                user_id=user_id,
+                limit=batch_size,
+                last_evaluated_key=last_evaluated_key,
+                uncategorized_only=False  # Get all transactions, not just uncategorized ones
+            )
+            
+            if not transactions:
+                break
+            
+            # Process transactions in this batch
+            for transaction in transactions:
+                transaction_updated = False
+                
+                # Check if this transaction references the category being deleted
+                if transaction.primary_category_id == category_id:
+                    # Remove primary category reference
+                    transaction.primary_category_id = None
+                    transaction_updated = True
+                    logger.debug(f"DB: Removed primary category reference from transaction {transaction.transaction_id}")
+                
+                # Check categories list for references to this category
+                if transaction.categories:
+                    original_categories_count = len(transaction.categories)
+                    # Remove any category assignments that reference the deleted category
+                    transaction.categories = [
+                        cat for cat in transaction.categories 
+                        if cat.category_id != category_id
+                    ]
+                    
+                    if len(transaction.categories) < original_categories_count:
+                        transaction_updated = True
+                        logger.debug(f"DB: Removed category assignment from transaction {transaction.transaction_id}")
+                        
+                        # If we removed categories and there's no primary category, 
+                        # set a new primary from remaining confirmed categories
+                        if not transaction.primary_category_id and transaction.confirmed_categories:
+                            transaction.primary_category_id = transaction.confirmed_categories[0].category_id
+                            logger.debug(f"DB: Set new primary category for transaction {transaction.transaction_id}")
+                
+                # Update transaction if it was modified
+                if transaction_updated:
+                    update_transaction(transaction)
+                    cleaned_count += 1
+            
+            # If we got fewer transactions than requested, we're done
+            if not last_evaluated_key:
+                break
+        
+        return cleaned_count
+        
+    except Exception as e:
+        logger.error(f"DB: Error cleaning up transaction references for category {str(category_id)}: {str(e)}", exc_info=True)
+        raise
 
 # =============================================================================
 # Analytics Data Functions

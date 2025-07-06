@@ -8,6 +8,15 @@ import { Account as AccountDetail } from '../../services/AccountService'; // IMP
 import { Category, CategoryRule } from '../../types/Category';
 import { CategoryService } from '../../services/CategoryService';
 import { Decimal } from 'decimal.js';
+import {
+  CurrencyAmount,
+  DateCell,
+  TextWithSubtext,
+  LookupCell,
+  NumberCell,
+  RowActions,
+  type ActionConfig
+} from './ui';
 
 export interface SortConfig {
   key: keyof TransactionViewItem | null; // USE TransactionViewItem
@@ -48,6 +57,7 @@ interface TransactionTableProps {
   itemsPerPage: number;
   totalItems: number;
   onPageSizeChange: (newPageSize: number) => void; // New prop
+  showAccountColumn?: boolean; // NEW PROP to control account column visibility
 }
 
 const TransactionTable: React.FC<TransactionTableProps> = ({
@@ -66,6 +76,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   itemsPerPage,
   totalItems,
   onPageSizeChange, // Destructure new prop
+  showAccountColumn = true, // Default to true for backward compatibility
 }) => {
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'date', direction: 'descending' });
   const [selectedTransactionIds, setSelectedTransactionIds] = useState<Set<string>>(new Set());
@@ -345,15 +356,17 @@ const handlePatternConfirm = async (pattern: string, rule: Partial<CategoryRule>
             >
               Category{getSortIndicator('category')}
             </th>
-            <th 
-              onClick={() => handleSort('account')}
-              onKeyDown={(e) => e.key === 'Enter' && handleSort('account')}
-              tabIndex={0}
-              role="button"
-              aria-label="Sort by account"
-            >
-              Account{getSortIndicator('account')}
-            </th>
+            {showAccountColumn && (
+              <th 
+                onClick={() => handleSort('account')}
+                onKeyDown={(e) => e.key === 'Enter' && handleSort('account')}
+                tabIndex={0}
+                role="button"
+                aria-label="Sort by account"
+              >
+                Account{getSortIndicator('account')}
+              </th>
+            )}
             <th 
               onClick={() => handleSort('amount')}
               onKeyDown={(e) => e.key === 'Enter' && handleSort('amount')}
@@ -387,7 +400,7 @@ const handlePatternConfirm = async (pattern: string, rule: Partial<CategoryRule>
         <tbody>
           {sortedTransactionsOnPage.length === 0 && (
             <tr>
-              <td colSpan={9} style={{ textAlign: 'center', padding: '20px' }}>
+              <td colSpan={showAccountColumn ? 9 : 8} style={{ textAlign: 'center', padding: '20px' }}>
                 No transactions for the current page or filters.
               </td>
             </tr>
@@ -402,12 +415,13 @@ const handlePatternConfirm = async (pattern: string, rule: Partial<CategoryRule>
                 />
               </td>
               <td>
-                {/* transaction.date is a number (milliseconds since epoch) as per TransactionViewItem */}
-                {new Date(transaction.date).toLocaleDateString()}
+                <DateCell date={transaction.date} />
               </td>
               <td>
-                {transaction.description}
-                {transaction.payee && <span className="payee-details"> ({transaction.payee})</span>}
+                <TextWithSubtext 
+                  primaryText={transaction.description} 
+                  secondaryText={transaction.payee} 
+                />
               </td>
               <td>
                 <div className="category-cell">
@@ -452,81 +466,42 @@ const handlePatternConfirm = async (pattern: string, rule: Partial<CategoryRule>
                 </div>
               </td>
               {/* Updated to use accountsMap */}
-              <td>{accountsMap.get(transaction.accountId || '') || 'N/A'}</td>
-              {(() => {
-                // Default values for safety
-                let displayAmount = "0.00";
-                let currencySymbol = "";
-                let amountClass = 'amount-expense'; // Default to expense or neutral
-
-                // transaction.amount is expected to be a Decimal instance due to processing in TransactionService.ts
-                if (transaction.amount instanceof Decimal) {
-                  const numericAmount = transaction.amount; // It's already a Decimal
-                  displayAmount = numericAmount.toFixed(2);
-                  if (transaction.currency) {
-                    currencySymbol = transaction.currency as string; // Assuming Currency is string-compatible
-                  }
-                  amountClass = numericAmount.greaterThanOrEqualTo(new Decimal(0)) ? 'amount-income' : 'amount-expense';
-                } else {
-                  // This path is taken if transaction.amount is not a Decimal instance.
-                  // This could be because it's undefined, null, or if the service layer conversion somehow failed.
-                  if (transaction.amount !== undefined && transaction.amount !== null) {
-                    // Only log a warning if amount is present but not a Decimal, as this is unexpected.
-                    console.warn(
-                      "TransactionTable: transaction.amount was expected to be a Decimal instance but was not. Value type:", 
-                      typeof transaction.amount, 
-                      "Value:", transaction.amount, 
-                      "Transaction ID:", transaction.id
-                    );
-                  }
-                  // displayAmount, currencySymbol, amountClass will retain their default values.
-                }
-                // This console.log was present in the original code provided
-                console.log("Transaction:", transaction);
-                return (
-                  <td className={amountClass}>
-                    {currencySymbol}{displayAmount}
-                  </td>
-                );
-              })()}
-              {(() => {
-                // Display balance
-                let displayBalance = "0.00";
-                let currencySymbol = "";
-                let balanceClass = 'balance-cell';
-
-                // transaction.balance is expected to be a Decimal instance
-                if (transaction.balance instanceof Decimal) {
-                  const numericBalance = transaction.balance;
-                  displayBalance = numericBalance.toFixed(2);
-                  if (transaction.currency) {
-                    currencySymbol = transaction.currency as string;
-                  }
-                  balanceClass = numericBalance.greaterThanOrEqualTo(new Decimal(0)) ? 'balance-positive' : 'balance-negative';
-                } else {
-                  if (transaction.balance !== undefined && transaction.balance !== null) {
-                    console.warn(
-                      "TransactionTable: transaction.balance was expected to be a Decimal instance but was not. Value type:", 
-                      typeof transaction.balance, 
-                      "Value:", transaction.balance, 
-                      "Transaction ID:", transaction.id
-                    );
-                  }
-                }
-
-                return (
-                  <td className={balanceClass}>
-                    {currencySymbol}{displayBalance}
-                  </td>
-                );
-              })()}
-              <td className="import-order">
-                {transaction.importOrder || 'N/A'}
+              {showAccountColumn && (
+                <td>
+                  <LookupCell 
+                    id={transaction.accountId} 
+                    lookupMap={accountsMap} 
+                  />
+                </td>
+              )}
+              <td>
+                <CurrencyAmount 
+                  amount={transaction.amount} 
+                  currency={transaction.currency as string} 
+                />
               </td>
               <td>
-                <button onClick={() => onEditTransaction(transaction.id)} className="action-button edit-button" title="Edit transaction">
-                  ✎
-                </button>
+                <CurrencyAmount 
+                  amount={transaction.balance} 
+                  currency={transaction.currency as string} 
+                  className="balance-cell"
+                />
+              </td>
+              <td>
+                <NumberCell value={transaction.importOrder} />
+              </td>
+              <td>
+                <RowActions 
+                  itemId={transaction.id} 
+                  actions={[
+                    {
+                      key: 'edit',
+                      icon: '✎',
+                      label: 'Edit transaction',
+                      onClick: onEditTransaction
+                    }
+                  ]}
+                />
               </td>
             </tr>
           ))}

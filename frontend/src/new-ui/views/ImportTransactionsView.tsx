@@ -7,6 +7,7 @@ import { getCurrentUser } from '../../services/AuthService'; // Import getCurren
 import ImportStep2Preview from '../components/ImportStep2Preview'; // Import the new component
 import type { TransactionRow, ColumnMapping } from '../components/ImportStep2Preview'; // Import types
 import TransactionFileUpload from '../components/TransactionFileUpload'; // Enhanced file upload
+import ImportHistoryTable from '../components/ImportHistoryTable'; // Import the new reusable table
 import { FileValidationResult } from '../utils/fileValidation'; // File validation types
 import { detectFileType } from '../utils/fileValidation'; // Import file type detection
 import './ImportTransactionsView.css'; // Import the CSS file
@@ -105,21 +106,7 @@ const ImportTransactionsView: React.FC = () => {
   // New state for import results - replaced with success alert
   const [successAlert, setSuccessAlert] = useState<ImportResultForView | null>(null);
 
-  // State for inline editing of opening balance
-  const [editingFileId, setEditingFileId] = useState<string | null>(null);
-  const [editingOpeningBalance, setEditingOpeningBalance] = useState<string>('');
-  
-  // State for inline editing of closing balance
-  const [editingClosingFileId, setEditingClosingFileId] = useState<string | null>(null);
-  const [editingClosingBalance, setEditingClosingBalance] = useState<string>('');
-  
-  // State for inline editing of mapping
-  const [editingMappingFileId, setEditingMappingFileId] = useState<string | null>(null);
-  const [editingMappingValue, setEditingMappingValue] = useState<string>('');
-  
-  // State for inline editing of account
-  const [editingAccountFileId, setEditingAccountFileId] = useState<string | null>(null);
-  const [editingAccountValue, setEditingAccountValue] = useState<string>('');
+  // Note: Inline editing state is now managed by ImportHistoryTable component
   
   // State for enhanced file validation
   const [fileValidation, setFileValidation] = useState<FileValidationResult>({ isValid: false });
@@ -297,33 +284,28 @@ const ImportTransactionsView: React.FC = () => {
     setCurrentlyLoadedFieldMapDetails(undefined);
   };
 
-  const handleDeleteHistoryFile = async () => {
-    if (!selectedHistoryFileId) {
-      setErrorMessage("No file selected from history to delete.");
-      return;
-    }
-
-    const fileToDelete = importHistory.find(f => f.fileId === selectedHistoryFileId);
+  const handleDeleteHistoryFile = async (fileId: string) => {
+    const fileToDelete = importHistory.find(f => f.fileId === fileId);
     if (!fileToDelete) {
       setErrorMessage("Selected file not found in history.");
       return;
     }
 
-    if (window.confirm(`Are you sure you want to delete "${fileToDelete.fileName}"? This action cannot be undone.`)) {
-      setIsLoadingHistory(true); // Use history loader for this action
-      setErrorMessage(null);
-      try {
-        await deleteFile(selectedHistoryFileId);
-        alert(`File "${fileToDelete.fileName}" deleted successfully.`);
+    setIsLoadingHistory(true); // Use history loader for this action
+    setErrorMessage(null);
+    try {
+      await deleteFile(fileId);
+      alert(`File "${fileToDelete.fileName}" deleted successfully.`);
+      if (selectedHistoryFileId === fileId) {
         setSelectedHistoryFileId(null);
-        // Refresh history
-        await fetchInitialData(); // Re-fetch all initial data which includes history
-      } catch (error: any) {
-        console.error("Error deleting file:", error);
-        setErrorMessage(error.message || `Failed to delete file "${fileToDelete.fileName}". Please try again.`);
-      } finally {
-        setIsLoadingHistory(false);
       }
+      // Refresh history
+      await fetchInitialData(); // Re-fetch all initial data which includes history
+    } catch (error: any) {
+      console.error("Error deleting file:", error);
+      setErrorMessage(error.message || `Failed to delete file "${fileToDelete.fileName}". Please try again.`);
+    } finally {
+      setIsLoadingHistory(false);
     }
   };
   
@@ -663,18 +645,11 @@ const ImportTransactionsView: React.FC = () => {
         )
       );
       
-      // Exit editing mode
-      setEditingFileId(null);
-      setEditingOpeningBalance('');
       alert("Opening balance updated successfully!"); // Or a more subtle notification
 
     } catch (error: any) {
       console.error("Error updating opening balance:", error);
       setErrorMessage(error.message || "Failed to update opening balance.");
-      // Optionally, you might want to keep the cell in edit mode or clear it
-      // For now, we will clear it as per existing Escape/✗ logic
-      setEditingFileId(null);
-      setEditingOpeningBalance('');
     } finally {
       setIsLoadingHistory(false);
     }
@@ -705,16 +680,11 @@ const ImportTransactionsView: React.FC = () => {
         )
       );
       
-      // Exit editing mode
-      setEditingClosingFileId(null);
-      setEditingClosingBalance('');
       alert("Closing balance updated successfully! Opening balance has been recalculated."); // Or a more subtle notification
 
     } catch (error: any) {
       console.error("Error updating closing balance:", error);
       setErrorMessage(error.message || "Failed to update closing balance.");
-      setEditingClosingFileId(null);
-      setEditingClosingBalance('');
     } finally {
       setIsLoadingHistory(false);
     }
@@ -751,16 +721,11 @@ const ImportTransactionsView: React.FC = () => {
         )
       );
       
-      // Exit editing mode
-      setEditingMappingFileId(null);
-      setEditingMappingValue('');
       alert("Mapping updated successfully!");
 
     } catch (error: any) {
       console.error("Error updating mapping:", error);
       setErrorMessage(error.message || "Failed to update mapping.");
-      setEditingMappingFileId(null);
-      setEditingMappingValue('');
     } finally {
       setIsLoadingHistory(false);
     }
@@ -790,17 +755,11 @@ const ImportTransactionsView: React.FC = () => {
         )
       );
       
-      // Exit editing mode
-      setEditingAccountFileId(null);
-      setEditingAccountValue('');
-      
       alert("Account updated successfully!");
 
     } catch (error: any) {
       console.error("Error updating account:", error);
       setErrorMessage(error.message || "Failed to update account.");
-      setEditingAccountFileId(null);
-      setEditingAccountValue('');
     } finally {
       setIsLoadingHistory(false);
     }
@@ -947,231 +906,25 @@ const ImportTransactionsView: React.FC = () => {
 
           <div style={{marginTop: '30px'}}>
             <h4 className="import-header">Import History</h4>
-            {isLoadingHistory && <p>Loading history...</p>}
-            {!isLoadingHistory && importHistory.length === 0 && <p>No import history found.</p>}
-            {importHistory.length > 0 && (
-              <>
-                <table className="history-table">
-                  <thead>
-                    <tr>
-                      <th className="history-th-td">File Name</th>
-                      <th className="history-th-td">Account</th>
-                      <th className="history-th-td">Upload Date</th>
-                      <th className="history-th-td">Mapping</th>
-                      <th className="history-th-td">Format</th>
-                      <th className="history-th-td">Processed State</th>
-                      <th className="history-th-td">Opening Balance</th>
-                      <th className="history-th-td">Closing Balance</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {importHistory.map(file => (
-                      <tr 
-                        key={file.fileId} 
-                        onClick={() => handleHistoryRowClick(file.fileId)}
-                        className={selectedHistoryFileId === file.fileId ? 'selected-row' : ''}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <td className="history-th-td">{file.fileName}</td>
-                        {editingAccountFileId === file.fileId ? (
-                          <td className="history-th-td">
-                            <select
-                              value={editingAccountValue}
-                              onChange={(e) => setEditingAccountValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleSaveAccount(file.fileId, editingAccountValue);
-                                }
-                                if (e.key === 'Escape') {
-                                  setEditingAccountFileId(null);
-                                  setEditingAccountValue('');
-                                }
-                              }}
-                              style={{ width: '150px', marginRight: '5px' }}
-                              autoFocus
-                            >
-                              <option value="">-- Select Account --</option>
-                              {accounts.map(acc => (
-                                <option key={acc.id} value={acc.id}>
-                                  {acc.name}
-                                </option>
-                              ))}
-                            </select>
-                            <button onClick={() => handleSaveAccount(file.fileId, editingAccountValue)}>✓</button>
-                            <button onClick={() => { setEditingAccountFileId(null); setEditingAccountValue(''); }}>✗</button>
-                          </td>
-                        ) : (
-                          <td 
-                            className="history-th-td"
-                            onClick={() => {
-                              setEditingAccountFileId(file.fileId);
-                              // Set the current account as default
-                              const currentAccountId = file.accountId || '';
-                              const accountExists = accounts.some(acc => acc.id === currentAccountId);
-                              const valueToSet = accountExists ? currentAccountId : '';
-                              console.log('Editing account for file:', file.fileId, 'Current account ID:', currentAccountId, 'Setting value to:', valueToSet);
-                              setEditingAccountValue(valueToSet);
-                            }}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            {file.accountId 
-                              ? (accounts.find(acc => acc.id === file.accountId)?.name || file.accountName || 'N/A') 
-                              : (file.accountName || 'N/A')}
-                          </td>
-                        )}
-                        <td className="history-th-td">{new Date(file.uploadDate).toLocaleDateString()}</td>
-                        {editingMappingFileId === file.fileId ? (
-                          <td className="history-th-td">
-                            <select
-                              value={editingMappingValue}
-                              onChange={(e) => setEditingMappingValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleSaveMapping(file.fileId, editingMappingValue);
-                                }
-                                if (e.key === 'Escape') {
-                                  setEditingMappingFileId(null);
-                                  setEditingMappingValue('');
-                                }
-                              }}
-                              style={{ width: '150px', marginRight: '5px' }}
-                              autoFocus
-                            >
-                              <option value="">-- Select Mapping --</option>
-                              {availableFileMaps.map(map => (
-                                <option key={map.id} value={map.id}>
-                                  {map.name}
-                                </option>
-                              ))}
-                            </select>
-                            <button onClick={() => handleSaveMapping(file.fileId, editingMappingValue)}>✓</button>
-                            <button onClick={() => { setEditingMappingFileId(null); setEditingMappingValue(''); }}>✗</button>
-                          </td>
-                        ) : (
-                          <td 
-                            className="history-th-td"
-                            onClick={() => {
-                              setEditingMappingFileId(file.fileId);
-                              // Debug the file mapping data
-                              console.log('Full file.fieldMap object:', file.fieldMap);
-                              console.log('fieldMapsData:', fieldMapsData);
-                              
-                              // Set the current mapping as default, ensuring it matches available options
-                              const currentMappingId = file.fieldMap?.fileMapId || '';
-                              const currentMappingName = file.fieldMap?.name || '';
-                              
-                              // If we don't have an ID but we have a name, try to find the ID from the name
-                              let mappingIdToUse = currentMappingId;
-                              if (!currentMappingId && currentMappingName) {
-                                const foundMapping = availableFileMaps.find(map => map.name === currentMappingName);
-                                mappingIdToUse = foundMapping?.id || '';
-                                console.log('Found mapping by name:', currentMappingName, 'ID:', mappingIdToUse);
-                              }
-                              
-                              const mappingExists = availableFileMaps.some(map => map.id === mappingIdToUse);
-                              const valueToSet = mappingExists ? mappingIdToUse : '';
-                              console.log('Editing mapping for file:', file.fileId, 'Current mapping ID:', currentMappingId, 'Current mapping name:', currentMappingName, 'ID to use:', mappingIdToUse, 'Setting value to:', valueToSet);
-                              setEditingMappingValue(valueToSet);
-                            }}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            {file.fieldMap?.fileMapId && fieldMapsData[file.fieldMap.fileMapId] 
-                              ? fieldMapsData[file.fieldMap.fileMapId] 
-                              : file.fieldMap?.name || '--'}
-                          </td>
-                        )}
-                        <td className="history-th-td">{file.fileFormat || 'N/A'}</td>
-                        <td className="history-th-td">
-                          <span className={`status-badge status-${file.processingStatus?.toLowerCase() || 'unknown'}`}>
-                            {file.processingStatus || 'UNKNOWN'}
-                          </span>
-                        </td>
-                        {editingFileId === file.fileId ? (
-                          <td className="history-th-td">
-                            <input
-                              type="number"
-                              value={editingOpeningBalance}
-                              onChange={(e) => setEditingOpeningBalance(e.target.value.replace(/[^\d.-]/g, ''))}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleSaveOpeningBalance(file.fileId, editingOpeningBalance);
-                                }
-                                if (e.key === 'Escape') {
-                                  setEditingFileId(null);
-                                  setEditingOpeningBalance('');
-                                }
-                              }}
-                              style={{ width: '80px', marginRight: '5px' }}
-                              autoFocus
-                            />
-                            <button onClick={() => handleSaveOpeningBalance(file.fileId, editingOpeningBalance)}>✓</button>
-                            <button onClick={() => { setEditingFileId(null); setEditingOpeningBalance(''); }}>✗</button>
-                          </td>
-                        ) : (
-                          <td 
-                            className="history-th-td"
-                            onClick={() => {
-                              setEditingFileId(file.fileId);
-                              setEditingOpeningBalance(decimalToNumber(file.openingBalance)?.toString() || '');
-                            }}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            {formatBalanceDisplay(file.openingBalance)}
-                          </td>
-                        )}
-                        {editingClosingFileId === file.fileId ? (
-                          <td className="history-th-td">
-                            <input
-                              type="number"
-                              value={editingClosingBalance}
-                              onChange={(e) => setEditingClosingBalance(e.target.value.replace(/[^\d.-]/g, ''))}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleSaveClosingBalance(file.fileId, editingClosingBalance);
-                                }
-                                if (e.key === 'Escape') {
-                                  setEditingClosingFileId(null);
-                                  setEditingClosingBalance('');
-                                }
-                              }}
-                              style={{ width: '80px', marginRight: '5px' }}
-                              autoFocus
-                            />
-                            <button onClick={() => handleSaveClosingBalance(file.fileId, editingClosingBalance)}>✓</button>
-                            <button onClick={() => { setEditingClosingFileId(null); setEditingClosingBalance(''); }}>✗</button>
-                          </td>
-                        ) : (
-                          <td 
-                            className="history-th-td"
-                            onClick={() => {
-                              setEditingClosingFileId(file.fileId);
-                              setEditingClosingBalance(decimalToNumber(file.closingBalance)?.toString() || '');
-                            }}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            {formatBalanceDisplay(file.closingBalance)}
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div style={{ marginTop: '10px' }}>
-                  <p className="history-help-text">
-                    {selectedHistoryFileId 
-                      ? "Click on any field above to edit file attributes. Opening and closing balances are editable inline." 
-                      : "Select a file to edit its attributes, mapping, or metadata."}
-                  </p>
-                  <button
-                    onClick={handleDeleteHistoryFile}
-                    disabled={!selectedHistoryFileId || isLoadingHistory}
-                    className="button-common button-danger"
-                  >
-                    Delete Selected File
-                  </button>
-                </div>
-              </>
-            )}
+            <ImportHistoryTable
+              importHistory={importHistory}
+              accounts={accounts}
+              availableFileMaps={availableFileMaps}
+              isLoading={isLoadingHistory}
+                             selectedHistoryFileId={selectedHistoryFileId || undefined}
+              onRowClick={handleHistoryRowClick}
+              onUpdateAccount={handleSaveAccount}
+              onUpdateMapping={handleSaveMapping}
+              onUpdateOpeningBalance={handleSaveOpeningBalance}
+              onUpdateClosingBalance={handleSaveClosingBalance}
+              onDeleteFile={handleDeleteHistoryFile}
+              showSelection={true}
+              showActions={true}
+              sortable={true}
+              helpText={selectedHistoryFileId 
+                ? "Click on any field above to edit file attributes. Opening and closing balances are editable inline." 
+                : "Select a file to edit its attributes, mapping, or metadata."}
+            />
           </div>
         </div>
       )}
