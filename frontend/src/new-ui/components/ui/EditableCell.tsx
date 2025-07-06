@@ -49,7 +49,8 @@ const EditableCell: React.FC<EditableCellProps> = ({
   const [editValue, setEditValue] = useState(value);
   const [isSaving, setIsSaving] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement | HTMLSelectElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const selectRef = useRef<HTMLSelectElement>(null);
 
   // Update edit value when prop value changes
   useEffect(() => {
@@ -59,12 +60,32 @@ const EditableCell: React.FC<EditableCellProps> = ({
     }
   }, [value, isEditing]);
 
+  // Ensure editValue is set when entering edit mode for select
+  useEffect(() => {
+    if (isEditing && type === 'select') {
+      // If current value doesn't match any option ID, try to find by display value
+      const hasMatchingOption = options.some(option => option.id === value);
+      if (!hasMatchingOption && displayValue) {
+        const matchingOption = options.find(option => option.name === displayValue);
+        if (matchingOption) {
+          setEditValue(matchingOption.id);
+        } else {
+          setEditValue(value || '');
+        }
+      } else {
+        setEditValue(value || '');
+      }
+    }
+  }, [isEditing, type, value, displayValue, options]);
+
   // Auto-focus when entering edit mode
   useEffect(() => {
-    if (isEditing && autoFocus && inputRef.current) {
-      inputRef.current.focus();
-      if (type === 'text' || type === 'number') {
-        (inputRef.current as HTMLInputElement).select();
+    if (isEditing && autoFocus) {
+      if (type === 'select' && selectRef.current) {
+        selectRef.current.focus();
+      } else if ((type === 'text' || type === 'number') && inputRef.current) {
+        inputRef.current.focus();
+        inputRef.current.select();
       }
     }
   }, [isEditing, autoFocus, type]);
@@ -129,21 +150,20 @@ const EditableCell: React.FC<EditableCellProps> = ({
   };
 
   const renderInput = () => {
-    const baseProps = {
-      ref: inputRef,
-      value: editValue,
-      onChange: handleChange,
-      onKeyDown: handleKeyDown,
-      className: `editable-input ${validationError ? 'editable-input-error' : ''}`,
-      disabled: isSaving,
-      placeholder,
-    };
+    const inputClassName = `editable-input ${validationError ? 'editable-input-error' : ''}`;
 
     switch (type) {
       case 'select':
         return (
-          <select {...baseProps}>
-            <option value="">-- Select --</option>
+          <select
+            ref={selectRef}
+            value={editValue}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            className={inputClassName}
+            disabled={isSaving}
+          >
+            <option value="">{placeholder || "-- Select --"}</option>
             {options.map(option => (
               <option key={option.id} value={option.id}>
                 {option.name}
@@ -154,8 +174,14 @@ const EditableCell: React.FC<EditableCellProps> = ({
       case 'number':
         return (
           <input
+            ref={inputRef}
             type="number"
-            {...baseProps}
+            value={editValue}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            className={inputClassName}
+            disabled={isSaving}
+            placeholder={placeholder}
             min={min}
             max={max}
             step={step}
@@ -165,8 +191,14 @@ const EditableCell: React.FC<EditableCellProps> = ({
       default:
         return (
           <input
+            ref={inputRef}
             type="text"
-            {...baseProps}
+            value={editValue}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            className={inputClassName}
+            disabled={isSaving}
+            placeholder={placeholder}
             maxLength={maxLength}
           />
         );

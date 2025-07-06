@@ -248,9 +248,9 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
         key: 'delete',
         icon: '🗑️',
         label: 'Delete file',
-        onClick: async () => {
+        onClick: () => {
           if (window.confirm('Are you sure you want to delete this file?')) {
-            await onDeleteFile(fileId);
+            onDeleteFile(fileId).catch(console.error);
           }
         },
         variant: 'danger'
