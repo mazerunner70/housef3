@@ -70,6 +70,7 @@ def get_transactions_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
             start_date_ts=start_date_ts,      
             end_date_ts=end_date_ts,        
             account_ids=account_ids,
+            category_ids=category_ids,
             transaction_type=transaction_type,
             search_term=search_term,
             sort_order_date=sort_order,

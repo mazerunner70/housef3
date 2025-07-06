@@ -1,5 +1,5 @@
 resource "aws_dynamodb_table" "analytics_data" {
-  name           = "${var.project_name}-${var.environment}-analytics-data"
+  name           = "${var.prefix}-analytics-data"
   billing_mode   = "PAY_PER_REQUEST"
   hash_key       = "pk"
   range_key      = "sk"
@@ -39,15 +39,13 @@ resource "aws_dynamodb_table" "analytics_data" {
   }
 
   tags = {
+    Name = "${var.prefix}-analytics-data"
     Environment = var.environment
-    Project     = var.project_name
-    ManagedBy   = "terraform"
-    Purpose     = "analytics-data-storage"
   }
 }
 
 resource "aws_dynamodb_table" "analytics_status" {
-  name           = "${var.project_name}-${var.environment}-analytics-status"
+  name           = "${var.prefix}-analytics-status"
   billing_mode   = "PAY_PER_REQUEST"
   hash_key       = "pk"
   range_key      = "sk"
@@ -63,7 +61,12 @@ resource "aws_dynamodb_table" "analytics_status" {
   }
 
   attribute {
-    name = "computationNeeded"
+    name = "userId"
+    type = "S"
+  }
+
+  attribute {
+    name = "lastUpdated"
     type = "S"
   }
 
@@ -72,45 +75,41 @@ resource "aws_dynamodb_table" "analytics_status" {
     type = "N"
   }
 
-  # Global Secondary Index for finding analytics that need computation
+  # Global Secondary Index for querying by user_id
   global_secondary_index {
-    name            = "ComputationNeededIndex"
-    hash_key        = "computationNeeded"
-    range_key       = "processingPriority"
+    name            = "UserStatusIndex"
+    hash_key        = "userId"
+    range_key       = "lastUpdated"
     projection_type = "ALL"
   }
 
-  # TTL config for automatic cleanup of old status records
-  ttl {
-    attribute_name = "ttl"
-    enabled = true
+  # Global Secondary Index for processing queue (priority-based)
+  global_secondary_index {
+    name            = "ProcessingQueueIndex"
+    hash_key        = "processingPriority"
+    range_key       = "lastUpdated"
+    projection_type = "ALL"
   }
 
   tags = {
+    Name = "${var.prefix}-analytics-status"
     Environment = var.environment
-    Project     = var.project_name
-    ManagedBy   = "terraform"
-    Purpose     = "analytics-processing-status"
   }
 }
 
-# Outputs for the analytics tables
+# Output the table names for use in Lambda environment variables
 output "analytics_data_table_name" {
-  description = "Name of the Analytics Data DynamoDB table"
-  value       = aws_dynamodb_table.analytics_data.name
-}
-
-output "analytics_data_table_arn" {
-  description = "ARN of the Analytics Data DynamoDB table"
-  value       = aws_dynamodb_table.analytics_data.arn
+  value = aws_dynamodb_table.analytics_data.name
 }
 
 output "analytics_status_table_name" {
-  description = "Name of the Analytics Status DynamoDB table"
-  value       = aws_dynamodb_table.analytics_status.name
+  value = aws_dynamodb_table.analytics_status.name
+}
+
+output "analytics_data_table_arn" {
+  value = aws_dynamodb_table.analytics_data.arn
 }
 
 output "analytics_status_table_arn" {
-  description = "ARN of the Analytics Status DynamoDB table"
-  value       = aws_dynamodb_table.analytics_status.arn
+  value = aws_dynamodb_table.analytics_status.arn
 } 

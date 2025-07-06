@@ -119,19 +119,14 @@ const PatternSuggestionModal: React.FC<PatternSuggestionModalProps> = ({
         })
       );
 
-      setSuggestedPatterns(enhancedPatterns);
+      // Sort patterns by confidence (highest first) for display
+      const sortedPatterns = [...enhancedPatterns].sort((a, b) => b.confidence - a.confidence);
+
+      setSuggestedPatterns(sortedPatterns);
       setCategorySuggestion(categoryResponse);
       
-      // Pre-select the best pattern based on match count and confidence
-      if (enhancedPatterns.length > 0) {
-        // Sort patterns by match count (descending), then by confidence (descending)
-        const sortedPatterns = [...enhancedPatterns].sort((a, b) => {
-          if (b.matchCount !== a.matchCount) {
-            return b.matchCount - a.matchCount; // Higher match count first
-          }
-          return b.confidence - a.confidence; // Higher confidence first
-        });
-        
+      // Pre-select the best pattern (highest confidence)
+      if (sortedPatterns.length > 0) {
         const bestPattern = sortedPatterns[0];
         setSelectedPattern(bestPattern.pattern);
         setSelectedField(bestPattern.field);

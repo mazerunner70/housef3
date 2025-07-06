@@ -521,6 +521,7 @@ def list_user_transactions(
     start_date_ts: Optional[int] = None,
     end_date_ts: Optional[int] = None,
     account_ids: Optional[List[uuid.UUID]] = None, # Changed to List[uuid.UUID]
+    category_ids: Optional[List[str]] = None,  # Added category_ids parameter
     transaction_type: Optional[str] = None,
     search_term: Optional[str] = None,
     sort_order_date: str = 'desc',
@@ -539,6 +540,7 @@ def list_user_transactions(
         start_date_ts: Start date filter (milliseconds since epoch)
         end_date_ts: End date filter (milliseconds since epoch)
         account_ids: List of account IDs to filter by
+        category_ids: List of category IDs to filter by
         transaction_type: Transaction type to filter by
         search_term: Search term to filter descriptions
         sort_order_date: Sort order ('asc' or 'desc')
@@ -578,6 +580,7 @@ def list_user_transactions(
         # Build conditional filters using dict comprehension pattern
         filters = {
             'account_ids': account_ids and Attr('accountId').is_in([str(aid) for aid in account_ids]),
+            'category_ids': category_ids and Attr('primaryCategoryId').is_in(category_ids),
             'transaction_type': (transaction_type and transaction_type.lower() != 'all') and Attr('transactionType').eq(transaction_type),
             'search_term': search_term and Attr('description').contains(search_term),
             'ignore_dup': ignore_dup and Attr('status').ne('duplicate'),
@@ -594,13 +597,18 @@ def list_user_transactions(
             query_params['FilterExpression'] = reduce(operator.and_, filter_expressions)
 
         logger.debug(f"DynamoDB query params: {query_params}")
+        
+        # Log category filtering for debugging
+        if category_ids:
+            logger.info(f"Filtering transactions by category IDs: {category_ids}")
+            
         response = table.query(**query_params)
         
         transactions = [Transaction.from_dynamodb_item(item) for item in response.get('Items', [])]
         new_last_evaluated_key = response.get('LastEvaluatedKey')
         
         # Count of items returned in this specific query response
-        items_in_current_response = len(transactions) # Use response.get('Count', len(transactions)) if prefer DynamoDB's count
+        items_in_current_response = len(transactions)
         
         logger.info(f"Query for user {user_id} returned {items_in_current_response} items. ScannedCount: {response.get('ScannedCount', 0)}")
 

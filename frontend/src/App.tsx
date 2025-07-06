@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import Login from './components-old/Login';
+import Login from './new-ui/components/Login';
 import NewUILayout from './new-ui/layouts/NewUILayout';
 import AccountsView from './new-ui/views/AccountsView';
 import TransactionsView from './new-ui/views/TransactionsView';
