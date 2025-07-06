@@ -16,14 +16,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px;
+  padding: 4px 10px;
   border: 1px solid #ced4da;
   border-radius: 4px;
   font-size: 0.9rem;
   background-color: #fff;
   cursor: pointer;
   transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
-  min-height: 40px;
+  min-height: 28px;
   user-select: none;
   width: 100%;
   text-align: left;

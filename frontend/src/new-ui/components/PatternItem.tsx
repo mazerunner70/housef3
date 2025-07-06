@@ -50,7 +50,19 @@ const PatternItem: React.FC<PatternItemProps> = ({
             onChange={onSelect}
           />
         </div>
-        <div className="pattern-info" onClick={onSelect}>
+        <div 
+          className="pattern-info" 
+          onClick={onSelect}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onSelect();
+            }
+          }}
+          role="button"
+          tabIndex={0}
+          aria-label={`Select pattern: ${pattern.pattern}`}
+        >
           <div className="pattern-text">
             <strong>Pattern:</strong> "{pattern.pattern}"
           </div>

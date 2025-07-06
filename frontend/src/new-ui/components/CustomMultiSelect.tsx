@@ -169,9 +169,15 @@ const CustomMultiSelect: React.FC<CustomMultiSelectProps> = ({
               return (
                 <div
                   key={option.value}
-                  ref={el => optionsRef.current[index] = el!}
+                  ref={el => { if (el) optionsRef.current[index] = el; }}
                   className={`multi-select-option ${isSelected ? 'selected' : ''} ${isFocused ? 'focused' : ''}`}
                   onClick={() => toggleOption(option.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleOption(option.value);
+                    }
+                  }}
                   onMouseEnter={() => setFocusedIndex(index)}
                   role="option"
                   aria-selected={isSelected}
