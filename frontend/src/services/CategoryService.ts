@@ -279,6 +279,28 @@ export class CategoryService {
 
   // ===== Smart Category Suggestions (Phase 4.2) =====
   
+  // Simple fallback for API failures - backend now handles intelligent name derivation
+  private static getSimpleFallbackName(description: string): string {
+    if (!description || description.trim().length === 0) {
+      return 'General';
+    }
+    
+    // Extract first meaningful word and capitalize it
+    const words = description.trim().split(/\s+/);
+    const meaningfulWords = words.filter(word => 
+      word.length >= 3 && 
+      !/^\d+$/.test(word) && // Skip pure numbers
+      !['THE', 'AND', 'OR', 'AT', 'TO', 'FROM', 'FOR', 'WITH'].includes(word.toUpperCase())
+    );
+    
+    if (meaningfulWords.length > 0) {
+      const firstWord = meaningfulWords[0];
+      return firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase();
+    }
+    
+    return 'General';
+  }
+  
   static async getQuickCategorySuggestions(transactionDescription: string): Promise<{
     suggestedCategory: {
       name: string;
@@ -314,9 +336,11 @@ export class CategoryService {
       };
     } catch (error) {
       console.error('Error getting quick category suggestions:', error);
+      // Use simple fallback for API failures
+      const fallbackName = this.getSimpleFallbackName(transactionDescription);
       return {
         suggestedCategory: {
-          name: 'General',
+          name: fallbackName,
           type: 'EXPENSE',
           confidence: 50
         },

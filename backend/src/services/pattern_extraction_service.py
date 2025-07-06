@@ -437,13 +437,74 @@ class PatternExtractionService:
                     confidence=70
                 )
         
-        # Default to general expense
+        # Use smart category name derivation instead of "General"
+        derived_name = self._derive_category_name_from_description(transaction.description)
         return CategorySuggestion(
-            name='General',
+            name=derived_name,
             category_type=CategoryType.EXPENSE,
             suggested_patterns=self.generate_patterns_from_description(transaction.description),
             confidence=50
         )
+    
+    def _derive_category_name_from_description(self, description: str) -> str:
+        """Derive a meaningful category name from transaction description"""
+        if not description or not description.strip():
+            return 'General'
+        
+        # Clean up the description
+        clean_description = description.strip().lower()
+        
+        # Common patterns to extract meaningful parts
+        patterns = [
+            # Direct transfers and payments
+            (r'transfer to (.+?)(?:\s|$)', lambda m: m.group(1)),
+            (r'payment to (.+?)(?:\s|$)', lambda m: m.group(1)),
+            (r'direct debit (.+?)(?:\s|$)', lambda m: m.group(1)),
+            
+            # Merchant names (often at the beginning)
+            (r'^([a-zA-Z0-9\s&.\'-]+?)(?:\s+\d|\s+[A-Z]{2,}|\s+card|\s+purchase|$)', lambda m: m.group(1)),
+            
+            # Common purchase patterns
+            (r'purchase at (.+?)(?:\s|$)', lambda m: m.group(1)),
+            (r'pos purchase (.+?)(?:\s|$)', lambda m: m.group(1)),
+            (r'card purchase (.+?)(?:\s|$)', lambda m: m.group(1)),
+            
+            # ATM and withdrawal patterns
+            (r'atm withdrawal', lambda m: 'ATM Withdrawal'),
+            (r'cash withdrawal', lambda m: 'Cash Withdrawal'),
+            
+            # Utility and service patterns
+            (r'(electricity|gas|water|phone|internet|mobile)', lambda m: m.group(1).title()),
+            (r'(insurance|mortgage|loan|rent)', lambda m: m.group(1).title()),
+            
+            # Shopping and retail
+            (r'(supermarket|grocery|food|restaurant|cafe|coffee)', lambda m: m.group(1).title()),
+            (r'(petrol|fuel|gas station)', lambda m: 'Fuel'),
+            (r'(pharmacy|medical|health)', lambda m: 'Healthcare'),
+            
+            # Generic fallback - take first meaningful word(s)
+            (r'^([a-zA-Z]+(?:\s+[a-zA-Z]+)?)', lambda m: m.group(1))
+        ]
+        
+        for pattern, extract_func in patterns:
+            match = re.search(pattern, clean_description, re.IGNORECASE)
+            if match:
+                extracted = extract_func(match)
+                # Clean up the extracted text
+                extracted = re.sub(r'[^a-zA-Z0-9\s&.\'-]', '', extracted).strip()
+                
+                # Capitalize first letter of each word
+                extracted = ' '.join(word.capitalize() for word in extracted.split())
+                
+                # Limit length and return
+                if extracted and len(extracted) <= 30:
+                    return extracted
+        
+        # Final fallback - take first few words, capitalize them
+        words = clean_description.split()[:2]
+        result = ' '.join(word.capitalize() for word in words)
+        
+        return result if result else 'General'
     
     def generate_patterns_from_samples(self, descriptions: List[str]) -> List[PatternSuggestion]:
         """Generate patterns from multiple sample descriptions"""

@@ -1,5 +1,5 @@
 resource "aws_dynamodb_table" "analytics_data" {
-  name           = "${var.prefix}-analytics-data"
+  name           = "${var.project_name}-${var.environment}-analytics-data"
   billing_mode   = "PAY_PER_REQUEST"
   hash_key       = "pk"
   range_key      = "sk"
@@ -39,13 +39,15 @@ resource "aws_dynamodb_table" "analytics_data" {
   }
 
   tags = {
-    Name = "${var.prefix}-analytics-data"
+    Name        = "${var.project_name}-${var.environment}-analytics-data"
     Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
   }
 }
 
 resource "aws_dynamodb_table" "analytics_status" {
-  name           = "${var.prefix}-analytics-status"
+  name           = "${var.project_name}-${var.environment}-analytics-status"
   billing_mode   = "PAY_PER_REQUEST"
   hash_key       = "pk"
   range_key      = "sk"
@@ -92,8 +94,10 @@ resource "aws_dynamodb_table" "analytics_status" {
   }
 
   tags = {
-    Name = "${var.prefix}-analytics-status"
+    Name        = "${var.project_name}-${var.environment}-analytics-status"
     Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
   }
 }
 

@@ -817,6 +817,16 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
                         key={index}
                         className={`pattern-suggestion ${selectedPattern === pattern.pattern ? 'selected' : ''}`}
                         onClick={() => setSelectedPattern(pattern.pattern)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelectedPattern(pattern.pattern);
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Select pattern: ${pattern.pattern}, confidence: ${pattern.confidence}%. ${pattern.explanation}`}
+                        aria-pressed={selectedPattern === pattern.pattern}
                       >
                         <div className="pattern-header">
                           <input
@@ -824,6 +834,8 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
                             name="suggestedPattern"
                             checked={selectedPattern === pattern.pattern}
                             onChange={() => setSelectedPattern(pattern.pattern)}
+                            tabIndex={-1}
+                            aria-hidden="true"
                           />
                           <span className="pattern-text">"{pattern.pattern}"</span>
                           <span className="pattern-confidence">{pattern.confidence}%</span>

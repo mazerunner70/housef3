@@ -564,10 +564,18 @@ def list_user_transactions(
         elif end_date_ts is not None:
             key_condition = key_condition & Key('date').lte(end_date_ts)
 
+        # Use a larger internal limit for DynamoDB when filters are active
+        # This ensures DynamoDB scans through enough data to find matching transactions
+        has_filters = any([account_ids, category_ids, transaction_type and transaction_type.lower() != 'all', 
+                          search_term, ignore_dup, uncategorized_only])
+        
+        # Use 4x the requested limit when filters are active to account for sparse data
+        internal_limit = limit * 4 if has_filters else limit
+        
         query_params: Dict[str, Any] = {
             'IndexName': 'UserIdIndex',
             'KeyConditionExpression': key_condition,
-            'Limit': limit,
+            'Limit': internal_limit,
             'ScanIndexForward': sort_order_date.lower() == 'asc'
         }
 
@@ -607,10 +615,23 @@ def list_user_transactions(
         transactions = [Transaction.from_dynamodb_item(item) for item in response.get('Items', [])]
         new_last_evaluated_key = response.get('LastEvaluatedKey')
         
+        # If we used a larger internal limit, trim results to the requested limit
+        # but preserve the LastEvaluatedKey to indicate more data is available
+        if len(transactions) > limit:
+            transactions = transactions[:limit]
+            # Keep the LastEvaluatedKey from the larger query to indicate more data exists
+            
         # Count of items returned in this specific query response
         items_in_current_response = len(transactions)
         
-        logger.info(f"Query for user {user_id} returned {items_in_current_response} items. ScannedCount: {response.get('ScannedCount', 0)}")
+        logger.info(f"Query for user {user_id} returned {items_in_current_response} items (requested: {limit}, internal limit: {internal_limit}). ScannedCount: {response.get('ScannedCount', 0)}, Count: {response.get('Count', 0)}")
+        
+        # Log filtering efficiency to help debug sparse data issues
+        scanned_count = response.get('ScannedCount', 0)
+        returned_count = response.get('Count', 0)
+        if scanned_count > 0:
+            filter_efficiency = (returned_count / scanned_count) * 100
+            logger.info(f"Filter efficiency: {filter_efficiency:.1f}% ({returned_count}/{scanned_count} items passed filters)")
 
         # Return items_in_current_response instead of a hardcoded 0.
         # The caller (transaction_operations.py) will use this and new_last_evaluated_key

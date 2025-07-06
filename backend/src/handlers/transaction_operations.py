@@ -82,12 +82,22 @@ def get_transactions_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
         user_categories = list_categories_by_user_from_db(user_id)
         categories_map = {str(cat.categoryId): cat for cat in user_categories}
         
-        total_items_for_response = items_on_this_page
+        # For DynamoDB pagination, we can't know the exact total count without scanning all items
+        # Instead, we provide an estimated total based on pagination state
+        # The frontend will handle pagination using lastEvaluatedKey and page indicators
+        if new_last_evaluated_key:
+            # There are more items available, so total is at least current items + some unknown amount
+            # We indicate this by setting totalItems to a value that suggests more data exists
+            total_items_for_response = (current_page_for_response * page_size) + 1
+        else:
+            # This is the last page, so total is current page items plus previous pages
+            total_items_for_response = ((current_page_for_response - 1) * page_size) + items_on_this_page
 
         if items_on_this_page == 0:
             if current_page_for_response == 1 and not new_last_evaluated_key:
                 # No items on the first page, and no indication of more pages.
                 total_pages_for_response = 0
+                total_items_for_response = 0
             else:
                 # No items on current page, but it's either not the first page
                 # or there might be more pages (new_last_evaluated_key is present).
@@ -142,7 +152,7 @@ def get_transactions_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
             "pagination": {
                 "currentPage": current_page_for_response,
                 "pageSize": page_size,
-                "totalItems": total_items_for_response, # Number of items on the current page
+                "totalItems": total_items_for_response, # Estimated total based on pagination state
                 "totalPages": total_pages_for_response,
             }
         }

@@ -187,15 +187,15 @@ export const getUserTransactions = async (params: TransactionRequestParams): Pro
       totalItemsFromBackend = data.pagination?.totalItems || 0;
       currentLastEvaluatedKey = data.pagination?.lastEvaluatedKey;
       
-      // If we got less than the desired page size and there's no more data, stop
-      if (processedTransactions.length < desiredPageSize && !currentLastEvaluatedKey) {
-        console.log(`Frontend pagination: No more data available, stopping after ${requestCount} requests`);
-        break;
-      }
-      
       // If we got no transactions in this request, stop
       if (processedTransactions.length === 0) {
         console.log(`Frontend pagination: No transactions in request ${requestCount}, stopping`);
+        break;
+      }
+      
+      // If there's no more data available (no lastEvaluatedKey), stop
+      if (!currentLastEvaluatedKey) {
+        console.log(`Frontend pagination: No more data available, stopping after ${requestCount} requests`);
         break;
       }
       
@@ -217,7 +217,7 @@ export const getUserTransactions = async (params: TransactionRequestParams): Pro
     pagination: {
       currentPage: params.page || 1,
       pageSize: desiredPageSize,
-      totalItems: allTransactions.length, // This is the items we actually returned
+      totalItems: totalItemsFromBackend,
       totalPages: totalPagesFromBackend,
       lastEvaluatedKey: currentLastEvaluatedKey
     }
@@ -384,4 +384,4 @@ export default {
   getCategories,
   getAccounts,
   quickUpdateTransactionCategory
-}; 
+};

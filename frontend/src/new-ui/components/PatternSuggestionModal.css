@@ -106,67 +106,7 @@
   100% { transform: rotate(360deg); }
 }
 
-/* Category Selection Section */
-.category-selection-section {
-  margin-bottom: 24px;
-}
-
-.category-selection-section h4 {
-  margin: 0 0 12px 0;
-  font-size: 1rem;
-  color: #495057;
-}
-
-.category-selector {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.category-dropdown-container {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.category-dropdown {
-  flex: 1;
-  padding: 10px 12px;
-  border: 2px solid #e9ecef;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  background-color: #fff;
-  color: #495057;
-  transition: border-color 0.2s ease;
-}
-
-.category-dropdown:focus {
-  outline: none;
-  border-color: #007bff;
-  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
-}
-
-.add-category-button {
-  width: 40px;
-  height: 40px;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 1.5rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-  font-weight: bold;
-  line-height: 1;
-}
-
-.add-category-button:hover {
-  background-color: #0056b3;
-  transform: translateY(-1px);
-}
+/* Category Selection Section - removed duplicate rules, handled by CategorySelector.css */
 
 .new-category-input-container {
   display: flex;
@@ -322,6 +262,7 @@
 
 .pattern-info {
   flex: 1;
+  cursor: pointer;
 }
 
 .pattern-text {

@@ -4,6 +4,14 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 }
 
+.multi-select-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #495057;
+}
+
 .multi-select-trigger {
   display: flex;
   align-items: center;
@@ -17,6 +25,8 @@
   transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
   min-height: 40px;
   user-select: none;
+  width: 100%;
+  text-align: left;
 }
 
 .multi-select-trigger:hover {
@@ -91,6 +101,12 @@
   background-color: #f8f9fa;
 }
 
+.multi-select-option.focused {
+  background-color: #e6f7ff;
+  outline: 2px solid #1890ff;
+  outline-offset: -2px;
+}
+
 .multi-select-option.selected {
   background-color: #e6f7ff;
   color: #1890ff;
@@ -98,6 +114,12 @@
 
 .multi-select-option.selected:hover {
   background-color: #d6f3ff;
+}
+
+.multi-select-option.selected.focused {
+  background-color: #d6f3ff;
+  outline: 2px solid #1890ff;
+  outline-offset: -2px;
 }
 
 .multi-select-option.disabled {
@@ -146,6 +168,14 @@
   outline: none;
   border-color: #80bdff;
   box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .multi-select-option.focused {
+    outline: 3px solid;
+    outline-offset: -3px;
+  }
 }
 
 /* Mobile responsive adjustments */
