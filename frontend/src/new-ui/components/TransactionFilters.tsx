@@ -42,6 +42,19 @@ const TransactionFilters: React.FC<TransactionFiltersProps> = ({
     setFilters(initialFilters);
   }, [initialFilters]);
 
+  // Clean up orphaned category IDs when categories list changes - just for display
+  useEffect(() => {
+    if (categories.length > 0 && filters.categoryIds && filters.categoryIds.length > 0) {
+      const validCategoryIds = categories.map(cat => cat.categoryId);
+      const filteredCategoryIds = filters.categoryIds.filter(id => validCategoryIds.includes(id));
+      
+      // Only update local display state if we found orphaned IDs
+      if (filteredCategoryIds.length !== filters.categoryIds.length) {
+        setFilters(prev => ({ ...prev, categoryIds: filteredCategoryIds }));
+      }
+    }
+  }, [categories]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFilters(prev => ({ ...prev, [name]: value }));
@@ -52,7 +65,10 @@ const TransactionFilters: React.FC<TransactionFiltersProps> = ({
   };
 
   const handleCategorySelectionChange = (selectedValues: string[]) => {
-    setFilters(prev => ({ ...prev, categoryIds: selectedValues }));
+    // Filter out any category IDs that don't exist in available categories
+    const validCategoryIds = categories.map(cat => cat.categoryId);
+    const filteredValues = selectedValues.filter(id => validCategoryIds.includes(id));
+    setFilters(prev => ({ ...prev, categoryIds: filteredValues }));
   };
   
   const handleTransactionTypeChange = (type: FilterValues['transactionType']) => {

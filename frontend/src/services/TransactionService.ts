@@ -269,7 +269,17 @@ export const quickUpdateTransactionCategory = async (transactionId: string, cate
       method: 'PUT',
       body: JSON.stringify({ categoryId }),
     });
-    // The response could be the updated transaction or a simple success message
+    
+    // If response contains transaction data, parse the amounts
+    if (response && response.amount && response.balance) {
+      return {
+        ...response,
+        amount: new Decimal(response.amount),
+        balance: new Decimal(response.balance),
+      };
+    }
+    
+    // Otherwise, return the response as-is (likely a simple success message)
     return response; 
   } catch (error) {
     console.error('Error updating transaction category:', error);
@@ -358,7 +368,18 @@ const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
 export const getFileTransactions = async (fileId: string): Promise<TransactionListResponse> => {
   try {
     const response = await authenticatedRequest(`${API_ENDPOINT}/api/files/${fileId}/transactions`);
-    return response;
+    
+    // Transform the response to convert string amounts to Decimal objects
+    const processedTransactions = response.transactions.map((tx: any) => ({
+      ...tx,
+      amount: new Decimal(tx.amount),
+      balance: new Decimal(tx.balance),
+    }));
+    
+    return {
+      ...response,
+      transactions: processedTransactions
+    };
   } catch (error) {
     console.error('Error fetching file transactions:', error);
     throw error;
@@ -369,7 +390,18 @@ export const getFileTransactions = async (fileId: string): Promise<TransactionLi
 export const getAccountTransactions = async (accountId: string, limit: number = 50): Promise<TransactionListResponse> => {
   try {
     const response = await authenticatedRequest(`${API_ENDPOINT}/api/accounts/${accountId}/transactions?limit=${limit}`);
-    return response;
+    
+    // Transform the response to convert string amounts to Decimal objects
+    const processedTransactions = response.transactions.map((tx: any) => ({
+      ...tx,
+      amount: new Decimal(tx.amount),
+      balance: new Decimal(tx.balance),
+    }));
+    
+    return {
+      ...response,
+      transactions: processedTransactions
+    };
   } catch (error) {
     console.error('Error fetching account transactions:', error);
     throw error;

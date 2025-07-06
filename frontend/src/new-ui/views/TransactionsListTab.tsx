@@ -98,6 +98,25 @@ const TransactionsListTab: React.FC = () => {
     fetchInitialFilterData();
   }, [fetchInitialFilterData]);
 
+  // Clean up orphaned category IDs from localStorage when categories are loaded
+  useEffect(() => {
+    if (categories.length > 0 && filters.categoryIds.length > 0) {
+      const validCategoryIds = categories.map(cat => cat.categoryId);
+      const filteredCategoryIds = filters.categoryIds.filter(id => validCategoryIds.includes(id));
+      
+      // If we found orphaned IDs, clean them from localStorage immediately
+      if (filteredCategoryIds.length !== filters.categoryIds.length) {
+        const orphanedCount = filters.categoryIds.length - filteredCategoryIds.length;
+        const orphanedIds = filters.categoryIds.filter(id => !validCategoryIds.includes(id));
+        
+        console.log(`🧹 Cleaning up ${orphanedCount} orphaned category IDs from localStorage:`, orphanedIds);
+        
+        // Update the store (which persists to localStorage)
+        applyNewFilters({ ...filters, categoryIds: filteredCategoryIds });
+      }
+    }
+  }, [categories]); // Only run when categories change to avoid loops
+
   // Construct queryKey. LEK is part of it to ensure new data fetch when it changes.
   const queryKey = ['transactions', filters, currentPage, pageSize];
   
