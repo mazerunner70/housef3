@@ -4,7 +4,7 @@ import { listAccounts, Account as ServiceAccount } from '../../services/AccountS
 import { getUploadUrl, uploadFileToS3, listFiles, FileMetadata, deleteFile, parseFile, updateFileFieldMapAssociation, getProcessedFileMetadata, FileProcessResult, updateFileBalance, updateFileClosingBalance, associateFileWithAccount } from '../../services/FileService'; // Added parseFile, updateFileBalance, updateFileClosingBalance, and associateFileWithAccount
 import { listFieldMaps, getFieldMap, createFieldMap, updateFieldMap, FieldMap } from '../../services/FileMapService'; // Import more from FileMapService
 import { getCurrentUser } from '../../services/AuthService'; // Import getCurrentUser
-import ImportStep2Preview from '../components/ImportStep2Preview'; // Import the new component
+import ImportMappingDialog from '../components/ImportMappingDialog'; // Import the new dialog component
 import type { TransactionRow, ColumnMapping } from '../components/ImportStep2Preview'; // Import types
 import TransactionFileUpload from '../components/TransactionFileUpload'; // Enhanced file upload
 import ImportHistoryTable from '../components/ImportHistoryTable'; // Import the new reusable table
@@ -74,6 +74,7 @@ interface ImportResultForView {
 
 const ImportTransactionsView: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<number>(1);
+  const [showMappingDialog, setShowMappingDialog] = useState<boolean>(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [accounts, setAccounts] = useState<ViewAccount[]>([]); // Use local ViewAccount type
@@ -225,6 +226,7 @@ const ImportTransactionsView: React.FC = () => {
       setCurrentlyLoadedFieldMapDetails(undefined); // Reset loaded map details
       setCurrentlyLoadedFieldMapData(undefined); // Reset loaded map data
       setInitialFieldMapForStep2(undefined); // Reset initial map to load
+      setShowMappingDialog(false); // Ensure dialog is closed
       // Don't clear success alert here since we want to show it on return to step 1
     }
   }, [currentStep, fetchInitialData]);
@@ -319,18 +321,18 @@ const ImportTransactionsView: React.FC = () => {
             id: fileMetaForMapLookup.fieldMap.fileMapId, 
             name: fileMetaForMapLookup.fieldMap.name 
         };
-        console.log("[ImportTransactionsView] Found initial field map for Step 2 from file metadata:", initialMap);
+        console.log("[ImportTransactionsView] Found initial field map for mapping dialog from file metadata:", initialMap);
         setInitialFieldMapForStep2(initialMap);
         // Pre-load its details
         if (initialMap) {
             await handleLoadFieldMapDetails(initialMap.id); // This will set currentlyLoadedFieldMapDetails
         }
     } else {
-        console.log("[ImportTransactionsView] No initial field map found for this file for Step 2.");
+        console.log("[ImportTransactionsView] No initial field map found for this file for mapping dialog.");
         setInitialFieldMapForStep2(undefined);
         setCurrentlyLoadedFieldMapDetails(undefined);
     }
-    setCurrentStep(2);
+    setShowMappingDialog(true);
   };
 
   const proceedToStep2 = async () => {
@@ -500,6 +502,7 @@ const ImportTransactionsView: React.FC = () => {
         accountName: processApiResult.accountName || preliminaryAccountName,
         errorDetails: !success ? (processApiResult.message || 'Processing failed.') : undefined,
       });
+      setShowMappingDialog(false); // Close the dialog
       setCurrentStep(1);
 
     } catch (error: any) {
@@ -511,18 +514,14 @@ const ImportTransactionsView: React.FC = () => {
         fileName: preliminaryFileName,
         accountName: preliminaryAccountName,
       });
+      setShowMappingDialog(false); // Close the dialog
       setCurrentStep(1); 
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleCancelStep2 = () => {
-    console.log("Step 2 Cancelled. Returning to Step 1.");
-    setCurrentStep(1);
-    setSuccessAlert(null);
-    // States like selectedFile, selectedAccount are reset by useEffect for currentStep === 1
-  };
+
   
   const resetProcess = () => {
     setCurrentStep(1);
@@ -898,10 +897,10 @@ const ImportTransactionsView: React.FC = () => {
             disabled={!selectedFile || !fileValidation.isValid || isLoading || isLoadingHistory}
             className="button-common button-primary"
           >
-            {(isLoading && currentStep === 1 && !isLoadingHistory && selectedFile) ? 'Uploading & Processing...' : 
-             (isLoadingHistory && currentStep === 1) ? 'Loading Data...' : 
+            {(isLoading && !isLoadingHistory && selectedFile) ? 'Uploading & Processing...' : 
+             (isLoadingHistory) ? 'Loading Data...' : 
              (selectedDefaultMapping && defaultMappingName) ? 'Upload & Import with Default Mapping' : 
-             'Upload & Continue'}
+             'Upload & Map Fields'}
           </button>
 
           <div style={{marginTop: '30px'}}>
@@ -929,22 +928,22 @@ const ImportTransactionsView: React.FC = () => {
         </div>
       )}
 
-      {currentStep === 2 && currentFileId && (
-        <ImportStep2Preview
-          parsedData={parsedTransactionData}
-          fileType={fileTypeForStep2}
-          csvHeaders={csvHeaders}
-          existingMapping={currentlyLoadedFieldMapDetails}
-          onCompleteImport={handleCompleteImportStep2}
-          onCancel={handleCancelStep2}
-          targetTransactionFields={TARGET_TRANSACTION_FIELDS}
-          availableFieldMaps={availableFileMaps}
-          initialFieldMapToLoad={initialFieldMapForStep2}
-          onLoadFieldMapDetails={handleLoadFieldMapDetails}
-          onSaveOrUpdateFieldMap={handleSaveOrUpdateFieldMap}
-          currentlyLoadedFieldMapData={currentlyLoadedFieldMapData}
-        />
-      )}
+      <ImportMappingDialog
+        isOpen={showMappingDialog && currentFileId !== null}
+        onClose={() => setShowMappingDialog(false)}
+        title="Map Transaction Fields"
+        parsedData={parsedTransactionData}
+        fileType={fileTypeForStep2}
+        csvHeaders={csvHeaders}
+        existingMapping={currentlyLoadedFieldMapDetails}
+        onCompleteImport={handleCompleteImportStep2}
+        targetTransactionFields={TARGET_TRANSACTION_FIELDS}
+        availableFieldMaps={availableFileMaps}
+        initialFieldMapToLoad={initialFieldMapForStep2}
+        onLoadFieldMapDetails={handleLoadFieldMapDetails}
+        onSaveOrUpdateFieldMap={handleSaveOrUpdateFieldMap}
+        currentlyLoadedFieldMapData={currentlyLoadedFieldMapData}
+      />
 
 
     </div>

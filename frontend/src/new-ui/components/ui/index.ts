@@ -10,10 +10,11 @@ export { default as RowActions } from './RowActions';
 export { default as EditableCell } from './EditableCell';
 export { default as StatusBadge } from './StatusBadge';
 export { default as FileFormatDisplay } from './FileFormatDisplay';
+export { default as ImportMappingDialog } from '../ImportMappingDialog';
 
 // Export types
 export type { ActionConfig } from './RowActions';
-export type { EditableCellOption } from './EditableCell';
+export type { EditableCellOption, EditableCellDialogProps } from './EditableCell';
 export type { StatusVariant } from './StatusBadge';
 export type { FileFormat } from './FileFormatDisplay';
 

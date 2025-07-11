@@ -1,101 +1,66 @@
-import React, { useState } from 'react';
+import React from 'react';
 import './Pagination.css';
 
-interface PaginationProps {
-  currentPage: number;
-  totalPages: number;
-  onPageChange: (page: number) => void;
-  itemsPerPage: number;
+interface LoadMoreProps {
+  hasMore: boolean;
+  isLoading: boolean;
+  onLoadMore: () => void;
+  itemsLoaded: number;
+  pageSize: number;
   onPageSizeChange: (newPageSize: number) => void;
-  totalItems?: number;
 }
 
-const Pagination: React.FC<PaginationProps> = ({
-  currentPage,
-  totalPages,
-  onPageChange,
-  itemsPerPage,
-  onPageSizeChange,
+const LoadMore: React.FC<LoadMoreProps> = ({
+  hasMore,
+  isLoading,
+  onLoadMore,
+  itemsLoaded,
+  pageSize,
+  onPageSizeChange
 }) => {
-  const [pageSizeInput, setPageSizeInput] = useState<string>(itemsPerPage.toString());
+  const [pageSizeInput, setPageSizeInput] = React.useState<string>(pageSize.toString());
 
   React.useEffect(() => {
-    setPageSizeInput(itemsPerPage.toString());
-  }, [itemsPerPage]);
+    setPageSizeInput(pageSize.toString());
+  }, [pageSize]);
 
-  const handlePrevious = () => {
-    if (currentPage > 1) {
-      onPageChange(currentPage - 1);
-    }
-  };
-
-  const handleNext = () => {
-    if (currentPage < totalPages) {
-      onPageChange(currentPage + 1);
-    }
-  };
-
-  const handlePageSizeInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePageSizeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setPageSizeInput(e.target.value);
   };
 
   const handlePageSizeSubmit = () => {
     const newSize = parseInt(pageSizeInput, 10);
-    if (!isNaN(newSize) && newSize > 0) {
+    if (!isNaN(newSize) && newSize > 0 && newSize <= 1000) {
       onPageSizeChange(newSize);
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handlePageSizeSubmit();
-    }
-  };
-
-  const pageNumbers = [];
-  for (let i = 1; i <= totalPages; i++) {
-    pageNumbers.push(i);
-  }
-
   return (
-    <div className="pagination-container">
-      {totalPages > 1 && (
-        <>
-          <button 
-            onClick={handlePrevious} 
-            disabled={currentPage === 1}
-            className="pagination-button prev-button"
-          >
-            Previous
-          </button>
-          {pageNumbers.map(number => (
-            <button 
-              key={number} 
-              onClick={() => onPageChange(number)} 
-              className={`pagination-button page-number ${currentPage === number ? 'active' : ''}`}
-            >
-              {number}
-            </button>
-          ))}
-          <button 
-            onClick={handleNext} 
-            disabled={currentPage === totalPages || totalPages === 0}
-            className="pagination-button next-button"
-          >
-            Next
-          </button>
-        </>
+    <div className="load-more-container">
+      <div className="results-info">
+        Showing {itemsLoaded.toLocaleString()} transactions
+      </div>
+      
+      {hasMore && (
+        <button 
+          onClick={onLoadMore}
+          disabled={isLoading}
+          className="load-more-button"
+        >
+          {isLoading ? 'Loading...' : 'Load More'}
+        </button>
       )}
+      
       <div className="page-size-changer">
-        <label htmlFor="pageSizeInput" className="page-size-label">Items per page: </label>
+        <label>Batch size:</label>
         <input 
           type="number" 
-          id="pageSizeInput" 
           value={pageSizeInput} 
-          onChange={handlePageSizeInputChange} 
+          onChange={handlePageSizeChange} 
           onBlur={handlePageSizeSubmit}
-          onKeyDown={handleKeyDown}
+          onKeyDown={(e) => e.key === 'Enter' && handlePageSizeSubmit()}
           min="1"
+          max="1000"
           className="page-size-input"
         />
       </div>
@@ -103,4 +68,4 @@ const Pagination: React.FC<PaginationProps> = ({
   );
 };
 
-export default Pagination; 
+export default LoadMore; 

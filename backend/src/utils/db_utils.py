@@ -514,6 +514,126 @@ def list_file_transactions(file_id: uuid.UUID) -> List[Transaction]:
         raise
 
 
+def _select_optimal_gsi(
+    user_id: str,
+    account_ids: Optional[List[uuid.UUID]] = None,
+    category_ids: Optional[List[str]] = None,
+    transaction_type: Optional[str] = None,
+    ignore_dup: bool = False,
+    uncategorized_only: bool = False,
+    start_date_ts: Optional[int] = None,
+    end_date_ts: Optional[int] = None
+) -> Tuple[str, Any]:
+    """
+    Select the most optimal GSI based on filters to minimize data scanning.
+    Returns (index_name, key_condition_expression).
+    
+    GSI Selection Priority:
+    1. Single account filter -> AccountDateIndex 
+    2. Single category filter -> CategoryDateIndex
+    3. Status filter (ignore_dup/uncategorized) -> StatusDateIndex
+    4. Transaction type filter -> TransactionTypeIndex
+    5. Fallback -> UserIdIndex
+    """
+    
+    # Helper function to add date range to key condition
+    def _add_date_range(key_condition):
+        if start_date_ts is not None and end_date_ts is not None:
+            return key_condition & Key('date').between(start_date_ts, end_date_ts)
+        elif start_date_ts is not None:
+            return key_condition & Key('date').gte(start_date_ts)
+        elif end_date_ts is not None:
+            return key_condition & Key('date').lte(end_date_ts)
+        return key_condition
+    
+    # 1. Single account filter (most selective for account-specific queries)
+    if account_ids and len(account_ids) == 1:
+        key_condition = Key('accountId').eq(str(account_ids[0]))
+        key_condition = _add_date_range(key_condition)
+        logger.debug(f"Using AccountDateIndex for account {account_ids[0]}")
+        return 'AccountDateIndex', key_condition
+    
+    # 2. Single category filter (good for category analysis)  
+    if category_ids and len(category_ids) == 1:
+        key_condition = Key('primaryCategoryId').eq(category_ids[0])
+        key_condition = _add_date_range(key_condition)
+        logger.debug(f"Using CategoryDateIndex for category {category_ids[0]}")
+        return 'CategoryDateIndex', key_condition
+    
+    # 3. Status filter (efficient for duplicate detection or status-specific queries)
+    if ignore_dup:
+        key_condition = Key('status').eq('processed')  # Assuming non-duplicates have 'processed' status
+        key_condition = _add_date_range(key_condition)
+        logger.debug("Using StatusDateIndex for ignore_dup filter")
+        return 'StatusDateIndex', key_condition
+    
+    if uncategorized_only:
+        # For uncategorized, we might use a specific status or fall back to UserIdIndex with filter
+        # This depends on how uncategorized transactions are marked
+        pass
+    
+    # 4. Transaction type filter
+    if transaction_type and transaction_type.lower() != 'all':
+        key_condition = Key('transactionType').eq(transaction_type)
+        key_condition = _add_date_range(key_condition)
+        logger.debug(f"Using TransactionTypeIndex for type {transaction_type}")
+        return 'TransactionTypeIndex', key_condition
+    
+    # 5. Fallback to UserIdIndex (always works, but may be less efficient)
+    key_condition = Key('userId').eq(user_id)
+    key_condition = _add_date_range(key_condition)
+    logger.debug("Using UserIdIndex (fallback)")
+    return 'UserIdIndex', key_condition
+
+
+def _get_remaining_filters(
+    index_name: str,
+    user_id: str,
+    account_ids: Optional[List[uuid.UUID]] = None,
+    category_ids: Optional[List[str]] = None,
+    transaction_type: Optional[str] = None,
+    ignore_dup: bool = False,
+    uncategorized_only: bool = False,
+    search_term: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Determine which filters still need to be applied via FilterExpression,
+    excluding those already handled by the selected GSI.
+    """
+    filters = {}
+    
+    # Account filter - skip if using AccountDateIndex with single account
+    if account_ids and not (index_name == 'AccountDateIndex' and len(account_ids) == 1):
+        filters['account_ids'] = Attr('accountId').is_in([str(aid) for aid in account_ids])
+    
+    # Category filter - skip if using CategoryDateIndex with single category  
+    if category_ids and not (index_name == 'CategoryDateIndex' and len(category_ids) == 1):
+        filters['category_ids'] = Attr('primaryCategoryId').is_in(category_ids)
+    
+    # Transaction type filter - skip if using TransactionTypeIndex
+    if (transaction_type and transaction_type.lower() != 'all' and 
+        index_name != 'TransactionTypeIndex'):
+        filters['transaction_type'] = Attr('transactionType').eq(transaction_type)
+    
+    # Status filter - skip if using StatusDateIndex for ignore_dup
+    if ignore_dup and index_name != 'StatusDateIndex':
+        filters['ignore_dup'] = Attr('status').ne('duplicate')
+    
+    # Uncategorized filter - always use FilterExpression (no dedicated GSI)
+    if uncategorized_only:
+        filters['uncategorized_only'] = Attr('primaryCategoryId').not_exists()
+    
+    # Search term - always use FilterExpression (no full-text GSI)
+    if search_term:
+        filters['search_term'] = Attr('description').contains(search_term)
+    
+    # User filter - add if not using UserIdIndex (for authorization)
+    if index_name != 'UserIdIndex':
+        filters['user_id'] = Attr('userId').eq(user_id)
+    
+    return filters
+
+
 def list_user_transactions(
     user_id: str, 
     limit: int = 50, 
@@ -530,12 +650,12 @@ def list_user_transactions(
 ) -> Tuple[List[Transaction], Optional[Dict[str, Any]], int]:
     """
     List transactions for a user with filtering, date sorting, and pagination.
-    Assumes 'UserIdIndex' GSI with 'userId' as PK and 'date' (ms since epoch) as SK or other suitable SK for date sorting.
-    And that 'date' attribute in DynamoDB is stored as numeric milliseconds since epoch.
+    Returns up to 'limit' transactions. May return fewer due to filtering - this is the 
+    industry standard approach used by GitHub, Twitter, Stripe, etc.
     
     Args:
         user_id: The user ID to filter by
-        limit: Maximum number of transactions to return
+        limit: Maximum number of transactions to return (may return fewer due to filters)
         last_evaluated_key: For pagination
         start_date_ts: Start date filter (milliseconds since epoch)
         end_date_ts: End date filter (milliseconds since epoch)
@@ -546,6 +666,9 @@ def list_user_transactions(
         sort_order_date: Sort order ('asc' or 'desc')
         ignore_dup: Whether to ignore duplicate transactions
         uncategorized_only: If True, only return transactions without categories
+        
+    Returns:
+        Tuple of (transactions, last_evaluated_key, items_count)
     """
     try:
         table = get_transactions_table()
@@ -553,50 +676,45 @@ def list_user_transactions(
             logger.error("TRANSACTIONS_TABLE is not configured.")
             return [], None, 0
 
-        # Build the key condition expression with date range if specified
-        # Since date is now the range key in UserIdIndex GSI, we need to use it in KeyConditionExpression
-        key_condition = Key('userId').eq(user_id)
-        
-        if start_date_ts is not None and end_date_ts is not None:
-            key_condition = key_condition & Key('date').between(start_date_ts, end_date_ts)
-        elif start_date_ts is not None:
-            key_condition = key_condition & Key('date').gte(start_date_ts)
-        elif end_date_ts is not None:
-            key_condition = key_condition & Key('date').lte(end_date_ts)
+        # Smart GSI selection - choose the most selective index to minimize data scanning
+        index_name, key_condition = _select_optimal_gsi(
+            user_id=user_id,
+            account_ids=account_ids,
+            category_ids=category_ids,
+            transaction_type=transaction_type,
+            ignore_dup=ignore_dup,
+            uncategorized_only=uncategorized_only,
+            start_date_ts=start_date_ts,
+            end_date_ts=end_date_ts
+        )
 
-        # Use a larger internal limit for DynamoDB when filters are active
-        # This ensures DynamoDB scans through enough data to find matching transactions
-        has_filters = any([account_ids, category_ids, transaction_type and transaction_type.lower() != 'all', 
-                          search_term, ignore_dup, uncategorized_only])
-        
-        # Use 4x the requested limit when filters are active to account for sparse data
-        internal_limit = limit * 4 if has_filters else limit
-        
         query_params: Dict[str, Any] = {
-            'IndexName': 'UserIdIndex',
+            'IndexName': index_name,
             'KeyConditionExpression': key_condition,
-            'Limit': internal_limit,
+            'Limit': limit,  # Use requested limit directly - industry standard approach
             'ScanIndexForward': sort_order_date.lower() == 'asc'
         }
 
         if last_evaluated_key:
             query_params['ExclusiveStartKey'] = last_evaluated_key
 
-        # Build filter expressions using a more pythonic approach
+        # Build filter expressions, excluding filters already handled by GSI selection
         filter_expressions = []
         
-        # Build conditional filters using dict comprehension pattern
-        filters = {
-            'account_ids': account_ids and Attr('accountId').is_in([str(aid) for aid in account_ids]),
-            'category_ids': category_ids and Attr('primaryCategoryId').is_in(category_ids),
-            'transaction_type': (transaction_type and transaction_type.lower() != 'all') and Attr('transactionType').eq(transaction_type),
-            'search_term': search_term and Attr('description').contains(search_term),
-            'ignore_dup': ignore_dup and Attr('status').ne('duplicate'),
-            'uncategorized_only': uncategorized_only and Attr('primaryCategoryId').not_exists()
-        }
+        # Only add filters that aren't already handled by the selected GSI
+        remaining_filters = _get_remaining_filters(
+            index_name=index_name,
+            user_id=user_id,
+            account_ids=account_ids,
+            category_ids=category_ids,
+            transaction_type=transaction_type,
+            ignore_dup=ignore_dup,
+            uncategorized_only=uncategorized_only,
+            search_term=search_term
+        )
         
         # Add non-None filters to the list
-        filter_expressions.extend(filter_expr for filter_expr in filters.values() if filter_expr)
+        filter_expressions.extend(filter_expr for filter_expr in remaining_filters.values() if filter_expr)
         
         # Combine all filters with AND logic
         if filter_expressions:
@@ -604,27 +722,26 @@ def list_user_transactions(
             import operator
             query_params['FilterExpression'] = reduce(operator.and_, filter_expressions)
 
+        logger.info(f"Using GSI: {index_name} for user {user_id}")
         logger.debug(f"DynamoDB query params: {query_params}")
         
-        # Log category filtering for debugging
+        # Log optimization info
         if category_ids:
             logger.info(f"Filtering transactions by category IDs: {category_ids}")
+        if filter_expressions:
+            logger.info(f"Additional filters applied: {len(filter_expressions)} FilterExpressions")
+        else:
+            logger.info("No additional filters needed - all filtering done via GSI KeyCondition")
             
         response = table.query(**query_params)
         
         transactions = [Transaction.from_dynamodb_item(item) for item in response.get('Items', [])]
         new_last_evaluated_key = response.get('LastEvaluatedKey')
         
-        # If we used a larger internal limit, trim results to the requested limit
-        # but preserve the LastEvaluatedKey to indicate more data is available
-        if len(transactions) > limit:
-            transactions = transactions[:limit]
-            # Keep the LastEvaluatedKey from the larger query to indicate more data exists
-            
-        # Count of items returned in this specific query response
+        # Count of items returned in this query response  
         items_in_current_response = len(transactions)
         
-        logger.info(f"Query for user {user_id} returned {items_in_current_response} items (requested: {limit}, internal limit: {internal_limit}). ScannedCount: {response.get('ScannedCount', 0)}, Count: {response.get('Count', 0)}")
+        logger.info(f"Query for user {user_id} returned {items_in_current_response} items (requested: {limit}). ScannedCount: {response.get('ScannedCount', 0)}, Count: {response.get('Count', 0)}")
         
         # Log filtering efficiency to help debug sparse data issues
         scanned_count = response.get('ScannedCount', 0)
@@ -633,9 +750,6 @@ def list_user_transactions(
             filter_efficiency = (returned_count / scanned_count) * 100
             logger.info(f"Filter efficiency: {filter_efficiency:.1f}% ({returned_count}/{scanned_count} items passed filters)")
 
-        # Return items_in_current_response instead of a hardcoded 0.
-        # The caller (transaction_operations.py) will use this and new_last_evaluated_key
-        # to determine pagination display logic.
         return transactions, new_last_evaluated_key, items_in_current_response
             
     except ClientError as e:

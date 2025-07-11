@@ -5,6 +5,15 @@ export interface EditableCellOption {
   name: string;
 }
 
+export interface EditableCellDialogProps {
+  value: string;
+  displayValue?: string;
+  options: EditableCellOption[];
+  onSave: (newValue: string, newOptions?: EditableCellOption[]) => Promise<void> | void;
+  onCancel: () => void;
+  isOpen: boolean;
+}
+
 interface EditableCellProps {
   value: string;
   displayValue?: string; // For cases where display differs from value (e.g., showing name but storing ID)
@@ -24,6 +33,8 @@ interface EditableCellProps {
   step?: number;
   autoFocus?: boolean;
   validation?: (value: string) => string | null; // Returns error message or null
+  dialogComponent?: React.ComponentType<EditableCellDialogProps> | null; // Dialog component for advanced editing
+  onOptionsUpdate?: (newOptions: EditableCellOption[]) => void; // Callback when options are updated via dialog
 }
 
 const EditableCell: React.FC<EditableCellProps> = ({
@@ -45,10 +56,13 @@ const EditableCell: React.FC<EditableCellProps> = ({
   step,
   autoFocus = true,
   validation,
+  dialogComponent: DialogComponent = null,
+  onOptionsUpdate,
 }) => {
   const [editValue, setEditValue] = useState(value);
   const [isSaving, setIsSaving] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const selectRef = useRef<HTMLSelectElement>(null);
 
@@ -149,6 +163,36 @@ const EditableCell: React.FC<EditableCellProps> = ({
     }
   };
 
+  const handleCellClick = () => {
+    if (disabled) return;
+    
+    if (DialogComponent) {
+      setIsDialogOpen(true);
+    } else {
+      onStartEdit();
+    }
+  };
+
+  const handleDialogSave = async (newValue: string, newOptions?: EditableCellOption[]) => {
+    try {
+      if (newOptions && onOptionsUpdate) {
+        onOptionsUpdate(newOptions);
+      }
+      await onSave(newValue);
+      setIsDialogOpen(false);
+    } catch (error) {
+      console.error('Error saving from dialog:', error);
+      // Could propagate error to dialog component here if needed
+    }
+  };
+
+  const handleDialogCancel = () => {
+    setIsDialogOpen(false);
+    if (onCancel) {
+      onCancel();
+    }
+  };
+
   const renderInput = () => {
     const inputClassName = `editable-input ${validationError ? 'editable-input-error' : ''}`;
 
@@ -241,21 +285,34 @@ const EditableCell: React.FC<EditableCellProps> = ({
   }
 
   return (
-    <div
-      className={`editable-cell-container ${disabled ? 'disabled' : 'clickable'} ${className}`}
-      onClick={disabled ? undefined : onStartEdit}
-      onKeyDown={disabled ? undefined : (e) => e.key === 'Enter' && onStartEdit()}
-      tabIndex={disabled ? -1 : 0}
-      role="button"
-      aria-label={`Edit ${displayValue || value || 'value'}`}
-    >
-      <span className="editable-display-value">
-        {displayValue || value || placeholder || 'N/A'}
-      </span>
-      {!disabled && (
-        <span className="editable-edit-hint">✎</span>
+    <>
+      <div
+        className={`editable-cell-container ${disabled ? 'disabled' : 'clickable'} ${className}`}
+        onClick={handleCellClick}
+        onKeyDown={disabled ? undefined : (e) => e.key === 'Enter' && handleCellClick()}
+        tabIndex={disabled ? -1 : 0}
+        role="button"
+        aria-label={`Edit ${displayValue || value || 'value'}`}
+      >
+        <span className="editable-display-value">
+          {displayValue || value || placeholder || 'N/A'}
+        </span>
+        {!disabled && (
+          <span className="editable-edit-hint" title="Edit">✎</span>
+        )}
+      </div>
+      
+      {DialogComponent && (
+        <DialogComponent
+          value={value}
+          displayValue={displayValue}
+          options={options}
+          onSave={handleDialogSave}
+          onCancel={handleDialogCancel}
+          isOpen={isDialogOpen}
+        />
       )}
-    </div>
+    </>
   );
 };
 

@@ -9,7 +9,7 @@
 
 .filter-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* Responsive grid */
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); /* Further reduced min-width for multi-selects */
   gap: 10px;
   margin-bottom: 15px;
 }
@@ -47,12 +47,22 @@
   min-height: 40px; /* Allow space for multiple options */
 }
 
+/* Make multi-select components more compact in filters */
+.filter-group .custom-multi-select {
+  max-width: 250px; /* Limit maximum width */
+}
+
+.filter-group .custom-multi-select .multi-select-trigger {
+  padding: 4px 8px; /* Reduce padding for more compact appearance */
+  font-size: 0.85rem; /* Slightly smaller font */
+}
+
 .date-range-group {
   display: flex;
   flex-direction: row; /* Align date inputs horizontally */
   align-items: center; /* Align items vertically */
   gap: 8px;
-  grid-column: span 2; /* Make it span 2 grid columns by default */
+  grid-column: span 2; /* Make it span 2 grid columns for proper spacing */
 }
 
 .date-range-group label {
@@ -157,5 +167,10 @@
   }
   .filter-button {
     width: 100%;
+  }
+  
+  /* Remove max-width constraint on mobile for better use of space */
+  .filter-group .custom-multi-select {
+    max-width: none;
   }
 } 

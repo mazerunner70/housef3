@@ -61,6 +61,17 @@ resource "aws_dynamodb_table" "transactions" {
     type = "S"
   }
   
+  # Add missing attributes for better GSI support
+  attribute {
+    name = "transactionType"
+    type = "S"
+  }
+  
+  attribute {
+    name = "primaryCategoryId" 
+    type = "S"
+  }
+
   # GSI to query transactions by file ID
   global_secondary_index {
     name               = "FileIdIndex"
@@ -131,6 +142,30 @@ resource "aws_dynamodb_table" "transactions" {
     projection_type    = "ALL"
   }
   
+  # GSI for category-based queries with date sorting
+  global_secondary_index {
+    name               = "CategoryDateIndex"
+    hash_key           = "primaryCategoryId"
+    range_key          = "date"
+    projection_type    = "ALL"
+  }
+  
+  # GSI for status filtering with date sorting  
+  global_secondary_index {
+    name               = "StatusDateIndex"
+    hash_key           = "status"
+    range_key          = "date"
+    projection_type    = "ALL"
+  }
+  
+  # GSI for transaction type filtering with date sorting
+  global_secondary_index {
+    name               = "TransactionTypeIndex"
+    hash_key           = "transactionType"
+    range_key          = "date"
+    projection_type    = "ALL"
+  }
+
   tags = {
     Environment = var.environment
     Project     = var.project_name

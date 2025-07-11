@@ -86,17 +86,15 @@ export interface TransactionViewItem extends Omit<Transaction, 'category' | 'acc
   isSplit?: boolean;
 }
 
-export interface PaginationInfo {
-  currentPage: number;
-  pageSize: number;
-  totalItems: number;
-  totalPages: number;
+export interface LoadMoreInfo {
+  hasMore: boolean;
   lastEvaluatedKey?: Record<string, any>;
+  itemsInCurrentBatch: number;
 }
 
 export interface TransactionsViewResponse {
   transactions: TransactionViewItem[];
-  pagination: PaginationInfo;
+  loadMore: LoadMoreInfo;
 }
 
 export interface TransactionRequestParams {
@@ -114,116 +112,78 @@ export interface TransactionRequestParams {
   ignoreDup?: boolean;
 }
 
-// Function to fetch transactions for the main transaction view
+// Function to fetch transactions for the main transaction view - Simple LoadMore approach
 export const getUserTransactions = async (params: TransactionRequestParams): Promise<TransactionsViewResponse> => {
-  const desiredPageSize = params.pageSize || 25;
-  let allTransactions: any[] = [];
-  let currentLastEvaluatedKey = params.lastEvaluatedKey;
-  let totalPagesFromBackend = 0;
-  let totalItemsFromBackend = 0;
-  let requestCount = 0;
-  const maxRequests = 10; // Prevent infinite loops
+  const pageSize = params.pageSize || 25;
   
-  console.log(`Frontend pagination: Starting to fetch ${desiredPageSize} transactions`);
+  console.log(`Frontend LoadMore: Fetching ${pageSize} transactions`);
   
-  while (allTransactions.length < desiredPageSize && requestCount < maxRequests) {
-    requestCount++;
-    
-    // Build query parameters for this request
-    const query = new URLSearchParams();
-    if (params.page) query.append('page', params.page.toString());
-    if (params.pageSize) query.append('pageSize', desiredPageSize.toString()); // Always request the full desired amount
-    
-    // Append timestamps as strings
-    if (params.startDate !== undefined) query.append('startDate', params.startDate.toString());
-    if (params.endDate !== undefined) query.append('endDate', params.endDate.toString());
-    
-    if (params.accountIds && params.accountIds.length > 0) query.append('accountIds', params.accountIds.join(','));
-    if (params.categoryIds && params.categoryIds.length > 0) query.append('categoryIds', params.categoryIds.join(','));
-    if (params.transactionType) query.append('transactionType', params.transactionType);
-    if (params.searchTerm) query.append('searchTerm', params.searchTerm);
-         if (params.sortBy) query.append('sortBy', params.sortBy as string);
-     if (params.sortOrder) query.append('sortOrder', params.sortOrder);
-     if (currentLastEvaluatedKey) {
-       // Fix data types for DynamoDB compatibility: convert date from string to number
-       // This happens because JSON serialization converts numbers to strings
-       const processedKey = { ...currentLastEvaluatedKey };
-       if (processedKey.date && typeof processedKey.date === 'string') {
-         const dateNum = parseInt(processedKey.date, 10);
-         if (!isNaN(dateNum)) {
-           processedKey.date = dateNum;
-           console.log(`Frontend: Converted lastEvaluatedKey date from string "${currentLastEvaluatedKey.date}" to number ${dateNum}`);
-         } else {
-           console.warn(`Frontend: Failed to convert lastEvaluatedKey date "${processedKey.date}" to number`);
-         }
-       }
-       query.append('lastEvaluatedKey', JSON.stringify(processedKey));
-     }
-     if (params.ignoreDup !== undefined) query.append('ignoreDup', params.ignoreDup.toString());
-
-    const endpoint = `${API_ENDPOINT}/api/transactions?${query.toString()}`;
-    
-    console.log(`Frontend pagination: Request ${requestCount}, currentLastEvaluatedKey:`, currentLastEvaluatedKey);
-    
-    try {
-      const response = await authenticatedRequest(endpoint);
-      const data = response as any; // Backend response format
-
-      // Transform backend response to match TransactionViewItem interface
-      const processedTransactions = data.transactions.map((tx: any) => ({
-        ...tx,
-        amount: new Decimal(tx.amount),
-        balance: new Decimal(tx.balance),
-        // Leave primaryCategoryId as-is, will be transformed in the component
-      }));
-
-      console.log(`Frontend pagination: Request ${requestCount} returned ${processedTransactions.length} transactions`);
-      
-      // Add to our collection
-      allTransactions = allTransactions.concat(processedTransactions);
-      
-      // Update pagination info from the most recent response
-      totalPagesFromBackend = data.pagination?.totalPages || 0;
-      totalItemsFromBackend = data.pagination?.totalItems || 0;
-      currentLastEvaluatedKey = data.pagination?.lastEvaluatedKey;
-      
-      // If we got no transactions in this request, stop
-      if (processedTransactions.length === 0) {
-        console.log(`Frontend pagination: No transactions in request ${requestCount}, stopping`);
-        break;
+  // Build query parameters for this request
+  const query = new URLSearchParams();
+  if (params.pageSize) query.append('pageSize', pageSize.toString());
+  
+  // Append timestamps as strings
+  if (params.startDate !== undefined) query.append('startDate', params.startDate.toString());
+  if (params.endDate !== undefined) query.append('endDate', params.endDate.toString());
+  
+  if (params.accountIds && params.accountIds.length > 0) query.append('accountIds', params.accountIds.join(','));
+  if (params.categoryIds && params.categoryIds.length > 0) query.append('categoryIds', params.categoryIds.join(','));
+  if (params.transactionType) query.append('transactionType', params.transactionType);
+  if (params.searchTerm) query.append('searchTerm', params.searchTerm);
+  if (params.sortBy) query.append('sortBy', params.sortBy as string);
+  if (params.sortOrder) query.append('sortOrder', params.sortOrder);
+  
+  if (params.lastEvaluatedKey) {
+    // Fix data types for DynamoDB compatibility: convert date from string to number
+    // This happens because JSON serialization converts numbers to strings
+    const processedKey = { ...params.lastEvaluatedKey };
+    if (processedKey.date && typeof processedKey.date === 'string') {
+      const dateNum = parseInt(processedKey.date, 10);
+      if (!isNaN(dateNum)) {
+        processedKey.date = dateNum;
+        console.log(`Frontend: Converted lastEvaluatedKey date from string "${params.lastEvaluatedKey.date}" to number ${dateNum}`);
+      } else {
+        console.warn(`Frontend: Failed to convert lastEvaluatedKey date "${processedKey.date}" to number`);
       }
-      
-      // If there's no more data available (no lastEvaluatedKey), stop
-      if (!currentLastEvaluatedKey) {
-        console.log(`Frontend pagination: No more data available, stopping after ${requestCount} requests`);
-        break;
-      }
-      
-    } catch (error) {
-      console.error(`Frontend pagination: Error on request ${requestCount}:`, error);
-      throw error;
     }
+    query.append('lastEvaluatedKey', JSON.stringify(processedKey));
   }
   
-  // Trim to exactly the desired page size if we got more
-  if (allTransactions.length > desiredPageSize) {
-    allTransactions = allTransactions.slice(0, desiredPageSize);
+  if (params.ignoreDup !== undefined) query.append('ignoreDup', params.ignoreDup.toString());
+
+  const endpoint = `${API_ENDPOINT}/api/transactions?${query.toString()}`;
+  
+  console.log(`Frontend LoadMore: Requesting from endpoint with lastEvaluatedKey:`, params.lastEvaluatedKey);
+  
+  try {
+    const response = await authenticatedRequest(endpoint);
+    const data = response as any; // Backend response format
+
+    // Transform backend response to match TransactionViewItem interface
+    const processedTransactions = data.transactions.map((tx: any) => ({
+      ...tx,
+      amount: new Decimal(tx.amount),
+      balance: new Decimal(tx.balance),
+      // Leave primaryCategoryId as-is, will be transformed in the component
+    }));
+
+    console.log(`Frontend LoadMore: Received ${processedTransactions.length} transactions`);
+    
+    const processedResponse: TransactionsViewResponse = {
+      transactions: processedTransactions,
+      loadMore: {
+        hasMore: !!data.pagination?.lastEvaluatedKey,
+        lastEvaluatedKey: data.pagination?.lastEvaluatedKey,
+        itemsInCurrentBatch: processedTransactions.length
+      }
+    };
+    
+    return processedResponse;
+    
+  } catch (error) {
+    console.error(`Frontend LoadMore: Error fetching transactions:`, error);
+    throw error;
   }
-  
-  console.log(`Frontend pagination: Completed after ${requestCount} requests, returning ${allTransactions.length} transactions`);
-  
-  const processedResponse: TransactionsViewResponse = {
-    transactions: allTransactions,
-    pagination: {
-      currentPage: params.page || 1,
-      pageSize: desiredPageSize,
-      totalItems: totalItemsFromBackend,
-      totalPages: totalPagesFromBackend,
-      lastEvaluatedKey: currentLastEvaluatedKey
-    }
-  };
-  
-  return processedResponse;
 };
 
 // Function to fetch all categories

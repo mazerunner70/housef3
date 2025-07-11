@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import './TransactionTable.css';
-import Pagination from './Pagination'; // Import Pagination
+import LoadMore from './Pagination'; // Import LoadMore (renamed from Pagination)
 import CategoryQuickSelector from './CategoryQuickSelector';
 import PatternSuggestionModal from './PatternSuggestionModal';
 import { TransactionViewItem, CategoryInfo } from '../../services/TransactionService'; // IMPORT SERVICE TYPES
@@ -51,12 +51,11 @@ interface TransactionTableProps {
     suggestedPattern?: string;
     transactionDescription?: string;
   }) => void;
-  currentPage: number;
-  totalPages: number;
-  onPageChange: (page: number) => void;
-  itemsPerPage: number;
-  totalItems: number;
-  onPageSizeChange: (newPageSize: number) => void; // New prop
+  hasMore: boolean;
+  onLoadMore: () => void;
+  itemsLoaded: number;
+  pageSize: number;
+  onPageSizeChange: (newPageSize: number) => void;
   showAccountColumn?: boolean; // NEW PROP to control account column visibility
 }
 
@@ -70,11 +69,10 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   onQuickCategoryChange,
   onCreateNewCategory,
   onNavigateToCategoryManagement,
-  currentPage,
-  totalPages,
-  onPageChange,
-  itemsPerPage,
-  totalItems,
+  hasMore,
+  onLoadMore,
+  itemsLoaded,
+  pageSize,
   onPageSizeChange, // Destructure new prop
   showAccountColumn = true, // Default to true for backward compatibility
 }) => {
@@ -311,7 +309,7 @@ const handlePatternConfirm = async (pattern: string, rule: Partial<CategoryRule>
     return <div className="transaction-table-error">Error loading transactions: {transactionsError}</div>;
   }
 
-  if (!isLoadingTransactions && transactions.length === 0 && totalItems === 0) {
+  if (!isLoadingTransactions && transactions.length === 0 && itemsLoaded === 0) {
     return <div className="transaction-table-empty">No transactions found.</div>;
   } 
 
@@ -507,16 +505,14 @@ const handlePatternConfirm = async (pattern: string, rule: Partial<CategoryRule>
           ))}
         </tbody>
       </table>
-      {totalPages > 0 && (
-        <Pagination 
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={onPageChange}
-          itemsPerPage={itemsPerPage}
-          onPageSizeChange={onPageSizeChange}
-          totalItems={totalItems}
-        />
-      )}
+      <LoadMore 
+        hasMore={hasMore}
+        isLoading={isLoadingTransactions}
+        onLoadMore={onLoadMore}
+        itemsLoaded={itemsLoaded}
+        pageSize={pageSize}
+        onPageSizeChange={onPageSizeChange}
+      />
       
       {/* Pattern Suggestion Modal */}
       <PatternSuggestionModal

@@ -11,8 +11,10 @@ import {
   StatusBadge,
   FileFormatDisplay,
   type ActionConfig,
-  type EditableCellOption
+  type EditableCellOption,
+  type EditableCellDialogProps
 } from './ui';
+import MappingSelectionDialog from './MappingSelectionDialog';
 
 // Types for the component
 export interface FileMetadata {
@@ -68,6 +70,36 @@ export interface SortConfig {
   direction: 'ascending' | 'descending';
 }
 
+// Target transaction fields for mapping dialog
+const TARGET_TRANSACTION_FIELDS = [
+  { 
+    field: 'date', 
+    label: 'Transaction Date', 
+    required: true,
+    regex: [
+      '^\\d{4}-\\d{2}-\\d{2}$',           // YYYY-MM-DD (ISO format)
+      '^\\d{2}/\\d{2}/\\d{4}$',           // MM/DD/YYYY (US format)
+      '^\\d{1,2}/\\d{1,2}/\\d{4}$',       // M/D/YYYY or MM/D/YYYY or M/DD/YYYY
+      '^\\d{2}-\\d{2}-\\d{4}$',           // MM-DD-YYYY
+      '^\\d{1,2}-\\d{1,2}-\\d{4}$',       // M-D-YYYY or MM-D-YYYY or M-DD-YYYY
+      '^\\d{4}/\\d{2}/\\d{2}$',           // YYYY/MM/DD
+      '^\\d{4}/\\d{1,2}/\\d{1,2}$',       // YYYY/M/D or YYYY/MM/D or YYYY/M/DD
+      '^\\d{2}\\.\\d{2}\\.\\d{4}$',       // DD.MM.YYYY (European format with dots)
+      '^\\d{1,2}\\.\\d{1,2}\\.\\d{4}$',   // D.M.YYYY or DD.M.YYYY or D.MM.YYYY
+      '^\\d{4}\\.\\d{2}\\.\\d{2}$',       // YYYY.MM.DD
+      '^\\d{4}\\.\\d{1,2}\\.\\d{1,2}$',   // YYYY.M.D or YYYY.MM.D or YYYY.M.DD
+      '^\\d{2}\\d{2}\\d{4}$',             // MMDDYYYY (no separators)
+      '^\\d{4}\\d{2}\\d{2}$',             // YYYYMMDD (no separators)
+      '^\\d{1,2}\\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{4}$', // D MMM YYYY
+      '^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{1,2},?\\s+\\d{4}$', // MMM D, YYYY
+    ]
+  },
+  { field: 'description', label: 'Description', required: true, regex: ['.+'] }, // Any non-empty string
+  { field: 'amount', label: 'Amount', required: true, regex: ['^-?(\\d+|\\d{1,3}(,\\d{3})*)(\\.\\d+)?$'] }, // Number, allows commas, optional negative/decimal
+  { field: 'debitOrCredit', label: 'Debit/Credit', required: false, regex: ['^(debit|credit|CRDT|DBIT|DR|CR)$'] }, // Optional but validated if mapped
+  { field: 'currency', label: 'Currency', required: false, regex: ['^[A-Z]{3}$'] }, // Optional but validated if mapped
+];
+
 const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
   importHistory,
   accounts,
@@ -93,6 +125,12 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
   const [editingMappingFileId, setEditingMappingFileId] = useState<string | null>(null);
   const [editingOpeningFileId, setEditingOpeningFileId] = useState<string | null>(null);
   const [editingClosingFileId, setEditingClosingFileId] = useState<string | null>(null);
+
+  // State for mapping dialog
+  const [mappingDialogOpen, setMappingDialogOpen] = useState<boolean>(false);
+  const [mappingDialogFileId, setMappingDialogFileId] = useState<string | null>(null);
+  const [mappingDialogCurrentValue, setMappingDialogCurrentValue] = useState<string>('');
+  const [mappingDialogDisplayValue, setMappingDialogDisplayValue] = useState<string>('');
 
   // State for sorting
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'uploadDate', direction: 'descending' });
@@ -196,6 +234,28 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
   const handleSaveMapping = async (fileId: string, mappingId: string) => {
     if (onUpdateMapping) {
       await onUpdateMapping(fileId, mappingId);
+    }
+  };
+
+  // Mapping dialog handlers
+  const handleOpenMappingDialog = (fileId: string, currentValue: string, displayValue: string) => {
+    setMappingDialogFileId(fileId);
+    setMappingDialogCurrentValue(currentValue);
+    setMappingDialogDisplayValue(displayValue);
+    setMappingDialogOpen(true);
+  };
+
+  const handleCloseMappingDialog = () => {
+    setMappingDialogOpen(false);
+    setMappingDialogFileId(null);
+    setMappingDialogCurrentValue('');
+    setMappingDialogDisplayValue('');
+  };
+
+  const handleSaveMappingDialog = async (newValue: string, newOptions?: EditableCellOption[]) => {
+    if (mappingDialogFileId) {
+      await handleSaveMapping(mappingDialogFileId, newValue);
+      handleCloseMappingDialog();
     }
   };
 
@@ -371,7 +431,28 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
                     onSave={(mappingId) => handleSaveMapping(file.fileId, mappingId)}
                     type="select"
                     isEditing={editingMappingFileId === file.fileId}
-                    onStartEdit={() => handleStartEditMapping(file.fileId)}
+                    onStartEdit={() => {
+                      // Open custom mapping dialog instead of inline editing
+                      let currentValue = file.fieldMap?.fileMapId || '';
+                      let displayValue = '';
+                      
+                      if (file.fieldMap?.fileMapId) {
+                        // We have a field map ID, use it
+                        displayValue = fieldMapsMap.get(file.fieldMap.fileMapId) || file.fieldMap.name || '';
+                      } else if (file.fieldMap?.name) {
+                        // No field map ID but we have a name, try to find the ID
+                        const matchingFieldMap = availableFileMaps.find(fm => fm.name === file.fieldMap?.name);
+                        if (matchingFieldMap) {
+                          currentValue = matchingFieldMap.id;
+                          displayValue = matchingFieldMap.name;
+                        } else {
+                          // Can't find matching field map, keep empty currentValue but show the name
+                          displayValue = file.fieldMap.name;
+                        }
+                      }
+                      
+                      handleOpenMappingDialog(file.fileId, currentValue, displayValue);
+                    }}
                     onEndEdit={handleEndEditMapping}
                     placeholder="Select mapping"
                   />
@@ -427,6 +508,20 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
           </tbody>
         </table>
       </div>
+
+      {/* Single mapping dialog instance */}
+      {mappingDialogFileId && (
+        <MappingSelectionDialog
+          value={mappingDialogCurrentValue}
+          displayValue={mappingDialogDisplayValue}
+          options={fieldMapOptions}
+          onSave={handleSaveMappingDialog}
+          onCancel={handleCloseMappingDialog}
+          isOpen={mappingDialogOpen}
+          fileId={mappingDialogFileId}
+          targetTransactionFields={TARGET_TRANSACTION_FIELDS}
+        />
+      )}
     </div>
   );
 };
