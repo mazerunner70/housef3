@@ -48,13 +48,13 @@ const AccountListItem: React.FC<AccountListItemProps> = ({ account, onEdit, onDe
                     >
                         {name}
                     </h3>
-                    <div className="account-balance">
-                        <CurrencyDisplay 
-                            amount={Number(balance || 0)} 
-                            currency={currency}
-                            showSign={true}
-                        />
-                    </div>
+                </div>
+                <div className="account-balance">
+                    <CurrencyDisplay 
+                        amount={Number(balance || 0)} 
+                        currency={currency}
+                        showSign={true}
+                    />
                 </div>
             </div>
             

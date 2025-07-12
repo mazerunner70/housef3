@@ -279,13 +279,19 @@ def create_transactions(
             update_transaction_file(transaction_file.file_id, transaction_file.user_id, {'duplicate_count': duplicate_count})
             logger.info(f"Late duplicate detection! Updated duplicate count for file {transaction_file.file_id} to {duplicate_count}")
         
-        # Find the latest transaction date
-        latest_transaction_date = max(t.date for t in transactions)
+        # Find the latest transaction date and its balance
+        latest_transaction = max(transactions, key=lambda t: t.date)
+        latest_transaction_date = latest_transaction.date
+        latest_balance = latest_transaction.balance
         
-        # Update account's last transaction date if this is more recent
+        # Update account's last transaction date and balance if this is more recent
         if not account.last_transaction_date or latest_transaction_date > account.last_transaction_date:
-            update_account(account.account_id, account.user_id, {'last_transaction_date': latest_transaction_date})
-            logger.info(f"Updated last transaction date for account {account.account_id} to {latest_transaction_date}")
+            update_data = {
+                'last_transaction_date': latest_transaction_date,
+                'balance': latest_balance
+            }
+            update_account(account.account_id, account.user_id, update_data)
+            logger.info(f"Updated last transaction date to {latest_transaction_date} and balance to {latest_balance} for account {account.account_id}")
         
         for transaction in transactions:
             try:
