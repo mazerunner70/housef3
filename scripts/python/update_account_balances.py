@@ -11,14 +11,13 @@ from botocore.exceptions import ClientError
 import psutil
 from boto3.dynamodb.conditions import Key
 
-# Add the necessary directories to the Python path
+# Add the backend source directory to the Python path
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../backend/src'))
-sys.path.append(os.path.dirname(__file__))  # Add current directory to path
 
 from models.account import Account
 from utils.db_utils import get_latest_transaction, initialize_tables
 from models.transaction import Transaction
-from diagnostic import check_table_exists, get_table_info, initialize_dynamodb, get_dynamodb_resource
+from .diagnostic import check_table_exists, get_table_info, initialize_dynamodb, get_dynamodb_resource
 
 # Configure logging with more detailed format
 logging.basicConfig(
