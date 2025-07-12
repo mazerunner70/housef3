@@ -43,6 +43,7 @@ export interface UIAccount {
     currency: string;
     balance?: Decimal;    // Changed from Decimal to number temporarily
     bankName?: string;
+    lastTransactionDate?: number; // milliseconds since epoch
 }
 
 // Input data type for UI forms (as previously defined)
@@ -85,6 +86,7 @@ const mapServiceAccountToUiAccount = (serviceAcc: ServiceAccount): UIAccount => 
         currency: serviceAcc.currency.toString().toUpperCase(),
         balance: serviceAcc.balance !== undefined && serviceAcc.balance !== null ? new Decimal(serviceAcc.balance.toString()) : undefined,
         bankName: serviceAcc.institution,
+        lastTransactionDate: (serviceAcc as any).lastTransactionDate || undefined,
     };
 };
 

@@ -99,6 +99,7 @@ class Transaction(BaseModel):
     check_number: Optional[str] = Field(default=None, alias="checkNumber", max_length=50)
     fit_id: Optional[str] = Field(default=None, alias="fitId", max_length=100)
     status: Optional[str] = Field(default=None, max_length=50)
+    status_date: Optional[str] = Field(default=None, alias="statusDate")  # Composite key of status#date
     created_at: int = Field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000), alias="createdAt")
     updated_at: int = Field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000), alias="updatedAt")
     transaction_hash: Optional[int] = Field(default=None, alias="transactionHash")
@@ -316,6 +317,13 @@ class Transaction(BaseModel):
         if model_initialized and name in self._hash_trigger_fields:
             self._recalculate_and_set_hash_value()
 
+    @property
+    def computed_status_date(self) -> Optional[str]:
+        """Computed property for the statusDate composite key."""
+        if self.status is not None and self.date is not None:
+            return f"{self.status}#{self.date}"
+        return None
+
     @classmethod
     def create(
         cls,
@@ -376,6 +384,11 @@ class Transaction(BaseModel):
                 processed_categories.append(assignment.to_dynamodb_item())
         
         data = self.model_dump(by_alias=True, exclude_none=True)
+
+        # Add computed statusDate field
+        status_date = self.computed_status_date
+        if status_date is not None:
+            data['statusDate'] = status_date
 
         # Ensure UUID fields are strings for DynamoDB
         for key, value in data.items():

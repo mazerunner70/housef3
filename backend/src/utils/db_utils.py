@@ -59,6 +59,79 @@ _analytics_data_table = None
 _analytics_status_table = None
 _categories_table = None
 
+def initialize_tables():
+    """Initialize all DynamoDB table resources."""
+    global _transactions_table, _accounts_table, _files_table, _file_maps_table
+    global _analytics_data_table, _analytics_status_table, _categories_table, dynamodb
+    
+    # Re-initialize DynamoDB resource
+    dynamodb = boto3.resource('dynamodb')
+    
+    # Initialize all tables if their environment variables are set
+    if TRANSACTIONS_TABLE:
+        _transactions_table = dynamodb.Table(TRANSACTIONS_TABLE)
+    if ACCOUNTS_TABLE:
+        _accounts_table = dynamodb.Table(ACCOUNTS_TABLE)
+    if FILES_TABLE:
+        _files_table = dynamodb.Table(FILES_TABLE)
+    if FILE_MAPS_TABLE:
+        _file_maps_table = dynamodb.Table(FILE_MAPS_TABLE)
+    if ANALYTICS_DATA_TABLE:
+        _analytics_data_table = dynamodb.Table(ANALYTICS_DATA_TABLE)
+    if ANALYTICS_STATUS_TABLE:
+        _analytics_status_table = dynamodb.Table(ANALYTICS_STATUS_TABLE)
+    if CATEGORIES_TABLE_NAME:
+        _categories_table = dynamodb.Table(CATEGORIES_TABLE_NAME)
+
+def get_transactions_table() -> Any:
+    """Get the transactions table resource, initializing it if needed."""
+    global _transactions_table
+    if _transactions_table is None:
+        initialize_tables()
+    return _transactions_table
+
+def get_accounts_table() -> Any:
+    """Get the accounts table resource, initializing it if needed."""
+    global _accounts_table
+    if _accounts_table is None:
+        initialize_tables()
+    return _accounts_table
+
+def get_files_table() -> Any:
+    """Get the files table resource, initializing it if needed."""
+    global _files_table
+    if _files_table is None:
+        initialize_tables()
+    return _files_table
+
+def get_file_maps_table() -> Any:
+    """Get the file maps table resource, initializing it if needed."""
+    global _file_maps_table
+    if _file_maps_table is None:
+        initialize_tables()
+    return _file_maps_table
+
+def get_analytics_data_table() -> Any:
+    """Get the analytics data table resource, initializing it if needed."""
+    global _analytics_data_table
+    if _analytics_data_table is None:
+        initialize_tables()
+    return _analytics_data_table
+
+def get_analytics_status_table() -> Any:
+    """Get the analytics status table resource, initializing it if needed."""
+    global _analytics_status_table
+    if _analytics_status_table is None:
+        initialize_tables()
+    return _analytics_status_table
+
+def get_categories_table() -> Any:
+    """Get the categories table resource, initializing it if needed."""
+    global _categories_table
+    if _categories_table is None:
+        initialize_tables()
+    return _categories_table
+
 
 class NotAuthorized(Exception):
     """Raised when a user is not authorized to access a resource."""
@@ -130,48 +203,6 @@ def checked_optional_file_map(file_map_id: Optional[uuid.UUID], user_id: str) ->
         return None
     check_user_owns_resource(file_map.user_id, user_id)
     return file_map
-
-def get_accounts_table() -> Any:
-    """Get the accounts table resource, initializing it if needed."""
-    global _accounts_table
-    if _accounts_table is None and ACCOUNTS_TABLE:
-        _accounts_table = dynamodb.Table(ACCOUNTS_TABLE)
-    return _accounts_table
-
-def get_files_table() -> Any:
-    """Get the files table resource, initializing it if needed."""
-    global _files_table
-    if _files_table is None and FILES_TABLE:
-        _files_table = dynamodb.Table(FILES_TABLE)
-    return _files_table
-
-def get_transactions_table() -> Any:
-    """Get the transactions table resource, initializing it if needed."""
-    global _transactions_table
-    if _transactions_table is None and TRANSACTIONS_TABLE:
-        _transactions_table = dynamodb.Table(TRANSACTIONS_TABLE)
-    return _transactions_table
-
-def get_file_maps_table() -> Any:
-    """Get the file maps table resource, initializing it if needed."""
-    global _file_maps_table
-    if _file_maps_table is None and FILE_MAPS_TABLE:
-        _file_maps_table = dynamodb.Table(FILE_MAPS_TABLE)
-    return _file_maps_table
-
-def get_analytics_data_table() -> Any:
-    """Get the analytics data table resource, initializing it if needed."""
-    global _analytics_data_table
-    if _analytics_data_table is None and ANALYTICS_DATA_TABLE:
-        _analytics_data_table = dynamodb.Table(ANALYTICS_DATA_TABLE)
-    return _analytics_data_table
-
-def get_analytics_status_table() -> Any:
-    """Get the analytics status table resource, initializing it if needed."""
-    global _analytics_status_table
-    if _analytics_status_table is None and ANALYTICS_STATUS_TABLE:
-        _analytics_status_table = dynamodb.Table(ANALYTICS_STATUS_TABLE)
-    return _analytics_status_table
 
 def get_account(account_id: uuid.UUID) -> Optional[Account]:
     """
@@ -1186,12 +1217,65 @@ def update_transaction(transaction: Transaction) -> None:
         logger.error(f"Error updating transaction {str(transaction.transaction_id)}: {str(e)}")
         raise e
 
-def get_categories_table() -> Any:
-    """Get the categories table resource, initializing it if needed."""
-    global _categories_table
-    if _categories_table is None and CATEGORIES_TABLE_NAME:
-        _categories_table = dynamodb.Table(CATEGORIES_TABLE_NAME)
-    return _categories_table
+def get_last_transaction_date(account_id: Union[str, uuid.UUID]) -> Optional[int]:
+    """
+    Get the most recent transaction date for a specific account.
+    Only considers transactions with status starting with 'new' (non-duplicates).
+    
+    Args:
+        account_id: The account ID
+        
+    Returns:
+        Transaction date as milliseconds since epoch, or None if no transactions found
+    """
+    try:
+        # Query the most recent non-duplicate transaction for this account
+        # The statusDate field is a composite key of format "status#timestamp"
+        response = get_transactions_table().query(
+            IndexName='AccountStatusDateIndex',
+            KeyConditionExpression=Key('accountId').eq(str(account_id)) & Key('statusDate').begins_with('new#'),
+            Limit=1,
+            ScanIndexForward=False  # Sort in descending order to get most recent first
+        )
+        
+        if response.get('Items'):
+            return response['Items'][0].get('date')
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error getting last transaction date for account {str(account_id)}: {str(e)}")
+        return None
+
+def get_latest_transaction(account_id: Union[str, uuid.UUID]) -> Optional[Transaction]:
+    """
+    Get the most recent transaction for a specific account.
+    Only considers transactions with status starting with 'new' (non-duplicates).
+    
+    Args:
+        account_id: The account ID
+        
+    Returns:
+        Transaction object or None if no transactions found
+    """
+    try:
+        # Query the most recent non-duplicate transaction for this account
+        # The statusDate field is a composite key of format "status#timestamp"
+        response = get_transactions_table().query(
+            IndexName='AccountStatusDateIndex',
+            KeyConditionExpression=Key('accountId').eq(str(account_id)) & Key('statusDate').begins_with('new#'),
+            Limit=1,
+            ScanIndexForward=False  # Sort in descending order to get most recent first
+        )
+        logger.info(f"DB: get_latest_transaction response: {response}")
+        
+        if response.get('Items'):
+            return Transaction.from_dynamodb_item(response['Items'][0])
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error getting latest transaction for account {str(account_id)}: {str(e)}")
+        return None
+
 
 def create_category_in_db(category: Category) -> Category:
     """Persist a new category to DynamoDB."""
