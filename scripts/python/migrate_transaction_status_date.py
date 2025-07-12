@@ -9,10 +9,12 @@ from typing import Dict, Any, Optional
 from typing_extensions import Self
 from botocore.exceptions import ClientError, ConnectionError
 
-# Add the backend source directory to the Python path
+# Add the necessary directories to the Python path
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../backend/src'))
+sys.path.append(os.path.dirname(__file__))  # Add current directory to path
 
 from models.transaction import Transaction
+from diagnostic import check_table_exists, get_table_info, initialize_dynamodb
 
 # Configure logging with more detailed format
 logging.basicConfig(
@@ -26,41 +28,6 @@ ENVIRONMENT = os.environ.get('ENVIRONMENT', 'dev')
 PROJECT_NAME = os.environ.get('PROJECT_NAME', 'housef3')
 TRANSACTIONS_TABLE = os.environ.get('TRANSACTIONS_TABLE', f'{PROJECT_NAME}-{ENVIRONMENT}-transactions')
 AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
-
-def check_table_exists(table_name: str) -> bool:
-    """
-    Check if the DynamoDB table exists and is active.
-    """
-    try:
-        dynamodb = boto3.client('dynamodb', region_name=AWS_REGION)
-        response = dynamodb.describe_table(TableName=table_name)
-        table_status = response['Table']['TableStatus']
-        logger.info(f"Table {table_name} status: {table_status}")
-        return table_status == 'ACTIVE'
-    except ClientError as e:
-        error_code = e.response.get('Error', {}).get('Code', '')
-        if error_code == 'ResourceNotFoundException':
-            logger.error(f"Table {table_name} does not exist")
-            return False
-        logger.error(f"Error checking table {table_name}: {str(e)}")
-        raise
-
-def get_table_info(table_name: str) -> Optional[Dict[str, Any]]:
-    """
-    Get detailed information about the DynamoDB table.
-    """
-    try:
-        dynamodb = boto3.client('dynamodb', region_name=AWS_REGION)
-        response = dynamodb.describe_table(TableName=table_name)
-        table_info = response['Table']
-        logger.info(f"Table {table_name} info:")
-        logger.info(f"  - Item count: {table_info.get('ItemCount', 'N/A')}")
-        logger.info(f"  - Size (bytes): {table_info.get('TableSizeBytes', 'N/A')}")
-        logger.info(f"  - Status: {table_info.get('TableStatus', 'N/A')}")
-        return table_info
-    except ClientError as e:
-        logger.error(f"Error getting table info for {table_name}: {str(e)}")
-        return None
 
 def get_dynamodb_client():
     """Get the DynamoDB client with connection diagnostics."""
@@ -86,40 +53,6 @@ def get_dynamodb_resource():
     except Exception as e:
         logger.error(f"Failed to initialize DynamoDB resource: {str(e)}")
         raise
-
-def initialize_dynamodb() -> bool:
-    """
-    Initialize DynamoDB connection and verify table access.
-    Returns True if initialization is successful.
-    """
-    try:
-        logger.info("Initializing DynamoDB connection...")
-        
-        # Check AWS credentials
-        session = boto3.Session()
-        credentials = session.get_credentials()
-        if not credentials:
-            logger.error("No AWS credentials found")
-            return False
-            
-        # Log configuration
-        logger.info(f"Using AWS Region: {AWS_REGION}")
-        logger.info(f"Using table: {TRANSACTIONS_TABLE}")
-        
-        # Check if table exists and is accessible
-        if not check_table_exists(TRANSACTIONS_TABLE):
-            return False
-            
-        # Get table information
-        table_info = get_table_info(TRANSACTIONS_TABLE)
-        if not table_info:
-            return False
-            
-        return True
-        
-    except Exception as e:
-        logger.error(f"Failed to initialize DynamoDB: {str(e)}")
-        return False
 
 def update_transaction_batch(table, items: list[Dict[str, Any]]) -> None:
     """
@@ -152,10 +85,10 @@ def migrate_transactions():
     """
     try:
         # Initialize DynamoDB and verify connection
-        if not initialize_dynamodb():
+        if not initialize_dynamodb(TRANSACTIONS_TABLE, AWS_REGION):
             logger.error("Failed to initialize DynamoDB connection. Aborting migration.")
             return
-
+        
         logger.info("Starting transaction migration...")
         
         # Get DynamoDB resource after successful initialization

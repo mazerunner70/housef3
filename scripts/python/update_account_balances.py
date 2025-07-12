@@ -11,12 +11,14 @@ from botocore.exceptions import ClientError
 import psutil
 from boto3.dynamodb.conditions import Key
 
-# Add the backend source directory to the Python path
+# Add the necessary directories to the Python path
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../backend/src'))
+sys.path.append(os.path.dirname(__file__))  # Add current directory to path
 
 from models.account import Account
 from utils.db_utils import get_latest_transaction, initialize_tables
 from models.transaction import Transaction
+from diagnostic import check_table_exists, get_table_info, initialize_dynamodb
 
 # Configure logging with more detailed format
 logging.basicConfig(
@@ -46,75 +48,6 @@ ACCOUNTS_TABLE = os.environ['ACCOUNTS_TABLE']
 TRANSACTIONS_TABLE = os.environ['TRANSACTIONS_TABLE']
 
 logger.info(f"Using tables - Accounts: {ACCOUNTS_TABLE}, Transactions: {TRANSACTIONS_TABLE}")
-
-def check_table_exists(table_name: str) -> bool:
-    """
-    Check if the DynamoDB table exists and is active.
-    """
-    try:
-        dynamodb = boto3.client('dynamodb', region_name=AWS_REGION)
-        response = dynamodb.describe_table(TableName=table_name)
-        table_status = response['Table']['TableStatus']
-        logger.info(f"Table {table_name} status: {table_status}")
-        return table_status == 'ACTIVE'
-    except ClientError as e:
-        error_code = e.response.get('Error', {}).get('Code', '')
-        if error_code == 'ResourceNotFoundException':
-            logger.error(f"Table {table_name} does not exist")
-            return False
-        logger.error(f"Error checking table {table_name}: {str(e)}")
-        raise
-
-def get_table_info(table_name: str) -> Optional[Dict[str, Any]]:
-    """
-    Get detailed information about the DynamoDB table.
-    """
-    try:
-        dynamodb = boto3.client('dynamodb', region_name=AWS_REGION)
-        response = dynamodb.describe_table(TableName=table_name)
-        table_info = response['Table']
-        logger.info(f"Table {table_name} info:")
-        logger.info(f"  - Item count: {table_info.get('ItemCount', 'N/A')}")
-        logger.info(f"  - Size (bytes): {table_info.get('TableSizeBytes', 'N/A')}")
-        logger.info(f"  - Status: {table_info.get('TableStatus', 'N/A')}")
-        return table_info
-    except ClientError as e:
-        logger.error(f"Error getting table info for {table_name}: {str(e)}")
-        return None
-
-def initialize_dynamodb() -> bool:
-    """
-    Initialize DynamoDB connection and verify table access.
-    Returns True if initialization is successful.
-    """
-    try:
-        logger.info("Initializing DynamoDB connection...")
-        
-        # Check AWS credentials
-        session = boto3.Session()
-        credentials = session.get_credentials()
-        if not credentials:
-            logger.error("No AWS credentials found")
-            return False
-            
-        # Log configuration
-        logger.info(f"Using AWS Region: {AWS_REGION}")
-        logger.info(f"Using accounts table: {ACCOUNTS_TABLE}")
-        logger.info(f"Using transactions table: {TRANSACTIONS_TABLE}")
-        
-        # Check if tables exist and are accessible
-        for table_name in [ACCOUNTS_TABLE, TRANSACTIONS_TABLE]:
-            if not check_table_exists(table_name):
-                return False
-            table_info = get_table_info(table_name)
-            if not table_info:
-                return False
-                
-        return True
-        
-    except Exception as e:
-        logger.error(f"Failed to initialize DynamoDB: {str(e)}")
-        return False
 
 def get_dynamodb_resource():
     """Get the DynamoDB resource with connection diagnostics."""
@@ -202,7 +135,7 @@ def update_all_accounts():
     """
     try:
         # Initialize DynamoDB and verify connection
-        if not initialize_dynamodb():
+        if not initialize_dynamodb(ACCOUNTS_TABLE, AWS_REGION) or not initialize_dynamodb(TRANSACTIONS_TABLE, AWS_REGION):
             logger.error("Failed to initialize DynamoDB connection. Aborting updates.")
             return
 
@@ -249,13 +182,8 @@ def update_all_accounts():
                         account_id = uuid.UUID(item['accountId'])
                         current_balance = item.get('balance')
                         
-                        # Process account
-                        process_start = datetime.now()
-                        success = update_account_balance(table, account_id)
-                        process_time = (datetime.now() - process_start).total_seconds()
-                        processing_times.append(process_time)
-                        
-                        if success:
+                        # Update the account balance
+                        if update_account_balance(table, account_id):
                             updated_count += 1
                         else:
                             skipped_count += 1
@@ -275,11 +203,12 @@ def update_all_accounts():
                             
                     except Exception as e:
                         error_count += 1
-                        logger.error(f"Error processing account {item.get('accountId', 'unknown')}: {str(e)}")
+                        logger.error(f"Error processing account: {str(e)}")
                         continue
                 
-                # Log batch completion
+                # Calculate and log batch processing time
                 batch_time = (datetime.now() - batch_start_time).total_seconds()
+                processing_times.append(batch_time)
                 logger.info(f"Batch processing time: {batch_time:.2f} seconds")
                 
                 # Check if we need to paginate
@@ -302,15 +231,15 @@ def update_all_accounts():
         end_time = datetime.now()
         total_time = (end_time - start_time).total_seconds()
         avg_rate = total_processed / total_time if total_time > 0 else 0
-        avg_process_time = sum(processing_times) / len(processing_times) if processing_times else 0
+        avg_batch_time = sum(processing_times) / len(processing_times) if processing_times else 0
         
-        logger.info(f"\nAccount balance updates completed at: {end_time}")
+        logger.info(f"\nUpdate completed at: {end_time}")
         logger.info(f"Total time: {total_time:.2f} seconds")
         logger.info(f"Total accounts processed: {total_processed}")
-        logger.info(f"Successfully updated: {updated_count}")
-        logger.info(f"Skipped (no balance): {skipped_count}")
+        logger.info(f"  - Updated: {updated_count}")
+        logger.info(f"  - Skipped: {skipped_count}")
         logger.info(f"Average processing rate: {avg_rate:.2f} accounts/second")
-        logger.info(f"Average account processing time: {avg_process_time:.2f} seconds")
+        logger.info(f"Average batch processing time: {avg_batch_time:.2f} seconds")
         logger.info(f"Total errors encountered: {error_count}")
         
         # Log final memory usage
@@ -320,7 +249,7 @@ def update_all_accounts():
         logger.info(f"Total memory change: {total_memory_change:+.2f} MB")
         
     except Exception as e:
-        logger.error(f"Update process failed: {str(e)}")
+        logger.error(f"Update failed: {str(e)}")
         raise
 
 if __name__ == "__main__":
