@@ -1186,6 +1186,36 @@ def update_transaction(transaction: Transaction) -> None:
         logger.error(f"Error updating transaction {str(transaction.transaction_id)}: {str(e)}")
         raise e
 
+def get_last_transaction_date(account_id: Union[str, uuid.UUID]) -> Optional[int]:
+    """
+    Get the most recent transaction date for a specific account.
+    Only considers transactions with status starting with 'new' (non-duplicates).
+    
+    Args:
+        account_id: The account ID
+        
+    Returns:
+        Transaction date as milliseconds since epoch, or None if no transactions found
+    """
+    try:
+        # Query the most recent non-duplicate transaction for this account
+        # The statusDate field is a composite key of format "status#timestamp"
+        response = get_transactions_table().query(
+            IndexName='AccountStatusDateIndex',
+            KeyConditionExpression=Key('accountId').eq(str(account_id)) & Key('statusDate').begins_with('new#'),
+            Limit=1,
+            ScanIndexForward=False  # Sort in descending order to get most recent first
+        )
+        
+        if response.get('Items'):
+            return response['Items'][0].get('date')
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error getting last transaction date for account {str(account_id)}: {str(e)}")
+        return None
+
+
 def get_categories_table() -> Any:
     """Get the categories table resource, initializing it if needed."""
     global _categories_table

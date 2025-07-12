@@ -67,6 +67,7 @@ class Account(BaseModel):
     notes: Optional[str] = Field(default=None, max_length=1000)
     is_active: bool = Field(default=True, alias="isActive")
     default_file_map_id: Optional[uuid.UUID] = Field(default=None, alias="defaultFileMapId")
+    last_transaction_date: Optional[int] = Field(default=None, alias="lastTransactionDate")  # milliseconds since epoch
     
     created_at: int = Field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000), alias="createdAt")
     updated_at: int = Field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000), alias="updatedAt")
@@ -147,6 +148,10 @@ class Account(BaseModel):
         # Convert currency enum to string for DynamoDB storage
         if 'currency' in item and item.get('currency') is not None:
             item['currency'] = item['currency'].value if hasattr(item['currency'], 'value') else str(item['currency'])
+        
+        # Ensure lastTransactionDate is included if it exists
+        if self.last_transaction_date is not None:
+            item['lastTransactionDate'] = self.last_transaction_date
         
         # Timestamps (createdAt, updatedAt) are integers from Pydantic model.
         # Boto3 will handle Python int as DynamoDB Number (N).

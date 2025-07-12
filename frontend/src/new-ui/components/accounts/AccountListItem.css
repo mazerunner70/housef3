@@ -90,6 +90,26 @@
     text-align: right;
 }
 
+.no-transactions {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-small);
+    font-style: italic;
+}
+
+/* Adjust TextWithSubtext in account details */
+.account-detail-item .text-with-subtext {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+}
+
+/* Override DateCell styles in account details */
+.account-detail-item .date-cell {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-small);
+    font-style: italic;
+}
+
 /* Footer Section */
 .account-card-footer {
     padding: var(--spacing-l);

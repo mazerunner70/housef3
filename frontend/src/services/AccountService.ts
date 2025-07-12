@@ -37,6 +37,7 @@ export interface Account {
   notes?: string;
   isActive: boolean;
   defaultFileMapId?: string;
+  lastTransactionDate?: number;  // milliseconds since epoch
   createdAt: number;
   updatedAt: number;
 }
