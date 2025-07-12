@@ -18,7 +18,7 @@ sys.path.append(os.path.dirname(__file__))  # Add current directory to path
 from models.account import Account
 from utils.db_utils import get_latest_transaction, initialize_tables
 from models.transaction import Transaction
-from diagnostic import check_table_exists, get_table_info, initialize_dynamodb
+from diagnostic import check_table_exists, get_table_info, initialize_dynamodb, get_dynamodb_resource
 
 # Configure logging with more detailed format
 logging.basicConfig(
@@ -48,20 +48,6 @@ ACCOUNTS_TABLE = os.environ['ACCOUNTS_TABLE']
 TRANSACTIONS_TABLE = os.environ['TRANSACTIONS_TABLE']
 
 logger.info(f"Using tables - Accounts: {ACCOUNTS_TABLE}, Transactions: {TRANSACTIONS_TABLE}")
-
-def get_dynamodb_resource():
-    """Get the DynamoDB resource with connection diagnostics."""
-    try:
-        resource = boto3.resource('dynamodb', region_name=AWS_REGION)
-        # Verify we can access the tables
-        for table_name in [ACCOUNTS_TABLE, TRANSACTIONS_TABLE]:
-            table = resource.Table(table_name)
-            table.table_status  # This will raise an exception if the table doesn't exist
-        logger.info("Successfully connected to DynamoDB and verified table access")
-        return resource
-    except Exception as e:
-        logger.error(f"Failed to initialize DynamoDB resource: {str(e)}")
-        raise
 
 def get_latest_transaction_balance(account_id: uuid.UUID) -> Optional[Decimal]:
     """
@@ -142,7 +128,12 @@ def update_all_accounts():
         # Initialize tables through db_utils
         initialize_tables()
         
-        dynamodb = get_dynamodb_resource()
+        # Get DynamoDB resource after successful initialization
+        dynamodb = get_dynamodb_resource([ACCOUNTS_TABLE, TRANSACTIONS_TABLE], AWS_REGION)
+        if not dynamodb:
+            logger.error("Failed to get DynamoDB resource. Aborting updates.")
+            return
+            
         table = dynamodb.Table(ACCOUNTS_TABLE)
         
         logger.info("Starting account balance updates...")

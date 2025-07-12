@@ -14,7 +14,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../backend/src'))
 sys.path.append(os.path.dirname(__file__))  # Add current directory to path
 
 from models.transaction import Transaction
-from diagnostic import check_table_exists, get_table_info, initialize_dynamodb
+from diagnostic import check_table_exists, get_table_info, initialize_dynamodb, get_dynamodb_resource
 
 # Configure logging with more detailed format
 logging.basicConfig(
@@ -39,19 +39,6 @@ def get_dynamodb_client():
         return client
     except Exception as e:
         logger.error(f"Failed to connect to DynamoDB: {str(e)}")
-        raise
-
-def get_dynamodb_resource():
-    """Get the DynamoDB resource with connection diagnostics."""
-    try:
-        resource = boto3.resource('dynamodb', region_name=AWS_REGION)
-        # Verify we can access the table
-        table = resource.Table(TRANSACTIONS_TABLE)
-        table.table_status  # This will raise an exception if the table doesn't exist
-        logger.info(f"Successfully connected to DynamoDB and verified table {TRANSACTIONS_TABLE}")
-        return resource
-    except Exception as e:
-        logger.error(f"Failed to initialize DynamoDB resource: {str(e)}")
         raise
 
 def update_transaction_batch(table, items: list[Dict[str, Any]]) -> None:
@@ -92,7 +79,11 @@ def migrate_transactions():
         logger.info("Starting transaction migration...")
         
         # Get DynamoDB resource after successful initialization
-        dynamodb = get_dynamodb_resource()
+        dynamodb = get_dynamodb_resource(TRANSACTIONS_TABLE, AWS_REGION)
+        if not dynamodb:
+            logger.error("Failed to get DynamoDB resource. Aborting migration.")
+            return
+            
         table = dynamodb.Table(TRANSACTIONS_TABLE)
         
         # Track statistics

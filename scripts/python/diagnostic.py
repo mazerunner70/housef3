@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import boto3
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union, List, cast
 from botocore.exceptions import ClientError
 
 # Configure logging
@@ -78,4 +78,32 @@ def initialize_dynamodb(table_name: str, region: str = 'us-east-1') -> bool:
         
     except Exception as e:
         logger.error(f"Failed to initialize DynamoDB: {str(e)}")
-        return False 
+        return False
+
+def get_dynamodb_resource(table_names: Union[str, List[str]], region: str = 'us-east-1') -> Any:
+    """
+    Get the DynamoDB resource with connection diagnostics.
+    Args:
+        table_names: Single table name or list of table names to verify access
+        region: AWS region name
+    Returns:
+        DynamoDB resource if successful, None otherwise
+    """
+    try:
+        resource = boto3.resource('dynamodb', region_name=region)
+        
+        # Convert single table name to list for consistent handling
+        if isinstance(table_names, str):
+            table_names = [table_names]
+            
+        # Verify we can access all tables
+        for table_name in table_names:
+            table = resource.Table(table_name)
+            table.table_status  # This will raise an exception if the table doesn't exist
+            logger.info(f"Successfully verified access to table {table_name}")
+            
+        logger.info("Successfully connected to DynamoDB and verified table access")
+        return resource
+    except Exception as e:
+        logger.error(f"Failed to initialize DynamoDB resource: {str(e)}")
+        return None 
