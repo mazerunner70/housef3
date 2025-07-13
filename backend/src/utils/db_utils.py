@@ -59,6 +59,79 @@ _analytics_data_table = None
 _analytics_status_table = None
 _categories_table = None
 
+def initialize_tables():
+    """Initialize all DynamoDB table resources."""
+    global _transactions_table, _accounts_table, _files_table, _file_maps_table
+    global _analytics_data_table, _analytics_status_table, _categories_table, dynamodb
+    
+    # Re-initialize DynamoDB resource
+    dynamodb = boto3.resource('dynamodb')
+    
+    # Initialize all tables if their environment variables are set
+    if TRANSACTIONS_TABLE:
+        _transactions_table = dynamodb.Table(TRANSACTIONS_TABLE)
+    if ACCOUNTS_TABLE:
+        _accounts_table = dynamodb.Table(ACCOUNTS_TABLE)
+    if FILES_TABLE:
+        _files_table = dynamodb.Table(FILES_TABLE)
+    if FILE_MAPS_TABLE:
+        _file_maps_table = dynamodb.Table(FILE_MAPS_TABLE)
+    if ANALYTICS_DATA_TABLE:
+        _analytics_data_table = dynamodb.Table(ANALYTICS_DATA_TABLE)
+    if ANALYTICS_STATUS_TABLE:
+        _analytics_status_table = dynamodb.Table(ANALYTICS_STATUS_TABLE)
+    if CATEGORIES_TABLE_NAME:
+        _categories_table = dynamodb.Table(CATEGORIES_TABLE_NAME)
+
+def get_transactions_table() -> Any:
+    """Get the transactions table resource, initializing it if needed."""
+    global _transactions_table
+    if _transactions_table is None:
+        initialize_tables()
+    return _transactions_table
+
+def get_accounts_table() -> Any:
+    """Get the accounts table resource, initializing it if needed."""
+    global _accounts_table
+    if _accounts_table is None:
+        initialize_tables()
+    return _accounts_table
+
+def get_files_table() -> Any:
+    """Get the files table resource, initializing it if needed."""
+    global _files_table
+    if _files_table is None:
+        initialize_tables()
+    return _files_table
+
+def get_file_maps_table() -> Any:
+    """Get the file maps table resource, initializing it if needed."""
+    global _file_maps_table
+    if _file_maps_table is None:
+        initialize_tables()
+    return _file_maps_table
+
+def get_analytics_data_table() -> Any:
+    """Get the analytics data table resource, initializing it if needed."""
+    global _analytics_data_table
+    if _analytics_data_table is None:
+        initialize_tables()
+    return _analytics_data_table
+
+def get_analytics_status_table() -> Any:
+    """Get the analytics status table resource, initializing it if needed."""
+    global _analytics_status_table
+    if _analytics_status_table is None:
+        initialize_tables()
+    return _analytics_status_table
+
+def get_categories_table() -> Any:
+    """Get the categories table resource, initializing it if needed."""
+    global _categories_table
+    if _categories_table is None:
+        initialize_tables()
+    return _categories_table
+
 
 class NotAuthorized(Exception):
     """Raised when a user is not authorized to access a resource."""
@@ -130,48 +203,6 @@ def checked_optional_file_map(file_map_id: Optional[uuid.UUID], user_id: str) ->
         return None
     check_user_owns_resource(file_map.user_id, user_id)
     return file_map
-
-def get_accounts_table() -> Any:
-    """Get the accounts table resource, initializing it if needed."""
-    global _accounts_table
-    if _accounts_table is None and ACCOUNTS_TABLE:
-        _accounts_table = dynamodb.Table(ACCOUNTS_TABLE)
-    return _accounts_table
-
-def get_files_table() -> Any:
-    """Get the files table resource, initializing it if needed."""
-    global _files_table
-    if _files_table is None and FILES_TABLE:
-        _files_table = dynamodb.Table(FILES_TABLE)
-    return _files_table
-
-def get_transactions_table() -> Any:
-    """Get the transactions table resource, initializing it if needed."""
-    global _transactions_table
-    if _transactions_table is None and TRANSACTIONS_TABLE:
-        _transactions_table = dynamodb.Table(TRANSACTIONS_TABLE)
-    return _transactions_table
-
-def get_file_maps_table() -> Any:
-    """Get the file maps table resource, initializing it if needed."""
-    global _file_maps_table
-    if _file_maps_table is None and FILE_MAPS_TABLE:
-        _file_maps_table = dynamodb.Table(FILE_MAPS_TABLE)
-    return _file_maps_table
-
-def get_analytics_data_table() -> Any:
-    """Get the analytics data table resource, initializing it if needed."""
-    global _analytics_data_table
-    if _analytics_data_table is None and ANALYTICS_DATA_TABLE:
-        _analytics_data_table = dynamodb.Table(ANALYTICS_DATA_TABLE)
-    return _analytics_data_table
-
-def get_analytics_status_table() -> Any:
-    """Get the analytics status table resource, initializing it if needed."""
-    global _analytics_status_table
-    if _analytics_status_table is None and ANALYTICS_STATUS_TABLE:
-        _analytics_status_table = dynamodb.Table(ANALYTICS_STATUS_TABLE)
-    return _analytics_status_table
 
 def get_account(account_id: uuid.UUID) -> Optional[Account]:
     """
@@ -1215,13 +1246,36 @@ def get_last_transaction_date(account_id: Union[str, uuid.UUID]) -> Optional[int
         logger.error(f"Error getting last transaction date for account {str(account_id)}: {str(e)}")
         return None
 
+def get_latest_transaction(account_id: Union[str, uuid.UUID]) -> Optional[Transaction]:
+    """
+    Get the most recent transaction for a specific account.
+    Only considers transactions with status starting with 'new' (non-duplicates).
+    
+    Args:
+        account_id: The account ID
+        
+    Returns:
+        Transaction object or None if no transactions found
+    """
+    try:
+        # Query the most recent non-duplicate transaction for this account
+        # The statusDate field is a composite key of format "status#timestamp"
+        response = get_transactions_table().query(
+            IndexName='AccountStatusDateIndex',
+            KeyConditionExpression=Key('accountId').eq(str(account_id)) & Key('statusDate').begins_with('new#'),
+            Limit=1,
+            ScanIndexForward=False  # Sort in descending order to get most recent first
+        )
+        logger.info(f"DB: get_latest_transaction response: {response}")
+        
+        if response.get('Items'):
+            return Transaction.from_dynamodb_item(response['Items'][0])
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error getting latest transaction for account {str(account_id)}: {str(e)}")
+        return None
 
-def get_categories_table() -> Any:
-    """Get the categories table resource, initializing it if needed."""
-    global _categories_table
-    if _categories_table is None and CATEGORIES_TABLE_NAME:
-        _categories_table = dynamodb.Table(CATEGORIES_TABLE_NAME)
-    return _categories_table
 
 def create_category_in_db(category: Category) -> Category:
     """Persist a new category to DynamoDB."""
@@ -1617,11 +1671,6 @@ def store_analytics_status(status: AnalyticsProcessingStatus) -> None:
     """
     try:
         item = status.to_dynamodb_item()
-        # Use user_id as partition key and analytic_type#account_id as sort key
-        item['pk'] = status.user_id
-        account_part = status.account_id or 'ALL'
-        item['sk'] = f"{status.analytic_type.value}#{account_part}"
-        
         get_analytics_status_table().put_item(Item=item)
         logger.info(f"Stored analytics status: {status.analytic_type.value} for user {status.user_id}")
     except ClientError as e:
@@ -1713,6 +1762,10 @@ def update_analytics_status(user_id: str, analytic_type: AnalyticType, updates: 
             elif key == 'status' and hasattr(value, 'value'):
                 # Handle enum fields
                 expression_values[f':{key}'] = value.value
+            elif key == 'computationNeeded':
+                # Handle Binary type for computationNeeded
+                from boto3.dynamodb.types import Binary
+                expression_values[f':{key}'] = Binary(b'\x01' if value else b'\x00')
             else:
                 expression_values[f':{key}'] = value
             
@@ -1750,10 +1803,14 @@ def list_stale_analytics(computation_needed_only: bool = True) -> List[Analytics
     try:
         if computation_needed_only:
             # Use the GSI to efficiently query for records that need computation
+            # Use Binary type for the query
+            from boto3.dynamodb.types import Binary
+            binary_true = Binary(b'\x01')  # Binary type for true
+            
             response = get_analytics_status_table().query(
                 IndexName='ComputationNeededIndex',
-                KeyConditionExpression=Key('computationNeeded').eq('true'),
-                # Order by priority (1=high, 2=medium, 3=low)
+                KeyConditionExpression=Key('computationNeeded').eq(binary_true),
+                # Order by lastUpdated to process oldest first
                 ScanIndexForward=True
             )
         else:
