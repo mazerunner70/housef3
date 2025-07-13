@@ -479,18 +479,45 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
               <th 
                 className={`import-history-th ${sortable ? 'sortable' : ''}`}
                 onClick={() => handleSort('fileName')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSort('fileName');
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label="Sort by file name"
               >
                 File Name{getSortIndicator('fileName')}
               </th>
               <th 
                 className={`import-history-th ${sortable ? 'sortable' : ''}`}
                 onClick={() => handleSort('accountName')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSort('accountName');
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label="Sort by account name"
               >
                 Account{getSortIndicator('accountName')}
               </th>
               <th 
                 className={`import-history-th ${sortable ? 'sortable' : ''}`}
                 onClick={() => handleSort('uploadDate')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSort('uploadDate');
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label="Sort by upload date"
               >
                 Upload Date{getSortIndicator('uploadDate')}
               </th>
@@ -499,6 +526,15 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
               <th 
                 className={`import-history-th ${sortable ? 'sortable' : ''}`}
                 onClick={() => handleSort('processingStatus')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSort('processingStatus');
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label="Sort by processing status"
               >
                 Status{getSortIndicator('processingStatus')}
               </th>
@@ -513,7 +549,16 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
                 key={file.fileId}
                 className={`import-history-row ${selectedHistoryFileId === file.fileId ? 'selected' : ''}`}
                 onClick={onRowClick ? () => onRowClick(file.fileId) : undefined}
+                onKeyDown={onRowClick ? (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onRowClick(file.fileId);
+                  }
+                } : undefined}
                 style={{ cursor: onRowClick ? 'pointer' : 'default' }}
+                role={onRowClick ? "button" : undefined}
+                tabIndex={onRowClick ? 0 : undefined}
+                aria-label={onRowClick ? `Select file ${file.fileName}` : undefined}
               >
                 {showSelection && (
                   <td className="import-history-td">
@@ -646,8 +691,25 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
               </div>
             </div>
           ) : mappingError ? (
-            <div className="import-mapping-dialog-overlay" onClick={handleCloseMappingDialog}>
-              <div className="import-mapping-dialog" onClick={(e) => e.stopPropagation()}>
+            <div 
+              className="import-mapping-dialog-overlay" 
+              onClick={handleCloseMappingDialog}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  handleCloseMappingDialog();
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label="Close dialog"
+            >
+              <div 
+                className="import-mapping-dialog" 
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+              >
                 <div className="dialog-header">
                   <h3>Error Loading File</h3>
                   <button className="close-btn" onClick={handleCloseMappingDialog}>×</button>
