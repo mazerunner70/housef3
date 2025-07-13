@@ -15,9 +15,9 @@ source venv/bin/activate
 echo "Installing requirements..."
 pip install -r requirements.txt
 
-# Run diagnostics
-echo "Running analytics diagnostics..."
-python diagnostic.py
+# Run migration
+echo "Running analytics status migration..."
+python migrate_analytics_status.py
 
 # Deactivate virtual environment
 deactivate 

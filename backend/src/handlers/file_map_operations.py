@@ -201,7 +201,19 @@ def update_file_map_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
             changed = False
             for key, value in update_dict.items():
                 if hasattr(file_map, key) and getattr(file_map, key) != value:
-                    setattr(file_map, key, value)
+                    # Special handling for mappings field to ensure proper FieldMapping objects
+                    if key == 'mappings' and value is not None:
+                        # Convert dictionary mappings to FieldMapping objects
+                        from models.file_map import FieldMapping
+                        field_mappings = []
+                        for mapping_dict in value:
+                            if isinstance(mapping_dict, dict):
+                                field_mappings.append(FieldMapping(**mapping_dict))
+                            else:
+                                field_mappings.append(mapping_dict)  # Already a FieldMapping object
+                        setattr(file_map, key, field_mappings)
+                    else:
+                        setattr(file_map, key, value)
                     changed = True
             
             if changed:

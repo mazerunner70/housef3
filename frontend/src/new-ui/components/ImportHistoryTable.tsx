@@ -14,7 +14,10 @@ import {
   type EditableCellOption,
   type EditableCellDialogProps
 } from './ui';
-import MappingSelectionDialog from './MappingSelectionDialog';
+import ImportMappingDialog from './ImportMappingDialog';
+import type { TransactionRow, ColumnMapping } from './ImportStep2Preview';
+import { parseFile } from '../../services/FileService';
+import { listFieldMaps, getFieldMap, createFieldMap, updateFieldMap } from '../../services/FileMapService';
 
 // Types for the component
 export interface FileMetadata {
@@ -72,32 +75,11 @@ export interface SortConfig {
 
 // Target transaction fields for mapping dialog
 const TARGET_TRANSACTION_FIELDS = [
-  { 
-    field: 'date', 
-    label: 'Transaction Date', 
-    required: true,
-    regex: [
-      '^\\d{4}-\\d{2}-\\d{2}$',           // YYYY-MM-DD (ISO format)
-      '^\\d{2}/\\d{2}/\\d{4}$',           // MM/DD/YYYY (US format)
-      '^\\d{1,2}/\\d{1,2}/\\d{4}$',       // M/D/YYYY or MM/D/YYYY or M/DD/YYYY
-      '^\\d{2}-\\d{2}-\\d{4}$',           // MM-DD-YYYY
-      '^\\d{1,2}-\\d{1,2}-\\d{4}$',       // M-D-YYYY or MM-D-YYYY or M-DD-YYYY
-      '^\\d{4}/\\d{2}/\\d{2}$',           // YYYY/MM/DD
-      '^\\d{4}/\\d{1,2}/\\d{1,2}$',       // YYYY/M/D or YYYY/MM/D or YYYY/M/DD
-      '^\\d{2}\\.\\d{2}\\.\\d{4}$',       // DD.MM.YYYY (European format with dots)
-      '^\\d{1,2}\\.\\d{1,2}\\.\\d{4}$',   // D.M.YYYY or DD.M.YYYY or D.MM.YYYY
-      '^\\d{4}\\.\\d{2}\\.\\d{2}$',       // YYYY.MM.DD
-      '^\\d{4}\\.\\d{1,2}\\.\\d{1,2}$',   // YYYY.M.D or YYYY.MM.D or YYYY.M.DD
-      '^\\d{2}\\d{2}\\d{4}$',             // MMDDYYYY (no separators)
-      '^\\d{4}\\d{2}\\d{2}$',             // YYYYMMDD (no separators)
-      '^\\d{1,2}\\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{4}$', // D MMM YYYY
-      '^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{1,2},?\\s+\\d{4}$', // MMM D, YYYY
-    ]
-  },
-  { field: 'description', label: 'Description', required: true, regex: ['.+'] }, // Any non-empty string
-  { field: 'amount', label: 'Amount', required: true, regex: ['^-?(\\d+|\\d{1,3}(,\\d{3})*)(\\.\\d+)?$'] }, // Number, allows commas, optional negative/decimal
-  { field: 'debitOrCredit', label: 'Debit/Credit', required: false, regex: ['^(debit|credit|CRDT|DBIT|DR|CR)$'] }, // Optional but validated if mapped
-  { field: 'currency', label: 'Currency', required: false, regex: ['^[A-Z]{3}$'] }, // Optional but validated if mapped
+  { field: 'date', label: 'Date', required: true },
+  { field: 'amount', label: 'Amount', required: true },
+  { field: 'description', label: 'Description', required: true },
+  { field: 'category', label: 'Category', required: false },
+  { field: 'account', label: 'Account', required: false },
 ];
 
 const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
@@ -131,6 +113,15 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
   const [mappingDialogFileId, setMappingDialogFileId] = useState<string | null>(null);
   const [mappingDialogCurrentValue, setMappingDialogCurrentValue] = useState<string>('');
   const [mappingDialogDisplayValue, setMappingDialogDisplayValue] = useState<string>('');
+
+  // New state for direct ImportMappingDialog integration
+  const [parsedData, setParsedData] = useState<TransactionRow[]>([]);
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [fileType, setFileType] = useState<'csv' | 'ofx' | 'qfx' | 'qif'>('csv');
+  const [currentMapping, setCurrentMapping] = useState<ColumnMapping[] | undefined>(undefined);
+  const [currentFieldMapData, setCurrentFieldMapData] = useState<any>(undefined); // Store full field map data
+  const [isLoadingMappingData, setIsLoadingMappingData] = useState<boolean>(false);
+  const [mappingError, setMappingError] = useState<string | null>(null);
 
   // State for sorting
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'uploadDate', direction: 'descending' });
@@ -243,6 +234,7 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
     setMappingDialogCurrentValue(currentValue);
     setMappingDialogDisplayValue(displayValue);
     setMappingDialogOpen(true);
+    loadFileDataForMapping(fileId, currentValue);
   };
 
   const handleCloseMappingDialog = () => {
@@ -250,12 +242,145 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
     setMappingDialogFileId(null);
     setMappingDialogCurrentValue('');
     setMappingDialogDisplayValue('');
+    setParsedData([]);
+    setCsvHeaders([]);
+    setCurrentMapping(undefined);
+    setCurrentFieldMapData(undefined);
+    setMappingError(null);
   };
 
   const handleSaveMappingDialog = async (newValue: string, newOptions?: EditableCellOption[]) => {
     if (mappingDialogFileId) {
       await handleSaveMapping(mappingDialogFileId, newValue);
       handleCloseMappingDialog();
+    }
+  };
+
+  // New function to load file data for mapping dialog
+  const loadFileDataForMapping = async (fileId: string, currentMappingId: string) => {
+    setIsLoadingMappingData(true);
+    setMappingError(null);
+
+    try {
+      // Load file data and available field maps in parallel
+      const [parseResult, fieldMapsResponse] = await Promise.all([
+        parseFile(fileId),
+        listFieldMaps()
+      ]);
+
+      if (parseResult.error) {
+        setMappingError(parseResult.error);
+        return;
+      }
+
+      setParsedData(parseResult.data || []);
+      setCsvHeaders(parseResult.headers || []);
+      setFileType(parseResult.file_format || 'csv');
+
+      // Pre-load the selected mapping if one is provided
+      if (currentMappingId && currentMappingId.trim()) {
+        try {
+          const fieldMapDetails = await getFieldMap(currentMappingId);
+          const mappings: ColumnMapping[] = fieldMapDetails.mappings.map(m => ({
+            csvColumn: m.sourceField,
+            targetField: m.targetField,
+          }));
+          setCurrentMapping(mappings);
+          setCurrentFieldMapData(fieldMapDetails); // Store full field map data
+        } catch (err) {
+          console.warn(`Could not load field map details for ID ${currentMappingId}:`, err);
+          setCurrentMapping(undefined);
+          setCurrentFieldMapData(undefined);
+        }
+      } else {
+        setCurrentMapping(undefined);
+        setCurrentFieldMapData(undefined);
+      }
+
+    } catch (error: any) {
+      setMappingError(error.message || 'Failed to load file data');
+    } finally {
+      setIsLoadingMappingData(false);
+    }
+  };
+
+  // Handler for completing import from mapping dialog
+  const handleCompleteImport = async (
+    mappedData: TransactionRow[], 
+    finalFieldMapToAssociate?: { id: string; name: string }
+  ) => {
+    try {
+      if (finalFieldMapToAssociate && mappingDialogFileId) {
+        await handleSaveMapping(mappingDialogFileId, finalFieldMapToAssociate.id);
+      }
+      handleCloseMappingDialog();
+    } catch (error: any) {
+      setMappingError(error.message || 'Failed to save mapping selection');
+    }
+  };
+
+  // Handlers for field map operations in the dialog
+  const handleLoadFieldMapDetails = async (fieldMapId: string): Promise<ColumnMapping[] | undefined> => {
+    try {
+      const fieldMapDetails = await getFieldMap(fieldMapId);
+      const mappings: ColumnMapping[] = fieldMapDetails.mappings.map(m => ({
+        csvColumn: m.sourceField,
+        targetField: m.targetField,
+      }));
+      setCurrentMapping(mappings);
+      setCurrentFieldMapData(fieldMapDetails); // Store full field map data
+      return mappings;
+    } catch (error) {
+      console.error('Error loading field map details:', error);
+      return undefined;
+    }
+  };
+
+  const handleSaveOrUpdateFieldMap = async (params: {
+    mapIdToUpdate?: string;
+    name: string;
+    mappingsToSave: Array<{ csvColumn: string; targetField: string }>;
+    reverseAmounts?: boolean;
+  }): Promise<{ newMapId?: string; newName?: string; success: boolean; message?: string }> => {
+    try {
+      const mappings = params.mappingsToSave.map(m => ({
+        sourceField: m.csvColumn,
+        targetField: m.targetField,
+      }));
+
+      if (params.mapIdToUpdate) {
+        const updatedFieldMap = await updateFieldMap(params.mapIdToUpdate, {
+          name: params.name,
+          mappings,
+          reverseAmounts: params.reverseAmounts,
+        });
+
+        return {
+          newMapId: updatedFieldMap.fileMapId,
+          newName: updatedFieldMap.name,
+          success: true,
+          message: 'Field map updated successfully',
+        };
+      } else {
+        const newFieldMap = await createFieldMap({
+          name: params.name,
+          mappings,
+          reverseAmounts: params.reverseAmounts,
+        });
+
+        return {
+          newMapId: newFieldMap.fileMapId,
+          newName: newFieldMap.name,
+          success: true,
+          message: 'Field map created successfully',
+        };
+      }
+    } catch (error: any) {
+      console.error('Error saving field map:', error);
+      return {
+        success: false,
+        message: error.message || 'Failed to save field map',
+      };
     }
   };
 
@@ -354,18 +479,45 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
               <th 
                 className={`import-history-th ${sortable ? 'sortable' : ''}`}
                 onClick={() => handleSort('fileName')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSort('fileName');
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label="Sort by file name"
               >
                 File Name{getSortIndicator('fileName')}
               </th>
               <th 
                 className={`import-history-th ${sortable ? 'sortable' : ''}`}
                 onClick={() => handleSort('accountName')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSort('accountName');
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label="Sort by account name"
               >
                 Account{getSortIndicator('accountName')}
               </th>
               <th 
                 className={`import-history-th ${sortable ? 'sortable' : ''}`}
                 onClick={() => handleSort('uploadDate')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSort('uploadDate');
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label="Sort by upload date"
               >
                 Upload Date{getSortIndicator('uploadDate')}
               </th>
@@ -374,6 +526,15 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
               <th 
                 className={`import-history-th ${sortable ? 'sortable' : ''}`}
                 onClick={() => handleSort('processingStatus')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSort('processingStatus');
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label="Sort by processing status"
               >
                 Status{getSortIndicator('processingStatus')}
               </th>
@@ -388,7 +549,16 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
                 key={file.fileId}
                 className={`import-history-row ${selectedHistoryFileId === file.fileId ? 'selected' : ''}`}
                 onClick={onRowClick ? () => onRowClick(file.fileId) : undefined}
+                onKeyDown={onRowClick ? (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onRowClick(file.fileId);
+                  }
+                } : undefined}
                 style={{ cursor: onRowClick ? 'pointer' : 'default' }}
+                role={onRowClick ? "button" : undefined}
+                tabIndex={onRowClick ? 0 : undefined}
+                aria-label={onRowClick ? `Select file ${file.fileName}` : undefined}
               >
                 {showSelection && (
                   <td className="import-history-td">
@@ -511,16 +681,69 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
 
       {/* Single mapping dialog instance */}
       {mappingDialogFileId && (
-        <MappingSelectionDialog
-          value={mappingDialogCurrentValue}
-          displayValue={mappingDialogDisplayValue}
-          options={fieldMapOptions}
-          onSave={handleSaveMappingDialog}
-          onCancel={handleCloseMappingDialog}
-          isOpen={mappingDialogOpen}
-          fileId={mappingDialogFileId}
-          targetTransactionFields={TARGET_TRANSACTION_FIELDS}
-        />
+        <>
+          {isLoadingMappingData ? (
+            <div className="import-mapping-dialog-overlay">
+              <div className="import-mapping-dialog">
+                <div className="dialog-content">
+                  <p style={{ padding: '40px', textAlign: 'center' }}>Loading file data...</p>
+                </div>
+              </div>
+            </div>
+          ) : mappingError ? (
+            <div 
+              className="import-mapping-dialog-overlay" 
+              onClick={handleCloseMappingDialog}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  handleCloseMappingDialog();
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label="Close dialog"
+            >
+              <div 
+                className="import-mapping-dialog" 
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+              >
+                <div className="dialog-header">
+                  <h3>Error Loading File</h3>
+                  <button className="close-btn" onClick={handleCloseMappingDialog}>×</button>
+                </div>
+                <div className="dialog-content">
+                  <p style={{ color: 'red', padding: '20px' }}>{mappingError}</p>
+                  <div style={{ padding: '20px', textAlign: 'right' }}>
+                    <button onClick={handleCloseMappingDialog} className="button-common">Close</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : parsedData.length > 0 ? (
+            <ImportMappingDialog
+              isOpen={mappingDialogOpen}
+              onClose={handleCloseMappingDialog}
+              title="Select or Create Field Mapping"
+              parsedData={parsedData}
+              fileType={fileType}
+              csvHeaders={csvHeaders}
+              existingMapping={currentMapping}
+              onCompleteImport={handleCompleteImport}
+              targetTransactionFields={TARGET_TRANSACTION_FIELDS}
+              availableFieldMaps={availableFileMaps}
+              initialFieldMapToLoad={mappingDialogCurrentValue ? { 
+                id: mappingDialogCurrentValue, 
+                name: mappingDialogDisplayValue || mappingDialogCurrentValue 
+              } : undefined}
+              onLoadFieldMapDetails={handleLoadFieldMapDetails}
+              onSaveOrUpdateFieldMap={handleSaveOrUpdateFieldMap}
+              currentlyLoadedFieldMapData={currentFieldMapData}
+            />
+          ) : null}
+        </>
       )}
     </div>
   );
