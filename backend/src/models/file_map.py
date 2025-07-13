@@ -85,8 +85,26 @@ class FileMapCreate(BaseModel):
     @classmethod
     def check_create_mappings_not_empty(cls, v: List[FieldMapping]) -> List[FieldMapping]:
         if not v:
-            raise ValueError("Mappings list cannot be empty for creation")
+            raise ValueError("Mappings list cannot be empty")
         return v
+
+    @field_validator('mappings', mode='before')
+    @classmethod
+    def convert_mapping_dicts_to_objects_create(cls, v: List[Any]) -> List[FieldMapping]:
+        """Convert dictionary mappings to FieldMapping objects if needed."""
+        converted_mappings = []
+        for mapping in v:
+            if isinstance(mapping, dict):
+                # Convert dictionary to FieldMapping object
+                converted_mappings.append(FieldMapping(**mapping))
+            elif isinstance(mapping, FieldMapping):
+                # Already a FieldMapping object
+                converted_mappings.append(mapping)
+            else:
+                # Invalid type
+                raise ValueError(f"Invalid mapping type: {type(mapping)}. Expected dict or FieldMapping.")
+        
+        return converted_mappings
 
 class FileMapUpdate(BaseModel):
     """DTO for updating an existing FileMap. All fields are optional."""
@@ -108,3 +126,24 @@ class FileMapUpdate(BaseModel):
         if v is not None and not v:
             raise ValueError("Mappings list, if provided for update, cannot be empty")
         return v
+
+    @field_validator('mappings', mode='before')
+    @classmethod
+    def convert_mapping_dicts_to_objects(cls, v: Optional[List[Any]]) -> Optional[List[FieldMapping]]:
+        """Convert dictionary mappings to FieldMapping objects if needed."""
+        if v is None:
+            return v
+        
+        converted_mappings = []
+        for mapping in v:
+            if isinstance(mapping, dict):
+                # Convert dictionary to FieldMapping object
+                converted_mappings.append(FieldMapping(**mapping))
+            elif isinstance(mapping, FieldMapping):
+                # Already a FieldMapping object
+                converted_mappings.append(mapping)
+            else:
+                # Invalid type
+                raise ValueError(f"Invalid mapping type: {type(mapping)}. Expected dict or FieldMapping.")
+        
+        return converted_mappings

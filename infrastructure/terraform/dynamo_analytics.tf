@@ -77,6 +77,11 @@ resource "aws_dynamodb_table" "analytics_status" {
     type = "N"
   }
 
+  attribute {
+    name = "computationNeeded"
+    type = "B"
+  }
+
   # Global Secondary Index for querying by user_id
   global_secondary_index {
     name            = "UserStatusIndex"
@@ -89,6 +94,14 @@ resource "aws_dynamodb_table" "analytics_status" {
   global_secondary_index {
     name            = "ProcessingQueueIndex"
     hash_key        = "processingPriority"
+    range_key       = "lastUpdated"
+    projection_type = "ALL"
+  }
+
+  # Global Secondary Index for computation needed status
+  global_secondary_index {
+    name            = "ComputationNeededIndex"
+    hash_key        = "computationNeeded"
     range_key       = "lastUpdated"
     projection_type = "ALL"
   }

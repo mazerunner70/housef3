@@ -1671,11 +1671,6 @@ def store_analytics_status(status: AnalyticsProcessingStatus) -> None:
     """
     try:
         item = status.to_dynamodb_item()
-        # Use user_id as partition key and analytic_type#account_id as sort key
-        item['pk'] = status.user_id
-        account_part = status.account_id or 'ALL'
-        item['sk'] = f"{status.analytic_type.value}#{account_part}"
-        
         get_analytics_status_table().put_item(Item=item)
         logger.info(f"Stored analytics status: {status.analytic_type.value} for user {status.user_id}")
     except ClientError as e:
@@ -1767,6 +1762,10 @@ def update_analytics_status(user_id: str, analytic_type: AnalyticType, updates: 
             elif key == 'status' and hasattr(value, 'value'):
                 # Handle enum fields
                 expression_values[f':{key}'] = value.value
+            elif key == 'computationNeeded':
+                # Handle Binary type for computationNeeded
+                from boto3.dynamodb.types import Binary
+                expression_values[f':{key}'] = Binary(b'\x01' if value else b'\x00')
             else:
                 expression_values[f':{key}'] = value
             
@@ -1804,10 +1803,14 @@ def list_stale_analytics(computation_needed_only: bool = True) -> List[Analytics
     try:
         if computation_needed_only:
             # Use the GSI to efficiently query for records that need computation
+            # Use Binary type for the query
+            from boto3.dynamodb.types import Binary
+            binary_true = Binary(b'\x01')  # Binary type for true
+            
             response = get_analytics_status_table().query(
                 IndexName='ComputationNeededIndex',
-                KeyConditionExpression=Key('computationNeeded').eq('true'),
-                # Order by priority (1=high, 2=medium, 3=low)
+                KeyConditionExpression=Key('computationNeeded').eq(binary_true),
+                # Order by lastUpdated to process oldest first
                 ScanIndexForward=True
             )
         else:
