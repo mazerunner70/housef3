@@ -18,14 +18,21 @@
 /* Header Section */
 .account-card-header {
     padding: var(--spacing-l);
-    background: linear-gradient(135deg, var(--color-primary-brand) 0%, var(--color-secondary-brand) 100%);
+    background: linear-gradient(135deg, 
+        var(--color-primary-brand) 0%, 
+        var(--color-secondary-brand) 60%, 
+        rgba(255, 255, 255, 0.9) 85%);
     color: var(--color-white);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
 }
 
 .account-primary-info {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-s);
+    flex: 1;
 }
 
 .account-name {
@@ -47,7 +54,13 @@
     font-size: var(--font-size-h5);
     font-weight: var(--font-weight-semibold);
     color: var(--color-white);
-    opacity: 0.95;
+    text-align: right;
+    min-width: fit-content;
+    margin-left: var(--spacing-l);
+    padding: var(--spacing-xs) var(--spacing-s);
+    background-color: rgba(255, 255, 255, 0.15);
+    border-radius: var(--border-radius-small);
+    opacity: 1;
 }
 
 /* Body Section */
@@ -88,6 +101,26 @@
     font-weight: var(--font-weight-medium);
     color: var(--color-text-primary);
     text-align: right;
+}
+
+.no-transactions {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-small);
+    font-style: italic;
+}
+
+/* Adjust TextWithSubtext in account details */
+.account-detail-item .text-with-subtext {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+}
+
+/* Override DateCell styles in account details */
+.account-detail-item .date-cell {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-small);
+    font-style: italic;
 }
 
 /* Footer Section */

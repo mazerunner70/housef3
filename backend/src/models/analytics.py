@@ -4,10 +4,11 @@ Analytics models for the financial analytics system.
 import enum
 import logging
 from datetime import datetime, timezone, date
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 from typing_extensions import Self
 
 from pydantic import BaseModel, Field, ConfigDict
+from boto3.dynamodb.types import Binary
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -134,9 +135,10 @@ class AnalyticsProcessingStatus(BaseModel):
                 else str(item['status'])
             )
 
-        # Convert boolean to string for DynamoDB GSI compatibility
+        # Convert computationNeeded to Binary type for DynamoDB
         if 'computationNeeded' in item:
-            item['computationNeeded'] = str(item['computationNeeded']).lower()
+            # Create a new Binary object with the appropriate bytes
+            item['computationNeeded'] = Binary(b'\x01' if item['computationNeeded'] else b'\x00')
 
         return item
 
@@ -169,9 +171,17 @@ class AnalyticsProcessingStatus(BaseModel):
         if 'status' in data and isinstance(data['status'], str):
             data['status'] = ComputationStatus(data['status'])
 
-        # Convert string back to boolean for computationNeeded
-        if 'computationNeeded' in data and isinstance(data['computationNeeded'], str):
-            data['computationNeeded'] = data['computationNeeded'].lower() == 'true'
+        # Convert Binary computationNeeded back to boolean
+        if 'computationNeeded' in data:
+            if isinstance(data['computationNeeded'], Binary):
+                # Access the raw bytes through the Binary object's internal representation
+                binary_data = getattr(data['computationNeeded'], 'value', None)
+                if binary_data is not None and isinstance(binary_data, bytes):
+                    data['computationNeeded'] = binary_data == b'\x01'
+                else:
+                    data['computationNeeded'] = False
+            else:
+                data['computationNeeded'] = bool(data['computationNeeded'])
 
         return cls.model_validate(data)
 

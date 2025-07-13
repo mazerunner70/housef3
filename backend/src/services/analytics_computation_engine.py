@@ -39,28 +39,37 @@ class AnalyticsComputationEngine:
         Returns:
             Dictionary with cash flow analytics data
         """
+        logger.info(f"Computing cash flow analytics for user {user_id}, period {time_period}, account {account_id}")
+        
         try:
             # Parse time period to get date range
             start_date, end_date = self._parse_time_period(time_period)
+            logger.info(f"Parsed time period: {start_date} to {end_date}")
 
             # Get transactions for the period
             account_ids = [uuid.UUID(account_id)] if account_id else None
             transactions = self._get_transactions_for_period(user_id, start_date, end_date, account_ids)
+            logger.info(f"Found {len(transactions)} transactions in period")
 
             # Separate income and expenses
             income_transactions = []
             expense_transactions = []
 
             for transaction in transactions:
+                logger.debug(f"Processing transaction {transaction.transaction_id}: amount={transaction.amount}")
                 if transaction.amount > 0:
                     income_transactions.append(transaction)
                 else:
                     expense_transactions.append(transaction)
 
+            logger.info(f"Split into {len(income_transactions)} income and {len(expense_transactions)} expense transactions")
+
             # Calculate totals
             total_income = sum(t.amount for t in income_transactions)
             total_expenses = abs(sum(t.amount for t in expense_transactions))
             net_cash_flow = total_income - total_expenses
+
+            logger.info(f"Calculated totals - Income: {total_income}, Expenses: {total_expenses}, Net Cash Flow: {net_cash_flow}")
 
             # Calculate monthly averages if period is longer than a month
             months_in_period = self._calculate_months_in_period(start_date, end_date)
@@ -386,7 +395,7 @@ class AnalyticsComputationEngine:
         Parse time period string into start and end dates.
 
         Args:
-            time_period: Time period string (e.g., '2024-12', '2024-Q4', '2024', 'overall')
+            time_period: Time period string (e.g., '2024-12', '2024-Q4', '2024', 'overall', '12months')
 
         Returns:
             Tuple of start_date and end_date
@@ -397,6 +406,24 @@ class AnalyticsComputationEngine:
                 # Start from 10 years ago to today
                 end_date = date.today()
                 start_date = date(end_date.year - 10, 1, 1)
+                
+            elif time_period.lower().endswith('months'):
+                # Format: '12months', '3months', etc.
+                try:
+                    num_months = int(time_period[:-6])  # Remove 'months' suffix
+                    end_date = date.today()
+                    # Calculate start date by subtracting months
+                    year = end_date.year
+                    month = end_date.month - num_months
+                    # Adjust year if we went back past January
+                    while month <= 0:
+                        year -= 1
+                        month += 12
+                    start_date = date(year, month, 1)
+                    logger.info(f"Parsed '{time_period}' as {start_date} to {end_date}")
+                except ValueError as e:
+                    logger.error(f"Invalid months format in '{time_period}': {str(e)}")
+                    raise
                 
             elif '-Q' in time_period:
                 # Quarterly format: 2024-Q4

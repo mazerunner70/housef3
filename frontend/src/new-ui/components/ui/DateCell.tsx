@@ -60,14 +60,14 @@ const DateCell: React.FC<DateCellProps> = ({
   const getRelativeTime = (date: Date): string => {
     const now = new Date();
     const diffInMs = now.getTime() - date.getTime();
-    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+    const diffInDays = diffInMs / (1000 * 60 * 60 * 24);
     
-    if (diffInDays === 0) return 'Today';
-    if (diffInDays === 1) return 'Yesterday';
-    if (diffInDays < 7) return `${diffInDays} days ago`;
-    if (diffInDays < 30) return `${Math.floor(diffInDays / 7)} weeks ago`;
-    if (diffInDays < 365) return `${Math.floor(diffInDays / 30)} months ago`;
-    return `${Math.floor(diffInDays / 365)} years ago`;
+    if (diffInDays < 1) return 'Today';
+    if (diffInDays < 2) return 'Yesterday';
+    if (diffInDays < 7) return `${diffInDays.toFixed(1)} days ago`;
+    if (diffInDays < 30) return `${(diffInDays / 7).toFixed(1)} weeks ago`;
+    if (diffInDays < 365) return `${(diffInDays / 30).toFixed(1)} months ago`;
+    return `${(diffInDays / 365).toFixed(1)} years ago`;
   };
 
   return (

@@ -1001,7 +1001,7 @@ def get_file_preview_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
             if content_bytes is None:
                 return handle_error(500, "Error reading file content from S3.")
             try:
-                content_str = content_bytes.decode('utf-8')
+                content_str = try_decode_content(content_bytes)
                 # Use io.StringIO to treat the string as a file
                 preprocessed_content = preprocess_csv_text(content_str)
                 csv_file = io.StringIO(preprocessed_content)
@@ -1119,6 +1119,19 @@ def get_file_preview_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
     except Exception as e:
         logger.error(f"Error in get_file_preview_handler for file {file_id if 'file_id' in locals() else 'unknown'}: {str(e)}", exc_info=True)
         return handle_error(500, "Internal server error while generating file preview.")
+
+def try_decode_content(content_bytes: bytes) -> str:
+    """Try to decode content using multiple encodings."""
+    encodings = ['utf-8', 'iso-8859-1', 'cp1252', 'latin1']
+    
+    for encoding in encodings:
+        try:
+            return content_bytes.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+            
+    # If all encodings fail, use 'utf-8' with error handling as last resort
+    return content_bytes.decode('utf-8', errors='replace')
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main Lambda handler for file operations."""

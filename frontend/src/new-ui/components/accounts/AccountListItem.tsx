@@ -1,7 +1,7 @@
 import React from 'react';
-import './AccountListItem.css'; // Import the CSS file
-// import { Decimal } from 'decimal.js'; // Re-enable if using Decimal.js
+import './AccountListItem.css';
 import { UIAccount } from '../../hooks/useAccounts';
+import { CurrencyDisplay, DateCell, TextWithSubtext } from '../ui';
 
 // This interface should align with UIAccount from useAccounts.ts
 export interface AccountListItemData {
@@ -11,6 +11,7 @@ export interface AccountListItemData {
     currency: string;
     balance?: number; // Temporarily number, change to Decimal when library is used
     bankName?: string;
+    lastTransactionDate?: number; // milliseconds since epoch
     // Removed: accountNumber, transactionFilesCount
 }
 
@@ -47,21 +48,38 @@ const AccountListItem: React.FC<AccountListItemProps> = ({ account, onEdit, onDe
                     >
                         {name}
                     </h3>
-                    <div className="account-balance">
-                        {displayBalance} {currency}
-                    </div>
+                </div>
+                <div className="account-balance">
+                    <CurrencyDisplay 
+                        amount={Number(balance || 0)} 
+                        currency={currency}
+                        showSign={true}
+                    />
                 </div>
             </div>
             
             <div className="account-card-body">
                 <div className="account-details">
                     <div className="account-detail-item">
-                        <span className="detail-label">Type:</span>
-                        <span className="detail-value">{type}</span>
+                        <TextWithSubtext 
+                            primaryText={type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}
+                            variant="description"
+                            subtextPrefix=""
+                            subtextSuffix=""
+                        />
                     </div>
                     <div className="account-detail-item">
-                        <span className="detail-label">Bank:</span>
-                        <span className="detail-value">{bankName || 'N/A'}</span>
+                        <span className="detail-label">Last Transaction:</span>
+                        <span className="detail-value">
+                            {account.lastTransactionDate ? (
+                                <DateCell 
+                                    date={account.lastTransactionDate}
+                                    format="iso"
+                                />
+                            ) : (
+                                <span className="no-transactions">No transactions</span>
+                            )}
+                        </span>
                     </div>
                 </div>
             </div>

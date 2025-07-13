@@ -262,24 +262,36 @@ def create_transactions(
     Args:
         transactions: List of transactions to save
         transaction_file: TransactionFile object
-        user_id: ID of the user who owns the file
-        account: Account object
         
     Returns:
         Tuple of (total transaction count, duplicate count)
     """
     try:
-        checked_mandatory_account(transaction_file.account_id, transaction_file.user_id)
+        account = checked_mandatory_account(transaction_file.account_id, transaction_file.user_id)
         checked_mandatory_transaction_file(transaction_file.file_id, transaction_file.user_id)
         transaction_count = 0
         duplicate_count = 0
 
-        # warn if duplicate detetcion has not yet been run oin this list of transactions
+        # warn if duplicate detection has not yet been run on this list of transactions
         if not transaction_file.duplicate_count:
             logger.warning(f"Duplicate detection has not yet been run on file {transaction_file.file_id}") 
             duplicate_count = update_transaction_duplicates(transactions)
             update_transaction_file(transaction_file.file_id, transaction_file.user_id, {'duplicate_count': duplicate_count})
             logger.info(f"Late duplicate detection! Updated duplicate count for file {transaction_file.file_id} to {duplicate_count}")
+        
+        # Find the latest transaction date and its balance
+        latest_transaction = max(transactions, key=lambda t: t.date)
+        latest_transaction_date = latest_transaction.date
+        latest_balance = latest_transaction.balance
+        
+        # Update account's last transaction date and balance if this is more recent
+        if not account.last_transaction_date or latest_transaction_date > account.last_transaction_date:
+            update_data = {
+                'last_transaction_date': latest_transaction_date,
+                'balance': latest_balance
+            }
+            update_account(account.account_id, account.user_id, update_data)
+            logger.info(f"Updated last transaction date to {latest_transaction_date} and balance to {latest_balance} for account {account.account_id}")
         
         for transaction in transactions:
             try:
@@ -294,10 +306,9 @@ def create_transactions(
                 logger.error(f"Error creating transaction: {str(tx_error)}")
                 logger.error(f"Transaction data that caused error: {transaction}")
                 
-        logger.info(f"Saved {transaction_count} transactions for file {transaction_file.file_id}")
         return transaction_count, duplicate_count
     except Exception as e:
-        logger.error(f"Error saving transactions: {str(e)}")
+        logger.error(f"Error creating transactions: {str(e)}")
         raise
 
 
