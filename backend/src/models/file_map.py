@@ -67,6 +67,24 @@ class FileMap(BaseModel):
         # and UUID string conversion if type hints and config are correct.
         return cls(**data)
 
+    def update_with_data(self, update_data: 'FileMapUpdate') -> bool:
+        """
+        Updates the file map with data from a FileMapUpdate DTO.
+        Returns True if any fields were changed, False otherwise.
+        """
+        updated_fields = False
+        # Use mode='python' to get the actual objects, not their string values
+        update_dict = update_data.model_dump(exclude_unset=True, by_alias=False, mode='python') # Use field names
+
+        for key, value in update_dict.items():
+            if hasattr(self, key) and getattr(self, key) != value:
+                setattr(self, key, value)
+                updated_fields = True
+        
+        if updated_fields:
+            self.updated_at = int(datetime.now(timezone.utc).timestamp() * 1000)
+        return updated_fields
+
 class FileMapCreate(BaseModel):
     """DTO for creating a new FileMap."""
     name: str = Field(min_length=1, max_length=255)

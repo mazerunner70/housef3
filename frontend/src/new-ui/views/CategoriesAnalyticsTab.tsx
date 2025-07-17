@@ -9,11 +9,12 @@ const CategoriesAnalyticsTab: React.FC<CategoriesAnalyticsTabProps> = ({ analyti
   const { categories, formatCurrency, formatPercentage, filters, setFilters } = analytics;
   const [selectedPeriod, setSelectedPeriod] = useState(filters.timeRange);
 
-  // Calculate total for percentages
-  const totalAmount = categories?.categories.reduce((sum, cat) => sum + cat.totalAmount, 0) || 0;
+  // Calculate total for percentages with proper null checks
+  const categoryData = categories?.categories || [];
+  const totalAmount = categoryData.reduce((sum, cat) => sum + cat.totalAmount, 0);
 
   // Transform category data for display
-  const categoryData = categories?.categories.map(cat => ({
+  const transformedCategoryData = categoryData.map(cat => ({
     name: cat.categoryName,
     amount: cat.totalAmount,
     percentage: totalAmount > 0 ? ((cat.totalAmount / totalAmount) * 100) : 0,
@@ -21,7 +22,7 @@ const CategoriesAnalyticsTab: React.FC<CategoriesAnalyticsTabProps> = ({ analyti
     trend: cat.trend === 'increasing' ? `+${cat.growthRate.toFixed(1)}%` : 
            cat.trend === 'decreasing' ? `-${cat.growthRate.toFixed(1)}%` : 
            `${cat.growthRate.toFixed(1)}%`
-  })) || [];
+  }));
 
   return (
     <div className="categories-analytics-tab">
@@ -53,9 +54,9 @@ const CategoriesAnalyticsTab: React.FC<CategoriesAnalyticsTabProps> = ({ analyti
               <br />
               <small>Analyzing your spending by category</small>
             </>
-          ) : categoryData.length > 0 ? (
+          ) : transformedCategoryData.length > 0 ? (
             <>
-              🥧 Category data available for {categoryData.length} categories
+              🥧 Category data available for {transformedCategoryData.length} categories
               <br />
               <small>Chart visualization coming soon - data is ready for display</small>
             </>
@@ -86,7 +87,7 @@ const CategoriesAnalyticsTab: React.FC<CategoriesAnalyticsTabProps> = ({ analyti
             </tr>
           </thead>
           <tbody>
-            {categoryData.map((category, index) => (
+            {transformedCategoryData.map((category, index) => (
               <tr key={index} style={{ borderBottom: '1px solid #e9ecef' }}>
                 <td style={{ padding: '12px 8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -105,7 +106,7 @@ const CategoriesAnalyticsTab: React.FC<CategoriesAnalyticsTabProps> = ({ analyti
                   ${category.amount.toFixed(2)}
                 </td>
                 <td style={{ textAlign: 'right', padding: '12px 8px' }}>
-                  {category.percentage}%
+                  {category.percentage.toFixed(1)}%
                 </td>
                 <td style={{ textAlign: 'right', padding: '12px 8px' }}>
                   {category.transactions}
@@ -141,24 +142,24 @@ const CategoriesAnalyticsTab: React.FC<CategoriesAnalyticsTabProps> = ({ analyti
         <div className="analytics-card">
           <h3>Highest Category</h3>
           <div className="analytics-metric negative">
-            {categoryData.length > 0 ? formatCurrency(categoryData[0].amount) : formatCurrency(0)}
+            {transformedCategoryData.length > 0 ? formatCurrency(transformedCategoryData[0].amount) : formatCurrency(0)}
           </div>
           <small>
-            {categoryData.length > 0 ? `${categoryData[0].name} (${categoryData[0].percentage.toFixed(1)}%)` : 'No data'}
+            {transformedCategoryData.length > 0 ? `${transformedCategoryData[0].name} (${transformedCategoryData[0].percentage.toFixed(1)}%)` : 'No data'}
           </small>
         </div>
         
         <div className="analytics-card">
           <h3>Fastest Growing</h3>
           <div className="analytics-metric positive">
-            {categoryData.length > 0 ? 
-              categoryData.find(cat => cat.trend.startsWith('+'))?.trend || 'N/A' : 
+            {transformedCategoryData.length > 0 ? 
+              transformedCategoryData.find(cat => cat.trend.startsWith('+'))?.trend || 'N/A' : 
               'N/A'
             }
           </div>
           <small>
-            {categoryData.length > 0 ? 
-              categoryData.find(cat => cat.trend.startsWith('+'))?.name || 'No growth trends' :
+            {transformedCategoryData.length > 0 ? 
+              transformedCategoryData.find(cat => cat.trend.startsWith('+'))?.name || 'No growth trends' :
               'No data'
             }
           </small>
@@ -167,14 +168,14 @@ const CategoriesAnalyticsTab: React.FC<CategoriesAnalyticsTabProps> = ({ analyti
         <div className="analytics-card">
           <h3>Most Transactions</h3>
           <div className="analytics-metric">
-            {categoryData.length > 0 ? 
-              Math.max(...categoryData.map(cat => cat.transactions)) : 
+            {transformedCategoryData.length > 0 ? 
+              Math.max(...transformedCategoryData.map(cat => cat.transactions)) : 
               0
             }
           </div>
           <small>
-            {categoryData.length > 0 ? 
-              categoryData.find(cat => cat.transactions === Math.max(...categoryData.map(c => c.transactions)))?.name || 'No data' :
+            {transformedCategoryData.length > 0 ? 
+              transformedCategoryData.find(cat => cat.transactions === Math.max(...transformedCategoryData.map(c => c.transactions)))?.name || 'No data' :
               'No data'
             }
           </small>
@@ -183,9 +184,9 @@ const CategoriesAnalyticsTab: React.FC<CategoriesAnalyticsTabProps> = ({ analyti
         <div className="analytics-card">
           <h3>Average per Category</h3>
           <div className="analytics-metric">
-            {categoryData.length > 0 ? formatCurrency(totalAmount / categoryData.length) : formatCurrency(0)}
+            {transformedCategoryData.length > 0 ? formatCurrency(totalAmount / transformedCategoryData.length) : formatCurrency(0)}
           </div>
-          <small>Across {categoryData.length} categories</small>
+          <small>Across {transformedCategoryData.length} categories</small>
         </div>
       </div>
 
