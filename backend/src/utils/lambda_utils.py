@@ -41,12 +41,15 @@ def optional_path_parameter(event: Dict[str, Any], parameter_name: str) -> str:
     return event.get('pathParameters', {}).get(parameter_name)
 
 def mandatory_path_parameter(event: Dict[str, Any], parameter_name: str) -> str:
-    """Extract a mandatory path parameter from the event."""
+    """Extract a mandatory path parameter from the event.
+    Raises ValueError if the parameter is not found.
+    
+    """
     if not parameter_name:
-        raise ValueError("Parameter name is required")
+        raise KeyError("Parameter name is required")
     parameter = optional_path_parameter(event, parameter_name)
     if not parameter:
-        raise ValueError(f"Path parameter {parameter_name} is required")
+        raise ValueError(f"Path parameter {parameter_name} not found")
     return parameter
 
 # extract query parameters from the event
@@ -57,10 +60,10 @@ def optional_query_parameter(event: Dict[str, Any], parameter_name: str) -> str:
 def mandatory_query_parameter(event: Dict[str, Any], parameter_name: str) -> str:
     """Extract a mandatory query parameter from the event."""
     if not parameter_name:
-        raise ValueError("Parameter name is required")
+        raise KeyError("Parameter name is required")
     parameter_value = optional_query_parameter(event, parameter_name)
     if not parameter_value:
-        raise ValueError(f"Query parameter {parameter_name} is required")
+        raise ValueError(f"Query parameter {parameter_name} not found")
     return parameter_value
     
 # extract paameters from json payload body
@@ -72,5 +75,5 @@ def mandatory_body_parameter(event: Dict[str, Any], parameter_name: str) -> str:
     """Extract a mandatory json-encoded body parameter from the event."""
     parameter_value = optional_body_parameter(event, parameter_name)
     if not parameter_value:
-        raise ValueError(f"Body parameter {parameter_name} is required")
+        raise KeyError(f"Body parameter {parameter_name} is required")
     return parameter_value
