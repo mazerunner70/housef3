@@ -36,7 +36,6 @@ from services.export_data_processors import (
 )
 from services.s3_file_handler import S3FileStreamer, ExportPackageBuilder, FileStreamingOptions
 from services.export_error_handler import export_error_handler, ErrorCategory
-
 logger = logging.getLogger(__name__)
 
 
@@ -105,7 +104,6 @@ class ExportService:
                          **filters) -> Dict[str, Any]:
         """
         Collect all user data for export using specialized entity exporters
-        
         Args:
             user_id: User identifier
             export_type: Type of export
@@ -147,7 +145,6 @@ class ExportService:
             transaction_file_exporter = TransactionFileExporter(user_id, self.batch_size)
             collected_data['transaction_files'] = transaction_file_exporter.collect_data(filters)
             export_summaries['transaction_files'] = transaction_file_exporter.get_export_summary()
-            
             # Collect analytics if requested
             if include_analytics:
                 analytics = self._collect_analytics(user_id)

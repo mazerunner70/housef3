@@ -87,7 +87,7 @@ def initiate_export_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
             date_range_end=export_request.date_range_end,
             category_ids=export_request.category_ids
         )
-        
+
         # Store export job in database
         create_export_job(export_job)
         
@@ -146,7 +146,6 @@ def get_export_status_handler(event: Dict[str, Any], user_id: str) -> Dict[str, 
             export_uuid = uuid.UUID(export_id)
         except ValueError:
             return create_response(400, {"error": "Invalid export ID format"})
-        
         # Retrieve export job from database
         export_job = get_export_job(export_id, user_id)
         if not export_job:
@@ -280,7 +279,7 @@ def delete_export_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]
             export_uuid = uuid.UUID(export_id)
         except ValueError:
             return create_response(400, {"error": "Invalid export ID format"})
-        
+ 
         # Retrieve export job from database and check ownership
         export_job = get_export_job(export_id, user_id)
         if not export_job:
@@ -299,8 +298,7 @@ def delete_export_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]
         # Delete export job from database
         success = delete_export_job(export_id, user_id)
         if not success:
-            return create_response(500, {"error": "Failed to delete export job"})
-        
+            return create_response(500, {"error": "Failed to delete export job"})   
         logger.info(f"Export {export_id} deleted for user {user_id}")
         
         return create_response(200, {"message": "Export deleted successfully"})
@@ -323,6 +321,7 @@ def process_export_job(export_job: ExportJob) -> ExportJob:
         export_job.progress = 10
         export_job.current_phase = "collecting_data"
         update_export_job(export_job)
+
         
         # Collect user data
         collected_data = export_service.collect_user_data(
@@ -334,15 +333,13 @@ def process_export_job(export_job: ExportJob) -> ExportJob:
         
         export_job.progress = 60
         export_job.current_phase = "building_package"
-        update_export_job(export_job)
-        
+        update_export_job(export_job)        
         # Build export package
         s3_key, package_size = export_service.build_export_package(export_job, collected_data)
         
         export_job.progress = 90
         export_job.current_phase = "generating_download_url"
         update_export_job(export_job)
-        
         # Generate download URL
         download_url = export_service.generate_download_url(s3_key)
         
@@ -355,7 +352,6 @@ def process_export_job(export_job: ExportJob) -> ExportJob:
         export_job.download_url = download_url
         export_job.completed_at = int(datetime.now(timezone.utc).timestamp() * 1000)
         update_export_job(export_job)
-        
         # Publish completion event
         completion_event = ExportCompletedEvent(
             user_id=export_job.user_id,
