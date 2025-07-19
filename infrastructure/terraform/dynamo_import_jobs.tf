@@ -76,6 +76,14 @@ resource "aws_s3_bucket" "import_packages" {
   }
 }
 
+# S3 Bucket Logging Configuration
+resource "aws_s3_bucket_logging" "import_packages_logging" {
+  bucket = aws_s3_bucket.import_packages.id
+  
+  target_bucket = aws_s3_bucket.file_storage.id
+  target_prefix = "logs/import-packages/"
+}
+
 # S3 Bucket Versioning
 resource "aws_s3_bucket_versioning" "import_packages_versioning" {
   bucket = aws_s3_bucket.import_packages.id
