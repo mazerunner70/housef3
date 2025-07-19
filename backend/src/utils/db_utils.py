@@ -26,6 +26,7 @@ from models import (
     AnalyticType,
     ComputationStatus
 )
+from models.export import ExportJob
 from models.category import Category, CategoryType, CategoryUpdate, CategoryRule
 from models.transaction import Transaction, TransactionCreate, TransactionUpdate
 from models.transaction_file import TransactionFileCreate, TransactionFileUpdate
@@ -49,6 +50,7 @@ FILE_MAPS_TABLE = os.environ.get('FILE_MAPS_TABLE')
 CATEGORIES_TABLE_NAME = os.environ.get('CATEGORIES_TABLE_NAME')
 ANALYTICS_DATA_TABLE = os.environ.get('ANALYTICS_DATA_TABLE', 'housef3-analytics-data')
 ANALYTICS_STATUS_TABLE = os.environ.get('ANALYTICS_STATUS_TABLE', 'housef3-analytics-status')
+EXPORT_JOBS_TABLE = os.environ.get('EXPORT_JOBS_TABLE')
 
 # Initialize table resources lazily
 _accounts_table = None
@@ -58,11 +60,12 @@ _file_maps_table = None
 _analytics_data_table = None
 _analytics_status_table = None
 _categories_table = None
+_export_jobs_table = None
 
 def initialize_tables():
     """Initialize all DynamoDB table resources."""
     global _transactions_table, _accounts_table, _files_table, _file_maps_table
-    global _analytics_data_table, _analytics_status_table, _categories_table, dynamodb
+    global _analytics_data_table, _analytics_status_table, _categories_table, _export_jobs_table, dynamodb
     
     # Re-initialize DynamoDB resource
     dynamodb = boto3.resource('dynamodb')
@@ -82,6 +85,8 @@ def initialize_tables():
         _analytics_status_table = dynamodb.Table(ANALYTICS_STATUS_TABLE)
     if CATEGORIES_TABLE_NAME:
         _categories_table = dynamodb.Table(CATEGORIES_TABLE_NAME)
+    if EXPORT_JOBS_TABLE:
+        _export_jobs_table = dynamodb.Table(EXPORT_JOBS_TABLE)
 
 def get_transactions_table() -> Any:
     """Get the transactions table resource, initializing it if needed."""
@@ -131,6 +136,13 @@ def get_categories_table() -> Any:
     if _categories_table is None:
         initialize_tables()
     return _categories_table
+
+def get_export_jobs_table() -> Any:
+    """Get the export jobs table resource, initializing it if needed."""
+    global _export_jobs_table
+    if _export_jobs_table is None:
+        initialize_tables()
+    return _export_jobs_table
 
 
 class NotAuthorized(Exception):
@@ -1825,3 +1837,179 @@ def list_stale_analytics(computation_needed_only: bool = True) -> List[Analytics
     except ClientError as e:
         logger.error(f"Error listing stale analytics: {str(e)}")
         raise 
+
+
+# =============================================================================
+# Export Jobs Functions
+# =============================================================================
+
+def create_export_job(export_job: ExportJob) -> None:
+    """
+    Create a new export job in DynamoDB.
+    
+    Args:
+        export_job: The ExportJob object to store
+        
+    Raises:
+        ClientError: If there's a DynamoDB error
+    """
+    try:
+        item = export_job.to_dynamodb_item()
+        get_export_jobs_table().put_item(Item=item)
+        logger.info(f"Created export job: {export_job.export_id} for user {export_job.user_id}")
+    except ClientError as e:
+        logger.error(f"Error creating export job: {str(e)}")
+        raise
+
+
+def get_export_job(export_id: str, user_id: str) -> Optional[ExportJob]:
+    """
+    Retrieve an export job by ID and user ID.
+    
+    Args:
+        export_id: The export job ID
+        user_id: The user ID (for access control)
+        
+    Returns:
+        ExportJob object if found and owned by user, None otherwise
+    """
+    try:
+        response = get_export_jobs_table().get_item(Key={'exportId': export_id})
+        
+        if 'Item' in response:
+            item = response['Item']
+            # Check user ownership
+            if item.get('userId') == user_id:
+                return ExportJob.from_dynamodb_item(item)
+            else:
+                logger.warning(f"User {user_id} attempted to access export job {export_id} owned by {item.get('userId')}")
+                return None
+        return None
+    except ClientError as e:
+        logger.error(f"Error retrieving export job {export_id}: {str(e)}")
+        return None
+
+
+def update_export_job(export_job: ExportJob) -> None:
+    """
+    Update an existing export job in DynamoDB.
+    
+    Args:
+        export_job: The ExportJob object with updated details
+        
+    Raises:
+        ClientError: If there's a DynamoDB error
+    """
+    try:
+        item = export_job.to_dynamodb_item()
+        get_export_jobs_table().put_item(Item=item)
+        logger.info(f"Updated export job: {export_job.export_id}")
+    except ClientError as e:
+        logger.error(f"Error updating export job {export_job.export_id}: {str(e)}")
+        raise
+
+
+def list_user_export_jobs(user_id: str, limit: int = 20, last_evaluated_key: Optional[Dict[str, Any]] = None) -> Tuple[List[ExportJob], Optional[Dict[str, Any]]]:
+    """
+    List export jobs for a user with pagination.
+    
+    Args:
+        user_id: The user ID
+        limit: Maximum number of jobs to return
+        last_evaluated_key: For pagination
+        
+    Returns:
+        Tuple of (export_jobs_list, next_pagination_key)
+    """
+    try:
+        query_params = {
+            'IndexName': 'UserIdIndex',
+            'KeyConditionExpression': Key('userId').eq(user_id),
+            'Limit': limit,
+            'ScanIndexForward': False  # Most recent first
+        }
+        
+        if last_evaluated_key:
+            query_params['ExclusiveStartKey'] = last_evaluated_key
+        
+        response = get_export_jobs_table().query(**query_params)
+        
+        export_jobs = []
+        for item in response.get('Items', []):
+            try:
+                export_job = ExportJob.from_dynamodb_item(item)
+                export_jobs.append(export_job)
+            except Exception as e:
+                logger.error(f"Error creating ExportJob from item: {str(e)}")
+                continue
+        
+        pagination_key = response.get('LastEvaluatedKey')
+        
+        logger.info(f"Listed {len(export_jobs)} export jobs for user {user_id}")
+        return export_jobs, pagination_key
+        
+    except ClientError as e:
+        logger.error(f"Error listing export jobs for user {user_id}: {str(e)}")
+        return [], None
+
+
+def delete_export_job(export_id: str, user_id: str) -> bool:
+    """
+    Delete an export job.
+    
+    Args:
+        export_id: The export job ID
+        user_id: The user ID (for access control)
+        
+    Returns:
+        True if deleted, False if not found or access denied
+    """
+    try:
+        # First verify ownership
+        export_job = get_export_job(export_id, user_id)
+        if not export_job:
+            logger.warning(f"Export job {export_id} not found or access denied for user {user_id}")
+            return False
+        
+        # Delete the job
+        get_export_jobs_table().delete_item(Key={'exportId': export_id})
+        logger.info(f"Deleted export job: {export_id} for user {user_id}")
+        return True
+        
+    except ClientError as e:
+        logger.error(f"Error deleting export job {export_id}: {str(e)}")
+        return False
+
+
+def cleanup_expired_export_jobs() -> int:
+    """
+    Clean up expired export jobs.
+    
+    Returns:
+        Number of jobs cleaned up
+    """
+    try:
+        current_time = int(datetime.now(timezone.utc).timestamp() * 1000)
+        
+        # Scan for expired jobs
+        response = get_export_jobs_table().scan(
+            FilterExpression=Attr('expiresAt').lt(current_time)
+        )
+        
+        expired_jobs = response.get('Items', [])
+        cleanup_count = 0
+        
+        # Delete expired jobs in batches
+        with get_export_jobs_table().batch_writer() as batch:
+            for job_item in expired_jobs:
+                batch.delete_item(Key={'exportId': job_item['exportId']})
+                cleanup_count += 1
+        
+        if cleanup_count > 0:
+            logger.info(f"Cleaned up {cleanup_count} expired export jobs")
+            
+        return cleanup_count
+        
+    except Exception as e:
+        logger.error(f"Error cleaning up expired export jobs: {str(e)}")
+        return 0

@@ -45,6 +45,14 @@ from handlers.file_processor import process_file
 from services.file_service import get_files_for_user, format_file_metadata, get_files_for_account
 from utils.lambda_utils import create_response, mandatory_body_parameter, mandatory_path_parameter, handle_error, mandatory_query_parameter, optional_body_parameter, optional_query_parameter 
 
+# Event-driven architecture imports
+from services.event_service import event_service
+from models.events import FileAssociatedEvent, TransactionsDeletedEvent
+
+# Shadow mode configuration
+ENABLE_EVENT_PUBLISHING = os.environ.get('ENABLE_EVENT_PUBLISHING', 'true').lower() == 'true'
+ENABLE_DIRECT_TRIGGERS = os.environ.get('ENABLE_DIRECT_TRIGGERS', 'false').lower() == 'true'
+
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -381,22 +389,41 @@ def unassociate_file_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
         
         checked_mandatory_account(file.account_id, user_id)
         
+        # Store previous account ID for event
+        previous_account_id = file.account_id
+        
         # Update the file to remove account association
         logger.info(f"Removing association between file {file_id} and account {file.account_id}")
         update_transaction_file(file_id, user_id, {'account_id': None})
         
-        # Trigger analytics refresh for file unassociation
-        try:
-            from utils.analytics_utils import trigger_analytics_for_account_change
-            trigger_analytics_for_account_change(user_id, 'unassociate')
-            logger.info(f"Analytics refresh triggered for file unassociation: {file_id}")
-        except Exception as e:
-            logger.warning(f"Failed to trigger analytics for file unassociation: {str(e)}")
+        # Handle file unassociation with shadow mode support
+        # NEW: Event publishing (if enabled)
+        if ENABLE_EVENT_PUBLISHING:
+            try:
+                file_event = FileAssociatedEvent(
+                    user_id=user_id,
+                    file_id=str(file_id),
+                    account_id='',  # No account now
+                    previous_account_id=str(previous_account_id) if previous_account_id else None
+                )
+                event_service.publish_event(file_event)
+                logger.info(f"FileAssociatedEvent (unassociation) published for file {file_id}")
+            except Exception as e:
+                logger.warning(f"Failed to publish file unassociation event: {str(e)}")
+        
+        # OLD: Direct analytics triggering (if enabled for shadow mode)
+        if ENABLE_DIRECT_TRIGGERS:
+            try:
+                from utils.analytics_utils import trigger_analytics_for_account_change
+                trigger_analytics_for_account_change(user_id, 'unassociate')
+                logger.info(f"Direct analytics refresh triggered for file unassociation: {file_id}")
+            except Exception as e:
+                logger.warning(f"Failed to trigger direct analytics for file unassociation: {str(e)}")
         
         return create_response(200, {
             "message": "File successfully unassociated from account",
             "fileId": file_id,
-            "previousAccountId": file.account_id
+            "previousAccountId": previous_account_id
         })
 
     except ValueError as e:
@@ -423,18 +450,37 @@ def associate_file_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any
         # Verify that the account exists and belongs to the user
         account = checked_mandatory_account(account_id, user_id)
             
+        # Store previous account ID for event (if any)
+        previous_account_id = file.account_id
+        
         # Update the file to add account association
         logger.info(f"Associating file {file_id} with account {account_id}")
         file.account_id = account_id
         response: FileProcessorResponse = process_file(file)
         
-        # Trigger analytics refresh for file association
-        try:
-            from utils.analytics_utils import trigger_analytics_for_account_change
-            trigger_analytics_for_account_change(user_id, 'associate')
-            logger.info(f"Analytics refresh triggered for file association: {file_id}")
-        except Exception as e:
-            logger.warning(f"Failed to trigger analytics for file association: {str(e)}")
+        # Handle file association with shadow mode support
+        # NEW: Event publishing (if enabled)
+        if ENABLE_EVENT_PUBLISHING:
+            try:
+                file_event = FileAssociatedEvent(
+                    user_id=user_id,
+                    file_id=str(file_id),
+                    account_id=str(account_id),
+                    previous_account_id=str(previous_account_id) if previous_account_id else None
+                )
+                event_service.publish_event(file_event)
+                logger.info(f"FileAssociatedEvent published for file {file_id} with account {account_id}")
+            except Exception as e:
+                logger.warning(f"Failed to publish file association event: {str(e)}")
+        
+        # OLD: Direct analytics triggering (if enabled for shadow mode)
+        if ENABLE_DIRECT_TRIGGERS:
+            try:
+                from utils.analytics_utils import trigger_analytics_for_account_change
+                trigger_analytics_for_account_change(user_id, 'associate')
+                logger.info(f"Direct analytics refresh triggered for file association: {file_id}")
+            except Exception as e:
+                logger.warning(f"Failed to trigger direct analytics for file association: {str(e)}")
         
         return create_response(200, response.to_dict())
     except Exception as e:
@@ -605,14 +651,30 @@ def delete_file_transactions_handler(event: Dict[str, Any], user_id: str) -> Dic
         # Delete all transactions for the file
         deleted_count = delete_transactions_for_file(file_id)
         
-        # Trigger analytics refresh for bulk transaction deletion
+        # Handle bulk transaction deletion with shadow mode support
         if deleted_count > 0:
-            try:
-                from utils.analytics_utils import trigger_analytics_for_transaction_change
-                trigger_analytics_for_transaction_change(user_id, 'bulk_delete')
-                logger.info(f"Analytics refresh triggered for bulk transaction deletion: {deleted_count} transactions")
-            except Exception as e:
-                logger.warning(f"Failed to trigger analytics for bulk transaction deletion: {str(e)}")
+            # NEW: Event publishing (if enabled)
+            if ENABLE_EVENT_PUBLISHING:
+                try:
+                    delete_event = TransactionsDeletedEvent(
+                        user_id=user_id,
+                        transaction_ids=[],  # We don't have individual IDs for bulk delete by file
+                        account_ids=[str(file.account_id)] if file.account_id else [],
+                        deletion_type='file_reprocessing'
+                    )
+                    event_service.publish_event(delete_event)
+                    logger.info(f"TransactionsDeletedEvent published for bulk deletion: {deleted_count} transactions from file {file_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to publish bulk transaction deletion event: {str(e)}")
+            
+            # OLD: Direct analytics triggering (if enabled for shadow mode)
+            if ENABLE_DIRECT_TRIGGERS:
+                try:
+                    from utils.analytics_utils import trigger_analytics_for_transaction_change
+                    trigger_analytics_for_transaction_change(user_id, 'bulk_delete')
+                    logger.info(f"Direct analytics refresh triggered for bulk transaction deletion: {deleted_count} transactions")
+                except Exception as e:
+                    logger.warning(f"Failed to trigger direct analytics for bulk transaction deletion: {str(e)}")
         
         return create_response(200, {
             'fileId': file_id,

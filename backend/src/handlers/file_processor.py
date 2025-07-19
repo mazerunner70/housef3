@@ -41,6 +41,14 @@ import time
 from utils.s3_dao import get_object_content, get_object_metadata
 import traceback
 
+# Event-driven architecture imports
+from services.event_service import event_service
+from models.events import FileProcessedEvent
+
+# Shadow mode configuration
+ENABLE_EVENT_PUBLISHING = os.environ.get('ENABLE_EVENT_PUBLISHING', 'true').lower() == 'true'
+ENABLE_DIRECT_TRIGGERS = os.environ.get('ENABLE_DIRECT_TRIGGERS', 'false').lower() == 'true'
+
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -198,15 +206,43 @@ def handler(event, context):
             file_processor_response: FileProcessorResponse = process_file(transaction_file)
             logger.info(f"File processing via process_file service complete. Message: {file_processor_response.message}, Tx Count: {file_processor_response.transaction_count}")
 
-            # Trigger analytics update if file processing was successful
+            # Handle successful file processing with shadow mode support
             if file_processor_response.transaction_count > 0:
-                try:
-                    from utils.analytics_utils import trigger_analytics_refresh
-                    trigger_analytics_refresh(user_id, priority=2)  # Medium priority for file upload
-                    logger.info(f"Analytics refresh triggered for user {user_id} after successful file processing")
-                except Exception as e:
-                    logger.warning(f"Failed to trigger analytics for user {user_id}: {str(e)}")
-                    # Don't fail the file processing because of analytics trigger failure
+                # NEW: Event publishing (if enabled)
+                if ENABLE_EVENT_PUBLISHING:
+                    try:
+                        # Get transaction IDs if we have transactions
+                        transaction_ids = []
+                        if file_processor_response.transactions:
+                            transaction_ids = [str(tx.transaction_id) for tx in file_processor_response.transactions]
+                        
+                        # Publish consolidated file processed event with transaction IDs
+                        file_event = FileProcessedEvent(
+                            user_id=user_id,
+                            file_id=str(transaction_file.file_id),
+                            account_id=str(transaction_file.account_id) if transaction_file.account_id else '',
+                            transaction_count=file_processor_response.transaction_count,
+                            duplicate_count=file_processor_response.duplicate_count or 0,
+                            processing_status='success',
+                            transaction_ids=transaction_ids
+                        )
+                        event_service.publish_event(file_event)
+                        logger.info(f"FileProcessedEvent published for file {transaction_file.file_id} with {len(transaction_ids)} transaction IDs")
+                        
+                        logger.info(f"Events published successfully for user {user_id} after file processing")
+                    except Exception as e:
+                        logger.warning(f"Failed to publish events for user {user_id}: {str(e)}")
+                        # Don't fail the file processing because of event publishing failure
+                
+                # OLD: Direct analytics triggering (if enabled for shadow mode)
+                if ENABLE_DIRECT_TRIGGERS:
+                    try:
+                        from utils.analytics_utils import trigger_analytics_refresh
+                        trigger_analytics_refresh(user_id, priority=2)  # Medium priority for file upload
+                        logger.info(f"Direct analytics refresh triggered for user {user_id} after successful file processing")
+                    except Exception as e:
+                        logger.warning(f"Failed to trigger direct analytics for user {user_id}: {str(e)}")
+                        # Don't fail the file processing because of analytics trigger failure
 
             # Re-fetch the transaction file to get its latest state for the response
             updated_transaction_file = get_transaction_file(transaction_file.file_id)
@@ -228,6 +264,26 @@ def handler(event, context):
         except Exception as e:
             logger.error(f"Error processing file: {str(e)}")
             logger.error(f"Stack trace: {traceback.format_exc()}")
+            
+            # Handle file processing failure with shadow mode support
+            if ENABLE_EVENT_PUBLISHING:
+                try:
+                    file_event = FileProcessedEvent(
+                        user_id=user_id,
+                        file_id=str(transaction_file.file_id) if 'transaction_file' in locals() else '',
+                        account_id=str(transaction_file.account_id) if 'transaction_file' in locals() and transaction_file.account_id else '',
+                        transaction_count=0,
+                        duplicate_count=0,
+                        processing_status='failed',
+                        error_message=str(e)
+                    )
+                    event_service.publish_event(file_event)
+                    logger.info(f"FileProcessedEvent (failed) published for file processing error")
+                except Exception as event_error:
+                    logger.warning(f"Failed to publish failure event: {str(event_error)}")
+            
+            # Note: No direct trigger needed for failures
+            
             return {
                 'statusCode': 500,
                 'body': json.dumps({
