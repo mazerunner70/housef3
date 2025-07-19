@@ -28,6 +28,7 @@ from models import (
 )
 from models.export import ExportJob
 from models.category import Category, CategoryType, CategoryUpdate, CategoryRule
+from models.import_job import ImportJob
 from models.transaction import Transaction, TransactionCreate, TransactionUpdate
 from models.transaction_file import TransactionFileCreate, TransactionFileUpdate
 from boto3.dynamodb.conditions import Key, Attr
@@ -51,6 +52,7 @@ CATEGORIES_TABLE_NAME = os.environ.get('CATEGORIES_TABLE_NAME')
 ANALYTICS_DATA_TABLE = os.environ.get('ANALYTICS_DATA_TABLE', 'housef3-analytics-data')
 ANALYTICS_STATUS_TABLE = os.environ.get('ANALYTICS_STATUS_TABLE', 'housef3-analytics-status')
 EXPORT_JOBS_TABLE = os.environ.get('EXPORT_JOBS_TABLE')
+IMPORT_JOBS_TABLE = os.environ.get('IMPORT_JOBS_TABLE')
 
 # Initialize table resources lazily
 _accounts_table = None
@@ -61,11 +63,12 @@ _analytics_data_table = None
 _analytics_status_table = None
 _categories_table = None
 _export_jobs_table = None
+_import_jobs_table = None
 
 def initialize_tables():
     """Initialize all DynamoDB table resources."""
     global _transactions_table, _accounts_table, _files_table, _file_maps_table
-    global _analytics_data_table, _analytics_status_table, _categories_table, _export_jobs_table, dynamodb
+    global _analytics_data_table, _analytics_status_table, _categories_table, _export_jobs_table, _import_jobs_table, dynamodb
     
     # Re-initialize DynamoDB resource
     dynamodb = boto3.resource('dynamodb')
@@ -87,6 +90,8 @@ def initialize_tables():
         _categories_table = dynamodb.Table(CATEGORIES_TABLE_NAME)
     if EXPORT_JOBS_TABLE:
         _export_jobs_table = dynamodb.Table(EXPORT_JOBS_TABLE)
+    if IMPORT_JOBS_TABLE:
+        _import_jobs_table = dynamodb.Table(IMPORT_JOBS_TABLE)
 
 def get_transactions_table() -> Any:
     """Get the transactions table resource, initializing it if needed."""
@@ -143,6 +148,14 @@ def get_export_jobs_table() -> Any:
     if _export_jobs_table is None:
         initialize_tables()
     return _export_jobs_table
+
+
+def get_import_jobs_table() -> Any:
+    """Get the import jobs table resource, initializing it if needed."""
+    global _import_jobs_table
+    if _import_jobs_table is None:
+        initialize_tables()
+    return _import_jobs_table
 
 
 class NotAuthorized(Exception):
@@ -2012,4 +2025,183 @@ def cleanup_expired_export_jobs() -> int:
         
     except Exception as e:
         logger.error(f"Error cleaning up expired export jobs: {str(e)}")
+        return 0
+
+
+# =============================================================================
+# Import Jobs Functions
+# =============================================================================
+
+def create_import_job(import_job: 'ImportJob') -> None:
+    """
+    Create a new import job in DynamoDB.
+    
+    Args:
+        import_job: The ImportJob object to store
+        
+    Raises:
+        ClientError: If there's a DynamoDB error
+    """
+    try:
+        from models.import_job import ImportJob
+        item = import_job.to_dynamodb_item()
+        get_import_jobs_table().put_item(Item=item)
+        logger.info(f"Created import job: {import_job.import_id} for user {import_job.user_id}")
+    except ClientError as e:
+        logger.error(f"Error creating import job: {str(e)}")
+        raise
+
+
+def get_import_job(import_id: str, user_id: str) -> Optional['ImportJob']:
+    """
+    Retrieve an import job by ID and user ID.
+    
+    Args:
+        import_id: The import job ID
+        user_id: The user ID (for access control)
+        
+    Returns:
+        ImportJob object if found and owned by user, None otherwise
+    """
+    try:
+        from models.import_job import ImportJob
+        response = get_import_jobs_table().get_item(Key={'importId': import_id})
+        
+        if 'Item' in response:
+            item = response['Item']
+            # Check user ownership
+            if item.get('userId') == user_id:
+                return ImportJob.from_dynamodb_item(item)
+            else:
+                logger.warning(f"User {user_id} attempted to access import job {import_id} owned by {item.get('userId')}")
+                return None
+        return None
+    except ClientError as e:
+        logger.error(f"Error retrieving import job {import_id}: {str(e)}")
+        return None
+
+
+def update_import_job(import_job: 'ImportJob') -> None:
+    """
+    Update an existing import job in DynamoDB.
+    
+    Args:
+        import_job: The ImportJob object with updated details
+        
+    Raises:
+        ClientError: If there's a DynamoDB error
+    """
+    try:
+        item = import_job.to_dynamodb_item()
+        get_import_jobs_table().put_item(Item=item)
+        logger.info(f"Updated import job: {import_job.import_id}")
+    except ClientError as e:
+        logger.error(f"Error updating import job {import_job.import_id}: {str(e)}")
+        raise
+
+
+def list_user_import_jobs(user_id: str, limit: int = 20, last_evaluated_key: Optional[Dict[str, Any]] = None) -> Tuple[List['ImportJob'], Optional[Dict[str, Any]]]:
+    """
+    List import jobs for a user with pagination.
+    
+    Args:
+        user_id: The user ID
+        limit: Maximum number of jobs to return
+        last_evaluated_key: For pagination
+        
+    Returns:
+        Tuple of (import_jobs_list, next_pagination_key)
+    """
+    try:
+        from models.import_job import ImportJob
+        query_params = {
+            'IndexName': 'UserIdIndex',
+            'KeyConditionExpression': Key('userId').eq(user_id),
+            'Limit': limit,
+            'ScanIndexForward': False  # Most recent first
+        }
+        
+        if last_evaluated_key:
+            query_params['ExclusiveStartKey'] = last_evaluated_key
+        
+        response = get_import_jobs_table().query(**query_params)
+        
+        import_jobs = []
+        for item in response.get('Items', []):
+            try:
+                import_job = ImportJob.from_dynamodb_item(item)
+                import_jobs.append(import_job)
+            except Exception as e:
+                logger.error(f"Error creating ImportJob from item: {str(e)}")
+                continue
+        
+        pagination_key = response.get('LastEvaluatedKey')
+        
+        logger.info(f"Listed {len(import_jobs)} import jobs for user {user_id}")
+        return import_jobs, pagination_key
+        
+    except ClientError as e:
+        logger.error(f"Error listing import jobs for user {user_id}: {str(e)}")
+        return [], None
+
+
+def delete_import_job(import_id: str, user_id: str) -> bool:
+    """
+    Delete an import job.
+    
+    Args:
+        import_id: The import job ID
+        user_id: The user ID (for access control)
+        
+    Returns:
+        True if deleted, False if not found or access denied
+    """
+    try:
+        # First verify ownership
+        import_job = get_import_job(import_id, user_id)
+        if not import_job:
+            logger.warning(f"Import job {import_id} not found or access denied for user {user_id}")
+            return False
+        
+        # Delete the job
+        get_import_jobs_table().delete_item(Key={'importId': import_id})
+        logger.info(f"Deleted import job: {import_id} for user {user_id}")
+        return True
+        
+    except ClientError as e:
+        logger.error(f"Error deleting import job {import_id}: {str(e)}")
+        return False
+
+
+def cleanup_expired_import_jobs() -> int:
+    """
+    Clean up expired import jobs.
+    
+    Returns:
+        Number of jobs cleaned up
+    """
+    try:
+        current_time = int(datetime.now(timezone.utc).timestamp() * 1000)
+        
+        # Scan for expired jobs
+        response = get_import_jobs_table().scan(
+            FilterExpression=Attr('expiresAt').lt(current_time)
+        )
+        
+        expired_jobs = response.get('Items', [])
+        cleanup_count = 0
+        
+        # Delete expired jobs in batches
+        with get_import_jobs_table().batch_writer() as batch:
+            for job_item in expired_jobs:
+                batch.delete_item(Key={'importId': job_item['importId']})
+                cleanup_count += 1
+        
+        if cleanup_count > 0:
+            logger.info(f"Cleaned up {cleanup_count} expired import jobs")
+            
+        return cleanup_count
+        
+    except Exception as e:
+        logger.error(f"Error cleaning up expired import jobs: {str(e)}")
         return 0
