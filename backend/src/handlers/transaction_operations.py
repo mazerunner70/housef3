@@ -10,6 +10,10 @@ from utils.auth import get_user_from_event
 from utils.db_utils import list_user_transactions, get_transactions_table
 from utils.lambda_utils import create_response, mandatory_path_parameter
 
+# Event-driven architecture imports
+from services.event_service import event_service
+from models.events import TransactionUpdatedEvent, TransactionsDeletedEvent
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
@@ -188,13 +192,18 @@ def delete_transaction_handler(event: Dict[str, Any], user_id: str) -> Dict[str,
         # Delete the transaction
         get_transactions_table().delete_item(Key={'transactionId': transaction_id})
         
-        # Trigger analytics refresh for transaction deletion
+        # Publish transaction deletion event
         try:
-            from utils.analytics_utils import trigger_analytics_for_transaction_change
-            trigger_analytics_for_transaction_change(user_id, 'delete')
-            logger.info(f"Analytics refresh triggered for transaction deletion: {transaction_id}")
+            delete_event = TransactionsDeletedEvent(
+                user_id=user_id,
+                transaction_ids=[transaction_id],
+                account_ids=[str(transaction.account_id)],
+                deletion_type='single'
+            )
+            event_service.publish_event(delete_event)
+            logger.info(f"TransactionsDeletedEvent published for transaction deletion: {transaction_id}")
         except Exception as e:
-            logger.warning(f"Failed to trigger analytics for transaction deletion: {str(e)}")
+            logger.warning(f"Failed to publish transaction deletion event: {str(e)}")
         
         return create_response(200, {"message": "Transaction deleted successfully"})
     except Exception as e:
@@ -398,6 +407,10 @@ def add_manual_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str
         if transaction.user_id != user_id:
             return create_response(403, {"error": "Unauthorized to modify this transaction"})
         
+        # Store old state for event tracking
+        old_category_count = len(transaction.confirmed_categories)
+        old_primary_category_id = transaction.primary_category_id
+        
         # Add manual category
         category_uuid = uuid.UUID(category_id)
         transaction.add_manual_category(category_uuid, set_as_primary=is_primary)
@@ -405,6 +418,33 @@ def add_manual_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str
         # Update transaction in database
         transaction_item = transaction.to_dynamodb_item()
         get_transactions_table().put_item(Item=transaction_item)
+        
+        # Publish transaction updated event
+        try:
+            changes = [{
+                'field': 'categories',
+                'oldValue': old_category_count,
+                'newValue': len(transaction.confirmed_categories)
+            }]
+            
+            # If primary category changed, add that to changes
+            if is_primary and old_primary_category_id != transaction.primary_category_id:
+                changes.append({
+                    'field': 'primaryCategoryId',
+                    'oldValue': str(old_primary_category_id) if old_primary_category_id else None,
+                    'newValue': category_id
+                })
+            
+            update_event = TransactionUpdatedEvent(
+                user_id=user_id,
+                transaction_id=transaction_id,
+                account_id=str(transaction.account_id),
+                changes=changes
+            )
+            event_service.publish_event(update_event)
+            logger.info(f"TransactionUpdatedEvent published for manual category addition: {transaction_id}")
+        except Exception as e:
+            logger.warning(f"Failed to publish transaction update event: {str(e)}")
         
         return create_response(201, {
             "transactionId": transaction_id,
@@ -451,6 +491,9 @@ def quick_update_category_handler(event: Dict[str, Any], user_id: str) -> Dict[s
         if transaction.user_id != user_id:
             return create_response(403, {"error": "Unauthorized to modify this transaction"})
         
+        # Store old primary category for event tracking
+        old_primary_category_id = transaction.primary_category_id
+        
         # Add the category as a manual assignment and set as primary
         category_uuid = uuid.UUID(category_id)
         transaction.add_manual_category(category_uuid, set_as_primary=True)
@@ -458,6 +501,25 @@ def quick_update_category_handler(event: Dict[str, Any], user_id: str) -> Dict[s
         # Update transaction in database
         transaction_item = transaction.to_dynamodb_item()
         get_transactions_table().put_item(Item=transaction_item)
+        
+        # Publish transaction updated event
+        try:
+            changes = [{
+                'field': 'primaryCategoryId',
+                'oldValue': str(old_primary_category_id) if old_primary_category_id else None,
+                'newValue': category_id
+            }]
+            
+            update_event = TransactionUpdatedEvent(
+                user_id=user_id,
+                transaction_id=transaction_id,
+                account_id=str(transaction.account_id),
+                changes=changes
+            )
+            event_service.publish_event(update_event)
+            logger.info(f"TransactionUpdatedEvent published for category update: {transaction_id}")
+        except Exception as e:
+            logger.warning(f"Failed to publish transaction update event: {str(e)}")
         
         return create_response(200, {
             "success": True,

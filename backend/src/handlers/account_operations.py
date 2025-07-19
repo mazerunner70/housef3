@@ -35,6 +35,10 @@ from utils.auth import get_user_from_event
 from utils.lambda_utils import mandatory_body_parameter, mandatory_path_parameter, mandatory_query_parameter, optional_body_parameter
 from utils.s3_dao import generate_upload_url
 
+# Event-driven architecture imports
+from services.event_service import event_service
+from models.events import AccountCreatedEvent, AccountUpdatedEvent, AccountDeletedEvent
+
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -127,13 +131,19 @@ def create_account_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any
         # Validate and create the account
         create_account(account)
         
-        # Trigger analytics refresh for account creation
+        # Publish account creation event
         try:
-            from utils.analytics_utils import trigger_analytics_for_account_change
-            trigger_analytics_for_account_change(user_id, 'create')
-            logger.info(f"Analytics refresh triggered for account creation: {account.account_id}")
+            create_event = AccountCreatedEvent(
+                user_id=user_id,
+                account_id=str(account.account_id),
+                account_name=account.account_name,
+                account_type=account.account_type.value,
+                currency=account.currency.value if account.currency else 'USD'
+            )
+            event_service.publish_event(create_event)
+            logger.info(f"AccountCreatedEvent published for account creation: {account.account_id}")
         except Exception as e:
-            logger.warning(f"Failed to trigger analytics for account creation: {str(e)}")
+            logger.warning(f"Failed to publish account creation event: {str(e)}")
         
         # Return the created account
         account_dict = account.model_dump(by_alias=True)
@@ -211,6 +221,9 @@ def update_account_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any
         # Convert currency input to Currency enum if provided
         currency_enum = convert_currency_input(currency) if currency is not None else None
         
+        # Get original account for change tracking
+        original_account = get_account(uuid.UUID(account_id))
+        
         # Update the account
         updated_account = update_account(uuid.UUID(account_id), user_id, {
             'account_name': account_name,
@@ -223,13 +236,34 @@ def update_account_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any
             'default_file_map_id': default_field_map_id
         })
         
-        # Trigger analytics refresh for account update
+        # Publish account update event
         try:
-            from utils.analytics_utils import trigger_analytics_for_account_change
-            trigger_analytics_for_account_change(user_id, 'update')
-            logger.info(f"Analytics refresh triggered for account update: {account_id}")
+            # Track changes
+            changes = []
+            if original_account and updated_account:
+                if original_account.account_name != updated_account.account_name:
+                    changes.append({
+                        'field': 'accountName',
+                        'oldValue': original_account.account_name,
+                        'newValue': updated_account.account_name
+                    })
+                if original_account.account_type != updated_account.account_type:
+                    changes.append({
+                        'field': 'accountType',
+                        'oldValue': original_account.account_type.value,
+                        'newValue': updated_account.account_type.value
+                    })
+                # Add other fields as needed
+            
+            update_event = AccountUpdatedEvent(
+                user_id=user_id,
+                account_id=account_id,
+                changes=changes
+            )
+            event_service.publish_event(update_event)
+            logger.info(f"AccountUpdatedEvent published for account update: {account_id}")
         except Exception as e:
-            logger.warning(f"Failed to trigger analytics for account update: {str(e)}")
+            logger.warning(f"Failed to publish account update event: {str(e)}")
         
         # Return the updated account
         account_dict = updated_account.model_dump(by_alias=True)
@@ -254,18 +288,25 @@ def delete_account_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any
         account_id = mandatory_path_parameter(event, 'id')
         
         # Verify the account exists and belongs to the user
-        checked_mandatory_account(uuid.UUID(account_id), user_id)
+        account_to_delete = checked_mandatory_account(uuid.UUID(account_id), user_id)
         
         # Delete the account
         delete_account(uuid.UUID(account_id), user_id)
         
-        # Trigger analytics refresh for account deletion
+        # Publish account deletion event
         try:
-            from utils.analytics_utils import trigger_analytics_for_account_change
-            trigger_analytics_for_account_change(user_id, 'delete')
-            logger.info(f"Analytics refresh triggered for account deletion: {account_id}")
+            # TODO: Get actual transaction count for this account
+            transaction_count = 0  # Would need to count transactions before deletion
+            
+            delete_event = AccountDeletedEvent(
+                user_id=user_id,
+                account_id=account_id,
+                transaction_count=transaction_count
+            )
+            event_service.publish_event(delete_event)
+            logger.info(f"AccountDeletedEvent published for account deletion: {account_id}")
         except Exception as e:
-            logger.warning(f"Failed to trigger analytics for account deletion: {str(e)}")
+            logger.warning(f"Failed to publish account deletion event: {str(e)}")
         
         return create_response(200, {
             'message': 'Account deleted successfully',

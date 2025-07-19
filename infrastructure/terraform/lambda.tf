@@ -357,7 +357,9 @@ resource "aws_iam_role_policy" "lambda_dynamodb_access" {
           aws_dynamodb_table.categories.arn,
           "${aws_dynamodb_table.categories.arn}/index/*",
           aws_dynamodb_table.transaction_category_assignments.arn,
-          "${aws_dynamodb_table.transaction_category_assignments.arn}/index/*"
+          "${aws_dynamodb_table.transaction_category_assignments.arn}/index/*",
+          aws_dynamodb_table.export_jobs.arn,
+          "${aws_dynamodb_table.export_jobs.arn}/index/*"
         ]
       }
     ]
@@ -579,6 +581,51 @@ resource "aws_lambda_function" "categories_lambda" {
   }
 }
 # End Categories Lambda Function
+
+# Export Operations Lambda
+resource "aws_lambda_function" "export_operations" {
+  filename         = "../../backend/lambda_deploy.zip"
+  function_name    = "${var.project_name}-${var.environment}-export-operations"
+  handler          = "handlers/export_operations.handler"
+  runtime          = "python3.10"
+  role            = aws_iam_role.lambda_exec.arn
+  timeout         = 900  # 15 minutes for export processing
+  memory_size     = 1024  # More memory for large exports
+  source_code_hash = base64encode(local.source_code_hash)
+  depends_on      = [null_resource.prepare_lambda]
+  
+  environment {
+    variables = {
+      ENVIRONMENT           = var.environment
+      EXPORT_JOBS_TABLE     = aws_dynamodb_table.export_jobs.name
+      ACCOUNTS_TABLE        = aws_dynamodb_table.accounts.name
+      TRANSACTIONS_TABLE    = aws_dynamodb_table.transactions.name
+      CATEGORIES_TABLE_NAME = aws_dynamodb_table.categories.name
+      FILE_MAPS_TABLE       = aws_dynamodb_table.file_maps.name
+      FILES_TABLE          = aws_dynamodb_table.transaction_files.name
+      ANALYTICS_DATA_TABLE  = aws_dynamodb_table.analytics_data.name
+      FILE_STORAGE_BUCKET   = aws_s3_bucket.file_storage.id
+      EVENT_BUS_NAME       = aws_cloudwatch_event_bus.app_events.name
+    }
+  }
+  
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_cloudwatch_log_group" "export_operations" {
+  name              = "/aws/lambda/${aws_lambda_function.export_operations.function_name}"
+  retention_in_days = 7
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
 
 resource "aws_cloudwatch_log_group" "categories_lambda" {
   name              = "/aws/lambda/${aws_lambda_function.categories_lambda.function_name}"
