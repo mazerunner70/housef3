@@ -366,6 +366,50 @@ resource "aws_iam_role_policy" "lambda_dynamodb_access" {
   })
 }
 
+resource "aws_iam_role_policy" "lambda_s3_access" {
+  name = "s3-access-v2"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket"
+        ]
+        Effect = "Allow"
+        Resource = [
+          aws_s3_bucket.file_storage.arn,
+          "${aws_s3_bucket.file_storage.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "lambda_eventbridge_access" {
+  name = "eventbridge-access-v1"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "events:PutEvents"
+        ]
+        Effect = "Allow"
+        Resource = [
+          aws_cloudwatch_event_bus.app_events.arn
+        ]
+      }
+    ]
+  })
+}
+
 resource "aws_cloudwatch_log_group" "file_operations" {
   name              = "/aws/lambda/${aws_lambda_function.file_operations.function_name}"
   retention_in_days = 7

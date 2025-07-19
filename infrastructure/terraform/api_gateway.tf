@@ -570,16 +570,15 @@ resource "aws_apigatewayv2_integration" "analytics_operations" {
   description           = "Lambda integration for analytics operations endpoints"
 }
 
-# Get analytics data by type
+# Analytics routes
 resource "aws_apigatewayv2_route" "get_analytics" {
   api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /analytics/{analytic_type}"
+  route_key          = "GET /analytics"
   target             = "integrations/${aws_apigatewayv2_integration.analytics_operations.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
-# Refresh analytics computation
 resource "aws_apigatewayv2_route" "refresh_analytics" {
   api_id             = aws_apigatewayv2_api.main.id
   route_key          = "POST /analytics/refresh"
@@ -588,11 +587,60 @@ resource "aws_apigatewayv2_route" "refresh_analytics" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
-# Get analytics status
 resource "aws_apigatewayv2_route" "get_analytics_status" {
   api_id             = aws_apigatewayv2_api.main.id
   route_key          = "GET /analytics/status"
   target             = "integrations/${aws_apigatewayv2_integration.analytics_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Export Operations Integration
+resource "aws_apigatewayv2_integration" "export_operations" {
+  api_id                 = aws_apigatewayv2_api.main.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.export_operations.invoke_arn
+  payload_format_version = "2.0"
+  description           = "Lambda integration for export operations endpoints"
+}
+
+# Export routes
+resource "aws_apigatewayv2_route" "initiate_export" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /export"
+  target             = "integrations/${aws_apigatewayv2_integration.export_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "list_exports" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /export"
+  target             = "integrations/${aws_apigatewayv2_integration.export_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "get_export_status" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /export/{exportId}/status"
+  target             = "integrations/${aws_apigatewayv2_integration.export_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "get_export_download" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /export/{exportId}/download"
+  target             = "integrations/${aws_apigatewayv2_integration.export_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "delete_export" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "DELETE /export/{exportId}"
+  target             = "integrations/${aws_apigatewayv2_integration.export_operations.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
@@ -708,6 +756,14 @@ resource "aws_lambda_permission" "api_gateway_analytics" {
   function_name = aws_lambda_function.analytics_operations.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/analytics*"
+}
+
+resource "aws_lambda_permission" "api_gateway_export" {
+  statement_id  = "AllowExecutionFromAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.export_operations.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
 }
 
 # Outputs
