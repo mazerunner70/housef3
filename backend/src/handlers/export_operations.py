@@ -27,6 +27,10 @@ from utils.lambda_utils import (
     create_response, mandatory_path_parameter, optional_body_parameter,
     mandatory_body_parameter, handle_error
 )
+from utils.db_utils import (
+    create_export_job, get_export_job, update_export_job, 
+    list_user_export_jobs, delete_export_job
+)
 
 # Configure logging
 logger = logging.getLogger()
@@ -83,9 +87,9 @@ def initiate_export_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
             date_range_end=export_request.date_range_end,
             category_ids=export_request.category_ids
         )
-        
-        # Store export job in database (this will be implemented in db_utils)
-        # For now, we'll process the export immediately
+
+        # Store export job in database
+        create_export_job(export_job)
         
         # Process export asynchronously (simplified for Phase 1)
         try:
@@ -107,6 +111,7 @@ def initiate_export_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
             # Update job status to failed
             export_job.status = ExportStatus.FAILED
             export_job.error = str(e)
+            update_export_job(export_job)
             
             # Publish failure event
             failure_event = ExportFailedEvent(
@@ -137,24 +142,26 @@ def get_export_status_handler(event: Dict[str, Any], user_id: str) -> Dict[str, 
     try:
         export_id = mandatory_path_parameter(event, 'exportId')
         
-        # TODO: Retrieve export job from database
-        # For now, return a mock response
-        
         try:
             export_uuid = uuid.UUID(export_id)
         except ValueError:
             return create_response(400, {"error": "Invalid export ID format"})
+        # Retrieve export job from database
+        export_job = get_export_job(export_id, user_id)
+        if not export_job:
+            return create_response(404, {"error": "Export job not found"})
         
-        # Mock response - this should be replaced with actual database lookup
+        # Create response from actual job data
         response = ExportStatusResponse(
-            exportId=export_uuid,
-            status=ExportStatus.COMPLETED,
-            progress=100,
-            currentPhase="completed",
-            downloadUrl=f"https://presigned-url-for-{export_id}",
-            expiresAt=datetime.now(timezone.utc).isoformat(),
-            packageSize=1024*1024,  # 1MB mock size
-            completedAt=datetime.now(timezone.utc).isoformat()
+            exportId=export_job.export_id,
+            status=export_job.status,
+            progress=export_job.progress,
+            currentPhase=export_job.current_phase,
+            downloadUrl=export_job.download_url,
+            expiresAt=datetime.fromtimestamp(export_job.expires_at / 1000, timezone.utc).isoformat() if export_job.expires_at else None,
+            packageSize=export_job.package_size,
+            completedAt=datetime.fromtimestamp(export_job.completed_at / 1000, timezone.utc).isoformat() if export_job.completed_at else None,
+            error=export_job.error
         )
         
         return create_response(200, response.model_dump(by_alias=True))
@@ -177,14 +184,25 @@ def get_export_download_handler(event: Dict[str, Any], user_id: str) -> Dict[str
         except ValueError:
             return create_response(400, {"error": "Invalid export ID format"})
         
-        # TODO: Retrieve export job from database and check ownership
-        # TODO: Generate presigned URL for the export package
+        # Retrieve export job from database and check ownership
+        export_job = get_export_job(export_id, user_id)
+        if not export_job:
+            return create_response(404, {"error": "Export job not found"})
         
-        # Mock S3 key for the export
-        s3_key = f"exports/{user_id}/{export_id}/export_package.zip"
+        # Check if export is completed
+        if export_job.status != ExportStatus.COMPLETED:
+            return create_response(400, {"error": "Export job is not completed yet"})
+        
+        # Check if export has expired
+        if export_job.expires_at and datetime.now(timezone.utc).timestamp() * 1000 > export_job.expires_at:
+            return create_response(410, {"error": "Export package has expired"})
+        
+        # Generate presigned URL for the export package
+        if not export_job.s3_key:
+            return create_response(404, {"error": "Export package not found"})
         
         try:
-            download_url = export_service.generate_download_url(s3_key)
+            download_url = export_service.generate_download_url(export_job.s3_key)
             
             # Return redirect response  
             return {
@@ -212,18 +230,36 @@ def list_exports_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     GET /export
     """
     try:
-        # TODO: Implement pagination parameters
-        # limit = optional_query_parameter(event, 'limit', default=20)
-        # offset = optional_query_parameter(event, 'offset', default=0)
+        # Parse pagination parameters
+        limit = int(event.get('queryStringParameters', {}).get('limit', 20))
+        offset = int(event.get('queryStringParameters', {}).get('offset', 0))
         
-        # TODO: Retrieve export jobs from database
-        # For now, return empty list
+        # Limit the maximum page size
+        limit = min(limit, 100)
+        
+        # Retrieve export jobs from database
+        export_jobs, pagination_key = list_user_export_jobs(user_id, limit=limit)
+        
+        # Convert to response format
+        exports_data = []
+        for job in export_jobs:
+            exports_data.append({
+                "exportId": str(job.export_id),
+                "status": job.status.value,
+                "exportType": job.export_type.value,
+                "requestedAt": job.requested_at,
+                "completedAt": job.completed_at,
+                "progress": job.progress,
+                "packageSize": job.package_size,
+                "description": job.description
+            })
         
         return create_response(200, {
-            "exports": [],
-            "total": 0,
-            "limit": 20,
-            "offset": 0
+            "exports": exports_data,
+            "total": len(exports_data),
+            "limit": limit,
+            "offset": offset,
+            "hasMore": pagination_key is not None
         })
         
     except Exception as e:
@@ -243,11 +279,26 @@ def delete_export_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]
             export_uuid = uuid.UUID(export_id)
         except ValueError:
             return create_response(400, {"error": "Invalid export ID format"})
+ 
+        # Retrieve export job from database and check ownership
+        export_job = get_export_job(export_id, user_id)
+        if not export_job:
+            return create_response(404, {"error": "Export job not found"})
         
-        # TODO: Retrieve export job from database and check ownership
-        # TODO: Delete export package from S3
-        # TODO: Delete export job from database
+        # Delete export package from S3 if it exists
+        if export_job.s3_key:
+            try:
+                from utils.s3_dao import delete_object
+                delete_object(export_job.s3_key)
+                logger.info(f"Deleted export package from S3: {export_job.s3_key}")
+            except Exception as e:
+                logger.warning(f"Failed to delete export package from S3: {str(e)}")
+                # Continue with database deletion even if S3 deletion fails
         
+        # Delete export job from database
+        success = delete_export_job(export_id, user_id)
+        if not success:
+            return create_response(500, {"error": "Failed to delete export job"})   
         logger.info(f"Export {export_id} deleted for user {user_id}")
         
         return create_response(200, {"message": "Export deleted successfully"})
@@ -269,6 +320,8 @@ def process_export_job(export_job: ExportJob) -> ExportJob:
         export_job.status = ExportStatus.PROCESSING
         export_job.progress = 10
         export_job.current_phase = "collecting_data"
+        update_export_job(export_job)
+
         
         # Collect user data
         collected_data = export_service.collect_user_data(
@@ -280,13 +333,13 @@ def process_export_job(export_job: ExportJob) -> ExportJob:
         
         export_job.progress = 60
         export_job.current_phase = "building_package"
-        
+        update_export_job(export_job)        
         # Build export package
         s3_key, package_size = export_service.build_export_package(export_job, collected_data)
         
         export_job.progress = 90
         export_job.current_phase = "generating_download_url"
-        
+        update_export_job(export_job)
         # Generate download URL
         download_url = export_service.generate_download_url(s3_key)
         
@@ -298,7 +351,7 @@ def process_export_job(export_job: ExportJob) -> ExportJob:
         export_job.package_size = package_size
         export_job.download_url = download_url
         export_job.completed_at = int(datetime.now(timezone.utc).timestamp() * 1000)
-        
+        update_export_job(export_job)
         # Publish completion event
         completion_event = ExportCompletedEvent(
             user_id=export_job.user_id,
@@ -324,6 +377,7 @@ def process_export_job(export_job: ExportJob) -> ExportJob:
         logger.error(f"Failed to process export job {export_job.export_id}: {str(e)}")
         export_job.status = ExportStatus.FAILED
         export_job.error = str(e)
+        update_export_job(export_job)
         raise
 
 

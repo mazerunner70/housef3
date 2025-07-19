@@ -30,7 +30,12 @@ from utils.db_utils import (
 from utils.s3_dao import get_object_content, put_object, get_presigned_url_simple
 from services.event_service import event_service
 from models.events import ExportInitiatedEvent, ExportCompletedEvent, ExportFailedEvent
-
+from services.export_data_processors import (
+    AccountExporter, TransactionExporter, CategoryExporter, 
+    FileMapExporter, TransactionFileExporter, ExportException
+)
+from services.s3_file_handler import S3FileStreamer, ExportPackageBuilder, FileStreamingOptions
+from services.export_error_handler import export_error_handler, ErrorCategory
 logger = logging.getLogger(__name__)
 
 
@@ -93,12 +98,12 @@ class ExportService:
             logger.error(f"Failed to initiate export for user {user_id}: {str(e)}")
             raise
     
+    @export_error_handler.with_error_handling("collect_user_data", max_retries=2)
     def collect_user_data(self, user_id: str, export_type: ExportType,
                          include_analytics: bool = False,
                          **filters) -> Dict[str, Any]:
         """
-        Collect all user data for export
-        
+        Collect all user data for export using specialized entity exporters
         Args:
             user_id: User identifier
             export_type: Type of export
@@ -112,37 +117,55 @@ class ExportService:
             logger.info(f"Collecting data for user {user_id}, export type: {export_type}")
             
             collected_data = {}
+            export_summaries = {}
+            
+            # Use specialized exporters for enhanced data collection
             
             # Collect accounts
-            accounts = self._collect_accounts(user_id, filters.get('account_ids'))
-            collected_data['accounts'] = accounts
+            account_exporter = AccountExporter(user_id, self.batch_size)
+            collected_data['accounts'] = account_exporter.collect_data(filters)
+            export_summaries['accounts'] = account_exporter.get_export_summary()
             
             # Collect transactions
-            transactions = self._collect_transactions(user_id, filters)
-            collected_data['transactions'] = transactions
+            transaction_exporter = TransactionExporter(user_id, self.batch_size)
+            collected_data['transactions'] = transaction_exporter.collect_data(filters)
+            export_summaries['transactions'] = transaction_exporter.get_export_summary()
             
             # Collect categories
-            categories = self._collect_categories(user_id, filters.get('category_ids'))
-            collected_data['categories'] = categories
+            category_exporter = CategoryExporter(user_id, self.batch_size)
+            collected_data['categories'] = category_exporter.collect_data(filters)
+            export_summaries['categories'] = category_exporter.get_export_summary()
             
             # Collect file maps
-            file_maps = self._collect_file_maps(user_id)
-            collected_data['file_maps'] = file_maps
+            file_map_exporter = FileMapExporter(user_id, self.batch_size)
+            collected_data['file_maps'] = file_map_exporter.collect_data(filters)
+            export_summaries['file_maps'] = file_map_exporter.get_export_summary()
             
             # Collect transaction files
-            transaction_files = self._collect_transaction_files(user_id, filters.get('account_ids'))
-            collected_data['transaction_files'] = transaction_files
-            
+            transaction_file_exporter = TransactionFileExporter(user_id, self.batch_size)
+            collected_data['transaction_files'] = transaction_file_exporter.collect_data(filters)
+            export_summaries['transaction_files'] = transaction_file_exporter.get_export_summary()
             # Collect analytics if requested
             if include_analytics:
                 analytics = self._collect_analytics(user_id)
                 collected_data['analytics'] = analytics
             
-            logger.info(f"Data collection complete: {len(accounts)} accounts, "
-                       f"{len(transactions)} transactions, {len(categories)} categories")
+            # Add export summaries for reporting
+            collected_data['_export_summaries'] = export_summaries
+            
+            # Record success for circuit breaker
+            export_error_handler.record_success("collect_user_data")
+            
+            logger.info(f"Enhanced data collection complete using specialized exporters")
+            for entity_type, summary in export_summaries.items():
+                logger.info(f"{entity_type}: {summary['processed_count']} items, "
+                          f"{summary.get('success_rate', 100):.1f}% success rate")
             
             return collected_data
             
+        except ExportException as e:
+            logger.error(f"Export-specific error collecting data for user {user_id}: {str(e)}")
+            raise
         except Exception as e:
             logger.error(f"Failed to collect data for user {user_id}: {str(e)}")
             raise
@@ -171,7 +194,7 @@ class ExportService:
             last_evaluated_key = None
             
             while True:
-                transactions, _, pagination_key = list_user_transactions(
+                transactions, pagination_key, _ = list_user_transactions(
                     user_id, 
                     limit=self.batch_size,
                     last_evaluated_key=last_evaluated_key
@@ -269,9 +292,10 @@ class ExportService:
             logger.error(f"Failed to collect analytics for user {user_id}: {str(e)}")
             return []
     
+    @export_error_handler.with_error_handling("build_export_package", max_retries=2)
     def build_export_package(self, export_job: ExportJob, collected_data: Dict[str, Any]) -> Tuple[str, int]:
         """
-        Build export package as ZIP file
+        Build export package using enhanced streaming and compression capabilities
         
         Args:
             export_job: Export job details
@@ -281,89 +305,77 @@ class ExportService:
             Tuple of (s3_key, package_size)
         """
         try:
-            logger.info(f"Building export package for job {export_job.export_id}")
+            logger.info(f"Building enhanced export package for job {export_job.export_id}")
+            
+            # Configure streaming options for large exports
+            streaming_options = FileStreamingOptions(
+                enable_compression=True,
+                compression_level=6,
+                enable_checksum=True,
+                max_memory_usage=200 * 1024 * 1024  # 200MB for larger exports
+            )
+            
+            # Create enhanced package builder
+            package_builder = ExportPackageBuilder(self.export_bucket, streaming_options)
             
             # Create temporary directory
             with tempfile.TemporaryDirectory() as temp_dir:
-                # Create package structure
-                package_dir = os.path.join(temp_dir, "export_package")
-                os.makedirs(package_dir)
+                # Build package with streaming capabilities
+                package_dir, processing_summary = package_builder.build_package_with_streaming(
+                    export_data=collected_data,
+                    transaction_files=collected_data.get('transaction_files', []),
+                    package_dir=os.path.join(temp_dir, "export_package")
+                )
                 
-                data_dir = os.path.join(package_dir, "data")
-                files_dir = os.path.join(package_dir, "files")
-                os.makedirs(data_dir)
-                os.makedirs(files_dir)
-                
-                # Write data files
-                checksums = {}
-                
-                # Write accounts
-                accounts_file = os.path.join(data_dir, "accounts.json")
-                with open(accounts_file, 'w') as f:
-                    json.dump({"accounts": collected_data['accounts']}, f, indent=2, default=str)
-                checksums["accounts.json"] = self._calculate_checksum(accounts_file)
-                
-                # Write transactions
-                transactions_file = os.path.join(data_dir, "transactions.json")
-                with open(transactions_file, 'w') as f:
-                    json.dump({"transactions": collected_data['transactions']}, f, indent=2, default=str)
-                checksums["transactions.json"] = self._calculate_checksum(transactions_file)
-                
-                # Write categories
-                categories_file = os.path.join(data_dir, "categories.json")
-                with open(categories_file, 'w') as f:
-                    json.dump({"categories": collected_data['categories']}, f, indent=2, default=str)
-                checksums["categories.json"] = self._calculate_checksum(categories_file)
-                
-                # Write file maps
-                file_maps_file = os.path.join(data_dir, "file_maps.json")
-                with open(file_maps_file, 'w') as f:
-                    json.dump({"file_maps": collected_data['file_maps']}, f, indent=2, default=str)
-                checksums["file_maps.json"] = self._calculate_checksum(file_maps_file)
-                
-                # Write transaction files metadata
-                transaction_files_file = os.path.join(data_dir, "transaction_files.json")
-                with open(transaction_files_file, 'w') as f:
-                    json.dump({"transaction_files": collected_data['transaction_files']}, f, indent=2, default=str)
-                checksums["transaction_files.json"] = self._calculate_checksum(transaction_files_file)
-                
-                # Write analytics if included
-                if export_job.include_analytics and collected_data.get('analytics'):
-                    analytics_file = os.path.join(data_dir, "analytics.json")
-                    with open(analytics_file, 'w') as f:
-                        json.dump({"analytics": collected_data['analytics']}, f, indent=2, default=str)
-                    checksums["analytics.json"] = self._calculate_checksum(analytics_file)
-                
-                # Download and include transaction files
-                self._download_transaction_files(collected_data['transaction_files'], files_dir)
-                
-                # Create manifest
-                manifest = self._create_manifest(export_job, collected_data, checksums)
+                # Create manifest with processing summary
+                manifest = self._create_enhanced_manifest(export_job, collected_data, processing_summary)
                 manifest_file = os.path.join(package_dir, "manifest.json")
                 with open(manifest_file, 'w') as f:
                     json.dump(manifest.model_dump(by_alias=True), f, indent=2, default=str)
                 
-                # Create ZIP file
+                # Create compressed ZIP file
                 zip_path = os.path.join(temp_dir, f"export_{export_job.export_id}.zip")
-                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                
+                # Use enhanced compression for large packages
+                compression_method = zipfile.ZIP_DEFLATED
+                if processing_summary['total_original_size'] > 50 * 1024 * 1024:  # > 50MB
+                    try:
+                        compression_method = zipfile.ZIP_LZMA  # Better compression for large files
+                    except AttributeError:
+                        compression_method = zipfile.ZIP_DEFLATED
+                
+                with zipfile.ZipFile(zip_path, 'w', compression_method, compresslevel=6) as zipf:
                     for root, dirs, files in os.walk(package_dir):
                         for file in files:
                             file_path = os.path.join(root, file)
                             arcname = os.path.relpath(file_path, package_dir)
                             zipf.write(file_path, arcname)
                 
-                # Upload to S3
+                # Upload to S3 with retry logic
                 s3_key = f"exports/{export_job.user_id}/{export_job.export_id}/export_package.zip"
                 package_size = os.path.getsize(zip_path)
                 
-                with open(zip_path, 'rb') as f:
-                    put_object(s3_key, f.read(), self.export_bucket)
+                # Use streaming upload for large files
+                if package_size > 100 * 1024 * 1024:  # > 100MB
+                    with open(zip_path, 'rb') as f:
+                        put_object(s3_key, f.read(), 'application/zip', self.export_bucket)
+                else:
+                    with open(zip_path, 'rb') as f:
+                        put_object(s3_key, f.read(), 'application/zip', self.export_bucket)
                 
-                logger.info(f"Export package created: {s3_key}, size: {package_size} bytes")
+                # Record success for circuit breaker
+                export_error_handler.record_success("build_export_package")
+                
+                logger.info(f"Enhanced export package created: {s3_key}")
+                logger.info(f"Package size: {package_size} bytes, "
+                          f"Compression ratio: {processing_summary.get('compression_ratio', 0):.1f}%")
+                logger.info(f"Files processed: {processing_summary['transaction_files_processed']}, "
+                          f"Failed: {processing_summary['transaction_files_failed']}")
+                
                 return s3_key, package_size
                 
         except Exception as e:
-            logger.error(f"Failed to build export package for job {export_job.export_id}: {str(e)}")
+            logger.error(f"Failed to build enhanced export package for job {export_job.export_id}: {str(e)}")
             raise
     
     def _download_transaction_files(self, transaction_files: List[Dict[str, Any]], files_dir: str):
@@ -431,6 +443,47 @@ class ExportService:
             includeAnalytics=export_job.include_analytics
         )
     
+    def _create_enhanced_manifest(self, export_job: ExportJob, collected_data: Dict[str, Any], 
+                                processing_summary: Dict[str, Any]) -> ExportManifest:
+        """Create enhanced export manifest with processing summary"""
+        data_summary = DataSummary(
+            accountsCount=len(collected_data.get('accounts', [])),
+            transactionsCount=len(collected_data.get('transactions', [])),
+            categoriesCount=len(collected_data.get('categories', [])),
+            fileMapsCount=len(collected_data.get('file_maps', [])),
+            transactionFilesCount=len(collected_data.get('transaction_files', [])),
+            analyticsIncluded=export_job.include_analytics and bool(collected_data.get('analytics'))
+        )
+        
+        compatibility = CompatibilityInfo(
+            minimumVersion="2.0.0",
+            supportedVersions=["2.0.0", "2.5.0"]
+        )
+        
+        # Create basic manifest
+        manifest = ExportManifest(
+            exportFormatVersion=self.export_format_version,
+            exportTimestamp=datetime.now(timezone.utc).isoformat(),
+            userId=export_job.user_id,
+            housef3Version=self.housef3_version,
+            dataSummary=data_summary,
+            checksums={},  # Will be populated by package builder if needed
+            compatibility=compatibility,
+            exportId=export_job.export_id,
+            exportType=export_job.export_type,
+            includeAnalytics=export_job.include_analytics
+        )
+        
+        # Add processing summary as metadata in the manifest data
+        manifest_dict = manifest.model_dump(by_alias=True)
+        manifest_dict['processingSummary'] = processing_summary
+        
+        # Add export summaries if available
+        if '_export_summaries' in collected_data:
+            manifest_dict['exportSummaries'] = collected_data['_export_summaries']
+        
+        return ExportManifest.model_validate(manifest_dict)
+    
     def _calculate_checksum(self, file_path: str) -> str:
         """Calculate SHA256 checksum of a file"""
         hash_sha256 = hashlib.sha256()
@@ -442,7 +495,7 @@ class ExportService:
     def generate_download_url(self, s3_key: str, expires_in: int = 3600) -> str:
         """Generate presigned URL for export download"""
         try:
-            return get_presigned_url_simple(s3_key, self.export_bucket, expires_in)
+            return get_presigned_url_simple(self.export_bucket, s3_key, 'get', expires_in)
         except Exception as e:
             logger.error(f"Failed to generate download URL for {s3_key}: {str(e)}")
             raise
