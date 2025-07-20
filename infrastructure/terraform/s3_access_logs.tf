@@ -11,6 +11,12 @@ resource "aws_s3_bucket" "s3_access_logs" {
     Project     = var.project_name
     Component   = "s3-access-logs"
   }
+
+  # S3 Bucket Logging Configuration - Using separate bucket for access logs bucket logs
+  logging {
+    target_bucket = aws_s3_bucket.cloudfront_logs.id
+    target_prefix = "s3-access-logs-bucket-logs/"
+  }
 }
 
 # S3 Bucket Versioning
@@ -77,6 +83,23 @@ resource "aws_s3_bucket_policy" "s3_access_logs_policy" {
         }
       },
       {
+        Sid    = "DenyNonHTTPSRequests"
+        Effect = "Deny"
+        Principal = {
+          AWS = "*"
+        }
+        Action = "s3:*"
+        Resource = [
+          aws_s3_bucket.s3_access_logs.arn,
+          "${aws_s3_bucket.s3_access_logs.arn}/*"
+        ]
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      },
+      {
         Sid    = "AllowS3LogDelivery"
         Effect = "Allow"
         Principal = {
@@ -89,6 +112,9 @@ resource "aws_s3_bucket_policy" "s3_access_logs_policy" {
         Condition = {
           StringEquals = {
             "s3:x-amz-acl" = "bucket-owner-full-control"
+          },
+          Bool = {
+            "aws:SecureTransport" = "true"
           }
         }
       }
@@ -186,6 +212,23 @@ resource "aws_s3_bucket_policy" "cloudfront_logs_policy" {
         }
       },
       {
+        Sid    = "DenyNonHTTPSRequests"
+        Effect = "Deny"
+        Principal = {
+          AWS = "*"
+        }
+        Action = "s3:*"
+        Resource = [
+          aws_s3_bucket.cloudfront_logs.arn,
+          "${aws_s3_bucket.cloudfront_logs.arn}/*"
+        ]
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      },
+      {
         Sid    = "AllowCloudFrontLogDelivery"
         Effect = "Allow"
         Principal = {
@@ -198,6 +241,9 @@ resource "aws_s3_bucket_policy" "cloudfront_logs_policy" {
         Condition = {
           StringEquals = {
             "s3:x-amz-acl" = "bucket-owner-full-control"
+          },
+          Bool = {
+            "aws:SecureTransport" = "true"
           }
         }
       }
