@@ -179,6 +179,13 @@ resource "aws_cloudfront_distribution" "frontend" {
 
   price_class = "PriceClass_100"
 
+  # CloudFront Access Logging
+  logging_config {
+    include_cookies = false
+    bucket         = aws_s3_bucket.cloudfront_logs.bucket_domain_name
+    prefix         = "logs/cloudfront/"
+  }
+
   restrictions {
     geo_restriction {
       restriction_type = "none"
