@@ -182,8 +182,8 @@ resource "aws_cloudfront_distribution" "frontend" {
   # CloudFront Access Logging
   logging_config {
     include_cookies = false
-    bucket         = aws_s3_bucket.cloudfront_logs.bucket_domain_name
-    prefix         = "logs/cloudfront/"
+    bucket         = aws_s3_bucket.s3_access_logs.bucket_domain_name
+    prefix         = "cloudfront-logs/"
   }
 
   restrictions {
