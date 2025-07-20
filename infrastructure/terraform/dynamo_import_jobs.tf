@@ -84,6 +84,12 @@ resource "aws_s3_bucket_logging" "import_packages_logging" {
   target_prefix = "logs/import-packages/"
 }
 
+# S3 Bucket ACL for Log Delivery
+resource "aws_s3_bucket_acl" "file_storage_log_delivery" {
+  bucket = aws_s3_bucket.file_storage.id
+  acl    = "log-delivery-write"
+}
+
 # S3 Bucket Versioning
 resource "aws_s3_bucket_versioning" "import_packages_versioning" {
   bucket = aws_s3_bucket.import_packages.id
