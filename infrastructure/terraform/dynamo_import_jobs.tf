@@ -87,6 +87,94 @@ resource "aws_s3_bucket" "import_packages_logs" {
   }
 }
 
+# S3 Bucket Public Access Block for Logging Bucket
+resource "aws_s3_bucket_public_access_block" "import_packages_logs_public_access_block" {
+  bucket = aws_s3_bucket.import_packages_logs.id
+  
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# S3 Bucket Policy for HTTPS-only access
+resource "aws_s3_bucket_policy" "import_packages_logs_policy" {
+  bucket = aws_s3_bucket.import_packages_logs.id
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "DenyUnencryptedObjectUploads"
+        Effect = "Deny"
+        Principal = {
+          AWS = "*"
+        }
+        Action = [
+          "s3:PutObject"
+        ]
+        Resource = "${aws_s3_bucket.import_packages_logs.arn}/*"
+        Condition = {
+          StringNotEquals = {
+            "s3:x-amz-server-side-encryption" = "AES256"
+          }
+        }
+      },
+      {
+        Sid    = "DenyIncorrectEncryptionHeader"
+        Effect = "Deny"
+        Principal = {
+          AWS = "*"
+        }
+        Action = [
+          "s3:PutObject"
+        ]
+        Resource = "${aws_s3_bucket.import_packages_logs.arn}/*"
+        Condition = {
+          StringNotEquals = {
+            "s3:x-amz-server-side-encryption" = "AES256"
+          }
+        }
+      },
+      {
+        Sid    = "DenyUnencryptedObjectUploads"
+        Effect = "Deny"
+        Principal = {
+          AWS = "*"
+        }
+        Action = [
+          "s3:PutObject"
+        ]
+        Resource = "${aws_s3_bucket.import_packages_logs.arn}/*"
+        Condition = {
+          Null = {
+            "s3:x-amz-server-side-encryption" = "true"
+          }
+        }
+      },
+      {
+        Sid    = "DenyNonHTTPSRequests"
+        Effect = "Deny"
+        Principal = {
+          AWS = "*"
+        }
+        Action = [
+          "s3:*"
+        ]
+        Resource = [
+          aws_s3_bucket.import_packages_logs.arn,
+          "${aws_s3_bucket.import_packages_logs.arn}/*"
+        ]
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      }
+    ]
+  })
+}
+
 # S3 Bucket ACL for Log Delivery
 resource "aws_s3_bucket_acl" "import_packages_logs_acl" {
   bucket = aws_s3_bucket.import_packages_logs.id
