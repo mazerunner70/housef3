@@ -1402,9 +1402,9 @@ def update_category_in_db(category_id: uuid.UUID, user_id: str, update_data: Dic
                 logger.info(f"DIAG: update_data rule {i}: type={type(rule)}, is_CategoryRule={isinstance(rule, CategoryRule)}")
         
         # Create a CategoryUpdate DTO from the update_data
-        logger.info(f"DIAG: Creating CategoryUpdate DTO...")
+        logger.info("DIAG: Creating CategoryUpdate DTO...")
         category_update_dto = CategoryUpdate(**update_data)
-        logger.info(f"DIAG: CategoryUpdate DTO created successfully")
+        logger.info("DIAG: CategoryUpdate DTO created successfully")
         
         # Check the DTO's rules
         if hasattr(category_update_dto, 'rules') and category_update_dto.rules:
@@ -1413,9 +1413,9 @@ def update_category_in_db(category_id: uuid.UUID, user_id: str, update_data: Dic
                 logger.info(f"DIAG: DTO rule {i}: type={type(rule)}, is_CategoryRule={isinstance(rule, CategoryRule)}")
         
         # Use the model's method to update details
-        logger.info(f"DIAG: Calling update_category_details...")
+        logger.info("DIAG: Calling update_category_details...")
         category.update_category_details(category_update_dto)
-        logger.info(f"DIAG: update_category_details completed")
+        logger.info("DIAG: update_category_details completed")
         
         # Check category rules after update
         logger.info(f"DIAG: After update, category has {len(category.rules)} rules")
@@ -1423,7 +1423,7 @@ def update_category_in_db(category_id: uuid.UUID, user_id: str, update_data: Dic
             logger.info(f"DIAG: Post-update rule {i}: type={type(rule)}, is_CategoryRule={isinstance(rule, CategoryRule)}")
         
         # Save updates to DynamoDB
-        logger.info(f"DIAG: Calling to_dynamodb_item...")
+        logger.info("DIAG: Calling to_dynamodb_item...")
         get_categories_table().put_item(Item=category.to_dynamodb_item())
         
         logger.info(f"DB: Category {str(category_id)} updated successfully.")

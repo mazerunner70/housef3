@@ -152,7 +152,7 @@ resource "aws_s3_bucket_public_access_block" "file_storage" {
   bucket = aws_s3_bucket.file_storage.id
 
   block_public_acls       = true
-  block_public_policy     = false  # Allow bucket policies
+  block_public_policy     = true   # ✅ BLOCK public policies
   ignore_public_acls      = true
   restrict_public_buckets = true
 }

@@ -175,10 +175,12 @@ resource "aws_s3_bucket_policy" "import_packages_logs_policy" {
   })
 }
 
-# S3 Bucket ACL for Log Delivery
-resource "aws_s3_bucket_acl" "import_packages_logs_acl" {
-  bucket = aws_s3_bucket.import_packages_logs.id
-  acl    = "log-delivery-write"
+# Data source for Lambda deployment package
+data "archive_file" "lambda_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../backend/src"
+  output_path = "${path.module}/lambda_import_operations.zip"
+  excludes    = ["__pycache__", "*.pyc", "tests", "venv"]
 }
 
 # S3 Bucket Logging Configuration
@@ -204,6 +206,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "import_packages_lifecycle" {
   rule {
     id     = "cleanup_expired_packages"
     status = "Enabled"
+    
+    filter {
+      prefix = ""
+    }
     
     expiration {
       days = 7  # Keep packages for 7 days
@@ -288,7 +294,7 @@ resource "aws_s3_bucket_policy" "import_packages_policy" {
 resource "aws_lambda_function" "import_operations" {
   filename         = data.archive_file.lambda_zip.output_path
   function_name    = "${var.environment}-import-operations"
-  role            = aws_iam_role.lambda_role.arn
+  role            = aws_iam_role.lambda_exec.arn
   handler         = "handlers.import_operations.lambda_handler"
   runtime         = "python3.9"
   timeout         = 300
@@ -303,7 +309,7 @@ resource "aws_lambda_function" "import_operations" {
       TRANSACTIONS_TABLE   = aws_dynamodb_table.transactions.name
       CATEGORIES_TABLE_NAME = aws_dynamodb_table.categories.name
       FILE_MAPS_TABLE      = aws_dynamodb_table.file_maps.name
-      FILES_TABLE          = aws_dynamodb_table.files.name
+      FILES_TABLE          = aws_dynamodb_table.transaction_files.name
       EXPORT_JOBS_TABLE    = aws_dynamodb_table.export_jobs.name
     }
   }
@@ -371,8 +377,8 @@ resource "aws_iam_role_policy" "import_operations_lambda_policy" {
           "${aws_dynamodb_table.categories.arn}/index/*",
           aws_dynamodb_table.file_maps.arn,
           "${aws_dynamodb_table.file_maps.arn}/index/*",
-          aws_dynamodb_table.files.arn,
-          "${aws_dynamodb_table.files.arn}/index/*",
+          aws_dynamodb_table.transaction_files.arn,
+          "${aws_dynamodb_table.transaction_files.arn}/index/*",
           aws_dynamodb_table.export_jobs.arn,
           "${aws_dynamodb_table.export_jobs.arn}/index/*"
         ]
@@ -406,130 +412,62 @@ resource "aws_iam_role_policy" "import_operations_lambda_policy" {
 }
 
 # API Gateway Integration for Import Operations
-resource "aws_api_gateway_resource" "import" {
-  rest_api_id = aws_api_gateway_rest_api.api.id
-  parent_id   = aws_api_gateway_rest_api.api.root_resource_id
-  path_part   = "import"
+resource "aws_apigatewayv2_integration" "import_operations" {
+  api_id                 = aws_apigatewayv2_api.main.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.import_operations.invoke_arn
+  payload_format_version = "2.0"
+  description           = "Lambda integration for import operations endpoints"
 }
 
-resource "aws_api_gateway_method" "import_post" {
-  rest_api_id   = aws_api_gateway_rest_api.api.id
-  resource_id   = aws_api_gateway_resource.import.id
-  http_method   = "POST"
-  authorization = "COGNITO_USER_POOLS"
-  authorizer_id = aws_api_gateway_authorizer.cognito.id
+# Import routes
+resource "aws_apigatewayv2_route" "import_post" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /import"
+  target             = "integrations/${aws_apigatewayv2_integration.import_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
-resource "aws_api_gateway_method" "import_get" {
-  rest_api_id   = aws_api_gateway_rest_api.api.id
-  resource_id   = aws_api_gateway_resource.import.id
-  http_method   = "GET"
-  authorization = "COGNITO_USER_POOLS"
-  authorizer_id = aws_api_gateway_authorizer.cognito.id
+resource "aws_apigatewayv2_route" "import_get" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /import"
+  target             = "integrations/${aws_apigatewayv2_integration.import_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
-resource "aws_api_gateway_integration" "import_post_integration" {
-  rest_api_id = aws_api_gateway_rest_api.api.id
-  resource_id = aws_api_gateway_resource.import.id
-  http_method = aws_api_gateway_method.import_post.http_method
-  
-  integration_http_method = "POST"
-  type                   = "AWS_PROXY"
-  uri                    = aws_lambda_function.import_operations.invoke_arn
+resource "aws_apigatewayv2_route" "import_status_get" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /import/{importId}/status"
+  target             = "integrations/${aws_apigatewayv2_integration.import_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
-resource "aws_api_gateway_integration" "import_get_integration" {
-  rest_api_id = aws_api_gateway_rest_api.api.id
-  resource_id = aws_api_gateway_resource.import.id
-  http_method = aws_api_gateway_method.import_get.http_method
-  
-  integration_http_method = "POST"
-  type                   = "AWS_PROXY"
-  uri                    = aws_lambda_function.import_operations.invoke_arn
+resource "aws_apigatewayv2_route" "import_delete" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "DELETE /import/{importId}"
+  target             = "integrations/${aws_apigatewayv2_integration.import_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
-# Import Status Resource
-resource "aws_api_gateway_resource" "import_status" {
-  rest_api_id = aws_api_gateway_rest_api.api.id
-  parent_id   = aws_api_gateway_resource.import.id
-  path_part   = "{importId}"
+resource "aws_apigatewayv2_route" "import_upload_post" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /import/{importId}/upload"
+  target             = "integrations/${aws_apigatewayv2_integration.import_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
-resource "aws_api_gateway_resource" "import_status_detail" {
-  rest_api_id = aws_api_gateway_rest_api.api.id
-  parent_id   = aws_api_gateway_resource.import_status.id
-  path_part   = "status"
-}
-
-resource "aws_api_gateway_method" "import_status_get" {
-  rest_api_id   = aws_api_gateway_rest_api.api.id
-  resource_id   = aws_api_gateway_resource.import_status_detail.id
-  http_method   = "GET"
-  authorization = "COGNITO_USER_POOLS"
-  authorizer_id = aws_api_gateway_authorizer.cognito.id
-}
-
-resource "aws_api_gateway_integration" "import_status_get_integration" {
-  rest_api_id = aws_api_gateway_rest_api.api.id
-  resource_id = aws_api_gateway_resource.import_status_detail.id
-  http_method = aws_api_gateway_method.import_status_get.http_method
-  
-  integration_http_method = "POST"
-  type                   = "AWS_PROXY"
-  uri                    = aws_lambda_function.import_operations.invoke_arn
-}
-
-# Import Delete Resource
-resource "aws_api_gateway_method" "import_delete" {
-  rest_api_id   = aws_api_gateway_rest_api.api.id
-  resource_id   = aws_api_gateway_resource.import_status.id
-  http_method   = "DELETE"
-  authorization = "COGNITO_USER_POOLS"
-  authorizer_id = aws_api_gateway_authorizer.cognito.id
-}
-
-resource "aws_api_gateway_integration" "import_delete_integration" {
-  rest_api_id = aws_api_gateway_rest_api.api.id
-  resource_id = aws_api_gateway_resource.import_status.id
-  http_method = aws_api_gateway_method.import_delete.http_method
-  
-  integration_http_method = "POST"
-  type                   = "AWS_PROXY"
-  uri                    = aws_lambda_function.import_operations.invoke_arn
-}
-
-# Import Upload Resource
-resource "aws_api_gateway_resource" "import_upload" {
-  rest_api_id = aws_api_gateway_rest_api.api.id
-  parent_id   = aws_api_gateway_resource.import_status.id
-  path_part   = "upload"
-}
-
-resource "aws_api_gateway_method" "import_upload_post" {
-  rest_api_id   = aws_api_gateway_rest_api.api.id
-  resource_id   = aws_api_gateway_resource.import_upload.id
-  http_method   = "POST"
-  authorization = "COGNITO_USER_POOLS"
-  authorizer_id = aws_api_gateway_authorizer.cognito.id
-}
-
-resource "aws_api_gateway_integration" "import_upload_post_integration" {
-  rest_api_id = aws_api_gateway_rest_api.api.id
-  resource_id = aws_api_gateway_resource.import_upload.id
-  http_method = aws_api_gateway_method.import_upload_post.http_method
-  
-  integration_http_method = "POST"
-  type                   = "AWS_PROXY"
-  uri                    = aws_lambda_function.import_operations.invoke_arn
-}
-
-# Lambda Permission for API Gateway
+# Lambda permission for API Gateway
 resource "aws_lambda_permission" "import_operations_api_gateway" {
   statement_id  = "AllowExecutionFromAPIGateway"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.import_operations.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
+  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
 }
 
 # CloudWatch Log Group for Import Operations

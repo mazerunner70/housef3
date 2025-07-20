@@ -85,15 +85,10 @@ resource "aws_cloudfront_function" "rewrite_api_path" {
 
 resource "aws_cloudfront_distribution" "frontend" {
   origin {
-    domain_name = aws_s3_bucket_website_configuration.frontend.website_endpoint
+    domain_name = aws_s3_bucket.frontend.bucket_regional_domain_name
     origin_id   = local.s3_origin_id
     
-    custom_origin_config {
-      http_port              = 80
-      https_port             = 443
-      origin_protocol_policy = "http-only"
-      origin_ssl_protocols   = ["TLSv1.2"]
-    }
+    origin_access_control_id = aws_cloudfront_origin_access_control.frontend.id
   }
   
   # API Gateway Origin

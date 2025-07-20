@@ -23,9 +23,9 @@ resource "aws_s3_bucket_public_access_block" "frontend" {
   bucket = aws_s3_bucket.frontend.id
 
   block_public_acls       = true
-  block_public_policy     = false
-  ignore_public_acls      = false
-  restrict_public_buckets = false
+  block_public_policy     = true   # ✅ BLOCK public policies
+  ignore_public_acls      = true   # ✅ IGNORE public ACLs
+  restrict_public_buckets = true   # ✅ RESTRICT public buckets
 }
 
 # Enable versioning for the frontend bucket
@@ -47,15 +47,21 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "frontend" {
   }
 }
 
-# Update bucket policy to allow public read access for website
+# Update bucket policy to allow CloudFront access only
 data "aws_iam_policy_document" "frontend_policy" {
   statement {
     actions   = ["s3:GetObject"]
     resources = ["${aws_s3_bucket.frontend.arn}/*"]
 
     principals {
-      type        = "*"
-      identifiers = ["*"]
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+    
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceArn"
+      values   = [aws_cloudfront_distribution.frontend.arn]
     }
   }
 }
@@ -67,6 +73,14 @@ resource "aws_s3_bucket_policy" "frontend" {
 
   # Ensure the bucket policy is created after the CloudFront distribution
   depends_on = [aws_cloudfront_distribution.frontend]
+}
+
+# S3 Bucket Logging Configuration for Frontend Website
+resource "aws_s3_bucket_logging" "frontend_logging" {
+  bucket = aws_s3_bucket.frontend.id
+  
+  target_bucket = aws_s3_bucket.import_packages_logs.id
+  target_prefix = "logs/frontend/"
 }
 
 # Enable static website hosting configuration
