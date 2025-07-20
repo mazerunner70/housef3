@@ -70,6 +70,28 @@ data "aws_iam_policy_document" "frontend_policy" {
       values   = [aws_cloudfront_distribution.frontend.arn]
     }
   }
+
+  # Deny non-HTTPS requests
+  statement {
+    sid    = "DenyNonHTTPSRequests"
+    effect = "Deny"
+    principals {
+      type        = "AWS"
+      identifiers = ["*"]
+    }
+    actions = [
+      "s3:*"
+    ]
+    resources = [
+      aws_s3_bucket.frontend.arn,
+      "${aws_s3_bucket.frontend.arn}/*"
+    ]
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
 }
 
 # Apply the website bucket policy

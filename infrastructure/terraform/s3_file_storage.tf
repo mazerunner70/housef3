@@ -145,6 +145,28 @@ data "aws_iam_policy_document" "file_storage_policy" {
       "${aws_s3_bucket.file_storage.arn}/*"
     ]
   }
+
+  # Deny non-HTTPS requests
+  statement {
+    sid    = "DenyNonHTTPSRequests"
+    effect = "Deny"
+    principals {
+      type        = "AWS"
+      identifiers = ["*"]
+    }
+    actions = [
+      "s3:*"
+    ]
+    resources = [
+      aws_s3_bucket.file_storage.arn,
+      "${aws_s3_bucket.file_storage.arn}/*"
+    ]
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
 }
 
 # Apply file storage bucket policy

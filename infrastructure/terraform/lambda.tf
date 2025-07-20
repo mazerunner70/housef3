@@ -358,8 +358,8 @@ resource "aws_iam_role_policy" "lambda_dynamodb_access" {
           "${aws_dynamodb_table.categories.arn}/index/*",
           aws_dynamodb_table.transaction_category_assignments.arn,
           "${aws_dynamodb_table.transaction_category_assignments.arn}/index/*",
-          aws_dynamodb_table.export_jobs.arn,
-          "${aws_dynamodb_table.export_jobs.arn}/index/*"
+          aws_dynamodb_table.fzip_jobs.arn,
+          "${aws_dynamodb_table.fzip_jobs.arn}/index/*"
         ]
       }
     ]
@@ -641,7 +641,7 @@ resource "aws_lambda_function" "export_operations" {
   environment {
     variables = {
       ENVIRONMENT           = var.environment
-      EXPORT_JOBS_TABLE     = aws_dynamodb_table.export_jobs.name
+              FZIP_JOBS_TABLE       = aws_dynamodb_table.fzip_jobs.name
       ACCOUNTS_TABLE        = aws_dynamodb_table.accounts.name
       TRANSACTIONS_TABLE    = aws_dynamodb_table.transactions.name
       CATEGORIES_TABLE_NAME = aws_dynamodb_table.categories.name

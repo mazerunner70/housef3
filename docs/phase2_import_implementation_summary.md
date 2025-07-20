@@ -1,7 +1,7 @@
 # Phase 2 Import Implementation Summary
 
 ## Overview
-This document summarizes the completion of Phase 2 of the import/export system implementation, focusing on the import functionality.
+This document summarizes the completion of Phase 2 of the import/export system implementation, focusing on the import functionality using **FZIP (Financial ZIP) files**.
 
 ## Completed Components
 
@@ -11,6 +11,7 @@ This document summarizes the completion of Phase 2 of the import/export system i
   - `ImportJob` - Complete import job tracking model with DynamoDB serialization
   - `ImportStatus` - Status enumeration (UPLOADED, VALIDATING, VALIDATION_PASSED, VALIDATION_FAILED, PROCESSING, COMPLETED, FAILED)
   - `MergeStrategy` - Merge strategy enumeration (FAIL_ON_CONFLICT, OVERWRITE, SKIP_EXISTING)
+  - `ImportFormat` - Format enumeration (FZIP, JSON)
   - `ImportRequest` - Request model for creating imports
   - `ImportResponse` - Response model for import operations
   - `ImportStatusResponse` - Status response model
@@ -22,14 +23,14 @@ This document summarizes the completion of Phase 2 of the import/export system i
 - **Components**:
   - DynamoDB table for import jobs with TTL
   - Global Secondary Indexes for user-based queries, status-based queries, and expired jobs cleanup
-  - S3 bucket for import packages with lifecycle policies
+  - S3 bucket for FZIP import packages with lifecycle policies
   - Proper IAM permissions for Lambda access
 
 ### 3. Import Service ✅
 - **File**: `backend/src/services/import_service.py`
 - **Components**:
   - Complete import orchestration service
-  - Package parsing and validation
+  - FZIP package parsing and validation
   - Schema and business rule validation
   - Data import processing with progress tracking
   - Error handling and retry logic
@@ -41,7 +42,7 @@ This document summarizes the completion of Phase 2 of the import/export system i
   - `GET /import` - List user's imports
   - `GET /import/{importId}/status` - Get import status
   - `DELETE /import/{importId}` - Delete import job
-  - `POST /import/{importId}/upload` - Upload package and start import
+  - `POST /import/{importId}/upload` - Upload FZIP package and start import
 
 ### 5. Database Utilities ✅
 - **File**: `backend/src/utils/db_utils.py`
@@ -57,7 +58,7 @@ This document summarizes the completion of Phase 2 of the import/export system i
 - **File**: `infrastructure/terraform/dynamo_import_jobs.tf`
 - **Components**:
   - DynamoDB table with comprehensive GSI structure
-  - S3 bucket for import packages with encryption and lifecycle policies
+  - S3 bucket for FZIP import packages with encryption and lifecycle policies
   - Lambda function for import operations
   - API Gateway integration
   - IAM roles and policies
@@ -69,7 +70,7 @@ This document summarizes the completion of Phase 2 of the import/export system i
 - **Features**: 
   - Import job creation
   - Status checking
-  - Package upload simulation
+  - FZIP package upload simulation
   - Import job deletion
   - Error handling
   - Unauthorized access testing
@@ -84,7 +85,8 @@ Authorization: Bearer <jwt_token>
 
 {
   "mergeStrategy": "fail_on_conflict",
-  "validateOnly": false
+  "validateOnly": false,
+  "packageFormat": "fzip"
 }
 
 Response:
@@ -92,6 +94,7 @@ Response:
   "importId": "uuid",
   "status": "uploaded",
   "message": "Import job created successfully",
+  "packageFormat": "fzip",
   "uploadUrl": {
     "url": "https://...",
     "fields": {...}
@@ -112,7 +115,8 @@ Response:
       "uploadedAt": 1234567890,
       "progress": 0,
       "currentPhase": "",
-      "packageSize": null
+      "packageSize": null,
+      "packageFormat": "fzip"
     }
   ],
   "nextEvaluatedKey": "..."
@@ -133,7 +137,8 @@ Response:
   "importResults": {...},
   "errorMessage": null,
   "uploadedAt": 1234567890,
-  "completedAt": null
+  "completedAt": null,
+  "packageFormat": "fzip"
 }
 ```
 
@@ -144,7 +149,7 @@ DELETE /import/{importId}
 Response: 204 No Content
 ```
 
-### Upload Package
+### Upload FZIP Package
 ```http
 POST /import/{importId}/upload
 
@@ -152,7 +157,8 @@ Response:
 {
   "message": "Import processing started",
   "importId": "uuid",
-  "status": "validating"
+  "status": "validating",
+  "packageFormat": "fzip"
 }
 ```
 
@@ -163,9 +169,9 @@ Response:
 2. System generates presigned S3 upload URL
 3. Job status: `UPLOADED`
 
-### 2. Package Upload
-1. User uploads ZIP package to S3
-2. System validates package structure
+### 2. FZIP Package Upload
+1. User uploads FZIP package to S3
+2. System validates FZIP package structure
 3. Job status: `VALIDATING`
 
 ### 3. Validation
@@ -190,6 +196,7 @@ class ImportJob(BaseModel):
     user_id: str
     status: ImportStatus
     merge_strategy: MergeStrategy
+    import_format: ImportFormat
     uploaded_at: int
     completed_at: Optional[int]
     package_size: Optional[int]
@@ -202,9 +209,9 @@ class ImportJob(BaseModel):
     expires_at: Optional[int]
 ```
 
-### Package Structure
+### FZIP Package Structure
 ```
-import_package.zip
+import_package.fzip
 ├── manifest.json          # Export metadata and validation
 ├── data/
 │   ├── accounts.json      # User accounts
@@ -233,7 +240,7 @@ import_package.zip
 - Batch processing for large datasets
 - Streaming file operations
 - Parallel data collection
-- Memory-efficient package processing
+- Memory-efficient FZIP package processing
 
 ## Testing
 
@@ -243,7 +250,7 @@ import_package.zip
 - **Features**: 
   - Import job creation
   - Status checking
-  - Package upload simulation
+  - FZIP package upload simulation
   - Import job deletion
   - Error handling
 
@@ -291,12 +298,12 @@ import_package.zip
 ## Current Status
 
 **✅ COMPLETED PHASES:**
-- **Phase 1: Export System** - 100% Complete
-- **Phase 2: Import System** - 100% Complete
+- **Phase 1: Export System** - 100% Complete (FZIP format)
+- **Phase 2: Import System** - 100% Complete (FZIP format)
 
 **🔄 IN PROGRESS:**
 - **Phase 3: Advanced Features** - 0% Complete
 
 **📊 OVERALL PROGRESS: 66% Complete**
 
-The import/export system now has a complete foundation with both export and import capabilities. Users can export their complete application state and import it into any environment while maintaining data integrity and security. 
+The import/export system now has a complete foundation with both export and import capabilities using **FZIP (Financial ZIP) files**. Users can export their complete application state and import it into any environment while maintaining data integrity and security. The FZIP format ensures standardized data portability across environments. 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the design and implementation of a comprehensive import/export system for the HouseF3 financial management application. The system enables users to backup their complete application state and restore it in the same or different environment.
+This document describes the design and implementation of a comprehensive import/export system for the HouseF3 financial management application. The system enables users to backup their complete application state and restore it in the same or different environment using **FZIP (Financial ZIP) files**.
 
 ## Objectives
 
@@ -39,30 +39,36 @@ This document describes the design and implementation of a comprehensive import/
 
 ## Technical Architecture
 
-### Export System Architecture
+### Unified FZIP System Architecture
 
 ```
-User Request → Export Handler → Data Collector → S3 Package Builder → Download URL
+User Request → FZIP Handler → Export/Import Service → FZIP Package Builder/Parser → Download/Upload URL
+                     ↓              ↓                    ↓
+                 Auth Check → Data Collection/Validation → FZIP Packaging → Signed URL
+```
+
+### Export System Flow
+```
+User Request → FZIP Export Handler → Data Collector → FZIP Package Builder → Download URL
                      ↓              ↓                    ↓
                  Auth Check → Batch Retrieval → File Packaging → Signed URL
 ```
 
-### Import System Architecture
-
+### Import System Flow
 ```
-Upload → Import Handler → Validation → Transaction → Restoration → Verification
+Upload → FZIP Import Handler → Validation → Transaction → Restoration → Verification
    ↓           ↓             ↓           ↓            ↓            ↓
 S3 Upload → Auth Check → Schema Check → Begin → Restore Data → Publish Events
 ```
 
 ## Data Format Specification
 
-### Export Package Structure
+### FZIP Package Structure
 
-The export package is a ZIP file containing:
+The export package is a **FZIP (Financial ZIP) file** containing:
 
 ```
-export_[timestamp]_[user_id].zip
+export_[timestamp]_[user_id].fzip
 ├── manifest.json                 # Export metadata and validation
 ├── data/
 │   ├── accounts.json            # Account entities
@@ -86,6 +92,7 @@ export_[timestamp]_[user_id].zip
   "export_timestamp": "2024-01-15T10:30:00Z",
   "user_id": "user_12345",
   "housef3_version": "2.5.0",
+  "package_format": "fzip",
   "data_summary": {
     "accounts_count": 5,
     "transactions_count": 2847,
@@ -206,16 +213,20 @@ export_[timestamp]_[user_id].zip
 
 ## API Endpoints
 
-### Export Endpoints
+### Unified FZIP Operations
 
-#### Initiate Export
+The system uses a unified `fzip_operations.py` handler that provides all FZIP-related functionality:
+
+#### Export Endpoints
+
+##### Initiate FZIP Export
 ```http
-POST /export
+POST /fzip/export
 Content-Type: application/json
 
 {
   "includeAnalytics": false,
-  "format": "complete",
+  "format": "fzip",
   "description": "Monthly backup"
 }
 
@@ -224,13 +235,14 @@ Response:
   "exportId": "uuid",
   "status": "initiated",
   "estimatedSize": "~25MB",
-  "estimatedCompletion": "2024-01-15T10:35:00Z"
+  "estimatedCompletion": "2024-01-15T10:35:00Z",
+  "packageFormat": "fzip"
 }
 ```
 
-#### Check Export Status
+##### Check FZIP Export Status
 ```http
-GET /export/{exportId}/status
+GET /fzip/export/{exportId}/status
 
 Response:
 {
@@ -239,70 +251,139 @@ Response:
   "progress": 75,
   "downloadUrl": "https://presigned-s3-url",
   "expiresAt": "2024-01-15T16:30:00Z",
-  "error": "error_message_if_failed"
+  "error": "error_message_if_failed",
+  "packageFormat": "fzip"
 }
 ```
 
-#### Download Export
+##### Download FZIP Export
 ```http
-GET /export/{exportId}/download
+GET /fzip/export/{exportId}/download
 
-Response: 302 Redirect to presigned S3 URL
+Response: 302 Redirect to presigned S3 URL (FZIP file)
 ```
 
-### Import Endpoints
-
-#### Upload Import Package
+##### List FZIP Exports
 ```http
-POST /import/upload
+GET /fzip/export?limit=20&offset=0
 
 Response:
 {
-  "uploadUrl": "https://presigned-s3-url",
-  "importId": "uuid",
-  "uploadExpires": "2024-01-15T11:30:00Z"
+  "exports": [
+    {
+      "exportId": "uuid",
+      "status": "completed",
+      "exportType": "complete",
+      "requestedAt": 1642234567000,
+      "completedAt": 1642234600000,
+      "progress": 100,
+      "packageSize": 25000000,
+      "description": "Monthly backup",
+      "packageFormat": "fzip"
+    }
+  ],
+  "total": 1,
+  "limit": 20,
+  "offset": 0,
+  "hasMore": false,
+  "packageFormat": "fzip"
 }
 ```
 
-#### Initiate Import
+##### Delete FZIP Export
 ```http
-POST /import/{importId}/start
+DELETE /fzip/export/{exportId}
+
+Response:
+{
+  "message": "FZIP export deleted successfully"
+}
+```
+
+#### Import Endpoints
+
+##### Create FZIP Import Job
+```http
+POST /fzip/import
 Content-Type: application/json
 
 {
-  "overwriteExisting": false,
+  "mergeStrategy": "fail_on_conflict",
   "validateOnly": false,
-  "mergeStrategy": "fail_on_conflict|overwrite|skip_existing"
+  "packageFormat": "fzip"
 }
 
 Response:
 {
   "importId": "uuid",
-  "status": "initiated|validation_passed|validation_failed",
-  "validationSummary": {
-    "accounts": {"valid": 5, "warnings": 0, "errors": 0},
-    "transactions": {"valid": 2847, "warnings": 5, "errors": 0}
+  "status": "uploaded",
+  "message": "FZIP import job created successfully",
+  "packageFormat": "fzip",
+  "uploadUrl": {
+    "url": "https://...",
+    "fields": {...}
   }
 }
 ```
 
-#### Check Import Status
+##### List FZIP Imports
 ```http
-GET /import/{importId}/status
+GET /fzip/import?limit=20&lastEvaluatedKey=...
 
 Response:
 {
-  "importId": "uuid", 
-  "status": "processing|completed|failed",
+  "importJobs": [
+    {
+      "importId": "uuid",
+      "status": "uploaded",
+      "uploadedAt": 1234567890,
+      "progress": 0,
+      "currentPhase": "",
+      "packageSize": null,
+      "packageFormat": "fzip"
+    }
+  ],
+  "nextEvaluatedKey": "...",
+  "packageFormat": "fzip"
+}
+```
+
+##### Get FZIP Import Status
+```http
+GET /fzip/import/{importId}/status
+
+Response:
+{
+  "importId": "uuid",
+  "status": "processing",
   "progress": 45,
-  "currentPhase": "restoring_transactions",
-  "summary": {
-    "accounts_created": 5,
-    "transactions_created": 1200,
-    "categories_created": 45,
-    "files_restored": 8
-  },
-  "errors": []
+  "currentPhase": "importing_transactions",
+  "validationResults": {...},
+  "importResults": {...},
+  "errorMessage": null,
+  "uploadedAt": 1234567890,
+  "completedAt": null,
+  "packageFormat": "fzip"
+}
+```
+
+##### Delete FZIP Import Job
+```http
+DELETE /fzip/import/{importId}
+
+Response: 204 No Content
+```
+
+##### Upload FZIP Package
+```http
+POST /fzip/import/{importId}/upload
+
+Response:
+{
+  "message": "FZIP import processing started",
+  "importId": "uuid",
+  "status": "validating",
+  "packageFormat": "fzip"
 }
 ```
 
@@ -311,18 +392,18 @@ Response:
 ### Phase 1: Export System (2-3 weeks)
 
 #### Week 1: Core Export Infrastructure
-1. **Export Handler Lambda**
-   - Create `export_operations.py` handler
-   - Implement export job management 
-   - Add export status tracking in DynamoDB
+1. **Unified FZIP Handler Lambda**
+   - Create `fzip_operations.py` handler
+   - Implement FZIP export job management 
+   - Add FZIP export status tracking in DynamoDB
 
 2. **Data Collection Service**
    - Create `ExportService` class
    - Implement user data collection methods
    - Add pagination for large datasets
 
-3. **Package Builder**
-   - Implement ZIP package creation
+3. **FZIP Package Builder**
+   - Implement FZIP package creation
    - Add manifest generation
    - Implement file collection from S3
 
@@ -341,25 +422,25 @@ Response:
 
 #### Week 3: Export API and Testing
 1. **API Integration** 
-   - Add export endpoints to API Gateway
+   - Add FZIP export endpoints to API Gateway
    - Implement authentication and authorization
-   - Add export history tracking
+   - Add FZIP export history tracking
 
 2. **Testing and Optimization**
-   - Unit tests for all export components
+   - Unit tests for all FZIP export components
    - Integration tests with real data
    - Performance testing with large datasets
 
 ### Phase 2: Import System (3-4 weeks)
 
 #### Week 1: Import Infrastructure
-1. **Import Handler Lambda**
-   - Create `import_operations.py` handler
-   - Implement import job management
+1. **Unified FZIP Handler Lambda**
+   - Extend `fzip_operations.py` handler with import functionality
+   - Implement FZIP import job management
    - Add validation framework
 
-2. **Package Parser**
-   - Implement ZIP package parsing
+2. **FZIP Package Parser**
+   - Implement FZIP package parsing
    - Add manifest validation
    - Implement schema validation
 
@@ -388,12 +469,12 @@ Response:
 
 #### Week 4: Import API and Testing
 1. **API Integration**
-   - Add import endpoints to API Gateway
+   - Add FZIP import endpoints to API Gateway
    - Implement progress tracking
    - Add rollback capabilities
 
 2. **Testing and Verification**
-   - Comprehensive import/export round-trip tests
+   - Comprehensive FZIP import/export round-trip tests
    - Data integrity verification
    - Error recovery testing
 
@@ -412,7 +493,7 @@ Response:
 
 #### Week 2: UI and Documentation
 1. **Frontend Integration**
-   - Export/import UI components
+   - FZIP export/import UI components
    - Progress indicators
    - Error handling displays
 
@@ -433,6 +514,7 @@ Attributes:
   - userId (S) 
   - status (S) # initiated|processing|completed|failed
   - exportType (S) # complete|selective
+  - exportFormat (S) # fzip|json
   - requestedAt (N)
   - completedAt (N) 
   - downloadUrl (S)
@@ -451,6 +533,7 @@ PK: importId (S)
 Attributes:
   - userId (S)
   - status (S) # uploaded|validating|processing|completed|failed
+  - importFormat (S) # fzip|json
   - uploadedAt (N)
   - completedAt (N)
   - packageSize (N) 
@@ -465,15 +548,15 @@ GSI: UserIdIndex (userId, uploadedAt)
 ## Security Considerations
 
 ### Data Protection
-1. **User Isolation**: All export/import operations are strictly user-scoped
-2. **Encryption**: All packages encrypted in transit and at rest
+1. **User Isolation**: All FZIP export/import operations are strictly user-scoped
+2. **Encryption**: All FZIP packages encrypted in transit and at rest
 3. **Access Control**: Presigned URLs with short expiration times
-4. **Audit Logging**: All import/export operations logged for security auditing
+4. **Audit Logging**: All FZIP import/export operations logged for security auditing
 
 ### Privacy Compliance
-1. **Data Minimization**: Only necessary data included in exports
+1. **Data Minimization**: Only necessary data included in FZIP exports
 2. **Right to Portability**: Full data export supports GDPR compliance
-3. **Secure Deletion**: Export packages automatically deleted after expiration
+3. **Secure Deletion**: FZIP export packages automatically deleted after expiration
 
 ## Performance Considerations
 
@@ -481,7 +564,7 @@ GSI: UserIdIndex (userId, uploadedAt)
 1. **Batch Processing**: Large datasets processed in configurable batches
 2. **Streaming**: Large files streamed to avoid memory limitations
 3. **Async Processing**: Long-running operations handled asynchronously
-4. **Compression**: ZIP compression reduces package sizes
+4. **Compression**: FZIP compression reduces package sizes
 
 ### Resource Management
 1. **Lambda Limits**: Processing split across multiple invocations if needed
@@ -493,7 +576,7 @@ GSI: UserIdIndex (userId, uploadedAt)
 ### Export Error Scenarios
 1. **Data Access Errors**: Retry with exponential backoff
 2. **S3 Upload Failures**: Automatic retry and error reporting
-3. **Package Size Limits**: Automatic splitting of large exports
+3. **FZIP Package Size Limits**: Automatic splitting of large exports
 4. **Timeout Handling**: Checkpoint and resume capability
 
 ### Import Error Scenarios  
@@ -505,32 +588,33 @@ GSI: UserIdIndex (userId, uploadedAt)
 ## Monitoring and Observability
 
 ### Metrics
-1. **Export Success Rate**: Percentage of successful exports
-2. **Import Success Rate**: Percentage of successful imports  
-3. **Processing Time**: Average time for export/import operations
-4. **Package Sizes**: Distribution of export package sizes
+1. **FZIP Export Success Rate**: Percentage of successful FZIP exports
+2. **FZIP Import Success Rate**: Percentage of successful FZIP imports  
+3. **Processing Time**: Average time for FZIP export/import operations
+4. **FZIP Package Sizes**: Distribution of FZIP export package sizes
 5. **Error Rates**: Categorized error rates and trends
 
 ### Alerting
 1. **High Error Rates**: Alert on elevated failure rates
 2. **Long Processing Times**: Alert on operations exceeding SLA
-3. **Storage Usage**: Monitor S3 storage for export packages
-4. **Security Events**: Alert on suspicious import/export patterns
+3. **Storage Usage**: Monitor S3 storage for FZIP export packages
+4. **Security Events**: Alert on suspicious FZIP import/export patterns
 
 ## Future Enhancements
 
 ### Incremental Exports
 - Delta exports containing only changes since last export
 - Optimized for regular backup scenarios
-- Reduced package sizes and processing time
+- Reduced FZIP package sizes and processing time
 
 ### Multi-Format Support
 - CSV export for analytics and reporting
 - JSON API format for system integration
 - Database dump format for direct database restoration
+- **FZIP format** as the primary portable format
 
 ### Automated Scheduling
-- Scheduled automatic exports
+- Scheduled automatic FZIP exports
 - Integration with backup systems
 - Retention policy management
 
@@ -541,4 +625,4 @@ GSI: UserIdIndex (userId, uploadedAt)
 
 ## Conclusion
 
-This comprehensive import/export system provides users with complete control over their financial data while maintaining security, performance, and data integrity. The phased implementation approach ensures robust testing and validation at each stage, delivering a reliable solution for data portability and backup needs. 
+This comprehensive import/export system provides users with complete control over their financial data while maintaining security, performance, and data integrity. The **FZIP (Financial ZIP) format** ensures portability and standardization across environments. The unified `fzip_operations.py` handler provides a cohesive API for all FZIP-related operations. The phased implementation approach ensures robust testing and validation at each stage, delivering a reliable solution for data portability and backup needs. 

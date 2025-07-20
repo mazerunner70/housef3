@@ -4,6 +4,17 @@
 # and their connections to the EventBridge rules.
 
 # ==============================================================================
+# LAMBDA ZIP DATA SOURCE
+# ==============================================================================
+
+data "archive_file" "lambda_zip" {
+  type        = "zip"
+  source_dir  = "../../backend/src"
+  output_path = "../../backend/lambda_consumers.zip"
+  excludes    = ["__pycache__", "*.pyc", "*.pyo", "*.pyd", ".pytest_cache", ".coverage"]
+}
+
+# ==============================================================================
 # Analytics Consumer Lambda
 # ==============================================================================
 
@@ -27,7 +38,7 @@ resource "aws_lambda_function" "analytics_consumer" {
       CATEGORIES_TABLE_NAME = aws_dynamodb_table.categories.name
       FILE_MAPS_TABLE      = aws_dynamodb_table.file_maps.name
       FILES_TABLE          = aws_dynamodb_table.transaction_files.name
-      EXPORT_JOBS_TABLE    = aws_dynamodb_table.export_jobs.name
+      FZIP_JOBS_TABLE      = aws_dynamodb_table.fzip_jobs.name
     }
   }
   
@@ -86,7 +97,7 @@ resource "aws_lambda_function" "categorization_consumer" {
       CATEGORIES_TABLE_NAME = aws_dynamodb_table.categories.name
       FILE_MAPS_TABLE      = aws_dynamodb_table.file_maps.name
       FILES_TABLE          = aws_dynamodb_table.transaction_files.name
-      EXPORT_JOBS_TABLE    = aws_dynamodb_table.export_jobs.name
+      FZIP_JOBS_TABLE      = aws_dynamodb_table.fzip_jobs.name
     }
   }
   
@@ -231,8 +242,8 @@ resource "aws_iam_policy" "event_consumer_policy" {
           "${aws_dynamodb_table.file_maps.arn}/index/*",
           aws_dynamodb_table.transaction_files.arn,
           "${aws_dynamodb_table.transaction_files.arn}/index/*",
-          aws_dynamodb_table.export_jobs.arn,
-          "${aws_dynamodb_table.export_jobs.arn}/index/*"
+          aws_dynamodb_table.fzip_jobs.arn,
+          "${aws_dynamodb_table.fzip_jobs.arn}/index/*"
         ]
       },
       {
