@@ -16,6 +16,12 @@ resource "aws_s3_bucket" "frontend" {
   lifecycle {
     prevent_destroy = true
   }
+
+  # S3 Bucket Logging Configuration
+  logging {
+    target_bucket = aws_s3_bucket.s3_access_logs.id
+    target_prefix = "s3-access-logs/frontend/"
+  }
 }
 
 # Configure public access settings for website hosting
@@ -73,14 +79,6 @@ resource "aws_s3_bucket_policy" "frontend" {
 
   # Ensure the bucket policy is created after the CloudFront distribution
   depends_on = [aws_cloudfront_distribution.frontend]
-}
-
-# S3 Bucket Logging Configuration for Frontend Website
-resource "aws_s3_bucket_logging" "frontend_logging" {
-  bucket = aws_s3_bucket.frontend.id
-  
-  target_bucket = aws_s3_bucket.import_packages_logs.id
-  target_prefix = "logs/frontend/"
 }
 
 # Enable static website hosting configuration

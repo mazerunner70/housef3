@@ -2,6 +2,168 @@
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
+# Centralized S3 Access Logging Bucket
+resource "aws_s3_bucket" "s3_access_logs" {
+  bucket = "${var.project_name}-${var.environment}-s3-access-logs"
+  
+  tags = {
+    Environment = var.environment
+    Project     = "housef3"
+    Component   = "s3-access-logs"
+  }
+}
+
+# S3 Bucket Public Access Block for Centralized Logging Bucket
+resource "aws_s3_bucket_public_access_block" "s3_access_logs_public_access_block" {
+  bucket = aws_s3_bucket.s3_access_logs.id
+  
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# S3 Bucket ACL for Log Delivery (Centralized)
+resource "aws_s3_bucket_acl" "s3_access_logs_acl" {
+  bucket = aws_s3_bucket.s3_access_logs.id
+  acl    = "log-delivery-write"
+}
+
+# S3 Bucket Policy for HTTPS-only access (Centralized)
+resource "aws_s3_bucket_policy" "s3_access_logs_policy" {
+  bucket = aws_s3_bucket.s3_access_logs.id
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "DenyUnencryptedObjectUploads"
+        Effect = "Deny"
+        Principal = {
+          AWS = "*"
+        }
+        Action = [
+          "s3:PutObject"
+        ]
+        Resource = "${aws_s3_bucket.s3_access_logs.arn}/*"
+        Condition = {
+          StringNotEquals = {
+            "s3:x-amz-server-side-encryption" = "AES256"
+          }
+        }
+      },
+      {
+        Sid    = "DenyIncorrectEncryptionHeader"
+        Effect = "Deny"
+        Principal = {
+          AWS = "*"
+        }
+        Action = [
+          "s3:PutObject"
+        ]
+        Resource = "${aws_s3_bucket.s3_access_logs.arn}/*"
+        Condition = {
+          StringNotEquals = {
+            "s3:x-amz-server-side-encryption-aws-kms-key-id" = "arn:aws:kms:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:key/*"
+          }
+        }
+      },
+      {
+        Sid    = "DenyNonHTTPSRequests"
+        Effect = "Deny"
+        Principal = {
+          AWS = "*"
+        }
+        Action = "s3:*"
+        Resource = [
+          aws_s3_bucket.s3_access_logs.arn,
+          "${aws_s3_bucket.s3_access_logs.arn}/*"
+        ]
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      }
+    ]
+  })
+}
+
+# Import Packages Logging Bucket
+resource "aws_s3_bucket" "import_packages_logs" {
+  bucket = "${var.environment}-import-packages-logs"
+  
+  tags = {
+    Environment = var.environment
+    Project     = "housef3"
+    Component   = "import-packages-logs"
+  }
+}
+
+# Dedicated CloudFront Logging Bucket
+resource "aws_s3_bucket" "cloudfront_logs" {
+  bucket = "${var.project_name}-${var.environment}-cloudfront-logs"
+  
+  tags = {
+    Environment = var.environment
+    Project     = "housef3"
+    Component   = "cloudfront-logs"
+  }
+}
+
+# Disable ownership controls to allow ACLs for CloudFront logging
+resource "aws_s3_bucket_ownership_controls" "cloudfront_logs_ownership" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+# S3 Bucket ACL for CloudFront Logging
+resource "aws_s3_bucket_acl" "cloudfront_logs_acl" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+  acl    = "log-delivery-write"
+}
+
+# S3 Bucket Public Access Block for CloudFront Logging Bucket
+resource "aws_s3_bucket_public_access_block" "cloudfront_logs_public_access_block" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+  
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# S3 Bucket Policy for CloudFront Logging (HTTPS-only)
+resource "aws_s3_bucket_policy" "cloudfront_logs_policy" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "DenyNonHTTPSRequests"
+        Effect = "Deny"
+        Principal = {
+          AWS = "*"
+        }
+        Action = "s3:*"
+        Resource = [
+          aws_s3_bucket.cloudfront_logs.arn,
+          "${aws_s3_bucket.cloudfront_logs.arn}/*"
+        ]
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      }
+    ]
+  })
+}
+
 # Import Jobs DynamoDB Table
 resource "aws_dynamodb_table" "import_jobs" {
   name           = "${var.environment}-import-jobs"
@@ -80,198 +242,12 @@ resource "aws_s3_bucket" "import_packages" {
   }
 }
 
-# Import Packages Logging Bucket
-resource "aws_s3_bucket" "import_packages_logs" {
-  bucket = "${var.environment}-import-packages-logs"
-  
-  tags = {
-    Environment = var.environment
-    Project     = "housef3"
-    Component   = "import-packages-logs"
-  }
-}
-
-# Dedicated CloudFront Logging Bucket
-resource "aws_s3_bucket" "cloudfront_logs" {
-  bucket = "${var.project_name}-${var.environment}-cloudfront-logs"
-  
-  tags = {
-    Environment = var.environment
-    Project     = "housef3"
-    Component   = "cloudfront-logs"
-  }
-}
-
-# Disable ownership controls to allow ACLs for CloudFront logging
-resource "aws_s3_bucket_ownership_controls" "cloudfront_logs_ownership" {
-  bucket = aws_s3_bucket.cloudfront_logs.id
-
-  rule {
-    object_ownership = "BucketOwnerPreferred"
-  }
-}
-
-# S3 Bucket Public Access Block for CloudFront Logging Bucket
-resource "aws_s3_bucket_public_access_block" "cloudfront_logs_public_access_block" {
-  bucket = aws_s3_bucket.cloudfront_logs.id
-  
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-# S3 Bucket ACL for CloudFront Log Delivery
-resource "aws_s3_bucket_acl" "cloudfront_logs_acl" {
-  bucket = aws_s3_bucket.cloudfront_logs.id
-  acl    = "log-delivery-write"
-}
-
-# S3 Bucket Policy for CloudFront Logging Bucket
-resource "aws_s3_bucket_policy" "cloudfront_logs_policy" {
-  bucket = aws_s3_bucket.cloudfront_logs.id
-  
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "DenyUnencryptedObjectUploads"
-        Effect = "Deny"
-        Principal = {
-          AWS = "*"
-        }
-        Action = [
-          "s3:PutObject"
-        ]
-        Resource = "${aws_s3_bucket.cloudfront_logs.arn}/*"
-        Condition = {
-          StringNotEquals = {
-            "s3:x-amz-server-side-encryption" = "AES256"
-          }
-        }
-      },
-      {
-        Sid    = "DenyIncorrectEncryptionHeader"
-        Effect = "Deny"
-        Principal = {
-          AWS = "*"
-        }
-        Action = [
-          "s3:PutObject"
-        ]
-        Resource = "${aws_s3_bucket.cloudfront_logs.arn}/*"
-        Condition = {
-          StringNotEquals = {
-            "s3:x-amz-server-side-encryption-aws-kms-key-id" = "arn:aws:kms:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:key/*"
-          }
-        }
-      }
-    ]
-  })
-}
-
-# S3 Bucket Public Access Block for Logging Bucket
-resource "aws_s3_bucket_public_access_block" "import_packages_logs_public_access_block" {
-  bucket = aws_s3_bucket.import_packages_logs.id
-  
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-# S3 Bucket Policy for HTTPS-only access
-resource "aws_s3_bucket_policy" "import_packages_logs_policy" {
-  bucket = aws_s3_bucket.import_packages_logs.id
-  
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "DenyUnencryptedObjectUploads"
-        Effect = "Deny"
-        Principal = {
-          AWS = "*"
-        }
-        Action = [
-          "s3:PutObject"
-        ]
-        Resource = "${aws_s3_bucket.import_packages_logs.arn}/*"
-        Condition = {
-          StringNotEquals = {
-            "s3:x-amz-server-side-encryption" = "AES256"
-          }
-        }
-      },
-      {
-        Sid    = "DenyIncorrectEncryptionHeader"
-        Effect = "Deny"
-        Principal = {
-          AWS = "*"
-        }
-        Action = [
-          "s3:PutObject"
-        ]
-        Resource = "${aws_s3_bucket.import_packages_logs.arn}/*"
-        Condition = {
-          StringNotEquals = {
-            "s3:x-amz-server-side-encryption" = "AES256"
-          }
-        }
-      },
-      {
-        Sid    = "DenyUnencryptedObjectUploads"
-        Effect = "Deny"
-        Principal = {
-          AWS = "*"
-        }
-        Action = [
-          "s3:PutObject"
-        ]
-        Resource = "${aws_s3_bucket.import_packages_logs.arn}/*"
-        Condition = {
-          Null = {
-            "s3:x-amz-server-side-encryption" = "true"
-          }
-        }
-      },
-      {
-        Sid    = "DenyNonHTTPSRequests"
-        Effect = "Deny"
-        Principal = {
-          AWS = "*"
-        }
-        Action = [
-          "s3:*"
-        ]
-        Resource = [
-          aws_s3_bucket.import_packages_logs.arn,
-          "${aws_s3_bucket.import_packages_logs.arn}/*"
-        ]
-        Condition = {
-          Bool = {
-            "aws:SecureTransport" = "false"
-          }
-        }
-      }
-    ]
-  })
-}
-
-# Data source for Lambda deployment package
-data "archive_file" "lambda_zip" {
-  type        = "zip"
-  source_dir  = "${path.module}/../../backend/src"
-  output_path = "${path.module}/lambda_import_operations.zip"
-  excludes    = ["__pycache__", "*.pyc", "tests", "venv"]
-}
-
 # S3 Bucket Logging Configuration
 resource "aws_s3_bucket_logging" "import_packages_logging" {
   bucket = aws_s3_bucket.import_packages.id
   
-  target_bucket = aws_s3_bucket.import_packages_logs.id
-  target_prefix = "logs/"
+  target_bucket = aws_s3_bucket.s3_access_logs.id
+  target_prefix = "s3-access-logs/import-packages/"
 }
 
 # S3 Bucket Versioning
@@ -371,6 +347,14 @@ resource "aws_s3_bucket_policy" "import_packages_policy" {
       }
     ]
   })
+}
+
+# Data source for Lambda deployment package
+data "archive_file" "lambda_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../backend/src"
+  output_path = "${path.module}/lambda_import_operations.zip"
+  excludes    = ["__pycache__", "*.pyc", "tests", "venv"]
 }
 
 # Lambda Function for Import Operations

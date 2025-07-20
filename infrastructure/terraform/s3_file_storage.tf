@@ -12,6 +12,12 @@ resource "aws_s3_bucket" "file_storage" {
     Name = "${var.project_name}-${var.environment}-file-storage"
     Description = "S3 bucket for file storage and management"
   })
+
+  # S3 Bucket Logging Configuration
+  logging {
+    target_bucket = aws_s3_bucket.s3_access_logs.id
+    target_prefix = "s3-access-logs/file-storage/"
+  }
 }
 
 # Enable versioning for the file storage bucket
@@ -155,14 +161,6 @@ resource "aws_s3_bucket_public_access_block" "file_storage" {
   block_public_policy     = true   # ✅ BLOCK public policies
   ignore_public_acls      = true
   restrict_public_buckets = true
-}
-
-# S3 Bucket Logging Configuration for File Storage
-resource "aws_s3_bucket_logging" "file_storage_logging" {
-  bucket = aws_s3_bucket.file_storage.id
-  
-  target_bucket = aws_s3_bucket.import_packages_logs.id
-  target_prefix = "logs/file-storage/"
 }
 
 # Configure S3 event notifications to trigger file processor Lambda
