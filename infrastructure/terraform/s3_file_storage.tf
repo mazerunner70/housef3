@@ -157,6 +157,14 @@ resource "aws_s3_bucket_public_access_block" "file_storage" {
   restrict_public_buckets = true
 }
 
+# S3 Bucket Logging Configuration for File Storage
+resource "aws_s3_bucket_logging" "file_storage_logging" {
+  bucket = aws_s3_bucket.file_storage.id
+  
+  target_bucket = aws_s3_bucket.import_packages_logs.id
+  target_prefix = "logs/file-storage/"
+}
+
 # Configure S3 event notifications to trigger file processor Lambda
 resource "aws_s3_bucket_notification" "file_upload_notification" {
   bucket = aws_s3_bucket.file_storage.id
