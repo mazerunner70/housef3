@@ -412,7 +412,7 @@ resource "aws_iam_role_policy" "lambda_eventbridge_access" {
 
 resource "aws_cloudwatch_log_group" "file_operations" {
   name              = "/aws/lambda/${aws_lambda_function.file_operations.function_name}"
-  retention_in_days = 7
+  retention_in_days = 14
 
   tags = {
     Environment = var.environment
@@ -423,7 +423,7 @@ resource "aws_cloudwatch_log_group" "file_operations" {
 
 resource "aws_cloudwatch_log_group" "file_processor" {
   name              = "/aws/lambda/${aws_lambda_function.file_processor.function_name}"
-  retention_in_days = 7
+  retention_in_days = 14
 
   tags = {
     Environment = var.environment
@@ -434,7 +434,7 @@ resource "aws_cloudwatch_log_group" "file_processor" {
 
 resource "aws_cloudwatch_log_group" "account_operations" {
   name              = "/aws/lambda/${aws_lambda_function.account_operations.function_name}"
-  retention_in_days = 7
+  retention_in_days = 14
 
   tags = {
     Environment = var.environment
@@ -445,7 +445,7 @@ resource "aws_cloudwatch_log_group" "account_operations" {
 
 resource "aws_cloudwatch_log_group" "transaction_operations" {
   name              = "/aws/lambda/${aws_lambda_function.transaction_operations.function_name}"
-  retention_in_days = 7
+  retention_in_days = 14
 
   tags = {
     Environment = var.environment

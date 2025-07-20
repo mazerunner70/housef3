@@ -98,6 +98,12 @@ resource "aws_s3_bucket" "import_packages_logs" {
     Project     = "housef3"
     Component   = "import-packages-logs"
   }
+
+  # S3 Bucket Logging Configuration
+  logging {
+    target_bucket = aws_s3_bucket.s3_access_logs.id
+    target_prefix = "s3-access-logs/import-packages-logs/"
+  }
 }
 
 # Dedicated CloudFront Logging Bucket
@@ -240,14 +246,6 @@ resource "aws_s3_bucket" "import_packages" {
     Project     = "housef3"
     Component   = "import-packages"
   }
-}
-
-# S3 Bucket Logging Configuration
-resource "aws_s3_bucket_logging" "import_packages_logging" {
-  bucket = aws_s3_bucket.import_packages.id
-  
-  target_bucket = aws_s3_bucket.s3_access_logs.id
-  target_prefix = "s3-access-logs/import-packages/"
 }
 
 # S3 Bucket Versioning
