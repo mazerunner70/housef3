@@ -16,6 +16,12 @@ resource "aws_s3_bucket" "frontend" {
   lifecycle {
     prevent_destroy = true
   }
+
+  # S3 Bucket Logging Configuration
+  logging {
+    target_bucket = aws_s3_bucket.s3_access_logs.id
+    target_prefix = "s3-access-logs/frontend/"
+  }
 }
 
 # Configure public access settings for website hosting
@@ -23,9 +29,9 @@ resource "aws_s3_bucket_public_access_block" "frontend" {
   bucket = aws_s3_bucket.frontend.id
 
   block_public_acls       = true
-  block_public_policy     = false
-  ignore_public_acls      = false
-  restrict_public_buckets = false
+  block_public_policy     = true   # ✅ BLOCK public policies
+  ignore_public_acls      = true   # ✅ IGNORE public ACLs
+  restrict_public_buckets = true   # ✅ RESTRICT public buckets
 }
 
 # Enable versioning for the frontend bucket
@@ -47,15 +53,43 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "frontend" {
   }
 }
 
-# Update bucket policy to allow public read access for website
+# Update bucket policy to allow CloudFront access only
 data "aws_iam_policy_document" "frontend_policy" {
   statement {
     actions   = ["s3:GetObject"]
     resources = ["${aws_s3_bucket.frontend.arn}/*"]
 
     principals {
-      type        = "*"
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+    
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceArn"
+      values   = [aws_cloudfront_distribution.frontend.arn]
+    }
+  }
+
+  # Deny non-HTTPS requests
+  statement {
+    sid    = "DenyNonHTTPSRequests"
+    effect = "Deny"
+    principals {
+      type        = "AWS"
       identifiers = ["*"]
+    }
+    actions = [
+      "s3:*"
+    ]
+    resources = [
+      aws_s3_bucket.frontend.arn,
+      "${aws_s3_bucket.frontend.arn}/*"
+    ]
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
     }
   }
 }

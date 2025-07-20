@@ -2,7 +2,7 @@
 
 ## Technical Implementation Guide
 
-This document provides detailed technical guidance for implementing the import/export system described in `import-export-design.md`.
+This document provides detailed technical guidance for implementing the import/export system described in `import-export-design.md` using **FZIP (Financial ZIP) files**.
 
 ## Code Structure and Organization
 
@@ -17,7 +17,7 @@ backend/src/services/
 │   │   ├── category_collector.py   # Category data collection
 │   │   ├── file_map_collector.py   # File map data collection
 │   │   └── analytics_collector.py  # Analytics data collection
-│   ├── package_builder.py          # ZIP package creation
+│   ├── fzip_package_builder.py     # FZIP package creation
 │   ├── manifest_generator.py       # Manifest file generation
 │   └── file_collector.py          # S3 file collection
 ├── import/
@@ -31,7 +31,7 @@ backend/src/services/
 │   │   ├── transaction_importer.py # Transaction data import
 │   │   ├── category_importer.py    # Category data import
 │   │   └── file_map_importer.py    # File map data import
-│   ├── package_parser.py           # ZIP package parsing
+│   ├── fzip_package_parser.py      # FZIP package parsing
 │   └── file_restorer.py           # S3 file restoration
 └── common/
     ├── export_import_models.py     # Shared data models
@@ -69,7 +69,7 @@ import uuid
 class ExportStatus(str, Enum):
     INITIATED = "initiated"
     COLLECTING_DATA = "collecting_data"
-    BUILDING_PACKAGE = "building_package"
+    BUILDING_FZIP_PACKAGE = "building_fzip_package"
     UPLOADING = "uploading"
     COMPLETED = "completed"
     FAILED = "failed"
@@ -81,11 +81,16 @@ class ExportType(str, Enum):
     CATEGORIES_ONLY = "categories_only"
     DATE_RANGE = "date_range"
 
+class ExportFormat(str, Enum):
+    FZIP = "fzip"
+    JSON = "json"
+
 class ExportJob(BaseModel):
     export_id: uuid.UUID = Field(default_factory=uuid.uuid4, alias="exportId")
     user_id: str = Field(alias="userId")
     status: ExportStatus
     export_type: ExportType = Field(alias="exportType")
+    export_format: ExportFormat = Field(default=ExportFormat.FZIP, alias="exportFormat")
     parameters: Dict[str, Any] = Field(default_factory=dict)
     requested_at: int = Field(alias="requestedAt")
     completed_at: Optional[int] = Field(default=None, alias="completedAt")
@@ -105,7 +110,7 @@ import uuid
 from typing import Dict, Any
 from datetime import datetime, timezone, timedelta
 
-from models.export_job import ExportJob, ExportStatus, ExportType
+from models.export_job import ExportJob, ExportStatus, ExportType, ExportFormat
 from services.export.export_service import ExportService
 from utils.auth import get_user_from_event
 from utils.lambda_utils import create_response, mandatory_body_parameter, optional_body_parameter
@@ -119,6 +124,7 @@ def initiate_export_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
     try:
         # Parse request parameters
         export_type = optional_body_parameter(event, 'exportType') or 'complete'
+        export_format = optional_body_parameter(event, 'format') or 'fzip'
         include_analytics = optional_body_parameter(event, 'includeAnalytics') or False
         description = optional_body_parameter(event, 'description')
         
@@ -127,6 +133,7 @@ def initiate_export_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
             userId=user_id,
             status=ExportStatus.INITIATED,
             exportType=ExportType(export_type),
+            exportFormat=ExportFormat(export_format),
             parameters={
                 'includeAnalytics': include_analytics,
                 'description': description
@@ -144,6 +151,7 @@ def initiate_export_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
         return create_response(201, {
             'exportId': str(export_job.export_id),
             'status': export_job.status.value,
+            'packageFormat': export_job.export_format.value,
             'estimatedCompletion': calculate_estimated_completion(export_job)
         })
         
@@ -166,7 +174,8 @@ def get_export_status_handler(event: Dict[str, Any], user_id: str) -> Dict[str, 
             'progress': export_job.progress,
             'downloadUrl': export_job.download_url,
             'expiresAt': export_job.expires_at,
-            'error': export_job.error_message
+            'error': export_job.error_message,
+            'packageFormat': export_job.export_format.value
         })
         
     except Exception as e:
@@ -208,11 +217,11 @@ from typing import List, Dict, Any
 import boto3
 from datetime import datetime, timezone, timedelta
 
-from models.export_job import ExportJob, ExportStatus
+from models.export_job import ExportJob, ExportStatus, ExportFormat
 from .data_collectors.account_collector import AccountCollector
 from .data_collectors.transaction_collector import TransactionCollector
 from .data_collectors.category_collector import CategoryCollector
-from .package_builder import PackageBuilder
+from .fzip_package_builder import FZIPPackageBuilder
 from .manifest_generator import ManifestGenerator
 from utils.db_utils import update_export_job
 from utils.s3_dao import put_object, get_presigned_url_simple
@@ -224,7 +233,7 @@ class ExportService:
         self.account_collector = AccountCollector()
         self.transaction_collector = TransactionCollector()
         self.category_collector = CategoryCollector()
-        self.package_builder = PackageBuilder()
+        self.fzip_package_builder = FZIPPackageBuilder()
         self.manifest_generator = ManifestGenerator()
     
     async def start_export_async(self, export_job: ExportJob):
@@ -238,13 +247,16 @@ class ExportService:
             # Collect all data
             data = await self.collect_user_data(export_job)
             
-            # Update status to building package
-            export_job.status = ExportStatus.BUILDING_PACKAGE
+            # Update status to building FZIP package
+            export_job.status = ExportStatus.BUILDING_FZIP_PACKAGE
             export_job.progress = 60
             update_export_job(export_job)
             
-            # Build export package
-            package_path = await self.build_package(export_job, data)
+            # Build FZIP export package
+            if export_job.export_format == ExportFormat.FZIP:
+                package_path = await self.fzip_package_builder.build_fzip_package(export_job, data)
+            else:
+                package_path = await self.build_json_package(export_job, data)
             
             # Update status to uploading
             export_job.status = ExportStatus.UPLOADING
@@ -358,32 +370,32 @@ class TransactionCollector:
             raise
 ```
 
-### Step 1.3: Package Builder (Week 2, Days 1-3)
+### Step 1.3: FZIP Package Builder (Week 2, Days 1-3)
 
 ```python
-# backend/src/services/export/package_builder.py
+# backend/src/services/export/fzip_package_builder.py
 import zipfile
 import json
 import tempfile
 import os
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List
 from .manifest_generator import ManifestGenerator
 from .file_collector import FileCollector
 
 logger = logging.getLogger()
 
-class PackageBuilder:
+class FZIPPackageBuilder:
     def __init__(self):
         self.manifest_generator = ManifestGenerator()
         self.file_collector = FileCollector()
     
-    async def build_package(self, export_job, data: Dict[str, Any]) -> str:
-        """Build ZIP package with all export data."""
+    async def build_fzip_package(self, export_job, data: Dict[str, Any]) -> str:
+        """Build FZIP package with all export data."""
         try:
             # Create temporary directory
             temp_dir = tempfile.mkdtemp()
-            package_path = os.path.join(temp_dir, f"export_{export_job.export_id}.zip")
+            package_path = os.path.join(temp_dir, f"export_{export_job.export_id}.fzip")
             
             with zipfile.ZipFile(package_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 # Add manifest
@@ -406,11 +418,11 @@ class PackageBuilder:
             return package_path
             
         except Exception as e:
-            logger.error(f"Error building package: {str(e)}")
+            logger.error(f"Error building FZIP package: {str(e)}")
             raise
     
     async def _add_transaction_files(self, zipf: zipfile.ZipFile, transaction_files: List[Dict]):
-        """Add actual transaction files from S3 to the package."""
+        """Add actual transaction files from S3 to the FZIP package."""
         for file_metadata in transaction_files:
             try:
                 file_id = file_metadata['fileId']
@@ -420,7 +432,7 @@ class PackageBuilder:
                 # Download file content from S3
                 file_content = self.file_collector.get_file_content_from_s3(s3_key)
                 if file_content:
-                    # Add to ZIP under files/[file_id]/[filename]
+                    # Add to FZIP under files/[file_id]/[filename]
                     zipf.writestr(f'files/{file_id}/{file_name}', file_content)
                 else:
                     logger.warning(f"Could not retrieve file content for {file_id}")
@@ -456,11 +468,16 @@ class MergeStrategy(str, Enum):
     OVERWRITE = "overwrite"
     SKIP_EXISTING = "skip_existing"
 
+class ImportFormat(str, Enum):
+    FZIP = "fzip"
+    JSON = "json"
+
 class ImportJob(BaseModel):
     import_id: uuid.UUID = Field(default_factory=uuid.uuid4, alias="importId")
     user_id: str = Field(alias="userId")
     status: ImportStatus
     merge_strategy: MergeStrategy = Field(alias="mergeStrategy")
+    import_format: ImportFormat = Field(default=ImportFormat.FZIP, alias="importFormat")
     uploaded_at: int = Field(alias="uploadedAt")
     completed_at: Optional[int] = Field(default=None, alias="completedAt")
     package_size: Optional[int] = Field(default=None, alias="packageSize")
@@ -479,10 +496,10 @@ import logging
 from typing import Dict, Any
 from .validators.schema_validator import SchemaValidator
 from .validators.business_validator import BusinessValidator
-from .package_parser import PackageParser
+from .fzip_package_parser import FZIPPackageParser
 from .data_importers.account_importer import AccountImporter
 from .data_importers.transaction_importer import TransactionImporter
-from models.import_job import ImportJob, ImportStatus
+from models.import_job import ImportJob, ImportStatus, ImportFormat
 
 logger = logging.getLogger()
 
@@ -490,20 +507,23 @@ class ImportService:
     def __init__(self):
         self.schema_validator = SchemaValidator()
         self.business_validator = BusinessValidator()
-        self.package_parser = PackageParser()
+        self.fzip_package_parser = FZIPPackageParser()
         self.account_importer = AccountImporter()
         self.transaction_importer = TransactionImporter()
     
     async def start_import_async(self, import_job: ImportJob, package_s3_key: str):
         """Start import processing asynchronously."""
         try:
-            # Parse package
+            # Parse FZIP package
             import_job.status = ImportStatus.VALIDATING
-            import_job.current_phase = "parsing_package"
+            import_job.current_phase = "parsing_fzip_package"
             import_job.progress = 10
             update_import_job(import_job)
             
-            package_data = await self.package_parser.parse_package(package_s3_key)
+            if import_job.import_format == ImportFormat.FZIP:
+                package_data = await self.fzip_package_parser.parse_fzip_package(package_s3_key)
+            else:
+                package_data = await self.json_package_parser.parse_json_package(package_s3_key)
             
             # Validate schema
             import_job.current_phase = "validating_schema"
@@ -547,7 +567,7 @@ class ImportService:
             update_import_job(import_job)
     
     async def import_data(self, import_job: ImportJob, package_data: Dict[str, Any]):
-        """Import all data from the package."""
+        """Import all data from the FZIP package."""
         try:
             import_job.status = ImportStatus.PROCESSING
             results = {}
@@ -724,7 +744,7 @@ resource "aws_lambda_function" "export_operations" {
       TRANSACTIONS_TABLE  = aws_dynamodb_table.transactions.name
       CATEGORIES_TABLE    = aws_dynamodb_table.categories.name
       FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.id
-      PACKAGE_BUCKET     = aws_s3_bucket.export_packages.id
+      FZIP_PACKAGE_BUCKET = aws_s3_bucket.export_packages.id
     }
   }
 }
@@ -748,7 +768,7 @@ resource "aws_lambda_function" "import_operations" {
       TRANSACTIONS_TABLE  = aws_dynamodb_table.transactions.name
       CATEGORIES_TABLE    = aws_dynamodb_table.categories.name
       FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.id
-      PACKAGE_BUCKET     = aws_s3_bucket.export_packages.id
+      FZIP_PACKAGE_BUCKET = aws_s3_bucket.export_packages.id
     }
   }
 }
@@ -762,7 +782,7 @@ resource "aws_lambda_function" "import_operations" {
 import pytest
 from unittest.mock import Mock, patch
 from services.export.export_service import ExportService
-from models.export_job import ExportJob, ExportStatus, ExportType
+from models.export_job import ExportJob, ExportStatus, ExportType, ExportFormat
 
 class TestExportService:
     @pytest.fixture
@@ -775,6 +795,7 @@ class TestExportService:
             userId="test_user",
             status=ExportStatus.INITIATED,
             exportType=ExportType.COMPLETE,
+            exportFormat=ExportFormat.FZIP,
             requestedAt=1642234567000
         )
     
@@ -805,7 +826,7 @@ class TestExportImportRoundtrip:
         # Create test accounts, transactions, categories
         # ... setup code ...
         
-        # Export data
+        # Export data to FZIP
         export_service = ExportService()
         export_job = create_test_export_job(user_id)
         package_path = await export_service.process_export(export_job)
@@ -813,7 +834,7 @@ class TestExportImportRoundtrip:
         # Clear user data
         # ... cleanup code ...
         
-        # Import data
+        # Import data from FZIP
         import_service = ImportService()
         import_job = create_test_import_job(user_id)
         await import_service.process_import(import_job, package_path)
@@ -859,14 +880,14 @@ class TransactionCollector:
 
 ### Memory Management
 ```python
-# backend/src/services/export/package_builder.py
-class PackageBuilder:
-    async def build_large_package(self, export_job, data: Dict[str, Any]) -> str:
-        """Build package with memory-efficient streaming."""
+# backend/src/services/export/fzip_package_builder.py
+class FZIPPackageBuilder:
+    async def build_large_fzip_package(self, export_job, data: Dict[str, Any]) -> str:
+        """Build FZIP package with memory-efficient streaming."""
         import tempfile
         
         # Use temporary file to avoid memory limits
-        with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as temp_file:
+        with tempfile.NamedTemporaryFile(suffix='.fzip', delete=False) as temp_file:
             with zipfile.ZipFile(temp_file, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as zipf:
                 # Write data in chunks
                 await self._write_data_chunks(zipf, data)
@@ -906,13 +927,13 @@ class ExportImportMetrics:
             ]
         )
     
-    def record_package_size(self, size_bytes: int):
-        """Record export package size."""
+    def record_fzip_package_size(self, size_bytes: int):
+        """Record FZIP export package size."""
         self.cloudwatch.put_metric_data(
             Namespace='HouseF3/ExportImport',
             MetricData=[
                 {
-                    'MetricName': 'PackageSize',
+                    'MetricName': 'FZIPPackageSize',
                     'Value': size_bytes,
                     'Unit': 'Bytes',
                     'Timestamp': datetime.utcnow()
@@ -927,7 +948,7 @@ class ExportImportMetrics:
 - [ ] Deploy export job DynamoDB table
 - [ ] Deploy export operations Lambda
 - [ ] Update API Gateway routes
-- [ ] Deploy export package S3 bucket
+- [ ] Deploy FZIP package S3 bucket
 - [ ] Test export functionality end-to-end
 - [ ] Monitor CloudWatch logs and metrics
 
@@ -947,4 +968,4 @@ class ExportImportMetrics:
 - [ ] Conduct user acceptance testing
 - [ ] Release to production
 
-This implementation plan provides the detailed technical guidance needed to build the complete import/export system while maintaining code quality, performance, and reliability standards. 
+This implementation plan provides the detailed technical guidance needed to build the complete import/export system using **FZIP (Financial ZIP) files** while maintaining code quality, performance, and reliability standards. 

@@ -12,6 +12,12 @@ resource "aws_s3_bucket" "file_storage" {
     Name = "${var.project_name}-${var.environment}-file-storage"
     Description = "S3 bucket for file storage and management"
   })
+
+  # S3 Bucket Logging Configuration
+  logging {
+    target_bucket = aws_s3_bucket.s3_access_logs.id
+    target_prefix = "s3-access-logs/file-storage/"
+  }
 }
 
 # Enable versioning for the file storage bucket
@@ -139,6 +145,28 @@ data "aws_iam_policy_document" "file_storage_policy" {
       "${aws_s3_bucket.file_storage.arn}/*"
     ]
   }
+
+  # Deny non-HTTPS requests
+  statement {
+    sid    = "DenyNonHTTPSRequests"
+    effect = "Deny"
+    principals {
+      type        = "AWS"
+      identifiers = ["*"]
+    }
+    actions = [
+      "s3:*"
+    ]
+    resources = [
+      aws_s3_bucket.file_storage.arn,
+      "${aws_s3_bucket.file_storage.arn}/*"
+    ]
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
 }
 
 # Apply file storage bucket policy
@@ -152,7 +180,7 @@ resource "aws_s3_bucket_public_access_block" "file_storage" {
   bucket = aws_s3_bucket.file_storage.id
 
   block_public_acls       = true
-  block_public_policy     = false  # Allow bucket policies
+  block_public_policy     = true   # ✅ BLOCK public policies
   ignore_public_acls      = true
   restrict_public_buckets = true
 }

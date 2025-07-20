@@ -113,8 +113,8 @@ resource "aws_sqs_queue" "event_dlq" {
 resource "aws_sqs_queue" "event_dlq_dlq" {
   name = "${var.project_name}-${var.environment}-event-dlq-dlq"
   
-  # Retain messages for 30 days for deep investigation
-  message_retention_seconds = 2592000  # 30 days
+  # Retain messages for 14 days for deep investigation (max allowed)
+  message_retention_seconds = 1209600  # 14 days
   
   # Enable server-side encryption
   sqs_managed_sse_enabled = true
