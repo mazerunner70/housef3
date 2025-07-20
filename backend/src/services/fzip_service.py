@@ -258,12 +258,10 @@ class FZIPService:
                 
                 # Use streaming upload for large files
                 if package_size > 100 * 1024 * 1024:  # > 100MB
-                    with open(zip_path, 'rb') as f:
-                        put_object(s3_key, f.read(), 'application/zip', self.fzip_bucket)
-                else:
-                    with open(zip_path, 'rb') as f:
-                        put_object(s3_key, f.read(), 'application/zip', self.fzip_bucket)
-                
+                    logger.info(f"Uploading large export package to S3: {s3_key}")
+                with open(zip_path, 'rb') as f:
+                    put_object(s3_key, f.read(), 'application/zip', self.fzip_bucket)
+            
 
                 
                 logger.info(f"Enhanced export package created: {s3_key}")
