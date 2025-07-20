@@ -76,18 +76,29 @@ resource "aws_s3_bucket" "import_packages" {
   }
 }
 
+# Import Packages Logging Bucket
+resource "aws_s3_bucket" "import_packages_logs" {
+  bucket = "${var.environment}-import-packages-logs"
+  
+  tags = {
+    Environment = var.environment
+    Project     = "housef3"
+    Component   = "import-packages-logs"
+  }
+}
+
+# S3 Bucket ACL for Log Delivery
+resource "aws_s3_bucket_acl" "import_packages_logs_acl" {
+  bucket = aws_s3_bucket.import_packages_logs.id
+  acl    = "log-delivery-write"
+}
+
 # S3 Bucket Logging Configuration
 resource "aws_s3_bucket_logging" "import_packages_logging" {
   bucket = aws_s3_bucket.import_packages.id
   
-  target_bucket = aws_s3_bucket.file_storage.id
-  target_prefix = "logs/import-packages/"
-}
-
-# S3 Bucket ACL for Log Delivery
-resource "aws_s3_bucket_acl" "file_storage_log_delivery" {
-  bucket = aws_s3_bucket.file_storage.id
-  acl    = "log-delivery-write"
+  target_bucket = aws_s3_bucket.import_packages_logs.id
+  target_prefix = "logs/"
 }
 
 # S3 Bucket Versioning
