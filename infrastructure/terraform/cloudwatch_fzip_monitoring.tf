@@ -9,7 +9,7 @@
 # =========================================
 
 data "aws_cloudwatch_log_group" "fzip_operations" {
-  name = "/aws/lambda/${aws_lambda_function.export_operations.function_name}"
+  name = "/aws/lambda/${var.project_name}-${var.environment}-export-operations"
 }
 
 # =========================================
@@ -245,7 +245,7 @@ resource "aws_cloudwatch_metric_alarm" "fzip_lambda_errors" {
   alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
 
   dimensions = {
-    FunctionName = aws_lambda_function.export_operations.function_name
+    FunctionName = "${var.project_name}-${var.environment}-export-operations"
   }
 
   tags = {
@@ -270,7 +270,7 @@ resource "aws_cloudwatch_metric_alarm" "fzip_lambda_duration" {
   alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
 
   dimensions = {
-    FunctionName = aws_lambda_function.export_operations.function_name
+    FunctionName = "${var.project_name}-${var.environment}-export-operations"
   }
 
   tags = {
