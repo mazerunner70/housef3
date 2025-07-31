@@ -7,6 +7,12 @@
 resource "aws_s3_bucket" "s3_access_logs" {
   bucket = "${var.project_name}-${var.environment}-s3-access-logs"
   
+  # Add logging configuration inline
+  logging {
+    target_bucket = aws_s3_bucket.frontend.id
+    target_prefix = "access-logs-audit/"
+  }
+  
   tags = {
     Environment = var.environment
     Project     = var.project_name
@@ -14,14 +20,6 @@ resource "aws_s3_bucket" "s3_access_logs" {
   }
 
   # Note: Access logs bucket logs to frontend bucket to avoid self-referential loop
-}
-
-# Add logging configuration for the access logs bucket
-resource "aws_s3_bucket_logging" "s3_access_logs_logging" {
-  bucket = aws_s3_bucket.s3_access_logs.id
-
-  target_bucket = aws_s3_bucket.frontend.id
-  target_prefix = "access-logs-audit/"
 }
 
 # S3 Bucket Versioning
