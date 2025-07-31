@@ -32,12 +32,18 @@ from utils.db_utils import (
     delete_fzip_job, cleanup_expired_fzip_jobs
 )
 from utils.s3_dao import get_object_content, put_object, get_presigned_url_simple
+from utils.fzip_metrics import fzip_metrics
 from services.event_service import event_service
 from services.export_data_processors import (
     AccountExporter, TransactionExporter, CategoryExporter, 
     FileMapExporter, TransactionFileExporter, ExportException
 )
 from services.s3_file_handler import S3FileStreamer, ExportPackageBuilder, FileStreamingOptions
+
+
+class ImportException(Exception):
+    """Custom exception for import processing errors"""
+    pass
 
 
 logger = logging.getLogger(__name__)
@@ -166,20 +172,41 @@ class FZIPService:
             # Add export summaries for reporting
             collected_data['_export_summaries'] = export_summaries
             
-
+            # Record data volume metrics
+            entity_counts = {
+                entity_type: summary['processed_count'] 
+                for entity_type, summary in export_summaries.items()
+            }
+            fzip_metrics.record_export_data_volume(entity_counts, export_type.value)
             
-            logger.info(f"Enhanced data collection complete using specialized exporters")
+            logger.info("Enhanced data collection complete using specialized exporters")
             for entity_type, summary in export_summaries.items():
-                logger.info(f"{entity_type}: {summary['processed_count']} items, "
-                          f"{summary.get('success_rate', 100):.1f}% success rate")
+                logger.info(
+                    "%s: %d items, %.1f%% success rate",
+                    entity_type,
+                    summary['processed_count'],
+                    summary.get('success_rate', 100)
+                )
             
             return collected_data
             
         except ExportException as e:
             logger.error(f"Export-specific error collecting data for user {user_id}: {str(e)}")
+            fzip_metrics.record_export_error(
+                error_type=type(e).__name__,
+                error_message=str(e),
+                export_type=export_type.value,
+                phase="data_collection"
+            )
             raise
         except Exception as e:
             logger.error(f"Failed to collect data for user {user_id}: {str(e)}")
+            fzip_metrics.record_export_error(
+                error_type=type(e).__name__,
+                error_message=str(e),
+                export_type=export_type.value,
+                phase="data_collection"
+            )
             raise
     
     def _collect_analytics(self, user_id: str) -> List[Dict[str, Any]]:
@@ -256,13 +283,14 @@ class FZIPService:
                 s3_key = f"exports/{export_job.user_id}/{export_job.job_id}/export_package.zip"
                 package_size = os.path.getsize(zip_path)
                 
-                # Use streaming upload for large files
-                if package_size > 100 * 1024 * 1024:  # > 100MB
-                    logger.info(f"Uploading large export package to S3: {s3_key}")
+                # Upload to S3
+                logger.info(f"Uploading export package to S3: {s3_key}")
                 with open(zip_path, 'rb') as f:
                     put_object(s3_key, f.read(), 'application/zip', self.fzip_bucket)
-            
-
+                
+                # Record package size metrics
+                export_type = export_job.export_type.value if export_job.export_type else "complete"
+                fzip_metrics.record_export_package_size(package_size, export_type)
                 
                 logger.info(f"Enhanced export package created: {s3_key}")
                 logger.info(f"Package size: {package_size} bytes, "
@@ -274,6 +302,14 @@ class FZIPService:
                 
         except Exception as e:
             logger.error(f"Failed to build enhanced export package for job {export_job.job_id}: {str(e)}")
+            # Record error metrics
+            export_type = export_job.export_type.value if export_job.export_type else "complete"
+            fzip_metrics.record_export_error(
+                error_type=type(e).__name__,
+                error_message=str(e),
+                export_type=export_type,
+                phase="package_building"
+            )
             raise
     
     def _create_enhanced_manifest(self, export_job: FZIPJob, collected_data: Dict[str, Any], 
@@ -444,7 +480,7 @@ class FZIPService:
             # Download package from S3
             package_data = get_object_content(package_s3_key, self.fzip_bucket)
             if not package_data:
-                raise Exception("Could not download package from S3")
+                raise ImportException("Could not download package from S3")
             
             # Parse ZIP file
             with zipfile.ZipFile(io.BytesIO(package_data), 'r') as zipf:
@@ -468,7 +504,7 @@ class FZIPService:
                 
         except Exception as e:
             logger.error(f"Error parsing package: {str(e)}")
-            raise Exception(f"Failed to parse import package: {str(e)}")
+            raise ImportException(f"Failed to parse import package: {str(e)}")
     
     def _validate_schema(self, package_data: Dict[str, Any]) -> Dict[str, Any]:
         """Validate the package schema."""

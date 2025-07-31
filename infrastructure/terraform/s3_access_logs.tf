@@ -3,11 +3,15 @@
 # =========================================
 # Centralized S3 bucket for storing access logs from other S3 buckets
 
-# Data source for current AWS account
-data "aws_caller_identity" "current" {}
 
 resource "aws_s3_bucket" "s3_access_logs" {
   bucket = "${var.project_name}-${var.environment}-s3-access-logs"
+  
+  # Add logging configuration inline
+  logging {
+    target_bucket = aws_s3_bucket.frontend.id
+    target_prefix = "access-logs-audit/"
+  }
   
   tags = {
     Environment = var.environment
@@ -15,11 +19,7 @@ resource "aws_s3_bucket" "s3_access_logs" {
     Component   = "s3-access-logs"
   }
 
-  # S3 Bucket Logging Configuration - Self-referencing for access logs bucket logs
-  logging {
-    target_bucket = aws_s3_bucket.s3_access_logs.id
-    target_prefix = "s3-access-logs-bucket-logs/"
-  }
+  # Note: Access logs bucket logs to frontend bucket to avoid self-referential loop
 }
 
 # S3 Bucket Versioning
@@ -27,6 +27,22 @@ resource "aws_s3_bucket_versioning" "s3_access_logs_versioning" {
   bucket = aws_s3_bucket.s3_access_logs.id
   versioning_configuration {
     status = "Enabled"
+  }
+}
+
+# S3 Bucket ACL Configuration - Required for CloudFront logging
+resource "aws_s3_bucket_acl" "s3_access_logs_acl" {
+  depends_on = [aws_s3_bucket_ownership_controls.s3_access_logs_ownership]
+  bucket     = aws_s3_bucket.s3_access_logs.id
+  acl        = "log-delivery-write"
+}
+
+# S3 Bucket Ownership Controls - Required for ACL
+resource "aws_s3_bucket_ownership_controls" "s3_access_logs_ownership" {
+  bucket = aws_s3_bucket.s3_access_logs.id
+
+  rule {
+    object_ownership = "BucketOwnerPreferred"
   }
 }
 
