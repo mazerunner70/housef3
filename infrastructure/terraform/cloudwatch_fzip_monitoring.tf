@@ -286,7 +286,8 @@ resource "aws_cloudwatch_metric_alarm" "fzip_lambda_duration" {
 # =========================================
 
 resource "aws_sns_topic" "fzip_alerts" {
-  name = "${var.project_name}-${var.environment}-fzip-alerts"
+  name              = "${var.project_name}-${var.environment}-fzip-alerts"
+  kms_master_key_id = "alias/aws/sns"  # Use AWS managed key for SNS encryption
 
   tags = {
     Environment = var.environment
