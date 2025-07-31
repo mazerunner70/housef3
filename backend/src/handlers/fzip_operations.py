@@ -33,6 +33,7 @@ from services.fzip_service import fzip_service
 from services.event_service import event_service
 from models.events import ExportCompletedEvent, ExportFailedEvent
 from utils.auth import get_user_from_event
+from utils.fzip_metrics import fzip_metrics
 from utils.lambda_utils import (
     create_response, mandatory_path_parameter, optional_body_parameter,
     mandatory_body_parameter, handle_error
@@ -317,75 +318,86 @@ def process_fzip_export_job(fzip_job: FZIPJob) -> FZIPJob:
     Process an FZIP export job (simplified for Phase 1)
     In production, this would be handled by a separate Lambda or async process
     """
-    try:
-        logger.info(f"Processing FZIP export job: {fzip_job.job_id}")
-        
-        # Update status to processing
-        fzip_job.status = FZIPStatus.EXPORT_PROCESSING
-        fzip_job.progress = 10
-        fzip_job.current_phase = "collecting_data"
-        update_fzip_job(fzip_job)
+    export_type = fzip_job.export_type.value if fzip_job.export_type else "complete"
+    
+    with fzip_metrics.measure_export_duration(export_type, fzip_job.user_id):
+        try:
+            logger.info(f"Processing FZIP export job: {fzip_job.job_id}")
+            
+            # Update status to processing
+            fzip_job.status = FZIPStatus.EXPORT_PROCESSING
+            fzip_job.progress = 10
+            fzip_job.current_phase = "collecting_data"
+            update_fzip_job(fzip_job)
 
-        # Collect user data
-        export_type = fzip_job.export_type or FZIPExportType.COMPLETE
-        collected_data = fzip_service_instance.collect_user_data(
-            user_id=fzip_job.user_id,
-            export_type=export_type,
-            include_analytics=fzip_job.include_analytics,
-            **(fzip_job.parameters or {})
-        )
-        
-        fzip_job.progress = 60
-        fzip_job.current_phase = "building_fzip_package"
-        update_fzip_job(fzip_job)        
-        
-        # Build FZIP export package
-        s3_key, package_size = fzip_service_instance.build_export_package(fzip_job, collected_data)
-        
-        fzip_job.progress = 90
-        fzip_job.current_phase = "generating_download_url"
-        update_fzip_job(fzip_job)
-        
-        # Generate download URL
-        download_url = fzip_service_instance.generate_download_url(s3_key)
-        
-        # Update job with results
-        fzip_job.status = FZIPStatus.EXPORT_COMPLETED
-        fzip_job.progress = 100
-        fzip_job.current_phase = "completed"
-        fzip_job.s3_key = s3_key
-        fzip_job.package_size = package_size
-        fzip_job.download_url = download_url
-        fzip_job.completed_at = int(datetime.now(timezone.utc).timestamp() * 1000)
-        update_fzip_job(fzip_job)
-        
-        # Publish completion event
-        completion_event = ExportCompletedEvent(
-            user_id=fzip_job.user_id,
-            export_id=str(fzip_job.job_id),
-            export_type=fzip_job.export_type.value if fzip_job.export_type else "complete",
-            package_size=package_size,
-            download_url=download_url,
-            s3_key=s3_key,
-            data_summary={
-                "accounts": len(collected_data.get('accounts', [])),
-                "transactions": len(collected_data.get('transactions', [])),
-                "categories": len(collected_data.get('categories', [])),
-                "file_maps": len(collected_data.get('file_maps', [])),
-                "transaction_files": len(collected_data.get('transaction_files', []))
-            }
-        )
-        event_service.publish_event(completion_event)
-        
-        logger.info(f"FZIP export job completed: {fzip_job.job_id}")
-        return fzip_job
-        
-    except Exception as e:
-        logger.error(f"Failed to process FZIP export job {fzip_job.job_id}: {str(e)}")
-        fzip_job.status = FZIPStatus.EXPORT_FAILED
-        fzip_job.error = str(e)
-        update_fzip_job(fzip_job)
-        raise
+            # Collect user data
+            export_type_enum = fzip_job.export_type or FZIPExportType.COMPLETE
+            collected_data = fzip_service_instance.collect_user_data(
+                user_id=fzip_job.user_id,
+                export_type=export_type_enum,
+                include_analytics=fzip_job.include_analytics,
+                **(fzip_job.parameters or {})
+            )
+            
+            fzip_job.progress = 60
+            fzip_job.current_phase = "building_fzip_package"
+            update_fzip_job(fzip_job)        
+            
+            # Build FZIP export package
+            s3_key, package_size = fzip_service_instance.build_export_package(fzip_job, collected_data)
+            
+            fzip_job.progress = 90
+            fzip_job.current_phase = "generating_download_url"
+            update_fzip_job(fzip_job)
+            
+            # Generate download URL
+            download_url = fzip_service_instance.generate_download_url(s3_key)
+            
+            # Update job with results
+            fzip_job.status = FZIPStatus.EXPORT_COMPLETED
+            fzip_job.progress = 100
+            fzip_job.current_phase = "completed"
+            fzip_job.s3_key = s3_key
+            fzip_job.package_size = package_size
+            fzip_job.download_url = download_url
+            fzip_job.completed_at = int(datetime.now(timezone.utc).timestamp() * 1000)
+            update_fzip_job(fzip_job)
+            
+            # Publish completion event
+            completion_event = ExportCompletedEvent(
+                user_id=fzip_job.user_id,
+                export_id=str(fzip_job.job_id),
+                export_type=fzip_job.export_type.value if fzip_job.export_type else "complete",
+                package_size=package_size,
+                download_url=download_url,
+                s3_key=s3_key,
+                data_summary={
+                    "accounts": len(collected_data.get('accounts', [])),
+                    "transactions": len(collected_data.get('transactions', [])),
+                    "categories": len(collected_data.get('categories', [])),
+                    "file_maps": len(collected_data.get('file_maps', [])),
+                    "transaction_files": len(collected_data.get('transaction_files', []))
+                }
+            )
+            event_service.publish_event(completion_event)
+            
+            logger.info(f"FZIP export job completed: {fzip_job.job_id}")
+            return fzip_job
+            
+        except Exception as e:
+            logger.error(f"Failed to process FZIP export job {fzip_job.job_id}: {str(e)}")
+            fzip_job.status = FZIPStatus.EXPORT_FAILED
+            fzip_job.error = str(e)
+            update_fzip_job(fzip_job)
+            
+            # Record failure metrics
+            fzip_metrics.record_export_error(
+                error_type=type(e).__name__,
+                error_message=str(e),
+                export_type=export_type,
+                phase="overall_processing"
+            )
+            raise
 
 
 # ============================================================================
