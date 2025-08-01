@@ -54,6 +54,11 @@ class ImportException(Exception):
     pass
 
 
+class ValidationException(Exception):
+    """Custom exception for validation errors"""
+    pass
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -414,8 +419,8 @@ class FZIPService:
             if not empty_check['valid']:
                 error_message = "Validation failed: " + " ".join(empty_check['errors'])
                 self._fail_job(restore_job, error_message)
-                # Note: Consider raising an exception here to notify the caller immediately
-                return restore_job  # Or handle as per API contract for immediate failure
+                # Raise exception to notify caller immediately
+                raise ValidationException(error_message)
             
             # Save to database
             create_fzip_job(restore_job)
@@ -616,6 +621,39 @@ class FZIPService:
                 'errors': [f"Business validation failed: {str(e)}"]
             }
     
+    def _validate_file_formats(self, user_id: str) -> Dict[str, Any]:
+        """Validate file formats before backup."""
+        try:
+            invalid_files = []
+            
+            # Check transaction files for valid formats
+            transaction_files = list_user_files(user_id)
+            for file_obj in transaction_files:
+                if not file_obj.file_format or file_obj.file_format not in ['CSV', 'OFX', 'QIF']:
+                    invalid_files.append(f"File {file_obj.file_name} has invalid format: {file_obj.file_format}")
+                
+                # Check file status - should be processed successfully
+                if file_obj.processing_status not in ['PROCESSED', 'SUCCESS']:
+                    invalid_files.append(f"File {file_obj.file_name} not processed successfully (status: {file_obj.processing_status})")
+            
+            if invalid_files:
+                return {
+                    'valid': False,
+                    'errors': [f"Invalid file formats detected: {'; '.join(invalid_files)}"]
+                }
+            
+            return {
+                'valid': True,
+                'errors': []
+            }
+            
+        except Exception as e:
+            logger.error(f"Error validating file formats: {str(e)}")
+            return {
+                'valid': False,
+                'errors': [f"File format validation failed: {str(e)}"]
+            }
+
     def _validate_empty_profile(self, user_id: str) -> Dict[str, Any]:
         """Validate that user profile is completely empty for restore."""
         try:
@@ -641,8 +679,10 @@ class FZIPService:
             if transaction_files:
                 artifacts.append(f"{len(transaction_files)} transaction file(s)")
             
-            # Check for existing transactions (if we have a method for this)
-            # Note: We could add transaction check here if needed
+            # Check for existing transactions
+            _, _, transaction_count = list_user_transactions(user_id, limit=1)
+            if transaction_count > 0:
+                artifacts.append(f"{transaction_count} transaction(s)")
             
             if artifacts:
                 return {
@@ -1084,7 +1124,7 @@ class FZIPService:
                        backup_format: FZIPFormat = FZIPFormat.FZIP,
                        **kwargs) -> FZIPJob:
         """
-        Initiate a new backup job (alias for initiate_export)
+        Initiate a new backup job (alias for initiate_export) with file format validation.
         
         Args:
             user_id: User identifier
@@ -1093,6 +1133,12 @@ class FZIPService:
             description: Optional description for the backup
             backup_format: Format of the backup package
         """
+        # Validate file formats before backup
+        format_check = self._validate_file_formats(user_id)
+        if not format_check['valid']:
+            error_message = "File format validation failed: " + " ".join(format_check['errors'])
+            raise ValidationException(error_message)
+        
         return self.initiate_export(user_id, backup_type, include_analytics, 
                                   description, backup_format, **kwargs)
 
