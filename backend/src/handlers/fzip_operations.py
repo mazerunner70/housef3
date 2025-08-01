@@ -413,8 +413,9 @@ def create_fzip_restore_handler(event: Dict[str, Any], user_id: str) -> Dict[str
         create_fzip_job(fzip_job)
         
         # Generate upload URL for FZIP package
+        restore_bucket = os.environ.get('FZIP_RESTORE_PACKAGES_BUCKET', 'housef3-dev-restore-packages')
         upload_url_data = get_presigned_post_url(
-            bucket="housef3-dev-restore-packages",
+            bucket=restore_bucket,
             key=f"packages/{fzip_job.job_id}.fzip",  # Use .fzip extension
             expires_in=3600,
             conditions=[
