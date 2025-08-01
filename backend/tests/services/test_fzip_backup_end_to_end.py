@@ -29,8 +29,8 @@ from services.export_data_processors import (
 from utils.db_utils import create_fzip_job, get_fzip_job, update_fzip_job
 
 
-class TestFZIPExportEndToEnd:
-    """Comprehensive end-to-end tests for FZIP export functionality."""
+class TestFZIPBackupEndToEnd:
+    """Comprehensive end-to-end tests for FZIP backup functionality."""
 
     @pytest.fixture
     def test_user_id(self):
@@ -44,7 +44,7 @@ class TestFZIPExportEndToEnd:
 
     @pytest.fixture
     def sample_test_data(self, test_user_id):
-        """Create sample test data for export testing."""
+        """Create sample test data for backup testing."""
         # Create consistent file ID for transactions and files
         sample_file_id = uuid.uuid4()
         
@@ -237,7 +237,7 @@ class TestFZIPExportEndToEnd:
             # Collect data
             collected_data = fzip_service.collect_user_data(
                 user_id=test_user_id,
-                export_type=FZIPExportType.COMPLETE,
+                backup_type=FZIPExportType.COMPLETE,
                 include_analytics=False
             )
 
@@ -257,12 +257,12 @@ class TestFZIPExportEndToEnd:
     def test_fzip_package_creation(self, fzip_service, test_user_id, sample_test_data):
         """Test FZIP package creation with real data."""
         
-        # Create a test export job
-        export_job = FZIPJob(
-            jobType=FZIPType.EXPORT,
+        # Create a test backup job
+        backup_job = FZIPJob(
+            jobType=FZIPType.BACKUP,
             userId=test_user_id,
-            status=FZIPStatus.EXPORT_PROCESSING,
-            exportType=FZIPExportType.COMPLETE,
+            status=FZIPStatus.BACKUP_PROCESSING,
+            backupType=FZIPExportType.COMPLETE,
             includeAnalytics=False
         )
 
@@ -307,12 +307,12 @@ class TestFZIPExportEndToEnd:
                 # Collect data first
                 collected_data = fzip_service.collect_user_data(
                     user_id=test_user_id,
-                    export_type=FZIPExportType.COMPLETE,
+                    backup_type=FZIPExportType.COMPLETE,
                     include_analytics=False
                 )
 
                 # Build package
-                s3_key, package_size = fzip_service.build_export_package(export_job, collected_data)
+                s3_key, package_size = fzip_service.build_backup_package(backup_job, collected_data)
 
                 # Verify package was created
                 assert s3_key is not None
@@ -325,11 +325,11 @@ class TestFZIPExportEndToEnd:
     def test_fzip_manifest_generation(self, fzip_service, test_user_id, sample_test_data):
         """Test FZIP manifest file generation."""
         
-        export_job = FZIPJob(
-            jobType=FZIPType.EXPORT,
+        backup_job = FZIPJob(
+            jobType=FZIPType.BACKUP,
             userId=test_user_id,
-            status=FZIPStatus.EXPORT_PROCESSING,
-            exportType=FZIPExportType.COMPLETE,
+            status=FZIPStatus.BACKUP_PROCESSING,
+            backupType=FZIPExportType.COMPLETE,
             includeAnalytics=False
         )
 
@@ -341,7 +341,7 @@ class TestFZIPExportEndToEnd:
         }
 
         # Generate manifest
-        manifest = fzip_service._create_enhanced_manifest(export_job, sample_test_data, processing_summary)
+        manifest = fzip_service._create_enhanced_manifest(backup_job, sample_test_data, processing_summary)
 
         # Verify manifest structure
         assert manifest.export_format_version == "1.0"
@@ -376,8 +376,8 @@ class TestFZIPExportEndToEnd:
             assert s3_key in download_url
             mock_presigned.assert_called_once_with(fzip_service.fzip_bucket, s3_key, 86400)
 
-    def test_complete_export_pipeline(self, fzip_service, test_user_id, sample_test_data):
-        """Test the complete export pipeline from start to finish."""
+    def test_complete_backup_pipeline(self, fzip_service, test_user_id, sample_test_data):
+        """Test the complete backup pipeline from start to finish."""
         
         with patch('utils.db_utils.list_user_accounts') as mock_accounts, \
              patch('utils.db_utils.list_user_transactions') as mock_transactions, \
@@ -415,21 +415,21 @@ class TestFZIPExportEndToEnd:
                 mock_builder_instance.build_package_with_streaming.return_value = (package_dir, processing_summary)
 
                 # Step 1: Initiate export
-                export_job = fzip_service.initiate_export(
+                backup_job = fzip_service.initiate_backup(
                     user_id=test_user_id,
-                    export_type=FZIPExportType.COMPLETE,
+                    backup_type=FZIPExportType.COMPLETE,
                     include_analytics=False,
-                    description="Test export"
+                    description="Test backup"
                 )
 
-                assert export_job.user_id == test_user_id
-                assert export_job.status == FZIPStatus.EXPORT_INITIATED
-                assert export_job.export_type == FZIPExportType.COMPLETE
+                assert backup_job.user_id == test_user_id
+                assert backup_job.status == FZIPStatus.BACKUP_INITIATED
+                assert backup_job.backup_type == FZIPExportType.COMPLETE
 
                 # Step 2: Collect data
                 collected_data = fzip_service.collect_user_data(
                     user_id=test_user_id,
-                    export_type=FZIPExportType.COMPLETE,
+                    backup_type=FZIPExportType.COMPLETE,
                     include_analytics=False
                 )
 
@@ -437,7 +437,7 @@ class TestFZIPExportEndToEnd:
                 assert len(collected_data['transactions']) == 5
 
                 # Step 3: Build package
-                s3_key, package_size = fzip_service.build_export_package(export_job, collected_data)
+                s3_key, package_size = fzip_service.build_backup_package(backup_job, collected_data)
 
                 assert s3_key is not None
                 assert package_size > 0
@@ -447,8 +447,8 @@ class TestFZIPExportEndToEnd:
 
                 assert download_url == "https://example.com/download-url"
 
-    def test_export_error_handling(self, fzip_service, test_user_id):
-        """Test error handling in export operations."""
+    def test_backup_error_handling(self, fzip_service, test_user_id):
+        """Test error handling in backup operations."""
         
         # Test error during data collection
         with patch('utils.db_utils.list_user_accounts') as mock_accounts:
@@ -457,30 +457,30 @@ class TestFZIPExportEndToEnd:
             with pytest.raises(Exception) as exc_info:
                 fzip_service.collect_user_data(
                     user_id=test_user_id,
-                    export_type=FZIPExportType.COMPLETE,
+                    backup_type=FZIPExportType.COMPLETE,
                     include_analytics=False
                 )
             
             assert "Database connection failed" in str(exc_info.value)
 
         # Test error during package building
-        export_job = FZIPJob(
-            jobType=FZIPType.EXPORT,
+        backup_job = FZIPJob(
+            jobType=FZIPType.BACKUP,
             userId=test_user_id,
-            status=FZIPStatus.EXPORT_PROCESSING,
-            exportType=FZIPExportType.COMPLETE
+            status=FZIPStatus.BACKUP_PROCESSING,
+            backupType=FZIPExportType.COMPLETE
         )
         
         with patch('services.fzip_service.ExportPackageBuilder') as mock_builder:
             mock_builder.side_effect = Exception("Package building failed")
             
             with pytest.raises(Exception) as exc_info:
-                fzip_service.build_export_package(export_job, {})
+                fzip_service.build_backup_package(backup_job, {})
             
             assert "Package building failed" in str(exc_info.value)
 
-    def test_selective_export_types(self, fzip_service, test_user_id, sample_test_data):
-        """Test different export types (accounts only, transactions only, etc.)."""
+    def test_selective_backup_types(self, fzip_service, test_user_id, sample_test_data):
+        """Test different backup types (accounts only, transactions only, etc.)."""
         
         with patch('utils.db_utils.list_user_accounts') as mock_accounts, \
              patch('utils.db_utils.list_user_transactions') as mock_transactions:
@@ -499,8 +499,8 @@ class TestFZIPExportEndToEnd:
             assert 'accounts' in collected_data
             assert len(collected_data['accounts']) == 2
 
-    def test_export_with_analytics(self, fzip_service, test_user_id, sample_test_data):
-        """Test export with analytics data included."""
+    def test_backup_with_analytics(self, fzip_service, test_user_id, sample_test_data):
+        """Test backup with analytics data included."""
         
         mock_analytics = [
             {
@@ -520,7 +520,7 @@ class TestFZIPExportEndToEnd:
 
             collected_data = fzip_service.collect_user_data(
                 user_id=test_user_id,
-                export_type=FZIPExportType.COMPLETE,
+                backup_type=FZIPExportType.COMPLETE,
                 include_analytics=True
             )
 

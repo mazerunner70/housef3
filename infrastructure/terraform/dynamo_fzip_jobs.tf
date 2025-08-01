@@ -2,7 +2,8 @@
 # DYNAMODB TABLE FOR FZIP JOBS
 # =========================================
 # This file contains configurations for the unified DynamoDB table
-# used to store FZIP (Financial ZIP) import/export job status and metadata.
+# used to store FZIP (Financial ZIP) backup/restore job status and metadata.
+# Also supports legacy import/export job compatibility.
 
 resource "aws_dynamodb_table" "fzip_jobs" {
   name           = "${var.project_name}-${var.environment}-fzip-jobs"
@@ -47,7 +48,7 @@ resource "aws_dynamodb_table" "fzip_jobs" {
     projection_type    = "ALL"
   }
 
-  # Global Secondary Index for querying jobs by type (export/import)
+  # Global Secondary Index for querying jobs by type (backup/restore, legacy export/import)
   global_secondary_index {
     name               = "JobTypeIndex"
     hash_key           = "jobType"
@@ -99,7 +100,7 @@ resource "aws_dynamodb_table" "fzip_jobs" {
     Environment = var.environment
     Project     = var.project_name
     ManagedBy   = "terraform"
-    Description = "Unified table for storing FZIP import/export job status and metadata"
+    Description = "FZIP backup and restore jobs"
   }
 }
 
@@ -117,7 +118,7 @@ output "fzip_jobs_table_arn" {
 # =========================================
 # FZIP PACKAGES S3 BUCKET
 # =========================================
-# Unified S3 bucket for storing FZIP packages (both import and export)
+# Unified S3 bucket for storing FZIP packages (backup/restore, legacy import/export)
 
 resource "aws_s3_bucket" "fzip_packages" {
   bucket = "${var.project_name}-${var.environment}-fzip-packages"

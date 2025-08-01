@@ -1840,7 +1840,7 @@ def list_stale_analytics(computation_needed_only: bool = True) -> List[Analytics
 
 
 # =============================================================================
-# FZIP Jobs Functions (Unified Import/Export)
+# FZIP Jobs Functions (Unified Backup/Restore)
 # =============================================================================
 
 def create_fzip_job(fzip_job: FZIPJob) -> None:
@@ -1915,7 +1915,7 @@ def list_user_fzip_jobs(user_id: str, job_type: Optional[str] = None, limit: int
     
     Args:
         user_id: The user ID
-        job_type: Optional job type filter ('export' or 'import')
+        job_type: Optional job type filter ('backup' or 'restore')
         limit: Maximum number of jobs to return
         last_evaluated_key: For pagination
         
@@ -2025,5 +2025,25 @@ def cleanup_expired_fzip_jobs() -> int:
     except Exception as e:
         logger.error(f"Error cleaning up expired FZIP jobs: {str(e)}")
         return 0
+
+
+# =============================================================================
+# BACKWARD COMPATIBILITY ALIASES
+# =============================================================================
+
+# TODO: Remove these aliases after migration is complete
+# These aliases ensure no breaking changes during the import/export → backup/restore migration
+
+# Export/Import job aliases (same functions, new semantic meaning)
+create_export_job = create_fzip_job  # Backward compatibility
+create_import_job = create_fzip_job  # Backward compatibility
+get_export_job = get_fzip_job  # Backward compatibility  
+get_import_job = get_fzip_job  # Backward compatibility
+update_export_job = update_fzip_job  # Backward compatibility
+update_import_job = update_fzip_job  # Backward compatibility
+list_user_export_jobs = list_user_fzip_jobs  # Backward compatibility
+list_user_import_jobs = list_user_fzip_jobs  # Backward compatibility
+delete_export_job = delete_fzip_job  # Backward compatibility
+delete_import_job = delete_fzip_job  # Backward compatibility
 
 

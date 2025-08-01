@@ -1,6 +1,6 @@
 """
-Unified FZIP Service for import/export operations.
-Handles data collection, package building, import processing, and export operations.
+Unified FZIP Service for backup/restore operations.
+Handles data collection, package building, restore processing, and backup operations.
 """
 import hashlib
 import json
@@ -16,20 +16,28 @@ from decimal import Decimal
 
 from models.fzip import (
     FZIPJob, FZIPManifest, FZIPDataSummary, FZIPCompatibilityInfo,
-    FZIPStatus, FZIPType, FZIPFormat, FZIPExportType, FZIPMergeStrategy
+    FZIPStatus, FZIPType, FZIPFormat, FZIPBackupType,
+    # Backward compatibility imports
+    FZIPExportType
 )
-from models.account import Account
+from models.account import Account, AccountType
 from models.transaction import Transaction
 from models.category import Category
 from models.file_map import FileMap
 from models.transaction_file import TransactionFile
 from models.analytics import AnalyticsData
+from models import Currency
 from models.events import ExportInitiatedEvent, ExportCompletedEvent, ExportFailedEvent
+# TODO: Create BackupInitiatedEvent, BackupCompletedEvent, BackupFailedEvent, RestoreInitiatedEvent, RestoreCompletedEvent, RestoreFailedEvent
+# For now, using export events for both backup and restore operations
 from utils.db_utils import (
     list_user_accounts, list_user_transactions, list_categories_by_user_from_db,
     list_file_maps_by_user, list_user_files, get_analytics_data,
     create_fzip_job, update_fzip_job, get_fzip_job, list_user_fzip_jobs,
-    delete_fzip_job, cleanup_expired_fzip_jobs
+    delete_fzip_job, cleanup_expired_fzip_jobs, create_account,
+    update_account, create_category_in_db, update_category_in_db,
+    create_file_map, update_file_map, create_transaction_file,
+    update_transaction_file, create_transaction, update_transaction
 )
 from utils.s3_dao import get_object_content, put_object, get_presigned_url_simple
 from utils.fzip_metrics import fzip_metrics
@@ -50,7 +58,7 @@ logger = logging.getLogger(__name__)
 
 
 class FZIPService:
-    """Unified service for handling FZIP (import/export) operations"""
+    """Unified service for handling FZIP (backup/restore) operations"""
     
     def __init__(self):
         self.housef3_version = "2.5.0"  # Current version
@@ -59,7 +67,7 @@ class FZIPService:
         self.batch_size = 1000  # For large datasets
         
     # =============================================================================
-    # Export Operations
+    # Backup Operations
     # =============================================================================
     
     def initiate_export(self, user_id: str, export_type: FZIPExportType, 
@@ -84,9 +92,9 @@ class FZIPService:
             # Create export job
             export_job = FZIPJob(
                 userId=user_id,
-                jobType=FZIPType.EXPORT,
-                status=FZIPStatus.EXPORT_INITIATED,
-                exportType=export_type,
+                jobType=FZIPType.BACKUP,
+                status=FZIPStatus.BACKUP_INITIATED,
+                backupType=export_type,
                 packageFormat=export_format,
                 includeAnalytics=include_analytics,
                 description=description,
@@ -289,7 +297,7 @@ class FZIPService:
                     put_object(s3_key, f.read(), 'application/zip', self.fzip_bucket)
                 
                 # Record package size metrics
-                export_type = export_job.export_type.value if export_job.export_type else "complete"
+                export_type = export_job.backup_type.value if export_job.backup_type else "complete"
                 fzip_metrics.record_export_package_size(package_size, export_type)
                 
                 logger.info(f"Enhanced export package created: {s3_key}")
@@ -303,7 +311,7 @@ class FZIPService:
         except Exception as e:
             logger.error(f"Failed to build enhanced export package for job {export_job.job_id}: {str(e)}")
             # Record error metrics
-            export_type = export_job.export_type.value if export_job.export_type else "complete"
+            export_type = export_job.backup_type.value if export_job.backup_type else "complete"
             fzip_metrics.record_export_error(
                 error_type=type(e).__name__,
                 error_message=str(e),
@@ -331,15 +339,15 @@ class FZIPService:
         
         # Create basic manifest
         manifest = FZIPManifest(
-            exportFormatVersion=self.fzip_format_version,
-            exportTimestamp=datetime.now(timezone.utc).isoformat(),
+            backupFormatVersion=self.fzip_format_version,
+            backupTimestamp=datetime.now(timezone.utc).isoformat(),
             userId=export_job.user_id,
             housef3Version=self.housef3_version,
             dataSummary=data_summary,
             checksums={},  # Will be populated by package builder if needed
             compatibility=compatibility,
             jobId=export_job.job_id,
-            exportType=export_job.export_type or FZIPExportType.COMPLETE,
+            backupType=export_job.backup_type or FZIPExportType.COMPLETE,
             includeAnalytics=export_job.include_analytics
         )
         
@@ -362,117 +370,119 @@ class FZIPService:
             raise
     
     # =============================================================================
-    # Import Operations
+    # Restore Operations
     # =============================================================================
     
-    def initiate_import(self, user_id: str, import_type: FZIPExportType,
-                       merge_strategy: FZIPMergeStrategy = FZIPMergeStrategy.FAIL_ON_CONFLICT, 
-                       description: Optional[str] = None,
-                       **kwargs) -> FZIPJob:
+    def initiate_restore(self, user_id: str, restore_type: FZIPExportType,
+                        description: Optional[str] = None,
+                        **kwargs) -> FZIPJob:
         """
-        Initiate a new import job
+        Initiate a new restore job for empty profile
         
         Args:
-            user_id: User identifier
-            import_type: Type of import to perform
-            merge_strategy: Strategy for handling conflicts
-            description: Optional description for the import
-            **kwargs: Additional import parameters
+            user_id: User identifier  
+            restore_type: Type of restore to perform
+            description: Optional description for the restore
+            **kwargs: Additional restore parameters
             
         Returns:
-            FZIPJob: Created import job
+            FZIPJob: Created restore job
+            
+        Note:
+            Restores only work with completely empty financial profiles.
+            Any existing data will cause validation failure.
         """
         try:
-            # Create import job
-            import_job = FZIPJob(
+            # Create restore job (no merge strategy needed for empty profile restore)
+            restore_job = FZIPJob(
                 userId=user_id,
-                jobType=FZIPType.IMPORT,
-                status=FZIPStatus.IMPORT_UPLOADED,
-                exportType=import_type,
-                mergeStrategy=merge_strategy,
+                jobType=FZIPType.RESTORE,
+                status=FZIPStatus.RESTORE_UPLOADED,
+                backupType=restore_type,
+                # Note: No merge strategy needed for empty profile restores
                 description=description,
                 parameters=kwargs
             )
             
             # Set expiration time (24 hours from now)
             expiry_time = datetime.now(timezone.utc) + timedelta(hours=24)
-            import_job.expires_at = int(expiry_time.timestamp() * 1000)
+            restore_job.expires_at = int(expiry_time.timestamp() * 1000)
             
             # Save to database
-            create_fzip_job(import_job)
+            create_fzip_job(restore_job)
             
-            # Publish import initiated event (using export event for now)
+            # Publish restore initiated event (using export event for now)
             event = ExportInitiatedEvent(
                 user_id=user_id,
-                export_id=str(import_job.job_id),
-                export_type=import_type.value,
+                export_id=str(restore_job.job_id),
+                export_type=restore_type.value,
                 description=description
             )
             event_service.publish_event(event)
             
-            logger.info(f"Import job initiated: {import_job.job_id} for user {user_id}")
-            return import_job
+            logger.info(f"Restore job initiated: {restore_job.job_id} for user {user_id}")
+            return restore_job
             
         except Exception as e:
-            logger.error(f"Failed to initiate import for user {user_id}: {str(e)}")
+            logger.error(f"Failed to initiate restore for user {user_id}: {str(e)}")
             raise
     
-    def start_import(self, import_job: FZIPJob, package_s3_key: str):
-        """Start import processing."""
+    def start_restore(self, restore_job: FZIPJob, package_s3_key: str):
+        """Start restore processing."""
         try:
             # Update job with package location
-            import_job.s3_key = package_s3_key
-            import_job.status = FZIPStatus.IMPORT_VALIDATING
-            import_job.current_phase = "parsing_package"
-            import_job.progress = 10
-            update_fzip_job(import_job)
+            restore_job.s3_key = package_s3_key
+            restore_job.status = FZIPStatus.RESTORE_VALIDATING
+            restore_job.current_phase = "parsing_package"
+            restore_job.progress = 10
+            update_fzip_job(restore_job)
             
             # Parse package
             package_data = self._parse_package(package_s3_key)
             
             # Validate schema
-            import_job.current_phase = "validating_schema"
-            import_job.progress = 20
-            update_fzip_job(import_job)
+            restore_job.current_phase = "validating_schema"
+            restore_job.progress = 20
+            update_fzip_job(restore_job)
             
             schema_results = self._validate_schema(package_data)
-            import_job.validation_results['schema'] = schema_results
+            restore_job.validation_results['schema'] = schema_results
             
             if not schema_results['valid']:
-                import_job.status = FZIPStatus.IMPORT_VALIDATION_FAILED
-                import_job.error = "Schema validation failed"
-                update_fzip_job(import_job)
+                restore_job.status = FZIPStatus.RESTORE_VALIDATION_FAILED
+                restore_job.error = "Schema validation failed"
+                update_fzip_job(restore_job)
                 return
             
             # Validate business rules
-            import_job.current_phase = "validating_business_rules"
-            import_job.progress = 30
-            update_fzip_job(import_job)
+            restore_job.current_phase = "validating_business_rules"
+            restore_job.progress = 30
+            update_fzip_job(restore_job)
             
-            merge_strategy_str = import_job.merge_strategy.value if import_job.merge_strategy else "fail_on_conflict"
+            # Business rules validation for empty profile restore
             business_results = self._validate_business_rules(
-                package_data, import_job.user_id, merge_strategy_str
+                package_data, restore_job.user_id
             )
-            import_job.validation_results['business'] = business_results
+            restore_job.validation_results['business'] = business_results
             
             if not business_results['valid']:
-                import_job.status = FZIPStatus.IMPORT_VALIDATION_FAILED
-                import_job.error = "Business validation failed"
-                update_fzip_job(import_job)
+                restore_job.status = FZIPStatus.RESTORE_VALIDATION_FAILED
+                restore_job.error = "Business validation failed"
+                update_fzip_job(restore_job)
                 return
             
-            import_job.status = FZIPStatus.IMPORT_VALIDATION_PASSED
-            import_job.progress = 40
-            update_fzip_job(import_job)
+            restore_job.status = FZIPStatus.RESTORE_VALIDATION_PASSED
+            restore_job.progress = 40
+            update_fzip_job(restore_job)
             
-            # Begin data import
-            self._import_data(import_job, package_data)
+            # Begin data restore
+            self._restore_data(restore_job, package_data)
             
         except Exception as e:
-            logger.error(f"Import failed: {str(e)}")
-            import_job.status = FZIPStatus.IMPORT_FAILED
-            import_job.error = str(e)
-            update_fzip_job(import_job)
+            logger.error(f"Restore failed: {str(e)}")
+            restore_job.status = FZIPStatus.RESTORE_FAILED
+            restore_job.error = str(e)
+            update_fzip_job(restore_job)
     
     def _parse_package(self, package_s3_key: str) -> Dict[str, Any]:
         """Parse the ZIP package and extract data."""
@@ -551,8 +561,8 @@ class FZIPService:
                 'errors': [f"Schema validation failed: {str(e)}"]
             }
     
-    def _validate_business_rules(self, package_data: Dict[str, Any], user_id: str, merge_strategy: str) -> Dict[str, Any]:
-        """Validate business rules for the import."""
+    def _validate_business_rules(self, package_data: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+        """Validate business rules: user ownership, empty profile, and package consistency."""
         try:
             data = package_data['data']
             manifest = package_data['manifest']
@@ -564,16 +574,12 @@ class FZIPService:
                     'errors': ["Package was exported by a different user"]
                 }
             
-            # Check for UUID conflicts if merge strategy is fail_on_conflict
-            if merge_strategy == "fail_on_conflict":
-                conflicts = self._check_uuid_conflicts(data, user_id)
-                if conflicts:
-                    return {
-                        'valid': False,
-                        'errors': [f"UUID conflicts found: {', '.join(conflicts)}"]
-                    }
+            # SINGLE VALIDATION: Check profile is completely empty
+            empty_check = self._validate_empty_profile(user_id)
+            if not empty_check['valid']:
+                return empty_check
             
-            # Validate data relationships
+            # Validate data relationships (internal package consistency)
             errors = []
             
             # Check that all transaction account IDs exist in accounts
@@ -599,132 +605,402 @@ class FZIPService:
                 'errors': [f"Business validation failed: {str(e)}"]
             }
     
-    def _check_uuid_conflicts(self, data: Dict[str, Any], user_id: str) -> list:
-        """Check for UUID conflicts with existing data."""
-        # This would need to be implemented with actual database queries
-        # For now, return empty list (no conflicts)
-        return []
-    
-    def _import_data(self, import_job: FZIPJob, package_data: Dict[str, Any]):
-        """Import all data from the package."""
+    def _validate_empty_profile(self, user_id: str) -> Dict[str, Any]:
+        """Validate that user profile is completely empty for restore."""
         try:
-            import_job.status = FZIPStatus.IMPORT_PROCESSING
+            artifacts = []
+            
+            # Check for existing accounts
+            accounts = list_user_accounts(user_id)
+            if accounts:
+                artifacts.append(f"{len(accounts)} account(s)")
+            
+            # Check for existing categories
+            categories = list_categories_by_user_from_db(user_id)
+            if categories:
+                artifacts.append(f"{len(categories)} category(ies)")
+            
+            # Check for existing file maps
+            file_maps = list_file_maps_by_user(user_id)
+            if file_maps:
+                artifacts.append(f"{len(file_maps)} file map(s)")
+            
+            # Check for existing transaction files
+            transaction_files = list_user_files(user_id)
+            if transaction_files:
+                artifacts.append(f"{len(transaction_files)} transaction file(s)")
+            
+            # Check for existing transactions (if we have a method for this)
+            # Note: We could add transaction check here if needed
+            
+            if artifacts:
+                return {
+                    'valid': False,
+                    'errors': [f"Profile not empty. Found: {', '.join(artifacts)}. FZIP restore requires completely empty profile."]
+                }
+            
+            return {
+                'valid': True,
+                'errors': []
+            }
+
+        except Exception as e:
+            logger.error(f"Error validating empty profile: {str(e)}")
+            return {
+                'valid': False,
+                'errors': [f"Profile validation failed: {str(e)}"]
+            }
+    
+    def _restore_data(self, restore_job: FZIPJob, package_data: Dict[str, Any]):
+        """Restore all data from the package."""
+        try:
+            restore_job.status = FZIPStatus.RESTORE_PROCESSING
             data = package_data['data']
             results = {}
             
-            # Import in dependency order
+            # Restore in dependency order
             
-            # 1. Import accounts first
-            import_job.current_phase = "importing_accounts"
-            import_job.progress = 50
-            update_fzip_job(import_job)
+            # 1. Restore accounts first
+            restore_job.current_phase = "restoring_accounts"
+            restore_job.progress = 50
+            update_fzip_job(restore_job)
             
-            merge_strategy_str = import_job.merge_strategy.value if import_job.merge_strategy else "fail_on_conflict"
-            account_results = self._import_accounts(
-                data.get('accounts', []), import_job.user_id, merge_strategy_str
+            # Restore to empty profile - no merge strategy needed
+            account_results = self._restore_accounts(
+                data.get('accounts', []), restore_job.user_id
             )
             results['accounts'] = account_results
             
-            # 2. Import categories
-            import_job.current_phase = "importing_categories"
-            import_job.progress = 60
-            update_fzip_job(import_job)
+            # 2. Restore categories
+            restore_job.current_phase = "restoring_categories"
+            restore_job.progress = 60
+            update_fzip_job(restore_job)
             
-            category_results = self._import_categories(
-                data.get('categories', []), import_job.user_id, merge_strategy_str
+            category_results = self._restore_categories(
+                data.get('categories', []), restore_job.user_id
             )
             results['categories'] = category_results
             
-            # 3. Import file maps
-            import_job.current_phase = "importing_file_maps"
-            import_job.progress = 70
-            update_fzip_job(import_job)
+            # 3. Restore file maps
+            restore_job.current_phase = "restoring_file_maps"
+            restore_job.progress = 70
+            update_fzip_job(restore_job)
             
-            file_map_results = self._import_file_maps(
-                data.get('file_maps', []), import_job.user_id, merge_strategy_str
+            file_map_results = self._restore_file_maps(
+                data.get('file_maps', []), restore_job.user_id
             )
             results['file_maps'] = file_map_results
             
-            # 4. Import transaction files
-            import_job.current_phase = "importing_transaction_files"
-            import_job.progress = 80
-            update_fzip_job(import_job)
+            # 4. Restore transaction files
+            restore_job.current_phase = "restoring_transaction_files"
+            restore_job.progress = 80
+            update_fzip_job(restore_job)
             
-            file_results = self._import_transaction_files(
-                data.get('transaction_files', []), import_job.user_id, merge_strategy_str
+            file_results = self._restore_transaction_files(
+                data.get('transaction_files', []), restore_job.user_id
             )
             results['transaction_files'] = file_results
             
-            # 5. Import transactions
-            import_job.current_phase = "importing_transactions"
-            import_job.progress = 90
-            update_fzip_job(import_job)
+            # 5. Restore transactions
+            restore_job.current_phase = "restoring_transactions"
+            restore_job.progress = 90
+            update_fzip_job(restore_job)
             
-            transaction_results = self._import_transactions(
-                data.get('transactions', []), import_job.user_id, merge_strategy_str
+            transaction_results = self._restore_transactions(
+                data.get('transactions', []), restore_job.user_id
             )
             results['transactions'] = transaction_results
             
-            # Complete import
-            import_job.status = FZIPStatus.IMPORT_COMPLETED
-            import_job.progress = 100
-            import_job.current_phase = "completed"
-            import_job.import_results = results
-            import_job.completed_at = int(datetime.now(timezone.utc).timestamp() * 1000)
-            update_fzip_job(import_job)
+            # Complete restore
+            restore_job.status = FZIPStatus.RESTORE_COMPLETED
+            restore_job.progress = 100
+            restore_job.current_phase = "completed"
+            restore_job.restore_results = results
+            restore_job.completed_at = int(datetime.now(timezone.utc).timestamp() * 1000)
+            update_fzip_job(restore_job)
             
         except Exception as e:
-            logger.error(f"Error during data import: {str(e)}")
+            logger.error(f"Error during data restore: {str(e)}")
             raise
     
-    def _import_accounts(self, accounts: list, user_id: str, merge_strategy: str) -> Dict[str, Any]:
-        """Import accounts data."""
-        # Placeholder implementation
+    def _restore_accounts(self, accounts: list, user_id: str) -> Dict[str, Any]:
+        """Restore accounts data to empty profile (no conflicts expected)."""
+        
+        created = 0
+        errors = []
+        
+        for account_data in accounts:
+            try:
+                # Convert export format to Account model
+                account = Account(
+                    accountId=uuid.UUID(account_data['accountId']),
+                    userId=user_id,  # Ensure user ownership
+                    accountName=account_data['accountName'],
+                    accountType=AccountType(account_data['accountType']),
+                    institution=account_data.get('institution', ''),
+                    balance=Decimal(str(account_data['balance'])) if account_data.get('balance') else Decimal('0.00'),
+                    currency=Currency(account_data.get('currency', 'USD')),
+                    notes=account_data.get('notes', ''),
+                    isActive=account_data.get('isActive', True),
+                    defaultFileMapId=uuid.UUID(account_data['defaultFileMapId']) if account_data.get('defaultFileMapId') else None,
+                    lastTransactionDate=account_data.get('lastTransactionDate'),
+                    createdAt=account_data.get('createdAt'),
+                    updatedAt=account_data.get('updatedAt')
+                )
+                
+                # Create account directly - profile already validated as empty
+                create_account(account)
+                created += 1
+                logger.debug(f"Successfully restored account: {account.account_id}")
+                    
+            except Exception as e:
+                # Any failure indicates system issue (not conflicts - profile was validated empty)
+                error_msg = f"Failed to restore account {account_data.get('accountId', 'unknown')}: {str(e)}"
+                errors.append(error_msg)
+                logger.error(error_msg)
+        
         return {
-            'created': len(accounts),
-            'updated': 0,
-            'skipped': 0,
-            'errors': []
+            'created': created,
+            'errors': errors
         }
     
-    def _import_categories(self, categories: list, user_id: str, merge_strategy: str) -> Dict[str, Any]:
-        """Import categories data."""
-        # Placeholder implementation
+    def _restore_categories(self, categories: list, user_id: str) -> Dict[str, Any]:
+        """Restore categories data to empty profile (no conflicts expected)."""
+        from models.category import CategoryType, CategoryRule, MatchCondition
+        
+        created = 0
+        errors = []
+        
+        for category_data in categories:
+            try:
+                # Convert rules from export format
+                rules = []
+                for rule_data in category_data.get('rules', []):
+                    rule = CategoryRule(
+                        ruleId=rule_data.get('ruleId'),
+                        fieldToMatch=rule_data.get('fieldToMatch'),
+                        condition=MatchCondition(rule_data.get('condition')),
+                        value=rule_data.get('value'),
+                        caseSensitive=rule_data.get('caseSensitive', False),
+                        priority=rule_data.get('priority', 0),
+                        enabled=rule_data.get('enabled', True),
+                        confidence=rule_data.get('confidence', 100),
+                        amountMin=Decimal(str(rule_data['amountMin'])) if rule_data.get('amountMin') else None,
+                        amountMax=Decimal(str(rule_data['amountMax'])) if rule_data.get('amountMax') else None,
+                        allowMultipleMatches=rule_data.get('allowMultipleMatches', True),
+                        autoSuggest=rule_data.get('autoSuggest', True)
+                    )
+                    rules.append(rule)
+                
+                # Convert export format to Category model
+                category = Category(
+                    categoryId=uuid.UUID(category_data['categoryId']),
+                    userId=user_id,  # Ensure user ownership
+                    name=category_data['name'],
+                    type=CategoryType(category_data['type']),
+                    parentCategoryId=uuid.UUID(category_data['parentCategoryId']) if category_data.get('parentCategoryId') else None,
+                    icon=category_data.get('icon'),
+                    color=category_data.get('color'),
+                    rules=rules,
+                    inheritParentRules=category_data.get('inheritParentRules', True),
+                    ruleInheritanceMode=category_data.get('ruleInheritanceMode', 'additive'),
+                    createdAt=category_data.get('createdAt'),
+                    updatedAt=category_data.get('updatedAt')
+                )
+                
+                # Create category directly - profile already validated as empty
+                create_category_in_db(category)
+                created += 1
+                logger.debug(f"Successfully restored category: {category.categoryId}")
+                    
+            except Exception as e:
+                # Any failure indicates system issue (not conflicts - profile was validated empty)
+                error_msg = f"Failed to restore category {category_data.get('categoryId', 'unknown')}: {str(e)}"
+                errors.append(error_msg)
+                logger.error(error_msg)
+        
         return {
-            'created': len(categories),
-            'updated': 0,
-            'skipped': 0,
-            'errors': []
+            'created': created,
+            'errors': errors
         }
     
-    def _import_file_maps(self, file_maps: list, user_id: str, merge_strategy: str) -> Dict[str, Any]:
-        """Import file maps data."""
-        # Placeholder implementation
+    def _restore_file_maps(self, file_maps: list, user_id: str) -> Dict[str, Any]:
+        """Restore file maps data to empty profile (no conflicts expected)."""
+        from models.file_map import FieldMapping
+        
+        created = 0
+        errors = []
+        
+        for file_map_data in file_maps:
+            try:
+                # Convert mappings from export format
+                mappings = []
+                for mapping_data in file_map_data.get('mappings', []):
+                    mapping = FieldMapping(
+                        sourceField=mapping_data.get('sourceField'),
+                        targetField=mapping_data.get('targetField'),
+                        transformation=mapping_data.get('transformation')
+                    )
+                    mappings.append(mapping)
+                
+                # Convert export format to FileMap model
+                file_map = FileMap(
+                    fileMapId=uuid.UUID(file_map_data['fileMapId']),
+                    userId=user_id,  # Ensure user ownership
+                    name=file_map_data['name'],
+                    mappings=mappings,
+                    accountId=uuid.UUID(file_map_data['accountId']) if file_map_data.get('accountId') else None,
+                    description=file_map_data.get('description'),
+                    reverseAmounts=file_map_data.get('reverseAmounts', False),
+                    createdAt=file_map_data.get('createdAt'),
+                    updatedAt=file_map_data.get('updatedAt')
+                )
+                
+                # Create file map directly - profile already validated as empty
+                create_file_map(file_map)
+                created += 1
+                logger.debug(f"Successfully restored file map: {file_map.file_map_id}")
+                    
+            except Exception as e:
+                # Any failure indicates system issue (not conflicts - profile was validated empty)
+                error_msg = f"Failed to restore file map {file_map_data.get('fileMapId', 'unknown')}: {str(e)}"
+                errors.append(error_msg)
+                logger.error(error_msg)
+        
         return {
-            'created': len(file_maps),
-            'updated': 0,
-            'skipped': 0,
-            'errors': []
+            'created': created,
+            'errors': errors
         }
     
-    def _import_transaction_files(self, transaction_files: list, user_id: str, merge_strategy: str) -> Dict[str, Any]:
-        """Import transaction files data."""
-        # Placeholder implementation
+    def _restore_transaction_files(self, transaction_files: list, user_id: str) -> Dict[str, Any]:
+        """Restore transaction files data to empty profile and restore files to S3."""
+        from models.transaction_file import ProcessingStatus, FileFormat, DateRange
+        from utils.s3_dao import put_object
+        
+        created = 0
+        errors = []
+        
+        for file_data in transaction_files:
+            try:
+                # Convert export format to TransactionFile model
+                date_range = None
+                if file_data.get('dateRange'):
+                    date_range_data = file_data['dateRange']
+                    date_range = DateRange(
+                        startDate=date_range_data.get('start'),
+                        endDate=date_range_data.get('end')
+                    )
+                
+                transaction_file = TransactionFile(
+                    fileId=uuid.UUID(file_data['fileId']),
+                    userId=user_id,  # Ensure user ownership
+                    fileName=file_data['fileName'],
+                    uploadDate=file_data.get('uploadDate'),
+                    fileSize=file_data.get('fileSize', 0),
+                    s3Key=file_data['s3Key'],
+                    processingStatus=ProcessingStatus(file_data.get('processingStatus', 'pending')),
+                    processedDate=file_data.get('processedDate'),
+                    fileFormat=FileFormat(file_data['fileFormat']) if file_data.get('fileFormat') else None,
+                    accountId=uuid.UUID(file_data['accountId']) if file_data.get('accountId') else None,
+                    fileMapId=uuid.UUID(file_data['fileMapId']) if file_data.get('fileMapId') else None,
+                    recordCount=file_data.get('recordCount'),
+                    dateRange=date_range,
+                    errorMessage=file_data.get('errorMessage'),
+                    openingBalance=Decimal(str(file_data['openingBalance'])) if file_data.get('openingBalance') else None,
+                    closingBalance=Decimal(str(file_data['closingBalance'])) if file_data.get('closingBalance') else None,
+                    currency=Currency(file_data['currency']) if file_data.get('currency') else None,
+                    duplicateCount=file_data.get('duplicateCount'),
+                    transactionCount=file_data.get('transactionCount'),
+                    createdAt=file_data.get('createdAt'),
+                    updatedAt=file_data.get('updatedAt')
+                )
+                
+                # Create transaction file directly - profile already validated as empty
+                create_transaction_file(transaction_file)
+                created += 1
+                
+                # TODO: Restore actual file content from FZIP package to S3
+                # This would require extracting the file content from the FZIP package
+                # and uploading it to S3 with the correct key
+                logger.info(f"Transaction file metadata restored: {transaction_file.file_id}")
+                    
+            except Exception as e:
+                # Any failure indicates system issue (not conflicts - profile was validated empty)
+                error_msg = f"Failed to restore transaction file {file_data.get('fileId', 'unknown')}: {str(e)}"
+                errors.append(error_msg)
+                logger.error(error_msg)
+        
         return {
-            'created': len(transaction_files),
-            'updated': 0,
-            'skipped': 0,
-            'errors': []
+            'created': created,
+            'errors': errors
         }
     
-    def _import_transactions(self, transactions: list, user_id: str, merge_strategy: str) -> Dict[str, Any]:
-        """Import transactions data."""
-        # Placeholder implementation
+    def _restore_transactions(self, transactions: list, user_id: str) -> Dict[str, Any]:
+        """Restore transactions data to empty profile with category assignments."""
+        from models.transaction import TransactionCategoryAssignment, CategoryAssignmentStatus
+        
+        created = 0
+        errors = []
+        
+        for transaction_data in transactions:
+            try:
+                # Convert category assignments from export format
+                category_assignments = []
+                for cat_data in transaction_data.get('categories', []):
+                    assignment = TransactionCategoryAssignment(
+                        categoryId=uuid.UUID(cat_data['categoryId']),
+                        status=CategoryAssignmentStatus(cat_data.get('status', 'suggested')),
+                        confidence=cat_data.get('confidence', 0.0),
+                        ruleId=cat_data.get('ruleId'),
+                        assignedAt=cat_data.get('assignedAt')
+                    )
+                    category_assignments.append(assignment)
+                
+                # Convert export format to Transaction model
+                file_id = uuid.UUID(transaction_data['fileId']) if transaction_data.get('fileId') else None
+                transaction_kwargs = {
+                    'transactionId': uuid.UUID(transaction_data['transactionId']),
+                    'accountId': uuid.UUID(transaction_data['accountId']),
+                    'userId': user_id,  # Ensure user ownership
+                    'date': transaction_data['date'],
+                    'description': transaction_data['description'],
+                    'amount': Decimal(str(transaction_data['amount'])),
+                    'currency': Currency(transaction_data.get('currency', 'USD')),
+                    'balance': Decimal(str(transaction_data['balance'])) if transaction_data.get('balance') else None,
+                    'importOrder': transaction_data.get('importOrder', 0),
+                    'transactionType': transaction_data.get('transactionType'),
+                    'memo': transaction_data.get('memo'),
+                    'checkNumber': transaction_data.get('checkNumber'),
+                    'fitId': transaction_data.get('fitId'),
+                    'status': transaction_data.get('status'),
+                    'statusDate': transaction_data.get('statusDate'),
+                    'transactionHash': transaction_data.get('transactionHash'),
+                    'categories': category_assignments,
+                    'primaryCategoryId': uuid.UUID(transaction_data['primaryCategoryId']) if transaction_data.get('primaryCategoryId') else None,
+                    'createdAt': transaction_data.get('createdAt'),
+                    'updatedAt': transaction_data.get('updatedAt')
+                }
+                
+                # Only add fileId if it's not None
+                if file_id is not None:
+                    transaction_kwargs['fileId'] = file_id
+                    
+                transaction = Transaction(**transaction_kwargs)
+                
+                # Create transaction directly - profile already validated as empty
+                create_transaction(transaction)
+                created += 1
+                logger.debug(f"Successfully restored transaction: {transaction.transaction_id}")
+                    
+            except Exception as e:
+                # Any failure indicates system issue (not conflicts - profile was validated empty)
+                error_msg = f"Failed to restore transaction {transaction_data.get('transactionId', 'unknown')}: {str(e)}"
+                errors.append(error_msg)
+                logger.error(error_msg)
+        
         return {
-            'created': len(transactions),
-            'updated': 0,
-            'skipped': 0,
-            'errors': []
+            'created': created,
+            'errors': errors
         }
     
     # =============================================================================
@@ -787,6 +1063,40 @@ class FZIPService:
         # For now, just log the operation
         logger.info(f"Cleanup operation for user {user_id} exports")
         return 0
+
+    # =============================================================================
+    # Backup Method Aliases (Legacy Export Terminology)
+    # =============================================================================
+
+    def initiate_backup(self, user_id: str, backup_type: FZIPBackupType,
+                       include_analytics: bool = False, description: Optional[str] = None,
+                       backup_format: FZIPFormat = FZIPFormat.FZIP,
+                       **kwargs) -> FZIPJob:
+        """
+        Initiate a new backup job (alias for initiate_export)
+        
+        Args:
+            user_id: User identifier
+            backup_type: Type of backup to perform
+            include_analytics: Whether to include analytics data
+            description: Optional description for the backup
+            backup_format: Format of the backup package
+        """
+        return self.initiate_export(user_id, backup_type, include_analytics, 
+                                  description, backup_format, **kwargs)
+
+    def collect_backup_data(self, user_id: str, backup_type: FZIPBackupType,
+                           include_analytics: bool = False, **kwargs) -> Dict[str, Any]:
+        """Collect user data for backup (alias for collect_user_data)"""
+        return self.collect_user_data(user_id, backup_type, include_analytics, **kwargs)
+
+    def build_backup_package(self, backup_job: FZIPJob, collected_data: Dict[str, Any]) -> Tuple[str, int]:
+        """Build backup package (alias for build_export_package)"""
+        return self.build_export_package(backup_job, collected_data)
+
+    def cleanup_expired_backups(self, user_id: str) -> int:
+        """Clean up expired backup files (alias for cleanup_expired_exports)"""
+        return self.cleanup_expired_exports(user_id)
 
 
 # Global service instance
