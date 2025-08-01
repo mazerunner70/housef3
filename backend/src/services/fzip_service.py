@@ -26,7 +26,7 @@ from models.category import Category
 from models.file_map import FileMap
 from models.transaction_file import TransactionFile
 from models.analytics import AnalyticsData
-from models import Currency
+from models.money import Currency
 from models.events import ExportInitiatedEvent, ExportCompletedEvent, ExportFailedEvent
 # TODO: Create BackupInitiatedEvent, BackupCompletedEvent, BackupFailedEvent, RestoreInitiatedEvent, RestoreCompletedEvent, RestoreFailedEvent
 # For now, using export events for both backup and restore operations
@@ -408,6 +408,15 @@ class FZIPService:
             expiry_time = datetime.now(timezone.utc) + timedelta(hours=24)
             restore_job.expires_at = int(expiry_time.timestamp() * 1000)
             
+            
+            # Perform initial validation for empty profile
+            empty_check = self._validate_empty_profile(user_id)
+            if not empty_check['valid']:
+                error_message = "Validation failed: " + " ".join(empty_check['errors'])
+                self._fail_job(restore_job, error_message)
+                # Note: Consider raising an exception here to notify the caller immediately
+                return restore_job  # Or handle as per API contract for immediate failure
+            
             # Save to database
             create_fzip_job(restore_job)
             
@@ -427,6 +436,13 @@ class FZIPService:
             logger.error(f"Failed to initiate restore for user {user_id}: {str(e)}")
             raise
     
+    def _fail_job(self, job: FZIPJob, error_message: str, status: FZIPStatus = FZIPStatus.RESTORE_VALIDATION_FAILED):
+        """Helper to fail a job and log the error"""
+        job.status = status
+        job.error = error_message
+        update_fzip_job(job)
+        logger.error(f"Job {job.job_id} failed: {error_message}")
+
     def start_restore(self, restore_job: FZIPJob, package_s3_key: str):
         """Start restore processing."""
         try:
@@ -573,11 +589,6 @@ class FZIPService:
                     'valid': False,
                     'errors': ["Package was exported by a different user"]
                 }
-            
-            # SINGLE VALIDATION: Check profile is completely empty
-            empty_check = self._validate_empty_profile(user_id)
-            if not empty_check['valid']:
-                return empty_check
             
             # Validate data relationships (internal package consistency)
             errors = []
