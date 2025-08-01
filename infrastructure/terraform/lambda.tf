@@ -677,6 +677,7 @@ resource "aws_lambda_function" "fzip_operations" {
       ENVIRONMENT           = var.environment
       FZIP_JOBS_TABLE       = aws_dynamodb_table.fzip_jobs.name
       FZIP_PACKAGES_BUCKET  = aws_s3_bucket.fzip_packages.bucket
+      FZIP_RESTORE_PACKAGES_BUCKET = aws_s3_bucket.fzip_packages.bucket
       ACCOUNTS_TABLE        = aws_dynamodb_table.accounts.name
       TRANSACTIONS_TABLE    = aws_dynamodb_table.transactions.name
       CATEGORIES_TABLE_NAME = aws_dynamodb_table.categories.name

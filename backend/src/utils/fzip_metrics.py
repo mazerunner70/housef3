@@ -1,5 +1,5 @@
 """
-CloudWatch metrics and monitoring for FZIP import/export operations.
+CloudWatch metrics and monitoring for FZIP backup/restore operations.
 """
 import boto3
 import logging
@@ -18,13 +18,17 @@ class FZIPMetrics:
         self.cloudwatch = boto3.client('cloudwatch')
         self.namespace = 'HouseF3/FZIP'
     
-    def record_export_duration(self, duration_seconds: float, success: bool, 
-                              export_type: str = "complete", user_id: Optional[str] = None):
-        """Record FZIP export processing duration."""
+    # ========================================================================
+    # BACKUP METRICS
+    # ========================================================================
+    
+    def record_backup_duration(self, duration_seconds: float, success: bool, 
+                              backup_type: str = "complete", user_id: Optional[str] = None):
+        """Record FZIP backup processing duration."""
         try:
             dimensions = [
                 {'Name': 'Success', 'Value': str(success)},
-                {'Name': 'ExportType', 'Value': export_type}
+                {'Name': 'BackupType', 'Value': backup_type}
             ]
             
             if user_id:
@@ -37,7 +41,7 @@ class FZIPMetrics:
                 Namespace=self.namespace,
                 MetricData=[
                     {
-                        'MetricName': 'ExportDuration',
+                        'MetricName': 'BackupDuration',
                         'Dimensions': dimensions,
                         'Value': duration_seconds,
                         'Unit': 'Seconds',
@@ -46,21 +50,21 @@ class FZIPMetrics:
                 ]
             )
             
-            logger.info(f"Recorded export duration metric: {duration_seconds}s, success={success}")
+            logger.info(f"Recorded backup duration metric: {duration_seconds}s, success={success}")
             
         except Exception as e:
-            logger.error(f"Failed to record export duration metric: {str(e)}")
+            logger.error(f"Failed to record backup duration metric: {str(e)}")
     
-    def record_export_package_size(self, size_bytes: int, export_type: str = "complete"):
-        """Record FZIP export package size."""
+    def record_backup_package_size(self, size_bytes: int, backup_type: str = "complete"):
+        """Record FZIP backup package size."""
         try:
             self.cloudwatch.put_metric_data(
                 Namespace=self.namespace,
                 MetricData=[
                     {
-                        'MetricName': 'ExportPackageSize',
+                        'MetricName': 'BackupPackageSize',
                         'Dimensions': [
-                            {'Name': 'ExportType', 'Value': export_type}
+                            {'Name': 'BackupType', 'Value': backup_type}
                         ],
                         'Value': size_bytes,
                         'Unit': 'Bytes',
@@ -69,22 +73,22 @@ class FZIPMetrics:
                 ]
             )
             
-            logger.info(f"Recorded export package size metric: {size_bytes} bytes")
+            logger.info(f"Recorded backup package size metric: {size_bytes} bytes")
             
         except Exception as e:
-            logger.error(f"Failed to record export package size metric: {str(e)}")
+            logger.error(f"Failed to record backup package size metric: {str(e)}")
     
-    def record_export_data_volume(self, entity_counts: Dict[str, int], export_type: str = "complete"):
-        """Record the volume of data exported by entity type."""
+    def record_backup_data_volume(self, entity_counts: Dict[str, int], backup_type: str = "complete"):
+        """Record the volume of data backed up by entity type."""
         try:
             metric_data = []
             
             for entity_type, count in entity_counts.items():
                 metric_data.append({
-                    'MetricName': 'ExportDataVolume',
+                    'MetricName': 'BackupDataVolume',
                     'Dimensions': [
                         {'Name': 'EntityType', 'Value': entity_type},
-                        {'Name': 'ExportType', 'Value': export_type}
+                        {'Name': 'BackupType', 'Value': backup_type}
                     ],
                     'Value': count,
                     'Unit': 'Count',
@@ -99,13 +103,13 @@ class FZIPMetrics:
                     MetricData=batch
                 )
             
-            logger.info(f"Recorded export data volume metrics: {entity_counts}")
+            logger.info(f"Recorded backup data volume metrics: {entity_counts}")
             
         except Exception as e:
-            logger.error(f"Failed to record export data volume metrics: {str(e)}")
+            logger.error(f"Failed to record backup data volume metrics: {str(e)}")
     
-    def record_export_success_rate(self, success_count: int, total_count: int):
-        """Record FZIP export success rate."""
+    def record_backup_success_rate(self, success_count: int, total_count: int):
+        """Record FZIP backup success rate."""
         try:
             if total_count > 0:
                 success_rate = (success_count / total_count) * 100
@@ -114,13 +118,13 @@ class FZIPMetrics:
                     Namespace=self.namespace,
                     MetricData=[
                         {
-                            'MetricName': 'ExportSuccessRate',
+                            'MetricName': 'BackupSuccessRate',
                             'Value': success_rate,
                             'Unit': 'Percent',
                             'Timestamp': datetime.utcnow()
                         },
                         {
-                            'MetricName': 'ExportCount',
+                            'MetricName': 'BackupCount',
                             'Dimensions': [
                                 {'Name': 'Result', 'Value': 'Success'}
                             ],
@@ -129,7 +133,7 @@ class FZIPMetrics:
                             'Timestamp': datetime.utcnow()
                         },
                         {
-                            'MetricName': 'ExportCount',
+                            'MetricName': 'BackupCount',
                             'Dimensions': [
                                 {'Name': 'Result', 'Value': 'Total'}
                             ],
@@ -140,23 +144,23 @@ class FZIPMetrics:
                     ]
                 )
                 
-                logger.info(f"Recorded export success rate: {success_rate}% ({success_count}/{total_count})")
+                logger.info(f"Recorded backup success rate: {success_rate}% ({success_count}/{total_count})")
                 
         except Exception as e:
-            logger.error(f"Failed to record export success rate metric: {str(e)}")
+            logger.error(f"Failed to record backup success rate metric: {str(e)}")
     
-    def record_export_error(self, error_type: str, error_message: str, 
-                           export_type: str = "complete", phase: str = "unknown"):
-        """Record FZIP export error details."""
+    def record_backup_error(self, error_type: str, error_message: str, 
+                           backup_type: str = "complete", phase: str = "unknown"):
+        """Record FZIP backup error details."""
         try:
             self.cloudwatch.put_metric_data(
                 Namespace=self.namespace,
                 MetricData=[
                     {
-                        'MetricName': 'ExportErrors',
+                        'MetricName': 'BackupErrors',
                         'Dimensions': [
                             {'Name': 'ErrorType', 'Value': error_type},
-                            {'Name': 'ExportType', 'Value': export_type},
+                            {'Name': 'BackupType', 'Value': backup_type},
                             {'Name': 'Phase', 'Value': phase}
                         ],
                         'Value': 1,
@@ -166,18 +170,35 @@ class FZIPMetrics:
                 ]
             )
             
-            logger.error(f"Recorded export error metric: {error_type} in {phase} phase - {error_message}")
+            logger.error(f"Recorded backup error metric: {error_type} in {phase} phase - {error_message}")
             
         except Exception as e:
-            logger.error(f"Failed to record export error metric: {str(e)}")
+            logger.error(f"Failed to record backup error metric: {str(e)}")
+
+    @contextmanager
+    def measure_backup_duration(self, backup_type: str = "complete", user_id: Optional[str] = None):
+        """Context manager to measure and record backup duration."""
+        start_time = time.time()
+        success = False
+        
+        try:
+            yield
+            success = True
+        finally:
+            duration = time.time() - start_time
+            self.record_backup_duration(duration, success, backup_type, user_id)
     
-    def record_import_duration(self, duration_seconds: float, success: bool, 
-                              import_type: str = "complete", user_id: Optional[str] = None):
-        """Record FZIP import processing duration."""
+    # ========================================================================
+    # RESTORE METRICS
+    # ========================================================================
+    
+    def record_restore_duration(self, duration_seconds: float, success: bool, 
+                               restore_type: str = "complete", user_id: Optional[str] = None):
+        """Record FZIP restore processing duration."""
         try:
             dimensions = [
                 {'Name': 'Success', 'Value': str(success)},
-                {'Name': 'ImportType', 'Value': import_type}
+                {'Name': 'RestoreType', 'Value': restore_type}
             ]
             
             if user_id:
@@ -190,7 +211,7 @@ class FZIPMetrics:
                 Namespace=self.namespace,
                 MetricData=[
                     {
-                        'MetricName': 'ImportDuration',
+                        'MetricName': 'RestoreDuration',
                         'Dimensions': dimensions,
                         'Value': duration_seconds,
                         'Unit': 'Seconds',
@@ -199,20 +220,20 @@ class FZIPMetrics:
                 ]
             )
             
-            logger.info(f"Recorded import duration metric: {duration_seconds}s, success={success}")
+            logger.info(f"Recorded restore duration metric: {duration_seconds}s, success={success}")
             
         except Exception as e:
-            logger.error(f"Failed to record import duration metric: {str(e)}")
+            logger.error(f"Failed to record restore duration metric: {str(e)}")
     
-    def record_import_validation_results(self, validation_results: Dict[str, Any]):
-        """Record FZIP import validation results."""
+    def record_restore_validation_results(self, validation_results: Dict[str, Any]):
+        """Record FZIP restore validation results."""
         try:
             metric_data = []
             
             # Record overall validation status
             overall_valid = validation_results.get('overall_valid', False)
             metric_data.append({
-                'MetricName': 'ImportValidation',
+                'MetricName': 'RestoreValidation',
                 'Dimensions': [
                     {'Name': 'Result', 'Value': 'Valid' if overall_valid else 'Invalid'}
                 ],
@@ -225,7 +246,7 @@ class FZIPMetrics:
             for validation_type, result in validation_results.items():
                 if isinstance(result, dict) and 'valid' in result:
                     metric_data.append({
-                        'MetricName': 'ImportValidationDetails',
+                        'MetricName': 'RestoreValidationDetails',
                         'Dimensions': [
                             {'Name': 'ValidationType', 'Value': validation_type},
                             {'Name': 'Result', 'Value': 'Valid' if result['valid'] else 'Invalid'}
@@ -240,14 +261,40 @@ class FZIPMetrics:
                 MetricData=metric_data
             )
             
-            logger.info(f"Recorded import validation metrics: overall_valid={overall_valid}")
+            logger.info(f"Recorded restore validation metrics: overall_valid={overall_valid}")
             
         except Exception as e:
-            logger.error(f"Failed to record import validation metrics: {str(e)}")
-    
+            logger.error(f"Failed to record restore validation metrics: {str(e)}")
+
+    def record_restore_error(self, error_type: str, error_message: str, 
+                            restore_type: str = "complete", phase: str = "unknown"):
+        """Record FZIP restore error details."""
+        try:
+            self.cloudwatch.put_metric_data(
+                Namespace=self.namespace,
+                MetricData=[
+                    {
+                        'MetricName': 'RestoreErrors',
+                        'Dimensions': [
+                            {'Name': 'ErrorType', 'Value': error_type},
+                            {'Name': 'RestoreType', 'Value': restore_type},
+                            {'Name': 'Phase', 'Value': phase}
+                        ],
+                        'Value': 1,
+                        'Unit': 'Count',
+                        'Timestamp': datetime.utcnow()
+                    }
+                ]
+            )
+            
+            logger.error(f"Recorded restore error metric: {error_type} in {phase} phase - {error_message}")
+            
+        except Exception as e:
+            logger.error(f"Failed to record restore error metric: {str(e)}")
+
     @contextmanager
-    def measure_export_duration(self, export_type: str = "complete", user_id: Optional[str] = None):
-        """Context manager to measure and record export duration."""
+    def measure_restore_duration(self, restore_type: str = "complete", user_id: Optional[str] = None):
+        """Context manager to measure and record restore duration."""
         start_time = time.time()
         success = False
         
@@ -256,28 +303,19 @@ class FZIPMetrics:
             success = True
         finally:
             duration = time.time() - start_time
-            self.record_export_duration(duration, success, export_type, user_id)
-    
-    @contextmanager
-    def measure_import_duration(self, import_type: str = "complete", user_id: Optional[str] = None):
-        """Context manager to measure and record import duration."""
-        start_time = time.time()
-        success = False
-        
-        try:
-            yield
-            success = True
-        finally:
-            duration = time.time() - start_time
-            self.record_import_duration(duration, success, import_type, user_id)
+            self.record_restore_duration(duration, success, restore_type, user_id)
 
 
 # Global metrics instance
 fzip_metrics = FZIPMetrics()
 
 
-def record_export_metrics(func):
-    """Decorator to automatically record metrics for export functions."""
+# ========================================================================
+# DECORATORS
+# ========================================================================
+
+def record_backup_metrics(func):
+    """Decorator to automatically record metrics for backup functions."""
     def wrapper(*args, **kwargs):
         start_time = time.time()
         success = False
@@ -287,7 +325,7 @@ def record_export_metrics(func):
             success = True
             return result
         except Exception as e:
-            fzip_metrics.record_export_error(
+            fzip_metrics.record_backup_error(
                 error_type=type(e).__name__,
                 error_message=str(e),
                 phase=func.__name__
@@ -295,13 +333,13 @@ def record_export_metrics(func):
             raise
         finally:
             duration = time.time() - start_time
-            fzip_metrics.record_export_duration(duration, success)
+            fzip_metrics.record_backup_duration(duration, success)
     
     return wrapper
 
 
-def record_import_metrics(func):
-    """Decorator to automatically record metrics for import functions."""
+def record_restore_metrics(func):
+    """Decorator to automatically record metrics for restore functions."""
     def wrapper(*args, **kwargs):
         start_time = time.time()
         success = False
@@ -311,7 +349,7 @@ def record_import_metrics(func):
             success = True
             return result
         except Exception as e:
-            fzip_metrics.record_export_error(
+            fzip_metrics.record_restore_error(
                 error_type=type(e).__name__,
                 error_message=str(e),
                 phase=func.__name__
@@ -319,6 +357,6 @@ def record_import_metrics(func):
             raise
         finally:
             duration = time.time() - start_time
-            fzip_metrics.record_import_duration(duration, success)
+            fzip_metrics.record_restore_duration(duration, success)
     
     return wrapper
