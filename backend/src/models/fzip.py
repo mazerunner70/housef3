@@ -82,6 +82,7 @@ class FZIPJob(BaseModel):
     description: Optional[str] = None
     
     # Restore-specific fields (empty profile restore only)
+    backup_id: Optional[str] = Field(default=None, alias="backupId")
     
     # Package information
     package_format: FZIPFormat = Field(default=FZIPFormat.FZIP, alias="packageFormat")
@@ -384,15 +385,4 @@ def create_restore_job(user_id: str, restore_request: FZIPRestoreRequest) -> FZI
         }
     )
 
-
-# ============================================================================
-# BACKWARD COMPATIBILITY ALIASES
-# ============================================================================
-
-# TODO: Remove these aliases after migration is complete
-FZIPExportType = FZIPBackupType  # Backward compatibility
-FZIPExportRequest = FZIPBackupRequest  # Backward compatibility  
-FZIPImportRequest = FZIPRestoreRequest  # Backward compatibility
-FZIPImportSummary = FZIPRestoreSummary  # Backward compatibility
-create_export_job = create_backup_job  # Backward compatibility
-create_import_job = create_restore_job  # Backward compatibility 
+ 

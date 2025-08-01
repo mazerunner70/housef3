@@ -16,9 +16,7 @@ from decimal import Decimal
 
 from models.fzip import (
     FZIPJob, FZIPManifest, FZIPDataSummary, FZIPCompatibilityInfo,
-    FZIPStatus, FZIPType, FZIPFormat, FZIPBackupType,
-    # Backward compatibility imports
-    FZIPExportType
+    FZIPStatus, FZIPType, FZIPFormat, FZIPBackupType
 )
 from models.account import Account, AccountType
 from models.transaction import Transaction
@@ -27,9 +25,11 @@ from models.file_map import FileMap
 from models.transaction_file import TransactionFile
 from models.analytics import AnalyticsData
 from models.money import Currency
-from models.events import ExportInitiatedEvent, ExportCompletedEvent, ExportFailedEvent
-# TODO: Create BackupInitiatedEvent, BackupCompletedEvent, BackupFailedEvent, RestoreInitiatedEvent, RestoreCompletedEvent, RestoreFailedEvent
-# For now, using export events for both backup and restore operations
+from models.events import (
+    BackupInitiatedEvent, BackupCompletedEvent, BackupFailedEvent,
+    RestoreInitiatedEvent, RestoreCompletedEvent, RestoreFailedEvent
+)
+
 from utils.db_utils import (
     list_user_accounts, list_user_transactions, list_categories_by_user_from_db,
     list_file_maps_by_user, list_user_files, get_analytics_data,
@@ -70,32 +70,32 @@ class FZIPService:
     # Backup Operations
     # =============================================================================
     
-    def initiate_export(self, user_id: str, export_type: FZIPExportType, 
+    def initiate_backup(self, user_id: str, backup_type: FZIPBackupType,
                        include_analytics: bool = False, description: Optional[str] = None,
-                       export_format: FZIPFormat = FZIPFormat.FZIP,
+                       backup_format: FZIPFormat = FZIPFormat.FZIP,
                        **kwargs) -> FZIPJob:
         """
-        Initiate a new export job
+        Initiate a new backup job
         
         Args:
             user_id: User identifier
-            export_type: Type of export to perform
+            backup_type: Type of backup to perform
             include_analytics: Whether to include analytics data
-            description: Optional description for the export
-            export_format: Format of the export package
-            **kwargs: Additional export parameters
+            description: Optional description for the backup
+            backup_format: Format of the backup package
+            **kwargs: Additional backup parameters
             
         Returns:
-            FZIPJob: Created export job
+            FZIPJob: Created backup job
         """
         try:
-            # Create export job
-            export_job = FZIPJob(
+            # Create backup job
+            backup_job = FZIPJob(
                 userId=user_id,
                 jobType=FZIPType.BACKUP,
                 status=FZIPStatus.BACKUP_INITIATED,
-                backupType=export_type,
-                packageFormat=export_format,
+                backupType=backup_type,
+                packageFormat=backup_format,
                 includeAnalytics=include_analytics,
                 description=description,
                 parameters=kwargs
@@ -103,44 +103,51 @@ class FZIPService:
             
             # Set expiration time (24 hours from now)
             expiry_time = datetime.now(timezone.utc) + timedelta(hours=24)
-            export_job.expires_at = int(expiry_time.timestamp() * 1000)
+            backup_job.expires_at = int(expiry_time.timestamp() * 1000)
             
             # Save to database
-            create_fzip_job(export_job)
+            create_fzip_job(backup_job)
             
-            # Publish export initiated event
-            event = ExportInitiatedEvent(
+            # Publish backup initiated event
+            event = BackupInitiatedEvent(
                 user_id=user_id,
-                export_id=str(export_job.job_id),
-                export_type=export_type.value,
-                include_analytics=include_analytics,
-                description=description
+                backup_id=str(backup_job.job_id),
+                description=description,
+                backup_type=backup_type.value,
+                include_analytics=include_analytics
             )
             event_service.publish_event(event)
             
-            logger.info(f"Export job initiated: {export_job.job_id} for user {user_id}")
-            return export_job
+            logger.info(f"Backup job initiated: {backup_job.job_id} for user {user_id}")
+            return backup_job
             
         except Exception as e:
-            logger.error(f"Failed to initiate export for user {user_id}: {str(e)}")
+            logger.error(f"Failed to initiate backup for user {user_id}: {str(e)}")
+            # We don't have a job ID yet, so we can't publish a perfect event,
+            # but we can do our best.
+            event_service.publish_event(BackupFailedEvent(
+                user_id=user_id,
+                backup_id='unknown',
+                error=str(e)
+            ))
             raise
     
-    def collect_user_data(self, user_id: str, export_type: FZIPExportType,
+    def collect_backup_data(self, user_id: str, backup_type: FZIPBackupType,
                          include_analytics: bool = False,
                          **filters) -> Dict[str, Any]:
         """
-        Collect all user data for export using specialized entity exporters
+        Collect all user data for backup using specialized entity exporters
         Args:
             user_id: User identifier
-            export_type: Type of export
+            backup_type: Type of backup
             include_analytics: Whether to include analytics
-            **filters: Additional filters for selective exports
+            **filters: Additional filters for selective backups
             
         Returns:
             Dictionary containing all collected data
         """
         try:
-            logger.info(f"Collecting data for user {user_id}, export type: {export_type}")
+            logger.info(f"Collecting data for user {user_id}, backup type: {backup_type}")
             
             collected_data = {}
             export_summaries = {}
@@ -185,7 +192,7 @@ class FZIPService:
                 entity_type: summary['processed_count'] 
                 for entity_type, summary in export_summaries.items()
             }
-            fzip_metrics.record_export_data_volume(entity_counts, export_type.value)
+            fzip_metrics.record_backup_data_volume(entity_counts, backup_type.value)
             
             logger.info("Enhanced data collection complete using specialized exporters")
             for entity_type, summary in export_summaries.items():
@@ -200,19 +207,19 @@ class FZIPService:
             
         except ExportException as e:
             logger.error(f"Export-specific error collecting data for user {user_id}: {str(e)}")
-            fzip_metrics.record_export_error(
+            fzip_metrics.record_backup_error(
                 error_type=type(e).__name__,
                 error_message=str(e),
-                export_type=export_type.value,
+                backup_type=backup_type.value,
                 phase="data_collection"
             )
             raise
         except Exception as e:
             logger.error(f"Failed to collect data for user {user_id}: {str(e)}")
-            fzip_metrics.record_export_error(
+            fzip_metrics.record_backup_error(
                 error_type=type(e).__name__,
                 error_message=str(e),
-                export_type=export_type.value,
+                backup_type=backup_type.value,
                 phase="data_collection"
             )
             raise
@@ -229,26 +236,26 @@ class FZIPService:
             logger.error(f"Failed to collect analytics for user {user_id}: {str(e)}")
             return []
     
-    def build_export_package(self, export_job: FZIPJob, collected_data: Dict[str, Any]) -> Tuple[str, int]:
+    def build_backup_package(self, backup_job: FZIPJob, collected_data: Dict[str, Any]) -> Tuple[str, int]:
         """
-        Build export package using enhanced streaming and compression capabilities
+        Build backup package using enhanced streaming and compression capabilities
         
         Args:
-            export_job: Export job details
+            backup_job: Backup job details
             collected_data: Collected user data
             
         Returns:
             Tuple of (s3_key, package_size)
         """
         try:
-            logger.info(f"Building enhanced export package for job {export_job.job_id}")
+            logger.info(f"Building enhanced backup package for job {backup_job.job_id}")
             
-            # Configure streaming options for large exports
+            # Configure streaming options for large backups
             streaming_options = FileStreamingOptions(
                 enable_compression=True,
                 compression_level=6,
                 enable_checksum=True,
-                max_memory_usage=200 * 1024 * 1024  # 200MB for larger exports
+                max_memory_usage=200 * 1024 * 1024  # 200MB for larger backups
             )
             
             # Create enhanced package builder
@@ -260,17 +267,17 @@ class FZIPService:
                 package_dir, processing_summary = package_builder.build_package_with_streaming(
                     export_data=collected_data,
                     transaction_files=collected_data.get('transaction_files', []),
-                    package_dir=os.path.join(temp_dir, "export_package")
+                    package_dir=os.path.join(temp_dir, "backup_package")
                 )
                 
                 # Create manifest with processing summary
-                manifest = self._create_enhanced_manifest(export_job, collected_data, processing_summary)
+                manifest = self._create_enhanced_manifest(backup_job, collected_data, processing_summary)
                 manifest_file = os.path.join(package_dir, "manifest.json")
                 with open(manifest_file, 'w') as f:
                     json.dump(manifest.model_dump(by_alias=True), f, indent=2, default=str)
                 
                 # Create compressed ZIP file
-                zip_path = os.path.join(temp_dir, f"export_{export_job.job_id}.zip")
+                zip_path = os.path.join(temp_dir, f"backup_{backup_job.job_id}.zip")
                 
                 # Use enhanced compression for large packages
                 compression_method = zipfile.ZIP_DEFLATED
@@ -288,19 +295,28 @@ class FZIPService:
                             zipf.write(file_path, arcname)
                 
                 # Upload to S3 with retry logic
-                s3_key = f"exports/{export_job.user_id}/{export_job.job_id}/export_package.zip"
+                s3_key = f"backups/{backup_job.user_id}/{backup_job.job_id}/backup_package.zip"
                 package_size = os.path.getsize(zip_path)
                 
                 # Upload to S3
-                logger.info(f"Uploading export package to S3: {s3_key}")
+                logger.info(f"Uploading backup package to S3: {s3_key}")
                 with open(zip_path, 'rb') as f:
                     put_object(s3_key, f.read(), 'application/zip', self.fzip_bucket)
                 
+                # Publish backup completed event
+                event_service.publish_event(BackupCompletedEvent(
+                    user_id=backup_job.user_id,
+                    backup_id=str(backup_job.job_id),
+                    package_size=package_size,
+                    s3_key=s3_key,
+                    data_summary=processing_summary
+                ))
+
                 # Record package size metrics
-                export_type = export_job.backup_type.value if export_job.backup_type else "complete"
-                fzip_metrics.record_export_package_size(package_size, export_type)
+                backup_type = backup_job.backup_type.value if backup_job.backup_type else "complete"
+                fzip_metrics.record_backup_package_size(package_size, backup_type)
                 
-                logger.info(f"Enhanced export package created: {s3_key}")
+                logger.info(f"Enhanced backup package created: {s3_key}")
                 logger.info(f"Package size: {package_size} bytes, "
                           f"Compression ratio: {processing_summary.get('compression_ratio', 0):.1f}%")
                 logger.info(f"Files processed: {processing_summary['transaction_files_processed']}, "
@@ -309,27 +325,32 @@ class FZIPService:
                 return s3_key, package_size
                 
         except Exception as e:
-            logger.error(f"Failed to build enhanced export package for job {export_job.job_id}: {str(e)}")
+            logger.error(f"Failed to build enhanced backup package for job {backup_job.job_id}: {str(e)}")
             # Record error metrics
-            export_type = export_job.backup_type.value if export_job.backup_type else "complete"
-            fzip_metrics.record_export_error(
+            backup_type = backup_job.backup_type.value if backup_job.backup_type else "complete"
+            fzip_metrics.record_backup_error(
                 error_type=type(e).__name__,
                 error_message=str(e),
-                export_type=export_type,
+                backup_type=backup_type,
                 phase="package_building"
             )
+            event_service.publish_event(BackupFailedEvent(
+                user_id=backup_job.user_id,
+                backup_id=str(backup_job.job_id),
+                error=str(e)
+            ))
             raise
     
-    def _create_enhanced_manifest(self, export_job: FZIPJob, collected_data: Dict[str, Any], 
+    def _create_enhanced_manifest(self, backup_job: FZIPJob, collected_data: Dict[str, Any], 
                                 processing_summary: Dict[str, Any]) -> FZIPManifest:
-        """Create enhanced export manifest with processing summary"""
+        """Create enhanced backup manifest with processing summary"""
         data_summary = FZIPDataSummary(
             accountsCount=len(collected_data.get('accounts', [])),
             transactionsCount=len(collected_data.get('transactions', [])),
             categoriesCount=len(collected_data.get('categories', [])),
             fileMapsCount=len(collected_data.get('file_maps', [])),
             transactionFilesCount=len(collected_data.get('transaction_files', [])),
-            analyticsIncluded=export_job.include_analytics and bool(collected_data.get('analytics'))
+            analyticsIncluded=backup_job.include_analytics and bool(collected_data.get('analytics'))
         )
         
         compatibility = FZIPCompatibilityInfo(
@@ -341,14 +362,14 @@ class FZIPService:
         manifest = FZIPManifest(
             backupFormatVersion=self.fzip_format_version,
             backupTimestamp=datetime.now(timezone.utc).isoformat(),
-            userId=export_job.user_id,
+            userId=backup_job.user_id,
             housef3Version=self.housef3_version,
             dataSummary=data_summary,
             checksums={},  # Will be populated by package builder if needed
             compatibility=compatibility,
-            jobId=export_job.job_id,
-            backupType=export_job.backup_type or FZIPExportType.COMPLETE,
-            includeAnalytics=export_job.include_analytics
+            jobId=backup_job.job_id,
+            backupType=backup_job.backup_type or FZIPBackupType.COMPLETE,
+            includeAnalytics=backup_job.include_analytics
         )
         
         # Add processing summary as metadata in the manifest data
@@ -362,7 +383,7 @@ class FZIPService:
         return FZIPManifest.model_validate(manifest_dict)
     
     def generate_download_url(self, s3_key: str, expires_in: int = 3600) -> str:
-        """Generate presigned URL for export download"""
+        """Generate presigned URL for backup download"""
         try:
             return get_presigned_url_simple(self.fzip_bucket, s3_key, 'get', expires_in)
         except Exception as e:
@@ -373,7 +394,7 @@ class FZIPService:
     # Restore Operations
     # =============================================================================
     
-    def initiate_restore(self, user_id: str, restore_type: FZIPExportType,
+    def initiate_restore(self, user_id: str, restore_type: FZIPBackupType,
                         description: Optional[str] = None,
                         **kwargs) -> FZIPJob:
         """
@@ -420,12 +441,13 @@ class FZIPService:
             # Save to database
             create_fzip_job(restore_job)
             
-            # Publish restore initiated event (using export event for now)
-            event = ExportInitiatedEvent(
+            # Publish restore initiated event
+            event = RestoreInitiatedEvent(
                 user_id=user_id,
-                export_id=str(restore_job.job_id),
-                export_type=restore_type.value,
-                description=description
+                restore_id=str(restore_job.job_id),
+                description=description,
+                backup_id=kwargs.get('backup_id', ''),
+                s3_key=kwargs.get('s3_key', '')
             )
             event_service.publish_event(event)
             
@@ -442,6 +464,13 @@ class FZIPService:
         job.error = error_message
         update_fzip_job(job)
         logger.error(f"Job {job.job_id} failed: {error_message}")
+        if job.job_type == FZIPType.RESTORE:
+            event_service.publish_event(RestoreFailedEvent(
+                user_id=job.user_id,
+                restore_id=str(job.job_id),
+                backup_id=job.backup_id or '',
+                error=error_message
+            ))
 
     def start_restore(self, restore_job: FZIPJob, package_s3_key: str):
         """Start restore processing."""
@@ -499,6 +528,12 @@ class FZIPService:
             restore_job.status = FZIPStatus.RESTORE_FAILED
             restore_job.error = str(e)
             update_fzip_job(restore_job)
+            event_service.publish_event(RestoreFailedEvent(
+                user_id=restore_job.user_id,
+                restore_id=str(restore_job.job_id),
+                backup_id=restore_job.backup_id or '',
+                error=str(e)
+            ))
     
     def _parse_package(self, package_s3_key: str) -> Dict[str, Any]:
         """Parse the ZIP package and extract data."""
@@ -525,7 +560,8 @@ class FZIPService:
                 
                 return {
                     'manifest': manifest,
-                    'data': data
+                    'data': data,
+                    'raw': package_data
                 }
                 
         except Exception as e:
@@ -708,7 +744,7 @@ class FZIPService:
             update_fzip_job(restore_job)
             
             file_results = self._restore_transaction_files(
-                data.get('transaction_files', []), restore_job.user_id
+                data.get('transaction_files', []), restore_job.user_id, package_data
             )
             results['transaction_files'] = file_results
             
@@ -729,9 +765,23 @@ class FZIPService:
             restore_job.restore_results = results
             restore_job.completed_at = int(datetime.now(timezone.utc).timestamp() * 1000)
             update_fzip_job(restore_job)
+
+            # Publish restore completed event
+            event_service.publish_event(RestoreCompletedEvent(
+                user_id=restore_job.user_id,
+                restore_id=str(restore_job.job_id),
+                backup_id=restore_job.backup_id or '',
+                data_summary=results
+            ))
             
         except Exception as e:
             logger.error(f"Error during data restore: {str(e)}")
+            event_service.publish_event(RestoreFailedEvent(
+                user_id=restore_job.user_id,
+                restore_id=str(restore_job.job_id),
+                backup_id=restore_job.backup_id or '',
+                error=str(e)
+            ))
             raise
     
     def _restore_accounts(self, accounts: list, user_id: str) -> Dict[str, Any]:
@@ -883,7 +933,7 @@ class FZIPService:
             'errors': errors
         }
     
-    def _restore_transaction_files(self, transaction_files: list, user_id: str) -> Dict[str, Any]:
+    def _restore_transaction_files(self, transaction_files: list, user_id: str, package_data: Dict[str, Any]) -> Dict[str, Any]:
         """Restore transaction files data to empty profile and restore files to S3."""
         from models.transaction_file import ProcessingStatus, FileFormat, DateRange
         from utils.s3_dao import put_object
@@ -891,55 +941,61 @@ class FZIPService:
         created = 0
         errors = []
         
-        for file_data in transaction_files:
-            try:
-                # Convert export format to TransactionFile model
-                date_range = None
-                if file_data.get('dateRange'):
-                    date_range_data = file_data['dateRange']
-                    date_range = DateRange(
-                        startDate=date_range_data.get('start'),
-                        endDate=date_range_data.get('end')
-                    )
-                
-                transaction_file = TransactionFile(
-                    fileId=uuid.UUID(file_data['fileId']),
-                    userId=user_id,  # Ensure user ownership
-                    fileName=file_data['fileName'],
-                    uploadDate=file_data.get('uploadDate'),
-                    fileSize=file_data.get('fileSize', 0),
-                    s3Key=file_data['s3Key'],
-                    processingStatus=ProcessingStatus(file_data.get('processingStatus', 'pending')),
-                    processedDate=file_data.get('processedDate'),
-                    fileFormat=FileFormat(file_data['fileFormat']) if file_data.get('fileFormat') else None,
-                    accountId=uuid.UUID(file_data['accountId']) if file_data.get('accountId') else None,
-                    fileMapId=uuid.UUID(file_data['fileMapId']) if file_data.get('fileMapId') else None,
-                    recordCount=file_data.get('recordCount'),
-                    dateRange=date_range,
-                    errorMessage=file_data.get('errorMessage'),
-                    openingBalance=Decimal(str(file_data['openingBalance'])) if file_data.get('openingBalance') else None,
-                    closingBalance=Decimal(str(file_data['closingBalance'])) if file_data.get('closingBalance') else None,
-                    currency=Currency(file_data['currency']) if file_data.get('currency') else None,
-                    duplicateCount=file_data.get('duplicateCount'),
-                    transactionCount=file_data.get('transactionCount'),
-                    createdAt=file_data.get('createdAt'),
-                    updatedAt=file_data.get('updatedAt')
-                )
-                
-                # Create transaction file directly - profile already validated as empty
-                create_transaction_file(transaction_file)
-                created += 1
-                
-                # TODO: Restore actual file content from FZIP package to S3
-                # This would require extracting the file content from the FZIP package
-                # and uploading it to S3 with the correct key
-                logger.info(f"Transaction file metadata restored: {transaction_file.file_id}")
+        with zipfile.ZipFile(io.BytesIO(package_data['raw']), 'r') as zipf:
+            for file_data in transaction_files:
+                try:
+                    # Convert export format to TransactionFile model
+                    date_range = None
+                    if file_data.get('dateRange'):
+                        date_range_data = file_data['dateRange']
+                        date_range = DateRange(
+                            startDate=date_range_data.get('start'),
+                            endDate=date_range_data.get('end')
+                        )
                     
-            except Exception as e:
-                # Any failure indicates system issue (not conflicts - profile was validated empty)
-                error_msg = f"Failed to restore transaction file {file_data.get('fileId', 'unknown')}: {str(e)}"
-                errors.append(error_msg)
-                logger.error(error_msg)
+                    transaction_file = TransactionFile(
+                        fileId=uuid.UUID(file_data['fileId']),
+                        userId=user_id,  # Ensure user ownership
+                        fileName=file_data['fileName'],
+                        uploadDate=file_data.get('uploadDate'),
+                        fileSize=file_data.get('fileSize', 0),
+                        s3Key=file_data['s3Key'],
+                        processingStatus=ProcessingStatus(file_data.get('processingStatus', 'pending')),
+                        processedDate=file_data.get('processedDate'),
+                        fileFormat=FileFormat(file_data['fileFormat']) if file_data.get('fileFormat') else None,
+                        accountId=uuid.UUID(file_data['accountId']) if file_data.get('accountId') else None,
+                        fileMapId=uuid.UUID(file_data['fileMapId']) if file_data.get('fileMapId') else None,
+                        recordCount=file_data.get('recordCount'),
+                        dateRange=date_range,
+                        errorMessage=file_data.get('errorMessage'),
+                        openingBalance=Decimal(str(file_data['openingBalance'])) if file_data.get('openingBalance') else None,
+                        closingBalance=Decimal(str(file_data['closingBalance'])) if file_data.get('closingBalance') else None,
+                        currency=Currency(file_data['currency']) if file_data.get('currency') else None,
+                        duplicateCount=file_data.get('duplicateCount'),
+                        transactionCount=file_data.get('transactionCount'),
+                        createdAt=file_data.get('createdAt'),
+                        updatedAt=file_data.get('updatedAt')
+                    )
+                    
+                    # Create transaction file directly - profile already validated as empty
+                    create_transaction_file(transaction_file)
+                    created += 1
+                    
+                    # Restore actual file content from FZIP package to S3
+                    try:
+                        file_content = zipf.read(f"files/{file_data['s3Key']}")
+                        put_object(file_data['s3Key'], file_content, 'application/octet-stream', self.fzip_bucket)
+                        logger.info(f"Successfully restored file content for {file_data['s3Key']}")
+                    except KeyError:
+                        logger.warning(f"File content not found in FZIP package for {file_data['s3Key']}")
+
+                    logger.info(f"Transaction file metadata restored: {transaction_file.file_id}")
+                        
+                except Exception as e:
+                    # Any failure indicates system issue (not conflicts - profile was validated empty)
+                    error_msg = f"Failed to restore transaction file {file_data.get('fileId', 'unknown')}: {str(e)}"
+                    errors.append(error_msg)
+                    logger.error(error_msg)
         
         return {
             'created': created,
@@ -1068,47 +1124,13 @@ class FZIPService:
                 hash_sha256.update(chunk)
         return f"sha256:{hash_sha256.hexdigest()}"
     
-    def cleanup_expired_exports(self, user_id: str) -> int:
-        """Clean up expired export files for a user"""
-        # This would be implemented to clean up old exports from S3
-        # For now, just log the operation
-        logger.info(f"Cleanup operation for user {user_id} exports")
-        return 0
-
-    # =============================================================================
-    # Backup Method Aliases (Legacy Export Terminology)
-    # =============================================================================
-
-    def initiate_backup(self, user_id: str, backup_type: FZIPBackupType,
-                       include_analytics: bool = False, description: Optional[str] = None,
-                       backup_format: FZIPFormat = FZIPFormat.FZIP,
-                       **kwargs) -> FZIPJob:
-        """
-        Initiate a new backup job (alias for initiate_export)
-        
-        Args:
-            user_id: User identifier
-            backup_type: Type of backup to perform
-            include_analytics: Whether to include analytics data
-            description: Optional description for the backup
-            backup_format: Format of the backup package
-        """
-        return self.initiate_export(user_id, backup_type, include_analytics, 
-                                  description, backup_format, **kwargs)
-
-    def collect_backup_data(self, user_id: str, backup_type: FZIPBackupType,
-                           include_analytics: bool = False, **kwargs) -> Dict[str, Any]:
-        """Collect user data for backup (alias for collect_user_data)"""
-        return self.collect_user_data(user_id, backup_type, include_analytics, **kwargs)
-
-    def build_backup_package(self, backup_job: FZIPJob, collected_data: Dict[str, Any]) -> Tuple[str, int]:
-        """Build backup package (alias for build_export_package)"""
-        return self.build_export_package(backup_job, collected_data)
-
     def cleanup_expired_backups(self, user_id: str) -> int:
-        """Clean up expired backup files (alias for cleanup_expired_exports)"""
-        return self.cleanup_expired_exports(user_id)
+        """Clean up expired backup files for a user"""
+        # This would be implemented to clean up old backups from S3
+        # For now, just log the operation
+        logger.info(f"Cleanup operation for user {user_id} backups")
+        return 0
 
 
 # Global service instance
-fzip_service = FZIPService() 
+fzip_service = FZIPService()
