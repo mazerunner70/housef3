@@ -645,6 +645,101 @@ resource "aws_apigatewayv2_route" "delete_export" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# FZIP Operations Integration (Unified Backup/Restore)
+resource "aws_apigatewayv2_integration" "fzip_operations" {
+  api_id                 = aws_apigatewayv2_api.main.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.fzip_operations.invoke_arn
+  payload_format_version = "2.0"
+  description           = "Lambda integration for unified FZIP backup/restore operations"
+}
+
+
+
+# FZIP Backup routes
+resource "aws_apigatewayv2_route" "fzip_initiate_backup" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /fzip/backup"
+  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "fzip_list_backups" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /fzip/backup"
+  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "fzip_get_backup_status" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /fzip/backup/{jobId}/status"
+  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "fzip_get_backup_download" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /fzip/backup/{jobId}/download"
+  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "fzip_delete_backup" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "DELETE /fzip/backup/{jobId}"
+  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+
+
+# FZIP Restore routes
+resource "aws_apigatewayv2_route" "fzip_create_restore" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /fzip/restore"
+  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "fzip_list_restores" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /fzip/restore"
+  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "fzip_get_restore_status" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /fzip/restore/{jobId}/status"
+  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "fzip_delete_restore" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "DELETE /fzip/restore/{jobId}"
+  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "fzip_upload_restore_package" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /fzip/restore/{jobId}/upload"
+  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 resource "aws_apigatewayv2_stage" "main" {
   api_id      = aws_apigatewayv2_api.main.id
   name        = var.environment
@@ -764,6 +859,15 @@ resource "aws_lambda_permission" "api_gateway_export" {
   function_name = aws_lambda_function.export_operations.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+}
+
+# Lambda permission for FZIP operations (unified backup/restore)
+resource "aws_lambda_permission" "api_gateway_fzip" {
+  statement_id  = "AllowAPIGatewayInvokeFZIPLambda"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.fzip_operations.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/fzip*"
 }
 
 # Outputs

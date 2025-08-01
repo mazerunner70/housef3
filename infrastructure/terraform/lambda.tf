@@ -660,6 +660,53 @@ resource "aws_lambda_function" "export_operations" {
   }
 }
 
+# FZIP Operations Lambda (Unified Backup/Restore with Import/Export compatibility)
+resource "aws_lambda_function" "fzip_operations" {
+  filename         = "../../backend/lambda_deploy.zip"
+  function_name    = "${var.project_name}-${var.environment}-fzip-operations"
+  handler          = "handlers/fzip_operations.handler"
+  runtime          = "python3.10"
+  role            = aws_iam_role.lambda_exec.arn
+  timeout         = 900  # 15 minutes for backup/restore processing
+  memory_size     = 1024  # More memory for large operations
+  source_code_hash = base64encode(local.source_code_hash)
+  depends_on      = [null_resource.prepare_lambda]
+  
+  environment {
+    variables = {
+      ENVIRONMENT           = var.environment
+      FZIP_JOBS_TABLE       = aws_dynamodb_table.fzip_jobs.name
+      FZIP_PACKAGES_BUCKET  = aws_s3_bucket.fzip_packages.bucket
+      ACCOUNTS_TABLE        = aws_dynamodb_table.accounts.name
+      TRANSACTIONS_TABLE    = aws_dynamodb_table.transactions.name
+      CATEGORIES_TABLE_NAME = aws_dynamodb_table.categories.name
+      FILE_MAPS_TABLE       = aws_dynamodb_table.file_maps.name
+      FILES_TABLE          = aws_dynamodb_table.transaction_files.name
+      ANALYTICS_DATA_TABLE  = aws_dynamodb_table.analytics_data.name
+      FILE_STORAGE_BUCKET   = aws_s3_bucket.file_storage.id
+      EVENT_BUS_NAME       = aws_cloudwatch_event_bus.app_events.name
+      TRANSACTION_CATEGORY_ASSIGNMENTS_TABLE = aws_dynamodb_table.transaction_category_assignments.name
+    }
+  }
+  
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_cloudwatch_log_group" "fzip_operations" {
+  name              = "/aws/lambda/${aws_lambda_function.fzip_operations.function_name}"
+  retention_in_days = 7
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
 resource "aws_cloudwatch_log_group" "export_operations" {
   name              = "/aws/lambda/${aws_lambda_function.export_operations.function_name}"
   retention_in_days = 7

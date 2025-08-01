@@ -1,5 +1,5 @@
 """
-Unified FZIP (Financial ZIP) models for the import/export system.
+Unified FZIP (Financial ZIP) models for the backup/restore system.
 """
 import uuid
 from datetime import datetime, timezone
@@ -16,31 +16,31 @@ from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 class FZIPStatus(str, Enum):
     """Status of FZIP operations"""
-    # Export statuses
-    EXPORT_INITIATED = "export_initiated"
-    EXPORT_PROCESSING = "export_processing"
-    EXPORT_COMPLETED = "export_completed"
-    EXPORT_FAILED = "export_failed"
-    EXPORT_EXPIRED = "export_expired"
+    # Backup statuses
+    BACKUP_INITIATED = "backup_initiated"
+    BACKUP_PROCESSING = "backup_processing"
+    BACKUP_COMPLETED = "backup_completed"
+    BACKUP_FAILED = "backup_failed"
+    BACKUP_EXPIRED = "backup_expired"
     
-    # Import statuses
-    IMPORT_UPLOADED = "import_uploaded"
-    IMPORT_VALIDATING = "import_validating"
-    IMPORT_VALIDATION_PASSED = "import_validation_passed"
-    IMPORT_VALIDATION_FAILED = "import_validation_failed"
-    IMPORT_PROCESSING = "import_processing"
-    IMPORT_COMPLETED = "import_completed"
-    IMPORT_FAILED = "import_failed"
+    # Restore statuses
+    RESTORE_UPLOADED = "restore_uploaded"
+    RESTORE_VALIDATING = "restore_validating"
+    RESTORE_VALIDATION_PASSED = "restore_validation_passed"
+    RESTORE_VALIDATION_FAILED = "restore_validation_failed"
+    RESTORE_PROCESSING = "restore_processing"
+    RESTORE_COMPLETED = "restore_completed"
+    RESTORE_FAILED = "restore_failed"
 
 
 class FZIPType(str, Enum):
     """Type of FZIP operation"""
-    EXPORT = "export"
-    IMPORT = "import"
+    BACKUP = "backup"
+    RESTORE = "restore"
 
 
-class FZIPExportType(str, Enum):
-    """Type of FZIP export"""
+class FZIPBackupType(str, Enum):
+    """Type of FZIP backup"""
     COMPLETE = "complete"
     SELECTIVE = "selective"
     ACCOUNTS_ONLY = "accounts_only"
@@ -53,11 +53,7 @@ class FZIPFormat(str, Enum):
     JSON = "json"
 
 
-class FZIPMergeStrategy(str, Enum):
-    """Merge strategy for FZIP imports"""
-    FAIL_ON_CONFLICT = "fail_on_conflict"
-    OVERWRITE = "overwrite"
-    SKIP_EXISTING = "skip_existing"
+
 
 
 # ============================================================================
@@ -65,7 +61,7 @@ class FZIPMergeStrategy(str, Enum):
 # ============================================================================
 
 class FZIPJob(BaseModel):
-    """Unified model for FZIP export and import jobs"""
+    """Unified model for FZIP backup and restore jobs"""
     # Core identifiers
     job_id: uuid.UUID = Field(default_factory=uuid.uuid4, alias="jobId")
     user_id: str = Field(alias="userId")
@@ -80,13 +76,12 @@ class FZIPJob(BaseModel):
     completed_at: Optional[int] = Field(default=None, alias="completedAt")
     expires_at: Optional[int] = Field(default=None, alias="expiresAt")
     
-    # Export-specific fields
-    export_type: Optional[FZIPExportType] = Field(default=None, alias="exportType")
+    # Backup-specific fields
+    backup_type: Optional[FZIPBackupType] = Field(default=None, alias="backupType")
     include_analytics: bool = Field(default=False, alias="includeAnalytics")
     description: Optional[str] = None
     
-    # Import-specific fields
-    merge_strategy: Optional[FZIPMergeStrategy] = Field(default=None, alias="mergeStrategy")
+    # Restore-specific fields (empty profile restore only)
     
     # Package information
     package_format: FZIPFormat = Field(default=FZIPFormat.FZIP, alias="packageFormat")
@@ -104,7 +99,7 @@ class FZIPJob(BaseModel):
     
     # Results
     validation_results: Dict[str, Any] = Field(default_factory=dict, alias="validationResults")
-    import_results: Dict[str, Any] = Field(default_factory=dict, alias="importResults")
+    restore_results: Dict[str, Any] = Field(default_factory=dict, alias="restoreResults")
     
     # Configuration
     parameters: Optional[Dict[str, Any]] = None
@@ -134,7 +129,7 @@ class FZIPJob(BaseModel):
             item['jobId'] = str(item['jobId'])
             
         # Convert enum values to strings
-        for field in ['status', 'jobType', 'exportType', 'mergeStrategy', 'packageFormat']:
+        for field in ['status', 'jobType', 'backupType', 'mergeStrategy', 'packageFormat']:
             if field in item and item[field] is not None:
                 item[field] = item[field].value if hasattr(item[field], 'value') else str(item[field])
             
@@ -152,44 +147,43 @@ class FZIPJob(BaseModel):
             item['status'] = FZIPStatus(item['status'])
         if 'jobType' in item:
             item['jobType'] = FZIPType(item['jobType'])
-        if 'exportType' in item and item['exportType']:
-            item['exportType'] = FZIPExportType(item['exportType'])
-        if 'mergeStrategy' in item and item['mergeStrategy']:
-            item['mergeStrategy'] = FZIPMergeStrategy(item['mergeStrategy'])
+        if 'backupType' in item and item['backupType']:
+            item['backupType'] = FZIPBackupType(item['backupType'])
+
         if 'packageFormat' in item:
             item['packageFormat'] = FZIPFormat(item['packageFormat'])
             
         return cls.model_validate(item)
 
-    def is_export(self) -> bool:
-        """Check if this is an export job"""
-        return self.job_type == FZIPType.EXPORT
+    def is_backup(self) -> bool:
+        """Check if this is a backup job"""
+        return self.job_type == FZIPType.BACKUP
 
-    def is_import(self) -> bool:
-        """Check if this is an import job"""
-        return self.job_type == FZIPType.IMPORT
+    def is_restore(self) -> bool:
+        """Check if this is a restore job"""
+        return self.job_type == FZIPType.RESTORE
 
     def is_completed(self) -> bool:
         """Check if the job is completed"""
-        return self.status in [FZIPStatus.EXPORT_COMPLETED, FZIPStatus.IMPORT_COMPLETED]
+        return self.status in [FZIPStatus.BACKUP_COMPLETED, FZIPStatus.RESTORE_COMPLETED]
 
     def is_failed(self) -> bool:
         """Check if the job failed"""
-        return self.status in [FZIPStatus.EXPORT_FAILED, FZIPStatus.IMPORT_FAILED, 
-                              FZIPStatus.IMPORT_VALIDATION_FAILED]
+        return self.status in [FZIPStatus.BACKUP_FAILED, FZIPStatus.RESTORE_FAILED, 
+                              FZIPStatus.RESTORE_VALIDATION_FAILED]
 
 
 # ============================================================================
 # REQUEST/RESPONSE MODELS
 # ============================================================================
 
-class FZIPExportRequest(BaseModel):
-    """Request model for creating a new FZIP export"""
+class FZIPBackupRequest(BaseModel):
+    """Request model for creating a new FZIP backup"""
     include_analytics: bool = Field(default=False, alias="includeAnalytics")
-    export_type: FZIPExportType = Field(default=FZIPExportType.COMPLETE, alias="exportType")
+    backup_type: FZIPBackupType = Field(default=FZIPBackupType.COMPLETE, alias="backupType")
     description: Optional[str] = None
     
-    # Selective export parameters
+    # Selective backup parameters
     account_ids: Optional[List[uuid.UUID]] = Field(default=None, alias="accountIds")
     date_range_start: Optional[int] = Field(default=None, alias="dateRangeStart")
     date_range_end: Optional[int] = Field(default=None, alias="dateRangeEnd")
@@ -204,9 +198,8 @@ class FZIPExportRequest(BaseModel):
     )
 
 
-class FZIPImportRequest(BaseModel):
-    """Request model for creating a new FZIP import"""
-    merge_strategy: FZIPMergeStrategy = Field(alias="mergeStrategy")
+class FZIPRestoreRequest(BaseModel):
+    """Request model for creating a new FZIP restore (empty profile only)"""
     validate_only: bool = Field(default=False, alias="validateOnly")
     
     model_config = ConfigDict(
@@ -223,11 +216,11 @@ class FZIPResponse(BaseModel):
     package_format: FZIPFormat = Field(default=FZIPFormat.FZIP, alias="packageFormat")
     message: Optional[str] = None
     
-    # Export-specific fields
+    # Backup-specific fields
     estimated_size: Optional[str] = Field(default=None, alias="estimatedSize")
     estimated_completion: Optional[str] = Field(default=None, alias="estimatedCompletion")
     
-    # Import-specific fields
+    # Restore-specific fields
     upload_url: Optional[Dict[str, Any]] = Field(default=None, alias="uploadUrl")
     
     model_config = ConfigDict(
@@ -253,13 +246,13 @@ class FZIPStatusResponse(BaseModel):
     completed_at: Optional[str] = Field(default=None, alias="completedAt")
     expires_at: Optional[str] = Field(default=None, alias="expiresAt")
     
-    # Export-specific fields
+    # Backup-specific fields
     download_url: Optional[str] = Field(default=None, alias="downloadUrl")
     package_size: Optional[int] = Field(default=None, alias="packageSize")
     
-    # Import-specific fields
+    # Restore-specific fields
     validation_results: Dict[str, Any] = Field(default_factory=dict, alias="validationResults")
-    import_results: Dict[str, Any] = Field(default_factory=dict, alias="importResults")
+    restore_results: Dict[str, Any] = Field(default_factory=dict, alias="restoreResults")
     
     # Error handling
     error: Optional[str] = None
@@ -278,7 +271,7 @@ class FZIPStatusResponse(BaseModel):
 # ============================================================================
 
 class FZIPDataSummary(BaseModel):
-    """Summary of data included in FZIP export"""
+    """Summary of data included in FZIP backup"""
     accounts_count: int = Field(alias="accountsCount")
     transactions_count: int = Field(alias="transactionsCount")
     categories_count: int = Field(alias="categoriesCount")
@@ -292,7 +285,7 @@ class FZIPDataSummary(BaseModel):
 
 
 class FZIPCompatibilityInfo(BaseModel):
-    """Compatibility information for FZIP import"""
+    """Compatibility information for FZIP restore"""
     minimum_version: str = Field(alias="minimumVersion")
     supported_versions: List[str] = Field(alias="supportedVersions")
     
@@ -303,8 +296,8 @@ class FZIPCompatibilityInfo(BaseModel):
 
 class FZIPManifest(BaseModel):
     """Manifest for FZIP package validation and metadata"""
-    export_format_version: str = Field(alias="exportFormatVersion")
-    export_timestamp: str = Field(alias="exportTimestamp")
+    backup_format_version: str = Field(alias="backupFormatVersion")
+    backup_timestamp: str = Field(alias="backupTimestamp")
     user_id: str = Field(alias="userId")
     housef3_version: str = Field(alias="housef3Version")
     package_format: FZIPFormat = Field(default=FZIPFormat.FZIP, alias="packageFormat")
@@ -313,9 +306,9 @@ class FZIPManifest(BaseModel):
     checksums: Dict[str, str] = Field(default_factory=dict)
     compatibility: FZIPCompatibilityInfo
     
-    # Export metadata
+    # Backup metadata
     job_id: uuid.UUID = Field(alias="jobId")
-    export_type: FZIPExportType = Field(alias="exportType")
+    backup_type: FZIPBackupType = Field(alias="backupType")
     include_analytics: bool = Field(alias="includeAnalytics")
     
     model_config = ConfigDict(
@@ -339,8 +332,8 @@ class FZIPValidationSummary(BaseModel):
     details: List[str] = Field(default_factory=list)
 
 
-class FZIPImportSummary(BaseModel):
-    """Summary of import results"""
+class FZIPRestoreSummary(BaseModel):
+    """Summary of restore results"""
     accounts_created: int = Field(alias="accountsCreated")
     accounts_updated: int = Field(alias="accountsUpdated")
     transactions_created: int = Field(alias="transactionsCreated")
@@ -360,33 +353,46 @@ class FZIPImportSummary(BaseModel):
 # UTILITY FUNCTIONS
 # ============================================================================
 
-def create_export_job(user_id: str, export_request: FZIPExportRequest) -> FZIPJob:
-    """Create a new FZIP export job"""
+def create_backup_job(user_id: str, backup_request: FZIPBackupRequest) -> FZIPJob:
+    """Create a new FZIP backup job"""
     return FZIPJob(
         userId=user_id,
-        jobType=FZIPType.EXPORT,
-        status=FZIPStatus.EXPORT_INITIATED,
-        exportType=export_request.export_type,
-        includeAnalytics=export_request.include_analytics,
-        description=export_request.description,
+        jobType=FZIPType.BACKUP,
+        status=FZIPStatus.BACKUP_INITIATED,
+        backupType=backup_request.backup_type,
+        includeAnalytics=backup_request.include_analytics,
+        description=backup_request.description,
         parameters={
-            'accountIds': export_request.account_ids,
-            'dateRangeStart': export_request.date_range_start,
-            'dateRangeEnd': export_request.date_range_end,
-            'categoryIds': export_request.category_ids
-        } if any([export_request.account_ids, export_request.date_range_start, 
-                   export_request.date_range_end, export_request.category_ids]) else None
+            'accountIds': backup_request.account_ids,
+            'dateRangeStart': backup_request.date_range_start,
+            'dateRangeEnd': backup_request.date_range_end,
+            'categoryIds': backup_request.category_ids
+        } if any([backup_request.account_ids, backup_request.date_range_start, 
+                   backup_request.date_range_end, backup_request.category_ids]) else None
     )
 
 
-def create_import_job(user_id: str, import_request: FZIPImportRequest) -> FZIPJob:
-    """Create a new FZIP import job"""
+def create_restore_job(user_id: str, restore_request: FZIPRestoreRequest) -> FZIPJob:
+    """Create a new FZIP restore job (empty profile only)"""
     return FZIPJob(
         userId=user_id,
-        jobType=FZIPType.IMPORT,
-        status=FZIPStatus.IMPORT_UPLOADED,
-        mergeStrategy=import_request.merge_strategy,
+        jobType=FZIPType.RESTORE,
+        status=FZIPStatus.RESTORE_UPLOADED,
+        # Note: No merge strategy for empty profile restores
         parameters={
-            'validateOnly': import_request.validate_only
+            'validateOnly': restore_request.validate_only
         }
-    ) 
+    )
+
+
+# ============================================================================
+# BACKWARD COMPATIBILITY ALIASES
+# ============================================================================
+
+# TODO: Remove these aliases after migration is complete
+FZIPExportType = FZIPBackupType  # Backward compatibility
+FZIPExportRequest = FZIPBackupRequest  # Backward compatibility  
+FZIPImportRequest = FZIPRestoreRequest  # Backward compatibility
+FZIPImportSummary = FZIPRestoreSummary  # Backward compatibility
+create_export_job = create_backup_job  # Backward compatibility
+create_import_job = create_restore_job  # Backward compatibility 

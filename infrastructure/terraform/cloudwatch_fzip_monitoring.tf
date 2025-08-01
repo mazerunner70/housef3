@@ -9,7 +9,7 @@
 # =========================================
 
 data "aws_cloudwatch_log_group" "fzip_operations" {
-  name = "/aws/lambda/${var.project_name}-${var.environment}-export-operations"
+  name = "/aws/lambda/${var.project_name}-${var.environment}-fzip-operations"
 }
 
 # =========================================
@@ -30,14 +30,14 @@ resource "aws_cloudwatch_dashboard" "fzip_operations" {
 
         properties = {
           metrics = [
-            ["HouseF3/FZIP", "ExportCount", "Result", "Success"],
+            ["HouseF3/FZIP", "BackupCount", "Result", "Success"],
             [".", ".", ".", "Total"],
-            [".", "ExportSuccessRate"]
+            [".", "BackupSuccessRate"]
           ]
           view    = "timeSeries"
           stacked = false
           region  = "us-east-1"
-          title   = "FZIP Export Success Rate"
+          title   = "FZIP Backup Success Rate"
           period  = 300
           stat    = "Sum"
         }
@@ -51,7 +51,7 @@ resource "aws_cloudwatch_dashboard" "fzip_operations" {
 
         properties = {
           metrics = [
-            ["HouseF3/FZIP", "ExportDuration", "Success", "true", "ExportType", "complete"],
+            ["HouseF3/FZIP", "BackupDuration", "Success", "true", "BackupType", "complete"],
             ["...", "false", ".", "."],
             ["...", "true", ".", "accounts_only"],
             ["...", "true", ".", "transactions_only"]
@@ -59,7 +59,7 @@ resource "aws_cloudwatch_dashboard" "fzip_operations" {
           view    = "timeSeries"
           stacked = false
           region  = "us-east-1"
-          title   = "FZIP Export Duration"
+          title   = "FZIP Backup Duration"
           period  = 300
           stat    = "Average"
           yAxis = {
@@ -78,14 +78,14 @@ resource "aws_cloudwatch_dashboard" "fzip_operations" {
 
         properties = {
           metrics = [
-            ["HouseF3/FZIP", "ExportPackageSize", "ExportType", "complete"],
+            ["HouseF3/FZIP", "BackupPackageSize", "BackupType", "complete"],
             ["...", "accounts_only"],
             ["...", "transactions_only"]
           ]
           view    = "timeSeries"
           stacked = false
           region  = "us-east-1"
-          title   = "FZIP Export Package Size"
+          title   = "FZIP Backup Package Size"
           period  = 300
           stat    = "Average"
           yAxis = {
@@ -104,7 +104,7 @@ resource "aws_cloudwatch_dashboard" "fzip_operations" {
 
         properties = {
           metrics = [
-            ["HouseF3/FZIP", "ExportDataVolume", "EntityType", "accounts"],
+            ["HouseF3/FZIP", "BackupDataVolume", "EntityType", "accounts"],
             ["...", "transactions"],
             ["...", "categories"],
             ["...", "file_maps"],
@@ -113,7 +113,7 @@ resource "aws_cloudwatch_dashboard" "fzip_operations" {
           view    = "timeSeries"
           stacked = false
           region  = "us-east-1"
-          title   = "FZIP Export Data Volume by Entity Type"
+          title   = "FZIP Backup Data Volume by Entity Type"
           period  = 300
           stat    = "Sum"
         }
@@ -127,7 +127,7 @@ resource "aws_cloudwatch_dashboard" "fzip_operations" {
 
         properties = {
           metrics = [
-            ["HouseF3/FZIP", "ExportErrors", "ErrorType", "ValidationError"],
+            ["HouseF3/FZIP", "BackupErrors", "ErrorType", "ValidationError"],
             ["...", "DatabaseError"],
             ["...", "S3Error"],
             ["...", "PackagingError"],
@@ -136,7 +136,7 @@ resource "aws_cloudwatch_dashboard" "fzip_operations" {
           view    = "timeSeries"
           stacked = false
           region  = "us-east-1"
-          title   = "FZIP Export Errors by Type"
+          title   = "FZIP Backup Errors by Type"
           period  = 300
           stat    = "Sum"
         }
@@ -151,8 +151,89 @@ resource "aws_cloudwatch_dashboard" "fzip_operations" {
         properties = {
           query   = "SOURCE '${data.aws_cloudwatch_log_group.fzip_operations.name}'\n| fields @timestamp, @message\n| filter @message like /ERROR/\n| sort @timestamp desc\n| limit 100"
           region  = "us-east-1"
-          title   = "Recent FZIP Export Errors"
+          title   = "Recent FZIP Operations Errors"
           view    = "table"
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 18
+        width  = 12
+        height = 6
+
+        properties = {
+          metrics = [
+            ["HouseF3/FZIP", "RestoreCount", "Result", "Success"],
+            [".", ".", ".", "Total"],
+            [".", "RestoreSuccessRate"]
+          ]
+          view    = "timeSeries"
+          stacked = false
+          region  = "us-east-1"
+          title   = "FZIP Restore Success Rate"
+          period  = 300
+          stat    = "Sum"
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 18
+        width  = 12
+        height = 6
+
+        properties = {
+          metrics = [
+            ["HouseF3/FZIP", "RestoreDuration", "Success", "true"],
+            ["...", "false"]
+          ]
+          view    = "timeSeries"
+          stacked = false
+          region  = "us-east-1"
+          title   = "FZIP Restore Duration"
+          period  = 300
+          stat    = "Average"
+        }
+      },
+            {
+        type   = "metric"
+        x      = 0
+        y      = 24
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            ["HouseF3/FZIP", "BackupValidationScore", "Quality", "excellent"],
+            [".", ".", ".", "good"],
+            [".", ".", ".", "fair"],
+            [".", ".", ".", "poor"]
+          ],
+          view    = "timeSeries",
+          stacked = true,
+          region  = "us-east-1",
+          title   = "Backup Validation Quality",
+          period  = 300,
+          stat    = "Average"
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 24
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            ["HouseF3/FZIP", "BackupIntegrityFailures"],
+            [".", "BackupCompletenessFailures"]
+          ],
+          view    = "timeSeries",
+          stacked = false,
+          region  = "us-east-1",
+          title   = "Backup Validation Failures",
+          period  = 300,
+          stat    = "Sum"
         }
       }
     ]
@@ -164,16 +245,16 @@ resource "aws_cloudwatch_dashboard" "fzip_operations" {
 # =========================================
 
 # High error rate alarm
-resource "aws_cloudwatch_metric_alarm" "fzip_export_high_error_rate" {
-  alarm_name          = "${var.project_name}-${var.environment}-fzip-export-high-error-rate"
+resource "aws_cloudwatch_metric_alarm" "fzip_backup_high_error_rate" {
+  alarm_name          = "${var.project_name}-${var.environment}-fzip-backup-high-error-rate"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = "2"
-  metric_name         = "ExportErrors"
+  metric_name         = "BackupErrors"
   namespace           = "HouseF3/FZIP"
   period              = "300"
   statistic           = "Sum"
   threshold           = "5"
-  alarm_description   = "This metric monitors FZIP export error rate"
+  alarm_description   = "This metric monitors FZIP backup error rate"
   alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
 
   tags = {
@@ -185,16 +266,16 @@ resource "aws_cloudwatch_metric_alarm" "fzip_export_high_error_rate" {
 }
 
 # Long processing time alarm
-resource "aws_cloudwatch_metric_alarm" "fzip_export_long_duration" {
-  alarm_name          = "${var.project_name}-${var.environment}-fzip-export-long-duration"
+resource "aws_cloudwatch_metric_alarm" "fzip_backup_long_duration" {
+  alarm_name          = "${var.project_name}-${var.environment}-fzip-backup-long-duration"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = "2"
-  metric_name         = "ExportDuration"
+  metric_name         = "BackupDuration"
   namespace           = "HouseF3/FZIP"
   period              = "300"
   statistic           = "Average"
   threshold           = "300"  # 5 minutes
-  alarm_description   = "This metric monitors FZIP export processing time"
+  alarm_description   = "This metric monitors FZIP backup processing time"
   alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
 
   dimensions = {
@@ -210,16 +291,16 @@ resource "aws_cloudwatch_metric_alarm" "fzip_export_long_duration" {
 }
 
 # Low success rate alarm
-resource "aws_cloudwatch_metric_alarm" "fzip_export_low_success_rate" {
-  alarm_name          = "${var.project_name}-${var.environment}-fzip-export-low-success-rate"
+resource "aws_cloudwatch_metric_alarm" "fzip_backup_low_success_rate" {
+  alarm_name          = "${var.project_name}-${var.environment}-fzip-backup-low-success-rate"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = "3"
-  metric_name         = "ExportSuccessRate"
+  metric_name         = "BackupSuccessRate"
   namespace           = "HouseF3/FZIP"
   period              = "900"  # 15 minutes
   statistic           = "Average"
   threshold           = "90"   # 90% success rate
-  alarm_description   = "This metric monitors FZIP export success rate"
+  alarm_description   = "This metric monitors FZIP backup success rate"
   alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
   treat_missing_data  = "notBreaching"
 
@@ -245,7 +326,7 @@ resource "aws_cloudwatch_metric_alarm" "fzip_lambda_errors" {
   alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
 
   dimensions = {
-    FunctionName = "${var.project_name}-${var.environment}-export-operations"
+    FunctionName = "${var.project_name}-${var.environment}-fzip-operations"
   }
 
   tags = {
@@ -270,7 +351,53 @@ resource "aws_cloudwatch_metric_alarm" "fzip_lambda_duration" {
   alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
 
   dimensions = {
-    FunctionName = "${var.project_name}-${var.environment}-export-operations"
+    FunctionName = "${var.project_name}-${var.environment}-fzip-operations"
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    Component   = "fzip-monitoring"
+    ManagedBy   = "terraform"
+  }
+}
+
+# High error rate alarm for restore
+resource "aws_cloudwatch_metric_alarm" "fzip_restore_high_error_rate" {
+  alarm_name          = "${var.project_name}-${var.environment}-fzip-restore-high-error-rate"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "RestoreErrors"
+  namespace           = "HouseF3/FZIP"
+  period              = "300"
+  statistic           = "Sum"
+  threshold           = "3"
+  alarm_description   = "This metric monitors FZIP restore error rate"
+  alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    Component   = "fzip-monitoring"
+    ManagedBy   = "terraform"
+  }
+}
+
+# Long processing time alarm for restore
+resource "aws_cloudwatch_metric_alarm" "fzip_restore_long_duration" {
+  alarm_name          = "${var.project_name}-${var.environment}-fzip-restore-long-duration"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "RestoreDuration"
+  namespace           = "HouseF3/FZIP"
+  period              = "300"
+  statistic           = "Average"
+  threshold           = "600"  # 10 minutes
+  alarm_description   = "This metric monitors FZIP restore processing time"
+  alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
+
+  dimensions = {
+    Success = "true"
   }
 
   tags = {

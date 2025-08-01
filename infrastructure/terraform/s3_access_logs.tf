@@ -7,11 +7,7 @@
 resource "aws_s3_bucket" "s3_access_logs" {
   bucket = "${var.project_name}-${var.environment}-s3-access-logs"
   
-  # Add logging configuration inline
-  logging {
-    target_bucket = aws_s3_bucket.frontend.id
-    target_prefix = "access-logs-audit/"
-  }
+
   
   tags = {
     Environment = var.environment
