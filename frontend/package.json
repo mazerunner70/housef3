@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.840.0",
-    "@tanstack/react-query": "^5.81.5",
+    "@tanstack/react-query": "^5.83.0",
     "@types/react-router-dom": "^5.3.3",
     "apexcharts": "^4.7.0",
     "decimal.js": "^10.5.0",
