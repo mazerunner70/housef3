@@ -298,27 +298,9 @@ const convertBackupResponseToFrontend = (backendBackup: any): FZIPBackupJob => {
     return undefined;
   };
 
-  // Parse packageSize from estimatedSize string if packageSize is not provided
-  const parsePackageSize = (packageSize: any, estimatedSize: any): number | undefined => {
+  // Parse packageSize - now just validates it's a number
+  const parsePackageSize = (packageSize: any): number | undefined => {
     if (packageSize && typeof packageSize === 'number') return packageSize;
-    if (!estimatedSize) return undefined;
-    
-    // Parse strings like "~352951B" or "1.2MB"
-    const sizeStr = typeof estimatedSize === 'string' ? estimatedSize : String(estimatedSize);
-    const match = sizeStr.match(/[~]?(\d+(?:\.\d+)?)\s*([KMGT]?B)/i);
-    if (match) {
-      const value = parseFloat(match[1]);
-      const unit = match[2].toUpperCase();
-      
-      switch (unit) {
-        case 'B': return value;
-        case 'KB': return value * 1024;
-        case 'MB': return value * 1024 * 1024;
-        case 'GB': return value * 1024 * 1024 * 1024;
-        case 'TB': return value * 1024 * 1024 * 1024 * 1024;
-        default: return value;
-      }
-    }
     return undefined;
   };
 
@@ -331,7 +313,7 @@ const convertBackupResponseToFrontend = (backendBackup: any): FZIPBackupJob => {
     progress: backendBackup.progress || (backendBackup.status === 'backup_completed' ? 100 : 0),
     downloadUrl: backendBackup.downloadUrl,
     expiresAt: parseTimestamp(backendBackup.expiresAt),
-    packageSize: parsePackageSize(backendBackup.packageSize, backendBackup.estimatedSize),
+    packageSize: parsePackageSize(backendBackup.packageSize),
     description: backendBackup.description,
     error: backendBackup.error
   };

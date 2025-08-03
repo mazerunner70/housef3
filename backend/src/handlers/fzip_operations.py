@@ -42,7 +42,7 @@ from utils.db_utils import (
     create_fzip_job, get_fzip_job, update_fzip_job, 
     list_user_fzip_jobs, delete_fzip_job
 )
-from utils.s3_dao import get_presigned_post_url, put_object, get_object_metadata
+from utils.s3_dao import get_presigned_post_url, get_object_metadata
 
 # Configure logging
 logger = logging.getLogger()
@@ -111,8 +111,7 @@ def initiate_fzip_backup_handler(event: Dict[str, Any], user_id: str) -> Dict[st
                 jobId=processed_job.job_id,
                 jobType=processed_job.job_type,
                 status=processed_job.status,
-                packageFormat=FZIPFormat.FZIP,
-                estimatedSize=f"~{processed_job.package_size or 0}B" if processed_job.package_size else None
+                packageFormat=FZIPFormat.FZIP
             )
             
             return create_response(201, response.model_dump(by_alias=True))
