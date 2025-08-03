@@ -217,7 +217,16 @@ export const initiateFZIPBackup = async (
       body: JSON.stringify(request)
     });
     
-    const data: InitiateFZIPBackupResponse = await response.json();
+    const backendData = await response.json();
+    
+    // Map backend response fields to frontend format
+    const data: InitiateFZIPBackupResponse = {
+      backupId: backendData.jobId,
+      status: backendData.status as FZIPBackupStatus,
+      estimatedSize: backendData.estimatedSize,
+      estimatedCompletion: backendData.estimatedCompletion
+    };
+    
     return data;
   } catch (error) {
     console.error('Error initiating FZIP backup:', error);
@@ -240,9 +249,16 @@ export const getFZIPBackupStatus = async (backupId: string): Promise<FZIPBackupJ
 // Get FZIP backup download URL
 export const getFZIPBackupDownloadUrl = async (backupId: string): Promise<string> => {
   try {
+    // Try direct JSON response first (new approach)
     const response = await authenticatedRequest(`${API_ENDPOINT}/fzip/backup/${backupId}/download`);
     
-    // If it's a redirect (302), get the URL from the Location header
+    if (response.status === 200) {
+      // New approach: JSON response with downloadUrl
+      const data = await response.json();
+      return data.downloadUrl || data.url;
+    }
+    
+    // Fallback: handle 302 redirect (old approach)
     if (response.status === 302) {
       const location = response.headers.get('Location');
       if (location) {
@@ -250,7 +266,7 @@ export const getFZIPBackupDownloadUrl = async (backupId: string): Promise<string
       }
     }
     
-    // Otherwise, expect JSON with URL
+    // If neither worked, try parsing as JSON anyway
     const data = await response.json();
     return data.downloadUrl || data.url;
   } catch (error) {
@@ -261,16 +277,43 @@ export const getFZIPBackupDownloadUrl = async (backupId: string): Promise<string
 
 // Helper function to convert backend backup response to frontend format
 const convertBackupResponseToFrontend = (backendBackup: any): FZIPBackupJob => {
+  // Handle both FZIPResponse and FZIPStatusResponse formats
+  const backupType = backendBackup.backupType || 
+    (backendBackup.jobType === 'backup' ? FZIPBackupType.COMPLETE : undefined);
+  
+  // Handle timestamp conversion - some responses may have ISO strings, others have numbers
+  const parseTimestamp = (value: any): number | undefined => {
+    if (!value) return undefined;
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') {
+      // Try parsing as ISO string first
+      const date = new Date(value);
+      if (!isNaN(date.getTime())) {
+        return date.getTime();
+      }
+      // Try parsing as string number
+      const num = parseInt(value);
+      return isNaN(num) ? undefined : num;
+    }
+    return undefined;
+  };
+
+  // Parse packageSize - now just validates it's a number
+  const parsePackageSize = (packageSize: any): number | undefined => {
+    if (packageSize && typeof packageSize === 'number') return packageSize;
+    return undefined;
+  };
+
   return {
     backupId: backendBackup.jobId,
     status: backendBackup.status as FZIPBackupStatus,
-    backupType: backendBackup.backupType as FZIPBackupType,
-    requestedAt: parseInt(backendBackup.createdAt),
-    completedAt: backendBackup.completedAt ? parseInt(backendBackup.completedAt) : undefined,
-    progress: backendBackup.progress || 0,
+    backupType: backupType as FZIPBackupType,
+    requestedAt: parseTimestamp(backendBackup.createdAt) || Date.now(),
+    completedAt: parseTimestamp(backendBackup.completedAt),
+    progress: backendBackup.progress || (backendBackup.status === 'backup_completed' ? 100 : 0),
     downloadUrl: backendBackup.downloadUrl,
-    expiresAt: backendBackup.expiresAt ? parseInt(backendBackup.expiresAt) : undefined,
-    packageSize: backendBackup.packageSize,
+    expiresAt: parseTimestamp(backendBackup.expiresAt),
+    packageSize: parsePackageSize(backendBackup.packageSize),
     description: backendBackup.description,
     error: backendBackup.error
   };
@@ -430,13 +473,25 @@ export const downloadFZIPBackup = async (backupId: string, filename?: string): P
   try {
     const downloadUrl = await getFZIPBackupDownloadUrl(backupId);
     
-    // Create a temporary link to trigger download
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = filename || `backup_${backupId}.fzip`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Use window.open for cross-origin downloads to avoid CORS issues
+    // This approach is more reliable for S3 presigned URLs
+    const finalFilename = filename || `backup_${backupId}.fzip`;
+    
+    // First try the standard approach
+    try {
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = finalFilename;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (linkError) {
+      // Fallback: Open in new window if link approach fails
+      console.warn('Link download failed, falling back to window.open:', linkError);
+      window.open(downloadUrl, '_blank');
+    }
   } catch (error) {
     console.error(`Error downloading FZIP backup ${backupId}:`, error);
     throw error;
@@ -449,8 +504,6 @@ export const formatBackupStatus = (status: FZIPBackupStatus): string => {
     case FZIPBackupStatus.INITIATED:
       return 'Initiated';
     case FZIPBackupStatus.COLLECTING_DATA:
-    case FZIPBackupStatus.BUILDING_FZIP_PACKAGE:
-    case FZIPBackupStatus.UPLOADING:
       return 'Processing';
     case FZIPBackupStatus.COMPLETED:
       return 'Completed';

@@ -229,7 +229,6 @@ class FZIPResponse(BaseModel):
     message: Optional[str] = None
     
     # Backup-specific fields
-    estimated_size: Optional[str] = Field(default=None, alias="estimatedSize")
     estimated_completion: Optional[str] = Field(default=None, alias="estimatedCompletion")
     
     # Restore-specific fields

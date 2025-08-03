@@ -303,7 +303,9 @@ resource "aws_iam_role_policy" "lambda_s3_access" {
         Effect = "Allow"
         Resource = [
           aws_s3_bucket.file_storage.arn,
-          "${aws_s3_bucket.file_storage.arn}/*"
+          "${aws_s3_bucket.file_storage.arn}/*",
+          aws_s3_bucket.fzip_packages.arn,
+          "${aws_s3_bucket.fzip_packages.arn}/*"
         ]
       }
     ]
