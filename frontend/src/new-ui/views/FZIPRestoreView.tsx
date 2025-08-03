@@ -1,0 +1,280 @@
+import React, { useState } from 'react';
+import { useFZIPRestore } from '../hooks/useFZIPRestore';
+import FZIPRestoreUpload from '../components/FZIPRestoreUpload';
+import FZIPRestoreList from '../components/FZIPRestoreList';
+import Button from '../components/Button';
+import './FZIPRestoreView.css';
+
+const FZIPRestoreView: React.FC = () => {
+  const {
+    restoreJobs,
+    isLoading,
+    error,
+    profileError,
+    profileSummary,
+    createRestoreJob,
+    uploadFile,
+    refreshRestoreJobs,
+    deleteRestoreJob,
+    getRestoreStatus,
+    hasMore,
+    loadMore,
+    clearErrors
+  } = useFZIPRestore();
+
+  const [showUpload, setShowUpload] = useState(true);
+  const [notification, setNotification] = useState<{
+    type: 'success' | 'error' | 'warning';
+    message: string;
+  } | null>(null);
+
+  const handleCreateRestore = async (request: any = {}) => {
+    try {
+      const response = await createRestoreJob(request);
+      setNotification({
+        type: 'success',
+        message: 'Restore job created successfully! You can now upload your FZIP file.'
+      });
+      setTimeout(() => setNotification(null), 5000);
+      return response;
+    } catch (error) {
+      if (error instanceof Error && error.message === 'PROFILE_NOT_EMPTY') {
+        // Profile error is handled separately in the component
+        return Promise.reject(error);
+      }
+      
+      setNotification({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to create restore job'
+      });
+      setTimeout(() => setNotification(null), 5000);
+      throw error;
+    }
+  };
+
+  const handleUploadFile = async (restoreId: string, file: File, uploadUrl: any) => {
+    try {
+      await uploadFile(restoreId, file, uploadUrl);
+      setNotification({
+        type: 'success',
+        message: 'File uploaded successfully! Validation and restore will begin automatically.'
+      });
+      setShowUpload(false); // Hide upload form after successful upload
+      setTimeout(() => setNotification(null), 5000);
+    } catch (error) {
+      setNotification({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'File upload failed'
+      });
+      setTimeout(() => setNotification(null), 5000);
+    }
+  };
+
+  const handleDelete = async (restoreId: string) => {
+    try {
+      await deleteRestoreJob(restoreId);
+      setNotification({
+        type: 'success',
+        message: 'Restore job deleted successfully'
+      });
+      setTimeout(() => setNotification(null), 3000);
+    } catch (error) {
+      setNotification({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to delete restore job'
+      });
+      setTimeout(() => setNotification(null), 5000);
+    }
+  };
+
+  const handleRefresh = async () => {
+    try {
+      await refreshRestoreJobs();
+      setNotification({
+        type: 'success',
+        message: 'Restore jobs refreshed'
+      });
+      setTimeout(() => setNotification(null), 2000);
+    } catch (error) {
+      setNotification({
+        type: 'error',
+        message: 'Failed to refresh restore jobs'
+      });
+      setTimeout(() => setNotification(null), 5000);
+    }
+  };
+
+  const handleClearErrors = () => {
+    clearErrors();
+    setNotification(null);
+  };
+
+  return (
+    <div className="fzip-restore-view">
+      {/* Header */}
+      <div className="restore-view-header">
+        <div className="header-content">
+          <h1>Financial Profile Restore</h1>
+          <p>Restore your complete financial profile from a FZIP backup file. Your current profile must be completely empty.</p>
+        </div>
+        
+        <div className="header-actions">
+          <Button
+            variant="secondary"
+            onClick={handleRefresh}
+            disabled={isLoading}
+          >
+            Refresh
+          </Button>
+          
+          {!showUpload && (
+            <Button
+              variant="primary"
+              onClick={() => {
+                setShowUpload(true);
+                clearErrors();
+              }}
+            >
+              New Restore
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Notification */}
+      {notification && (
+        <div className={`notification notification--${notification.type}`}>
+          <div className="notification-content">
+            <span className="notification-icon">
+              {notification.type === 'success' ? '✓' : 
+               notification.type === 'warning' ? '⚠' : '⚠'}
+            </span>
+            <span className="notification-message">{notification.message}</span>
+            <button
+              className="notification-close"
+              onClick={() => setNotification(null)}
+              aria-label="Close notification"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Global Error */}
+      {error && !profileError && (
+        <div className="global-error">
+          <div className="error-content">
+            <h3>Service Status</h3>
+            <p>{error}</p>
+            {error.includes('service may not be available') || error.includes('service is not available') ? (
+              <div className="service-notice">
+                <p><strong>Note:</strong> The backup and restore feature requires backend deployment. If you're a developer, make sure the FZIP endpoints are deployed.</p>
+              </div>
+            ) : (
+              <Button
+                variant="secondary"
+                size="small"
+                onClick={handleRefresh}
+              >
+                Try Again
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Main Content */}
+      <div className="restore-view-content">
+        {/* Restore Upload */}
+        {showUpload && (
+          <div className="upload-section">
+            <div className="section-header">
+              <h2>Upload FZIP Backup</h2>
+              {restoreJobs.length > 0 && (
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => setShowUpload(false)}
+                >
+                  Hide Upload
+                </Button>
+              )}
+            </div>
+            
+            <FZIPRestoreUpload
+              onCreateRestore={handleCreateRestore}
+              onUploadFile={handleUploadFile}
+              isLoading={isLoading}
+              profileError={profileError}
+              profileSummary={profileSummary}
+              onClearErrors={handleClearErrors}
+            />
+          </div>
+        )}
+
+        {/* Restore Jobs List */}
+        <div className="list-section">
+          <div className="section-header">
+            <h2>Restore Jobs</h2>
+            <div className="section-info">
+              {restoreJobs.length > 0 && (
+                <span className="job-count">
+                  {restoreJobs.length} job{restoreJobs.length !== 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+          </div>
+          
+          <FZIPRestoreList
+            restoreJobs={restoreJobs}
+            isLoading={isLoading}
+            onDelete={handleDelete}
+            onRefreshStatus={getRestoreStatus}
+            hasMore={hasMore}
+            onLoadMore={loadMore}
+          />
+        </div>
+      </div>
+
+      {/* Info Panel */}
+      <div className="info-panel">
+        <h3>About FZIP Restore</h3>
+        <div className="info-content">
+          <div className="info-item">
+            <h4>Empty Profile Required</h4>
+            <p>Restore operations require a completely empty financial profile to ensure clean restoration without conflicts.</p>
+          </div>
+          
+          <div className="info-item">
+            <h4>Complete Restoration</h4>
+            <p>All data from the backup is restored exactly as it was, including accounts, transactions, categories, and files.</p>
+          </div>
+          
+          <div className="info-item">
+            <h4>Data Validation</h4>
+            <p>Every restore includes comprehensive validation to ensure data integrity and schema compatibility.</p>
+          </div>
+          
+          <div className="info-item">
+            <h4>Progress Tracking</h4>
+            <p>Real-time progress updates show each phase of the restore process from validation to completion.</p>
+          </div>
+        </div>
+
+        <div className="restore-phases">
+          <h4>Restore Process:</h4>
+          <ol>
+            <li><strong>Upload:</strong> Upload your FZIP backup file</li>
+            <li><strong>Validation:</strong> Verify file format and profile emptiness</li>
+            <li><strong>Parsing:</strong> Extract and validate backup contents</li>
+            <li><strong>Restoration:</strong> Restore accounts, categories, files, and transactions</li>
+            <li><strong>Completion:</strong> Verify data integrity and finalize</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default FZIPRestoreView;

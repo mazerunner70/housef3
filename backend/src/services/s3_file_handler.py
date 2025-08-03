@@ -527,7 +527,7 @@ class ExportPackageBuilder:
             if not file_info.get('s3Key'):
                 continue
                 
-            file_id = file_info['fileId']
+            file_id = str(file_info['fileId'])  # Convert UUID to string for path operations
             filename = file_info.get('fileName', f'file_{file_id}')
             
             # Create subdirectory for each file

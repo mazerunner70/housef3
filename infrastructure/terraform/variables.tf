@@ -38,4 +38,16 @@ variable "tags" {
   description = "Additional tags for resources"
   type        = map(string)
   default     = {}
+}
+
+variable "app_version" {
+  description = "Application version (semver format, e.g., v1.2.3.123). If not provided, will be read from build output."
+  type        = string
+  default     = null
+}
+
+variable "semver_base" {
+  description = "Base semantic version for builds (e.g., v1.2.3). Build number will be appended automatically."
+  type        = string
+  default     = "v1.0.0"
 } 

@@ -12,14 +12,13 @@ terraform {
     }
   }
 
-  # You can uncomment this block and configure it once you have your S3 bucket for state
-  # backend "s3" {
-  #   bucket         = "your-terraform-state-bucket"
-  #   key            = "housef3/terraform.tfstate"
-  #   region         = "eu-west-2"
-  #   encrypt        = true
-  #   dynamodb_table = "terraform-state-lock"
-  # }
+  backend "s3" {
+    bucket         = "housef3-terraform-state"
+    key            = "housef3/terraform.tfstate"
+    region         = "eu-west-2"
+    encrypt        = true
+    dynamodb_table = "terraform-state-lock"
+  }
 }
 
 provider "aws" {

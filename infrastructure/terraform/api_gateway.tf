@@ -649,9 +649,9 @@ resource "aws_apigatewayv2_route" "delete_export" {
 resource "aws_apigatewayv2_integration" "fzip_operations" {
   api_id                 = aws_apigatewayv2_api.main.id
   integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.fzip_operations.invoke_arn
+  integration_uri        = aws_lambda_alias.fzip_operations_version.invoke_arn
   payload_format_version = "2.0"
-  description           = "Lambda integration for unified FZIP backup/restore operations"
+  description           = "Lambda integration for unified FZIP backup/restore operations (versioned)"
 }
 
 
@@ -861,11 +861,11 @@ resource "aws_lambda_permission" "api_gateway_export" {
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
 }
 
-# Lambda permission for FZIP operations (unified backup/restore)
+# Lambda permission for FZIP operations (unified backup/restore) - via alias
 resource "aws_lambda_permission" "api_gateway_fzip" {
   statement_id  = "AllowAPIGatewayInvokeFZIPLambda"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.fzip_operations.function_name
+  function_name = aws_lambda_alias.fzip_operations_version.arn
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/fzip*"
 }

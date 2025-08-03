@@ -1,0 +1,98 @@
+#!/bin/bash
+
+# API Gateway Route Imports
+# API ID: ypa8h438hl
+
+set -e
+
+echo "Importing API Gateway routes..."
+
+# Account routes
+terraform import aws_apigatewayv2_route.get_account ypa8h438hl/zw9ju01
+terraform import aws_apigatewayv2_route.update_account ypa8h438hl/174qml3
+terraform import aws_apigatewayv2_route.delete_account ypa8h438hl/mluwsy9
+terraform import aws_apigatewayv2_route.create_account ypa8h438hl/20n6tid
+terraform import aws_apigatewayv2_route.delete_all_accounts ypa8h438hl/1prqt3e
+terraform import aws_apigatewayv2_route.get_account_transactions ypa8h438hl/n3oivce
+terraform import aws_apigatewayv2_route.account_timeline ypa8h438hl/4l52n93
+terraform import aws_apigatewayv2_route.get_account_files ypa8h438hl/5zoo3c8
+terraform import aws_apigatewayv2_route.associate_file_to_account ypa8h438hl/yf2zngp
+terraform import aws_apigatewayv2_route.delete_account_files ypa8h438hl/kgzxe1o
+
+# File routes
+terraform import aws_apigatewayv2_route.get_s3_upload_url ypa8h438hl/hjaehba
+terraform import aws_apigatewayv2_route.list_files ypa8h438hl/oziz52q
+terraform import aws_apigatewayv2_route.get_file ypa8h438hl/on1vpr0
+terraform import aws_apigatewayv2_route.delete_file ypa8h438hl/xrwtdal
+terraform import aws_apigatewayv2_route.get_file_metadata ypa8h438hl/p0n2p2n
+terraform import aws_apigatewayv2_route.get_file_preview ypa8h438hl/4q9p7z8
+terraform import aws_apigatewayv2_route.get_download_url ypa8h438hl/0l4qixj
+terraform import aws_apigatewayv2_route.get_file_transactions ypa8h438hl/f4ggwz8
+terraform import aws_apigatewayv2_route.delete_file_transactions ypa8h438hl/yl76yq0
+terraform import aws_apigatewayv2_route.associate_file ypa8h438hl/3fkxhl7
+terraform import aws_apigatewayv2_route.unassociate_file ypa8h438hl/c5kz37b
+terraform import aws_apigatewayv2_route.update_file_field_map ypa8h438hl/bfrnqhs
+terraform import aws_apigatewayv2_route.list_files_by_account ypa8h438hl/1h9ya5s
+terraform import aws_apigatewayv2_route.update_file_balance ypa8h438hl/tbetvod
+terraform import aws_apigatewayv2_route.update_file_closing_balance ypa8h438hl/b9qqvlm
+
+# Transaction routes
+terraform import aws_apigatewayv2_route.get_transactions ypa8h438hl/xi65mj3
+terraform import aws_apigatewayv2_route.delete_transaction ypa8h438hl/43c7xya
+terraform import aws_apigatewayv2_route.generate_category_suggestions ypa8h438hl/zpopjrb
+
+# Category routes
+terraform import aws_apigatewayv2_route.list_categories ypa8h438hl/r05rgo5
+terraform import aws_apigatewayv2_route.create_category ypa8h438hl/2xsh4qe
+terraform import aws_apigatewayv2_route.get_category ypa8h438hl/bzpuzs5
+terraform import aws_apigatewayv2_route.update_category ypa8h438hl/04rnxnj
+terraform import aws_apigatewayv2_route.delete_category ypa8h438hl/o4j08yr
+terraform import aws_apigatewayv2_route.get_categories_hierarchy ypa8h438hl/zuoe81l
+terraform import aws_apigatewayv2_route.create_category_rule ypa8h438hl/3ex07v0
+terraform import aws_apigatewayv2_route.update_category_rule ypa8h438hl/djyp0lp
+terraform import aws_apigatewayv2_route.delete_category_rule ypa8h438hl/tzng8mu
+terraform import aws_apigatewayv2_route.test_category_rule ypa8h438hl/dbabxfu
+terraform import aws_apigatewayv2_route.preview_category_matches ypa8h438hl/fhic44u
+terraform import aws_apigatewayv2_route.generate_pattern ypa8h438hl/lgphgrc
+terraform import aws_apigatewayv2_route.validate_regex_pattern ypa8h438hl/9umq6io
+terraform import aws_apigatewayv2_route.suggest_category_from_transaction ypa8h438hl/t145blg
+terraform import aws_apigatewayv2_route.reset_and_reapply_categories ypa8h438hl/exjqkse
+terraform import aws_apigatewayv2_route.apply_category_rules_bulk ypa8h438hl/5cpdft1
+terraform import aws_apigatewayv2_route.create_category_with_rule ypa8h438hl/8qsknbh
+terraform import aws_apigatewayv2_route.extract_patterns ypa8h438hl/4063jx8
+
+# Analytics routes
+terraform import aws_apigatewayv2_route.get_analytics ypa8h438hl/bsacsyh
+terraform import aws_apigatewayv2_route.get_analytics_status ypa8h438hl/36xseah
+terraform import aws_apigatewayv2_route.refresh_analytics ypa8h438hl/69mxrg2
+
+# Export routes
+terraform import aws_apigatewayv2_route.initiate_export ypa8h438hl/3o338ib
+terraform import aws_apigatewayv2_route.list_exports ypa8h438hl/y91dgf7
+terraform import aws_apigatewayv2_route.get_export_status ypa8h438hl/ey5eeqk
+terraform import aws_apigatewayv2_route.get_export_download ypa8h438hl/nt6m10j
+terraform import aws_apigatewayv2_route.delete_export ypa8h438hl/2silddp
+
+# Field map routes
+terraform import aws_apigatewayv2_route.list_field_maps ypa8h438hl/h7t4tvj
+terraform import aws_apigatewayv2_route.create_field_map ypa8h438hl/43vi4wu
+terraform import aws_apigatewayv2_route.get_field_map ypa8h438hl/wxrs3g1
+terraform import aws_apigatewayv2_route.update_field_map ypa8h438hl/k89ykhu
+terraform import aws_apigatewayv2_route.delete_field_map ypa8h438hl/2jc26af
+
+# FZIP routes
+terraform import aws_apigatewayv2_route.fzip_create_backup ypa8h438hl/1x0j0hl
+terraform import aws_apigatewayv2_route.fzip_list_backups ypa8h438hl/go5hi90
+terraform import aws_apigatewayv2_route.fzip_get_backup_status ypa8h438hl/yedqqrf
+terraform import aws_apigatewayv2_route.fzip_download_backup ypa8h438hl/8fwx6lu
+terraform import aws_apigatewayv2_route.fzip_delete_backup ypa8h438hl/s4yem51
+terraform import aws_apigatewayv2_route.fzip_create_restore ypa8h438hl/8zlnxi1
+terraform import aws_apigatewayv2_route.fzip_list_restores ypa8h438hl/4bjfnab
+terraform import aws_apigatewayv2_route.fzip_get_restore_status ypa8h438hl/9k2efjk
+terraform import aws_apigatewayv2_route.fzip_upload_restore_package ypa8h438hl/j97se6r
+terraform import aws_apigatewayv2_route.fzip_delete_restore ypa8h438hl/ugp6ukb
+
+# Colors route
+terraform import aws_apigatewayv2_route.getcolors ypa8h438hl/5vbihk8
+
+echo "All API Gateway routes imported successfully!"

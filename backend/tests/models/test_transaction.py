@@ -70,7 +70,7 @@ class TestTransactionCategoryAssignment:
         category_id = uuid.uuid4()
         item = {
             "categoryId": str(category_id),
-            "confidence": 0.8,
+            "confidence": 80,
             "status": "confirmed",
             "isManual": True,
             "assignedAt": 1751743054715,
@@ -87,6 +87,55 @@ class TestTransactionCategoryAssignment:
         assert assignment.assigned_at == 1751743054715
         assert assignment.confirmed_at == 1751743054715
         assert assignment.rule_id == "rule123"
+
+    def test_from_dynamodb_item_enum_conversion(self):
+        """Test that enum conversion from DynamoDB strings preserves enum objects and .value access works."""
+        category_id = uuid.uuid4()
+        # Mock DynamoDB data with string enum values (as they come from DynamoDB)
+        item = {
+            "categoryId": str(category_id),
+            "confidence": 90,
+            "status": "suggested",  # String value from DynamoDB
+            "isManual": False,
+            "assignedAt": 1751743054715,
+            "ruleId": "rule456"
+        }
+        
+        # Call the conversion method
+        assignment = TransactionCategoryAssignment.from_dynamodb_item(item)
+        
+        # Verify the result objects are actual enum types (not strings)
+        assert isinstance(assignment.status, CategoryAssignmentStatus)
+        assert type(assignment.status).__name__ == "CategoryAssignmentStatus"
+        
+        # Test that .value attribute access works without AttributeError
+        assert assignment.status.value == "suggested"
+        assert assignment.status == CategoryAssignmentStatus.SUGGESTED
+        
+        # Test with confirmed status as well
+        item_confirmed = item.copy()
+        item_confirmed["status"] = "confirmed"
+        assignment_confirmed = TransactionCategoryAssignment.from_dynamodb_item(item_confirmed)
+        
+        assert isinstance(assignment_confirmed.status, CategoryAssignmentStatus)
+        assert assignment_confirmed.status.value == "confirmed"
+        assert assignment_confirmed.status == CategoryAssignmentStatus.CONFIRMED
+
+    def test_from_dynamodb_item_invalid_enum_value(self):
+        """Test handling of invalid enum values from DynamoDB."""
+        category_id = uuid.uuid4()
+        item = {
+            "categoryId": str(category_id),
+            "confidence": 90,
+            "status": "invalid_status",  # Invalid enum value
+            "isManual": False,
+            "assignedAt": 1751743054715
+        }
+        
+        # Should default to SUGGESTED for invalid values
+        assignment = TransactionCategoryAssignment.from_dynamodb_item(item)
+        assert assignment.status == CategoryAssignmentStatus.SUGGESTED
+        assert assignment.status.value == "suggested"
 
 
 class TestTransaction:
@@ -552,4 +601,55 @@ class TestTransactionSerialization:
     def test_transaction_to_json_invalid_input(self):
         """Test transaction_to_json function with invalid input."""
         with pytest.raises(TypeError, match="Input must be a Transaction object"):
-            transaction_to_json("invalid input")  # type: ignore 
+            transaction_to_json("invalid input")  # type: ignore
+
+    def test_from_dynamodb_item_decimal_conversion(self):
+        """Test that Decimal values from DynamoDB are properly converted to int for timestamp fields."""
+        from decimal import Decimal
+        
+        # Mock DynamoDB data with Decimal values (as they come from DynamoDB)
+        dynamodb_data = {
+            'userId': 'test-user',
+            'fileId': str(uuid.uuid4()),
+            'accountId': str(uuid.uuid4()),
+            'date': Decimal('1751810806504'),  # This was in the error message
+            'description': 'Test transaction',
+            'amount': Decimal('100.50'),
+            'currency': 'USD',
+            'createdAt': Decimal('1751810806504'),
+            'updatedAt': Decimal('1751810806505'),
+            'transactionHash': Decimal('12345'),
+            'importOrder': Decimal('1'),
+            'categories': [{
+                'categoryId': str(uuid.uuid4()),
+                'confidence': Decimal('100'),  # This was in the error message
+                'status': 'suggested',
+                'assignedAt': Decimal('1751810806504'),
+                'confirmedAt': Decimal('1751810806506')
+            }]
+        }
+        
+        # This should not raise any Pydantic serialization warnings
+        transaction = Transaction.from_dynamodb_item(dynamodb_data)
+        
+        # Verify the types are correct (int, not Decimal)
+        assert isinstance(transaction.date, int)
+        assert isinstance(transaction.created_at, int)
+        assert isinstance(transaction.updated_at, int)
+        assert isinstance(transaction.transaction_hash, int)
+        assert isinstance(transaction.import_order, int)
+        
+        # Verify category assignment types
+        assert len(transaction.categories) == 1
+        category = transaction.categories[0]
+        assert isinstance(category.confidence, int)
+        assert isinstance(category.assigned_at, int)
+        assert isinstance(category.confirmed_at, int)
+        
+        # Verify the serialization doesn't produce warnings about Decimal values
+        serialized = transaction.model_dump(by_alias=True, exclude_none=True)
+        
+        # These should be int types now, not Decimal
+        assert type(serialized['date']).__name__ == 'int'
+        assert type(serialized['createdAt']).__name__ == 'int'
+        assert type(serialized['updatedAt']).__name__ == 'int' 
