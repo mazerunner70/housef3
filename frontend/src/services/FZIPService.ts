@@ -217,7 +217,16 @@ export const initiateFZIPBackup = async (
       body: JSON.stringify(request)
     });
     
-    const data: InitiateFZIPBackupResponse = await response.json();
+    const backendData = await response.json();
+    
+    // Map backend response fields to frontend format
+    const data: InitiateFZIPBackupResponse = {
+      backupId: backendData.jobId,
+      status: backendData.status as FZIPBackupStatus,
+      estimatedSize: backendData.estimatedSize,
+      estimatedCompletion: backendData.estimatedCompletion
+    };
+    
     return data;
   } catch (error) {
     console.error('Error initiating FZIP backup:', error);
@@ -261,16 +270,61 @@ export const getFZIPBackupDownloadUrl = async (backupId: string): Promise<string
 
 // Helper function to convert backend backup response to frontend format
 const convertBackupResponseToFrontend = (backendBackup: any): FZIPBackupJob => {
+  // Handle both FZIPResponse and FZIPStatusResponse formats
+  const backupType = backendBackup.backupType || 
+    (backendBackup.jobType === 'backup' ? FZIPBackupType.COMPLETE : undefined);
+  
+  // Handle timestamp conversion - some responses may have ISO strings, others have numbers
+  const parseTimestamp = (value: any): number | undefined => {
+    if (!value) return undefined;
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') {
+      // Try parsing as ISO string first
+      const date = new Date(value);
+      if (!isNaN(date.getTime())) {
+        return date.getTime();
+      }
+      // Try parsing as string number
+      const num = parseInt(value);
+      return isNaN(num) ? undefined : num;
+    }
+    return undefined;
+  };
+
+  // Parse packageSize from estimatedSize string if packageSize is not provided
+  const parsePackageSize = (packageSize: any, estimatedSize: any): number | undefined => {
+    if (packageSize && typeof packageSize === 'number') return packageSize;
+    if (!estimatedSize) return undefined;
+    
+    // Parse strings like "~352951B" or "1.2MB"
+    const sizeStr = typeof estimatedSize === 'string' ? estimatedSize : String(estimatedSize);
+    const match = sizeStr.match(/[~]?(\d+(?:\.\d+)?)\s*([KMGT]?B)/i);
+    if (match) {
+      const value = parseFloat(match[1]);
+      const unit = match[2].toUpperCase();
+      
+      switch (unit) {
+        case 'B': return value;
+        case 'KB': return value * 1024;
+        case 'MB': return value * 1024 * 1024;
+        case 'GB': return value * 1024 * 1024 * 1024;
+        case 'TB': return value * 1024 * 1024 * 1024 * 1024;
+        default: return value;
+      }
+    }
+    return undefined;
+  };
+
   return {
     backupId: backendBackup.jobId,
     status: backendBackup.status as FZIPBackupStatus,
-    backupType: backendBackup.backupType as FZIPBackupType,
-    requestedAt: parseInt(backendBackup.createdAt),
-    completedAt: backendBackup.completedAt ? parseInt(backendBackup.completedAt) : undefined,
-    progress: backendBackup.progress || 0,
+    backupType: backupType as FZIPBackupType,
+    requestedAt: parseTimestamp(backendBackup.createdAt) || Date.now(),
+    completedAt: parseTimestamp(backendBackup.completedAt),
+    progress: backendBackup.progress || (backendBackup.status === 'backup_completed' ? 100 : 0),
     downloadUrl: backendBackup.downloadUrl,
-    expiresAt: backendBackup.expiresAt ? parseInt(backendBackup.expiresAt) : undefined,
-    packageSize: backendBackup.packageSize,
+    expiresAt: parseTimestamp(backendBackup.expiresAt),
+    packageSize: parsePackageSize(backendBackup.packageSize, backendBackup.estimatedSize),
     description: backendBackup.description,
     error: backendBackup.error
   };

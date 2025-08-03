@@ -64,6 +64,7 @@ class FZIPService:
         self.housef3_version = "2.5.0"  # Current version
         self.fzip_format_version = "1.0"
         self.fzip_bucket = os.environ.get('FZIP_PACKAGES_BUCKET', 'housef3-dev-fzip-packages')
+        self.file_storage_bucket = os.environ.get('FILE_STORAGE_BUCKET', 'housef3-dev-file-storage')
         self.batch_size = 1000  # For large datasets
         
     # =============================================================================
@@ -258,8 +259,8 @@ class FZIPService:
                 max_memory_usage=200 * 1024 * 1024  # 200MB for larger backups
             )
             
-            # Create enhanced package builder
-            package_builder = ExportPackageBuilder(self.fzip_bucket, streaming_options)
+            # Create enhanced package builder with file storage bucket for transaction files
+            package_builder = ExportPackageBuilder(self.fzip_bucket, streaming_options, self.file_storage_bucket)
             
             # Create temporary directory
             with tempfile.TemporaryDirectory() as temp_dir:
