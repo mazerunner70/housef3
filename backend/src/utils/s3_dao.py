@@ -192,7 +192,8 @@ def put_object(key: str, body: bytes, content_type: str, bucket: Optional[str] =
             Bucket=bucket,
             Key=key,
             Body=body,
-            ContentType=content_type
+            ContentType=content_type,
+            ServerSideEncryption='AES256'
         )
         return True
     except ClientError as e:

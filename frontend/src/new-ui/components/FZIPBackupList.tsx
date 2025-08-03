@@ -33,13 +33,15 @@ const FZIPBackupList: React.FC<FZIPBackupListProps> = ({
 
   // Auto-refresh processing backups
   useEffect(() => {
+    const processingStatuses: string[] = [
+      FZIPBackupStatus.INITIATED,
+      FZIPBackupStatus.COLLECTING_DATA,
+      FZIPBackupStatus.BUILDING_FZIP_PACKAGE,
+      FZIPBackupStatus.UPLOADING
+    ];
+    
     const processingIds = backups
-      .filter(backup => 
-        backup.status === FZIPBackupStatus.INITIATED ||
-        backup.status === FZIPBackupStatus.COLLECTING_DATA ||
-        backup.status === FZIPBackupStatus.BUILDING_FZIP_PACKAGE ||
-        backup.status === FZIPBackupStatus.UPLOADING
-      )
+      .filter(backup => processingStatuses.includes(backup.status))
       .map(backup => backup.backupId);
 
     setProcessingBackups(new Set(processingIds));
@@ -104,7 +106,7 @@ const FZIPBackupList: React.FC<FZIPBackupListProps> = ({
     return new Date(timestamp).toLocaleString();
   };
 
-  const getStatusVariant = (status: FZIPBackupStatus): 'success' | 'error' | 'warning' | 'info' => {
+  const getStatusVariant = (status: FZIPBackupStatus): 'success' | 'error' | 'warning' | 'processing' => {
     switch (status) {
       case FZIPBackupStatus.COMPLETED:
         return 'success';
@@ -114,7 +116,7 @@ const FZIPBackupList: React.FC<FZIPBackupListProps> = ({
       case FZIPBackupStatus.COLLECTING_DATA:
       case FZIPBackupStatus.BUILDING_FZIP_PACKAGE:
       case FZIPBackupStatus.UPLOADING:
-        return 'info';
+        return 'processing';
       default:
         return 'warning';
     }
@@ -246,12 +248,12 @@ const FZIPBackupList: React.FC<FZIPBackupListProps> = ({
               </div>
 
               <div className="backup-actions">
-                {backup.status === FZIPBackupStatus.COMPLETED && backup.downloadUrl && (
+                {backup.status === FZIPBackupStatus.COMPLETED && (
                   <Button
                     variant="secondary"
-                    size="small"
+                    size="compact"
                     onClick={() => handleDownload(backup)}
-                    disabled={backup.expiresAt && backup.expiresAt < Date.now()}
+                    disabled={backup.expiresAt ? backup.expiresAt < Date.now() : false}
                   >
                     Download
                   </Button>
@@ -259,7 +261,7 @@ const FZIPBackupList: React.FC<FZIPBackupListProps> = ({
                 
                 <Button
                   variant="danger"
-                  size="small"
+                  size="compact"
                   onClick={() => setDeleteConfirmation({
                     isOpen: true,
                     backupId: backup.backupId,
@@ -280,9 +282,8 @@ const FZIPBackupList: React.FC<FZIPBackupListProps> = ({
             variant="secondary"
             onClick={onLoadMore}
             disabled={isLoading}
-            loading={isLoading}
           >
-            Load More Backups
+            {isLoading ? 'Loading...' : 'Load More Backups'}
           </Button>
         </div>
       )}
@@ -293,11 +294,11 @@ const FZIPBackupList: React.FC<FZIPBackupListProps> = ({
         message={`Are you sure you want to delete this backup? ${
           deleteConfirmation.description ? `"${deleteConfirmation.description}"` : ''
         } This action cannot be undone.`}
-        confirmText="Delete"
-        cancelText="Cancel"
+        confirmButtonText="Delete"
+        cancelButtonText="Cancel"
         onConfirm={handleDelete}
         onCancel={() => setDeleteConfirmation({ isOpen: false, backupId: '' })}
-        variant="danger"
+        type="danger"
       />
     </div>
   );

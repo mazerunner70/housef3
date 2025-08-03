@@ -42,7 +42,7 @@ from utils.db_utils import (
     create_fzip_job, get_fzip_job, update_fzip_job, 
     list_user_fzip_jobs, delete_fzip_job
 )
-from utils.s3_dao import get_presigned_post_url, put_object
+from utils.s3_dao import get_presigned_post_url, put_object, get_object_metadata
 
 # Configure logging
 logger = logging.getLogger()
@@ -207,19 +207,22 @@ def get_fzip_backup_download_handler(event: Dict[str, Any], user_id: str) -> Dic
         if not backup_job.s3_key:
             return create_response(404, {"error": "FZIP backup package not found"})
         
+        # Verify the backup file actually exists in S3 before generating presigned URL
+        fzip_bucket = fzip_service_instance.fzip_bucket
+        metadata = get_object_metadata(backup_job.s3_key, fzip_bucket)
+        if not metadata:
+            logger.error(f"FZIP backup file not found in S3: {backup_job.s3_key}")
+            return create_response(404, {"error": "FZIP backup package file not found in storage"})
+        
         try:
             download_url = fzip_service_instance.generate_download_url(backup_job.s3_key)
             
-            # Return redirect response  
-            return {
-                "statusCode": 302,
-                "headers": {
-                    "Location": download_url,
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Origin": "*"
-                },
-                "body": json.dumps({"downloadUrl": download_url, "packageFormat": "fzip"})
-            }
+            # Return JSON response with download URL (more reliable than 302 redirect)
+            return create_response(200, {
+                "downloadUrl": download_url, 
+                "packageFormat": "fzip",
+                "filename": f"backup_{job_id}.fzip"
+            })
             
         except Exception as e:
             logger.error(f"Failed to generate download URL: {str(e)}")
@@ -246,9 +249,18 @@ def list_fzip_backups_handler(event: Dict[str, Any], user_id: str) -> Dict[str, 
         # Retrieve backup jobs from database
         backup_jobs, pagination_key = list_user_fzip_jobs(user_id, FZIPType.BACKUP.value, limit)
         
-        # Convert to response format
+        # Convert to response format, filtering out completed backups with missing S3 files
         backups_data = []
+        fzip_bucket = fzip_service_instance.fzip_bucket
+        
         for job in backup_jobs:
+            # For completed backups, verify the S3 file exists before including in response
+            if job.status == FZIPStatus.BACKUP_COMPLETED and job.s3_key:
+                metadata = get_object_metadata(job.s3_key, fzip_bucket)
+                if not metadata:
+                    logger.warning(f"Skipping completed backup {job.job_id} - S3 file not found: {job.s3_key}")
+                    continue  # Skip this backup from the response
+            
             backups_data.append({
                 "jobId": str(job.job_id),
                 "jobType": job.job_type.value,

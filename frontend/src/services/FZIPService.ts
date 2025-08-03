@@ -249,9 +249,16 @@ export const getFZIPBackupStatus = async (backupId: string): Promise<FZIPBackupJ
 // Get FZIP backup download URL
 export const getFZIPBackupDownloadUrl = async (backupId: string): Promise<string> => {
   try {
+    // Try direct JSON response first (new approach)
     const response = await authenticatedRequest(`${API_ENDPOINT}/fzip/backup/${backupId}/download`);
     
-    // If it's a redirect (302), get the URL from the Location header
+    if (response.status === 200) {
+      // New approach: JSON response with downloadUrl
+      const data = await response.json();
+      return data.downloadUrl || data.url;
+    }
+    
+    // Fallback: handle 302 redirect (old approach)
     if (response.status === 302) {
       const location = response.headers.get('Location');
       if (location) {
@@ -259,7 +266,7 @@ export const getFZIPBackupDownloadUrl = async (backupId: string): Promise<string
       }
     }
     
-    // Otherwise, expect JSON with URL
+    // If neither worked, try parsing as JSON anyway
     const data = await response.json();
     return data.downloadUrl || data.url;
   } catch (error) {
@@ -484,13 +491,25 @@ export const downloadFZIPBackup = async (backupId: string, filename?: string): P
   try {
     const downloadUrl = await getFZIPBackupDownloadUrl(backupId);
     
-    // Create a temporary link to trigger download
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = filename || `backup_${backupId}.fzip`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Use window.open for cross-origin downloads to avoid CORS issues
+    // This approach is more reliable for S3 presigned URLs
+    const finalFilename = filename || `backup_${backupId}.fzip`;
+    
+    // First try the standard approach
+    try {
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = finalFilename;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (linkError) {
+      // Fallback: Open in new window if link approach fails
+      console.warn('Link download failed, falling back to window.open:', linkError);
+      window.open(downloadUrl, '_blank');
+    }
   } catch (error) {
     console.error(`Error downloading FZIP backup ${backupId}:`, error);
     throw error;
@@ -503,8 +522,6 @@ export const formatBackupStatus = (status: FZIPBackupStatus): string => {
     case FZIPBackupStatus.INITIATED:
       return 'Initiated';
     case FZIPBackupStatus.COLLECTING_DATA:
-    case FZIPBackupStatus.BUILDING_FZIP_PACKAGE:
-    case FZIPBackupStatus.UPLOADING:
       return 'Processing';
     case FZIPBackupStatus.COMPLETED:
       return 'Completed';
