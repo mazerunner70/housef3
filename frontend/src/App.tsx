@@ -5,6 +5,7 @@ import NewUILayout from './new-ui/layouts/NewUILayout';
 import AccountsView from './new-ui/views/AccountsView';
 import TransactionsView from './new-ui/views/TransactionsView';
 import AnalyticsView from './new-ui/views/AnalyticsView';
+import FZIPManagementView from './new-ui/views/FZIPManagementView';
 import { getCurrentUser, isAuthenticated, refreshToken } from './services/AuthService';
 import './App.css'
 
@@ -85,6 +86,7 @@ function App() {
         <Route path="accounts" element={<AccountsView />} />
         <Route path="transactions" element={<TransactionsView />} />
         <Route path="analytics" element={<AnalyticsView />} />
+        <Route path="backup" element={<FZIPManagementView />} />
         <Route path="*" element={<div><p>Page Not Found</p></div>} />
       </Route>
     </Routes>

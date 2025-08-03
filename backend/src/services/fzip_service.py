@@ -113,7 +113,7 @@ class FZIPService:
                 user_id=user_id,
                 backup_id=str(backup_job.job_id),
                 description=description,
-                backup_type=backup_type.value,
+                backup_type=backup_type,
                 include_analytics=include_analytics
             )
             event_service.publish_event(event)
@@ -192,7 +192,7 @@ class FZIPService:
                 entity_type: summary['processed_count'] 
                 for entity_type, summary in export_summaries.items()
             }
-            fzip_metrics.record_backup_data_volume(entity_counts, backup_type.value)
+            fzip_metrics.record_backup_data_volume(entity_counts, backup_type)
             
             logger.info("Enhanced data collection complete using specialized exporters")
             for entity_type, summary in export_summaries.items():
@@ -210,7 +210,7 @@ class FZIPService:
             fzip_metrics.record_backup_error(
                 error_type=type(e).__name__,
                 error_message=str(e),
-                backup_type=backup_type.value,
+                backup_type=backup_type,
                 phase="data_collection"
             )
             raise
@@ -219,7 +219,7 @@ class FZIPService:
             fzip_metrics.record_backup_error(
                 error_type=type(e).__name__,
                 error_message=str(e),
-                backup_type=backup_type.value,
+                backup_type=backup_type,
                 phase="data_collection"
             )
             raise
@@ -313,7 +313,7 @@ class FZIPService:
                 ))
 
                 # Record package size metrics
-                backup_type = backup_job.backup_type.value if backup_job.backup_type else "complete"
+                backup_type = backup_job.backup_type if backup_job.backup_type else "complete"
                 fzip_metrics.record_backup_package_size(package_size, backup_type)
                 
                 logger.info(f"Enhanced backup package created: {s3_key}")
@@ -327,7 +327,7 @@ class FZIPService:
         except Exception as e:
             logger.error(f"Failed to build enhanced backup package for job {backup_job.job_id}: {str(e)}")
             # Record error metrics
-            backup_type = backup_job.backup_type.value if backup_job.backup_type else "complete"
+            backup_type = backup_job.backup_type if backup_job.backup_type else "complete"
             fzip_metrics.record_backup_error(
                 error_type=type(e).__name__,
                 error_message=str(e),

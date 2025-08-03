@@ -76,7 +76,35 @@ class TransactionCategoryAssignment(BaseModel):
     @classmethod
     def from_dynamodb_item(cls, data: Dict[str, Any]) -> "TransactionCategoryAssignment":
         """Create from DynamoDB item data."""
-        return cls.model_validate(data)
+        # Copy data to avoid modifying original
+        converted_data = data.copy()
+        
+        # Convert Decimal values to int for numeric fields
+        int_fields = ['confidence', 'assignedAt', 'confirmedAt']
+        for field in int_fields:
+            if field in converted_data and converted_data[field] is not None:
+                if isinstance(converted_data[field], Decimal):
+                    converted_data[field] = int(converted_data[field])
+        
+        # Manually convert categoryId string to UUID object
+        if 'categoryId' in converted_data and isinstance(converted_data['categoryId'], str):
+            try:
+                converted_data['categoryId'] = uuid.UUID(converted_data['categoryId'])
+            except ValueError:
+                # If invalid UUID, let Pydantic handle the error
+                pass
+        
+        # Manually convert status string to enum object to preserve enum type
+        if 'status' in converted_data and isinstance(converted_data['status'], str):
+            try:
+                converted_data['status'] = CategoryAssignmentStatus(converted_data['status'])
+            except ValueError:
+                # If invalid enum value, default to SUGGESTED
+                logger.warning(f"Invalid CategoryAssignmentStatus value: {converted_data['status']}, defaulting to SUGGESTED")
+                converted_data['status'] = CategoryAssignmentStatus.SUGGESTED
+        
+        # Use model_construct to preserve enum objects (model_validate would convert them back to strings due to use_enum_values=True)
+        return cls.model_construct(**converted_data)
 
 
 class Transaction(BaseModel):
@@ -414,22 +442,20 @@ class Transaction(BaseModel):
         Deserializes a dictionary (from DynamoDB) into a Transaction instance.
         Handles reconstruction of Money objects and ensures correct types for other fields.
         """
-        # Prepare data for Pydantic model instantiation
-        # Pydantic will use aliases if populate_by_name=True in model_config
-
-        # Pydantic handles conversion for Decimal (amount, balance) and Currency (currency)
-        # from their string/numeric representations in data based on type hints.
-        # Ensure data['amount'] and data['balance'] are in a format Pydantic can parse to Decimal (e.g., string or number).
-        # Ensure data['currency'] is a valid string value for the Currency enum.
-
-        # UUIDs: Pydantic should convert string UUIDs to uuid.UUID objects based on type hints.
-        # Timestamps: Pydantic should convert numbers to int based on type hints.
-        # Other fields should map directly or be handled by Pydantic's parsing.
+        # Copy data to avoid modifying original
+        converted_data = data.copy()
+        
+        # Convert Decimal values to int for timestamp fields
+        int_fields = ['date', 'createdAt', 'updatedAt', 'transactionHash', 'importOrder']
+        for field in int_fields:
+            if field in converted_data and converted_data[field] is not None:
+                if isinstance(converted_data[field], Decimal):
+                    converted_data[field] = int(converted_data[field])
 
         # Handle category assignments reconstruction
-        if 'categories' in data and data['categories']:
+        if 'categories' in converted_data and converted_data['categories']:
             processed_categories = []
-            for assignment in data['categories']:
+            for assignment in converted_data['categories']:
                 if isinstance(assignment, dict):
                     # New format: dictionary
                     processed_categories.append(
@@ -458,9 +484,9 @@ class Transaction(BaseModel):
                     # Already a TransactionCategoryAssignment object
                     processed_categories.append(assignment)
             
-            data['categories'] = processed_categories
+            converted_data['categories'] = processed_categories
 
-        return cls.model_validate(data, context={'from_database': True})
+        return cls.model_validate(converted_data, context={'from_database': True})
 
 
 def transaction_to_json(transaction_input: Union[Transaction, Dict[str, Any]]) -> str:

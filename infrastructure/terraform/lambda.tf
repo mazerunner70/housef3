@@ -1,109 +1,28 @@
 # Run tests and prepare Lambda package
 resource "null_resource" "prepare_lambda" {
   triggers = {
-    source_code_hash = "${sha256(file("../../backend/requirements.txt"))}-${sha256(join("", [for f in fileset("../../backend/src", "**"): filesha256("../../backend/src/${f}")])) }"
+    source_code_hash = "${sha256(file("../../backend/requirements.txt"))}-${sha256(file("../../backend/build_lambda_package.sh"))}-${sha256(join("", [for f in fileset("../../backend/src", "**"): filesha256("../../backend/src/${f}")])) }"
   }
 
   provisioner "local-exec" {
     working_dir = "../../backend"
-    command     = <<EOF
-      echo "Current working directory:"
-      pwd
-      
-      # Create test venv and install all dependencies for testing
-      python -m venv .venv_test
-      source .venv_test/bin/activate
-      pip install -r requirements.txt
-      
-      # Run tests
-      chmod +x run_tests.sh && ./run_tests.sh
-      
-      # Deactivate test venv
-      deactivate
-      
-      # Setup build
-      rm -rf build
-      mkdir -p build
-      
-      # Install only Lambda runtime dependencies directly to build directory
-      python3.10 -m pip install \
-        -r requirements-lambda.txt \
-        -t build/ \
-        --platform manylinux2014_x86_64 \
-        --python-version 3.10 \
-        --only-binary=:all:
-      
-      # Copy source code
-      cp -r src/* build/
-      
-      # Clean up unnecessary files
-      find build -type d -name "__pycache__" -exec rm -rf {} +
-      find build -type f -name "*.pyc" -delete
-      find build -type f -name "*.pyo" -delete
-      find build -type f -name "*.dll" -delete
-      find build -type f -name "*.exe" -delete
-      find build -type f -name "*.bat" -delete
-      find build -type f -name "*.sh" -delete
-      find build -type f -name "*.txt" -delete
-      find build -type f -name "*.md" -delete
-      find build -type f -name "*.rst" -delete
-      find build -type f -name "*.html" -delete
-      find build -type f -name "*.css" -delete
-      find build -type f -name "*.js" -delete
-      find build -type f -name "*.json" -delete
-      find build -type f -name "*.xml" -delete
-      find build -type f -name "*.yaml" -delete
-      find build -type f -name "*.yml" -delete
-      find build -type f -name "*.ini" -delete
-      find build -type f -name "*.cfg" -delete
-      find build -type f -name "*.conf" -delete
-      find build -type f -name "*.log" -delete
-      find build -type f -name "*.dat" -delete
-      find build -type f -name "*.db" -delete
-      find build -type f -name "*.sqlite" -delete
-      find build -type f -name "*.sqlite3" -delete
-      find build -type f -name "*.pdb" -delete
-      find build -type f -name "*.pyd" -delete
-      find build -type f -name "*.pyi" -delete
-      find build -type f -name "*.pyx" -delete
-      find build -type f -name "*.pxd" -delete
-      find build -type f -name "*.pxi" -delete
-      find build -type f -name "*.h" -delete
-      find build -type f -name "*.c" -delete
-      find build -type f -name "*.cpp" -delete
-      find build -type f -name "*.cc" -delete
-      find build -type f -name "*.cxx" -delete
-      find build -type f -name "*.hpp" -delete
-      find build -type f -name "*.hh" -delete
-      find build -type f -name "*.hxx" -delete
-      find build -type f -name "*.f" -delete
-      find build -type f -name "*.f90" -delete
-      find build -type f -name "*.f95" -delete
-      find build -type f -name "*.f03" -delete
-      find build -type f -name "*.f08" -delete
-      find build -type f -name "*.for" -delete
-      find build -type f -name "*.ftn" -delete
-      
-      # Create deployment package
-      cd build
-      zip -r ../lambda_deploy.zip .
-      cd ..
-      
-      # Cleanup
-      rm -rf build .venv_test
-      
-      echo "Build process complete!"
-      echo "Final working directory:"
-      pwd
-      echo "Lambda package location:"
-      ls -l lambda_deploy.zip
-    EOF
+    command     = "./build_lambda_package.sh"
   }
 }
 
-# Calculate source code hash from source files
+# Calculate source code hash from source files and build script
 locals {
-  source_code_hash = "${sha256(file("../../backend/requirements.txt"))}-${sha256(join("", [for f in fileset("../../backend/src", "**"): filesha256("../../backend/src/${f}")])) }"
+  source_code_hash = "${sha256(file("../../backend/requirements.txt"))}-${sha256(file("../../backend/build_lambda_package.sh"))}-${sha256(join("", [for f in fileset("../../backend/src", "**"): filesha256("../../backend/src/${f}")])) }"
+  
+  # Dynamic version management - read from build script output or use provided version
+  app_version_raw = var.app_version != null ? var.app_version : (
+    fileexists("../../backend/.current_version") ? 
+    trimspace(file("../../backend/.current_version")) : 
+    "${var.semver_base}.1"
+  )
+  
+  # Transform version to valid Lambda alias name (replace dots with underscores)
+  app_version = replace(local.app_version_raw, ".", "_")
 }
 
 # File Operations Lambda
@@ -111,7 +30,7 @@ resource "aws_lambda_function" "file_operations" {
   filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-file-operations"
   handler          = "handlers/file_operations.handler"
-  runtime          = "python3.10"
+  runtime          = "python3.12"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 300
   memory_size     = 256
@@ -142,7 +61,7 @@ resource "aws_lambda_function" "file_processor" {
   filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-file-processor"
   handler          = "handlers/file_processor.handler"
-  runtime          = "python3.10"
+  runtime          = "python3.12"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 60
   memory_size     = 256
@@ -174,7 +93,7 @@ resource "aws_lambda_function" "account_operations" {
   filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-account-operations"
   handler          = "handlers/account_operations.handler"
-  runtime          = "python3.10"
+  runtime          = "python3.12"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 30
   memory_size     = 256
@@ -203,7 +122,7 @@ resource "aws_lambda_function" "transaction_operations" {
   filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-transaction-operations"
   handler          = "handlers/transaction_operations.handler"
-  runtime          = "python3.10"
+  runtime          = "python3.12"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 30
   memory_size     = 256
@@ -233,7 +152,7 @@ resource "aws_lambda_function" "analytics_operations" {
   filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-analytics-operations"
   handler          = "handlers/analytics_operations.handler"
-  runtime          = "python3.10"
+  runtime          = "python3.12"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 300
   memory_size     = 512
@@ -265,7 +184,7 @@ resource "aws_lambda_function" "getcolors" {
   role            = aws_iam_role.lambda_exec.arn
   handler         = "handlers/getcolors.handler"
   source_code_hash = base64encode(local.source_code_hash)
-  runtime         = "python3.10"
+  runtime         = "python3.12"
   timeout         = 30
   memory_size     = 128
   depends_on      = [null_resource.prepare_lambda]
@@ -375,10 +294,11 @@ resource "aws_iam_role_policy" "lambda_s3_access" {
     Statement = [
       {
         Action = [
-          "s3:GetObject",
-          "s3:PutObject",
           "s3:DeleteObject",
-          "s3:ListBucket"
+          "s3:GetObject",
+          "s3:HeadObject",
+          "s3:ListBucket",
+          "s3:PutObject"
         ]
         Effect = "Allow"
         Resource = [
@@ -405,6 +325,24 @@ resource "aws_iam_role_policy" "lambda_eventbridge_access" {
         Resource = [
           aws_cloudwatch_event_bus.app_events.arn
         ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "lambda_cloudwatch_metrics" {
+  name = "cloudwatch-metrics-access-v1"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "cloudwatch:PutMetricData"
+        ]
+        Effect = "Allow"
+        Resource = "*"
       }
     ]
   })
@@ -470,7 +408,7 @@ resource "aws_lambda_function" "analytics_processor" {
   filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-analytics-processor"
   handler          = "services/analytics_processor_service.handler"
-  runtime          = "python3.10"
+  runtime          = "python3.12"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 300  # 5 minutes timeout for processing
   memory_size     = 512  # More memory for analytics processing
@@ -599,7 +537,7 @@ resource "aws_lambda_function" "categories_lambda" {
   function_name = "${var.project_name}-${var.environment}-categories-lambda"
   role          = aws_iam_role.categories_lambda_role.arn
   handler       = "handlers/category_operations.handler" # Updated handler
-  runtime       = "python3.10"
+  runtime       = "python3.12"
   timeout       = 30 # seconds
   memory_size   = 256 # MB
 
@@ -631,7 +569,7 @@ resource "aws_lambda_function" "export_operations" {
   filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-export-operations"
   handler          = "handlers/export_operations.handler"
-  runtime          = "python3.10"
+  runtime          = "python3.12"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 900  # 15 minutes for export processing
   memory_size     = 1024  # More memory for large exports
@@ -665,12 +603,13 @@ resource "aws_lambda_function" "fzip_operations" {
   filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-fzip-operations"
   handler          = "handlers/fzip_operations.handler"
-  runtime          = "python3.10"
+  runtime          = "python3.12"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 900  # 15 minutes for backup/restore processing
   memory_size     = 1024  # More memory for large operations
   source_code_hash = base64encode(local.source_code_hash)
   depends_on      = [null_resource.prepare_lambda]
+  publish         = true  # Enable versioning
   
   environment {
     variables = {
@@ -697,6 +636,14 @@ resource "aws_lambda_function" "fzip_operations" {
   }
 }
 
+# Create semver alias for FZIP operations
+resource "aws_lambda_alias" "fzip_operations_version" {
+  name             = local.app_version
+  description      = "Semver alias for FZIP operations Lambda - ${local.app_version_raw} (alias: ${local.app_version})"
+  function_name    = aws_lambda_function.fzip_operations.function_name
+  function_version = aws_lambda_function.fzip_operations.version
+}
+
 resource "aws_cloudwatch_log_group" "fzip_operations" {
   name              = "/aws/lambda/${aws_lambda_function.fzip_operations.function_name}"
   retention_in_days = 7
@@ -707,6 +654,9 @@ resource "aws_cloudwatch_log_group" "fzip_operations" {
     ManagedBy   = "terraform"
   }
 }
+
+# Note: Versioned log groups are automatically created by AWS when the alias is invoked
+# The log streams will show the version name like: [v1.0.0.123]
 
 resource "aws_cloudwatch_log_group" "export_operations" {
   name              = "/aws/lambda/${aws_lambda_function.export_operations.function_name}"
@@ -781,6 +731,31 @@ output "categories_lambda_name" {
   value       = aws_lambda_function.categories_lambda.function_name
 }
 
+output "lambda_fzip_operations_name" {
+  description = "Name of the FZIP Operations Lambda function"
+  value       = aws_lambda_function.fzip_operations.function_name
+}
+
+output "lambda_fzip_operations_version_alias" {
+  description = "Version alias for FZIP Operations Lambda (semver)"
+  value       = aws_lambda_alias.fzip_operations_version.name
+}
+
+output "lambda_fzip_operations_versioned_arn" {
+  description = "ARN of the versioned FZIP Operations Lambda alias"
+  value       = aws_lambda_alias.fzip_operations_version.arn
+}
+
+output "app_version_raw" {
+  description = "The raw app version from build script (e.g., v1.0.0.1)"
+  value       = local.app_version_raw
+}
+
+output "app_version_alias" {
+  description = "The Lambda alias version (dots replaced with underscores, e.g., v1_0_0_1)"
+  value       = local.app_version
+}
+
 output "categories_lambda_arn" {
   description = "ARN of the Categories Lambda function"
   value       = aws_lambda_function.categories_lambda.arn
@@ -798,7 +773,7 @@ resource "aws_lambda_function" "file_map_operations" {
   filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-file-map-operations"
   handler          = "handlers/file_map_operations.handler"
-  runtime          = "python3.10"
+  runtime          = "python3.12"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 30
   memory_size     = 256

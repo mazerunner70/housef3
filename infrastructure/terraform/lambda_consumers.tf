@@ -142,7 +142,7 @@ resource "aws_lambda_function" "audit_consumer" {
   filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-audit-consumer"
   handler          = "consumers/audit_consumer.handler"
-  runtime          = "python3.10"
+  runtime          = "python3.12"
   role            = aws_iam_role.lambda_exec.arn
   timeout         = 120  # 2 minutes for audit logging
   memory_size     = 256  # Less memory needed for simple audit logging

@@ -232,7 +232,7 @@ def get_fzip_backup_download_handler(event: Dict[str, Any], user_id: str) -> Dic
 
 def list_fzip_backups_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """
-    List user's FZIP backup jobs
+    List user's FZIP  backup packages
     GET /fzip/backup
     """
     try:
@@ -253,7 +253,7 @@ def list_fzip_backups_handler(event: Dict[str, Any], user_id: str) -> Dict[str, 
                 "jobId": str(job.job_id),
                 "jobType": job.job_type.value,
                 "status": job.status.value,
-                "backupType": job.backup_type.value if job.backup_type else None,
+                "backupType": job.backup_type if job.backup_type else None,
                 "createdAt": job.created_at,
                 "completedAt": job.completed_at,
                 "progress": job.progress,
@@ -317,7 +317,7 @@ def process_fzip_backup_job(fzip_job: FZIPJob) -> FZIPJob:
     Process an FZIP backup job (simplified for Phase 1)
     In production, this would be handled by a separate Lambda or async process
     """
-    backup_type = fzip_job.backup_type.value if fzip_job.backup_type else "complete"
+    backup_type = fzip_job.backup_type if fzip_job.backup_type else "complete"
     
     with fzip_metrics.measure_backup_duration(backup_type, fzip_job.user_id):
         try:

@@ -136,9 +136,9 @@ data "aws_iam_policy_document" "file_storage_policy" {
       identifiers = ["arn:aws:iam::661792079381:user/terraform-housef2", aws_iam_role.lambda_exec.arn]
     }
     actions = [
-      "s3:PutObject",
-      "s3:GetObject",
       "s3:DeleteObject",
+      "s3:GetObject",
+      "s3:PutObject",
       "s3:PutObjectAcl"
     ]
     resources = [
@@ -218,10 +218,10 @@ resource "aws_iam_role_policy" "lambda_file_storage_access" {
     Statement = [
       {
         Action = [
-          "s3:GetObject",
-          "s3:PutObject",
           "s3:DeleteObject",
-          "s3:ListBucket"
+          "s3:GetObject",
+          "s3:ListBucket",
+          "s3:PutObject"
         ]
         Effect   = "Allow"
         Resource = [

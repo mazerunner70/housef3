@@ -26,6 +26,7 @@ const NewUILayout: React.FC<NewUILayoutProps> = ({ onSignOut }) => {
           <NavLink to="/transactions" className={({ isActive }) => isActive ? "active" : ""}>Transactions</NavLink>
           <NavLink to="/accounts" className={({ isActive }) => isActive ? "active" : ""}>Accounts</NavLink>
           <NavLink to="/analytics" className={({ isActive }) => isActive ? "active" : ""}>Analytics</NavLink>
+          <NavLink to="/backup" className={({ isActive }) => isActive ? "active" : ""}>💾 Backup & Restore</NavLink>
           <button onClick={onSignOut} className="sign-out-button">Sign Out</button>
         </nav>
         <main className="new-ui-main-content">

@@ -2,7 +2,7 @@
     "python.analysis.include": ["backend/src/**/*", "backend/tests/**/*"],
     "python.analysis.exclude": ["**/node_modules", "**/__pycache__", "**/build", ".git", "myenv/**"],
     "python.linting.enabled": true,
-    "python.languageServer": "Pylance",
+    "python.languageServer": "None",
     "python.analysis.typeCheckingMode": "basic",
     "python.analysis.diagnosticMode": "workspace",
     "python.analysis.autoImportCompletions": true,
