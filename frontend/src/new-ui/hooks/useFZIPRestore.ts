@@ -8,7 +8,8 @@ import {
   getFZIPRestoreStatus,
   listFZIPRestoreJobs,
   deleteFZIPRestoreJob,
-  uploadFZIPPackage
+  uploadFZIPPackage,
+  startFZIPRestoreProcessing
 } from '../../services/FZIPService';
 
 export interface UseFZIPRestoreResult {
@@ -22,6 +23,7 @@ export interface UseFZIPRestoreResult {
   refreshRestoreJobs: () => Promise<void>;
   deleteRestoreJob: (restoreId: string) => Promise<void>;
   getRestoreStatus: (restoreId: string) => Promise<FZIPRestoreJob>;
+  startRestoreProcessing: (restoreId: string) => Promise<void>;
   hasMore: boolean;
   loadMore: () => Promise<void>;
   clearErrors: () => void;
@@ -48,11 +50,11 @@ export const useFZIPRestore = (): UseFZIPRestoreResult => {
       const response = await listFZIPRestoreJobs(limit, currentKey);
       
       // Defensive check for response structure
-      if (response && response.importJobs && Array.isArray(response.importJobs)) {
+      if (response && response.restoreJobs && Array.isArray(response.restoreJobs)) {
         if (reset) {
-          setRestoreJobs(response.importJobs);
+          setRestoreJobs(response.restoreJobs);
         } else {
-          setRestoreJobs(prev => [...prev, ...response.importJobs]);
+          setRestoreJobs(prev => [...prev, ...response.restoreJobs]);
         }
         
         setLastEvaluatedKey(response.nextEvaluatedKey);
@@ -110,9 +112,9 @@ export const useFZIPRestore = (): UseFZIPRestoreResult => {
       
       // Add new restore job to the beginning of the list
       const newRestoreJob: FZIPRestoreJob = {
-        restoreId: response.restoreId,
+        jobId: response.restoreId,
         status: response.status || FZIPRestoreStatus.UPLOADED,
-        uploadedAt: Date.now(),
+        createdAt: Date.now(),
         progress: 0,
         currentPhase: ''
       };
@@ -155,7 +157,7 @@ export const useFZIPRestore = (): UseFZIPRestoreResult => {
       // Update restore job status
       setRestoreJobs(prev =>
         prev.map(job =>
-          job.restoreId === restoreId
+          job.jobId === restoreId
             ? { ...job, status: FZIPRestoreStatus.VALIDATING, progress: 10, packageSize: file.size }
             : job
         )
@@ -172,7 +174,7 @@ export const useFZIPRestore = (): UseFZIPRestoreResult => {
     
     try {
       await deleteFZIPRestoreJob(restoreId);
-      setRestoreJobs(prev => prev.filter(job => job.restoreId !== restoreId));
+      setRestoreJobs(prev => prev.filter(job => job.jobId !== restoreId));
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to delete restore job';
       setError(errorMessage);
@@ -189,13 +191,34 @@ export const useFZIPRestore = (): UseFZIPRestoreResult => {
       // Update the restore job in our local state
       setRestoreJobs(prev =>
         prev.map(job =>
-          job.restoreId === restoreId ? updatedJob : job
+          job.jobId === restoreId ? updatedJob : job
         )
       );
       
       return updatedJob;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to get restore status';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    }
+  }, []);
+
+  const startRestoreProcessing = useCallback(async (restoreId: string): Promise<void> => {
+    setError(null);
+    
+    try {
+      await startFZIPRestoreProcessing(restoreId);
+      
+      // Update the restore job status to processing
+      setRestoreJobs(prev =>
+        prev.map(job =>
+          job.jobId === restoreId
+            ? { ...job, status: FZIPRestoreStatus.PROCESSING, progress: 50, currentPhase: 'Starting restore...' }
+            : job
+        )
+      );
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to start restore processing';
       setError(errorMessage);
       throw new Error(errorMessage);
     }
@@ -223,6 +246,7 @@ export const useFZIPRestore = (): UseFZIPRestoreResult => {
     refreshRestoreJobs,
     deleteRestoreJob,
     getRestoreStatus,
+    startRestoreProcessing,
     hasMore,
     loadMore,
     clearErrors

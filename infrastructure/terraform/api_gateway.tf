@@ -740,6 +740,14 @@ resource "aws_apigatewayv2_route" "fzip_upload_restore_package" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+resource "aws_apigatewayv2_route" "fzip_start_restore_processing" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /fzip/restore/{jobId}/start"
+  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 resource "aws_apigatewayv2_stage" "main" {
   api_id      = aws_apigatewayv2_api.main.id
   name        = var.environment

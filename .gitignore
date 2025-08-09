@@ -222,3 +222,6 @@ backend/.build_number
 backend/.current_version
 
 .venv_build/
+
+# Test account credentials
+test-accounts.env

@@ -63,7 +63,13 @@ class FZIPService:
     def __init__(self):
         self.housef3_version = "2.5.0"  # Current version
         self.fzip_format_version = "1.0"
+        # Bucket used to store exported backup packages
         self.fzip_bucket = os.environ.get('FZIP_PACKAGES_BUCKET', 'housef3-dev-fzip-packages')
+        # Bucket used to receive uploaded restore packages
+        self.restore_packages_bucket = os.environ.get(
+            'FZIP_RESTORE_PACKAGES_BUCKET',
+            os.environ.get('FZIP_PACKAGES_BUCKET', 'housef3-dev-fzip-packages')
+        )
         self.file_storage_bucket = os.environ.get('FILE_STORAGE_BUCKET', 'housef3-dev-file-storage')
         self.batch_size = 1000  # For large datasets
         
@@ -536,11 +542,39 @@ class FZIPService:
                 error=str(e)
             ))
     
+    def resume_restore(self, restore_job: FZIPJob):
+        """Resume restore processing from validation passed state."""
+        try:
+            # Update status to processing
+            restore_job.status = FZIPStatus.RESTORE_PROCESSING
+            restore_job.current_phase = "Starting restore..."
+            restore_job.progress = 50
+            update_fzip_job(restore_job)
+            
+            # Re-parse the package to get the data
+            package_data = self._parse_package(restore_job.s3_key)
+            
+            # Continue with data restoration
+            self._restore_data(restore_job, package_data)
+            
+        except Exception as e:
+            logger.error(f"Resume restore failed: {str(e)}")
+            restore_job.status = FZIPStatus.RESTORE_FAILED
+            restore_job.error = str(e)
+            update_fzip_job(restore_job)
+            event_service.publish_event(RestoreFailedEvent(
+                user_id=restore_job.user_id,
+                restore_id=str(restore_job.job_id),
+                backup_id=restore_job.backup_id or '',
+                error=str(e)
+            ))
+    
     def _parse_package(self, package_s3_key: str) -> Dict[str, Any]:
         """Parse the ZIP package and extract data."""
         try:
             # Download package from S3
-            package_data = get_object_content(package_s3_key, self.fzip_bucket)
+            # Read the uploaded restore package from the restore bucket
+            package_data = get_object_content(package_s3_key, self.restore_packages_bucket)
             if not package_data:
                 raise ImportException("Could not download package from S3")
             
