@@ -45,19 +45,20 @@ export interface FZIPBackupJob {
 
 // FZIP Restore Types
 export enum FZIPRestoreStatus {
-  UPLOADED = "uploaded",
-  VALIDATING = "validating",
-  VALIDATION_PASSED = "validation_passed",
-  VALIDATION_FAILED = "validation_failed",
-  PROCESSING = "processing",
-  COMPLETED = "completed",
-  FAILED = "failed"
+  // Mirror backend FZIPStatus values exactly
+  UPLOADED = "restore_uploaded",
+  VALIDATING = "restore_validating",
+  VALIDATION_PASSED = "restore_validation_passed",
+  VALIDATION_FAILED = "restore_validation_failed",
+  PROCESSING = "restore_processing",
+  COMPLETED = "restore_completed",
+  FAILED = "restore_failed"
 }
 
 export interface FZIPRestoreJob {
-  restoreId: string;
+  jobId: string;
   status: FZIPRestoreStatus;
-  uploadedAt: number;
+  createdAt: number;
   completedAt?: number;
   progress: number;
   currentPhase: string;
@@ -73,7 +74,7 @@ export interface FZIPRestoreJob {
     categories_restored: number;
     files_restored: number;
   };
-  errorMessage?: string;
+  error?: string;
 }
 
 // API Request/Response Types
@@ -122,7 +123,7 @@ export interface CreateFZIPRestoreResponse {
 }
 
 export interface FZIPRestoreListResponse {
-  importJobs: FZIPRestoreJob[];  // API uses "importJobs" not "restoreJobs"
+  restoreJobs: FZIPRestoreJob[];  // API returns "restoreJobs"
   nextEvaluatedKey?: string;
   packageFormat?: string;
 }
@@ -319,6 +320,8 @@ const convertBackupResponseToFrontend = (backendBackup: any): FZIPBackupJob => {
   };
 };
 
+
+
 // List FZIP backups
 export const listFZIPBackups = async (
   limit: number = 20,
@@ -363,6 +366,18 @@ export const deleteFZIPBackup = async (backupId: string): Promise<void> => {
 };
 
 // ========== RESTORE OPERATIONS ==========
+
+// Start FZIP restore processing (for jobs that have passed validation)
+export const startFZIPRestoreProcessing = async (restoreId: string): Promise<void> => {
+  try {
+    await authenticatedRequest(`${API_ENDPOINT}/fzip/restore/${restoreId}/start`, {
+      method: 'POST'
+    });
+  } catch (error) {
+    console.error(`Error starting FZIP restore processing for ${restoreId}:`, error);
+    throw error;
+  }
+};
 
 // Create FZIP restore job
 export const createFZIPRestoreJob = async (

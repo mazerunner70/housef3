@@ -17,6 +17,7 @@ const FZIPRestoreView: React.FC = () => {
     refreshRestoreJobs,
     deleteRestoreJob,
     getRestoreStatus,
+    startRestoreProcessing,
     hasMore,
     loadMore,
     clearErrors
@@ -231,6 +232,7 @@ const FZIPRestoreView: React.FC = () => {
             isLoading={isLoading}
             onDelete={handleDelete}
             onRefreshStatus={getRestoreStatus}
+            onStartRestore={startRestoreProcessing}
             hasMore={hasMore}
             onLoadMore={loadMore}
           />

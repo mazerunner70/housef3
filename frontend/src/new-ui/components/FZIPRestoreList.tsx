@@ -10,6 +10,7 @@ interface FZIPRestoreListProps {
   isLoading?: boolean;
   onDelete: (restoreId: string) => Promise<void>;
   onRefreshStatus: (restoreId: string) => Promise<FZIPRestoreJob>;
+  onStartRestore: (restoreId: string) => Promise<void>;
   hasMore?: boolean;
   onLoadMore?: () => Promise<void>;
 }
@@ -19,6 +20,7 @@ const FZIPRestoreList: React.FC<FZIPRestoreListProps> = ({
   isLoading = false,
   onDelete,
   onRefreshStatus,
+  onStartRestore,
   hasMore = false,
   onLoadMore
 }) => {
@@ -37,7 +39,7 @@ const FZIPRestoreList: React.FC<FZIPRestoreListProps> = ({
         job.status === FZIPRestoreStatus.VALIDATION_PASSED ||
         job.status === FZIPRestoreStatus.PROCESSING
       )
-      .map(job => job.restoreId);
+      .map(job => job.jobId);
 
     setProcessingJobs(new Set(processingIds));
 
@@ -93,7 +95,7 @@ const FZIPRestoreList: React.FC<FZIPRestoreListProps> = ({
     return new Date(timestamp).toLocaleString();
   };
 
-  const getStatusVariant = (status: FZIPRestoreStatus): 'success' | 'error' | 'warning' | 'info' => {
+  const getStatusVariant = (status: FZIPRestoreStatus): 'success' | 'error' | 'warning' | 'processing' => {
     switch (status) {
       case FZIPRestoreStatus.COMPLETED:
         return 'success';
@@ -104,10 +106,16 @@ const FZIPRestoreList: React.FC<FZIPRestoreListProps> = ({
       case FZIPRestoreStatus.VALIDATING:
       case FZIPRestoreStatus.VALIDATION_PASSED:
       case FZIPRestoreStatus.PROCESSING:
-        return 'info';
+        return 'processing';
       default:
         return 'warning';
     }
+  };
+
+  const canStartRestore = (job: FZIPRestoreJob): boolean => {
+    // Backend sets status to restore_validation_passed when ready; it may not include a
+    // specific `ready` flag. Allow starting when status indicates validation passed.
+    return job.status === FZIPRestoreStatus.VALIDATION_PASSED;
   };
 
   const renderValidationResults = (job: FZIPRestoreJob) => {
@@ -186,15 +194,15 @@ const FZIPRestoreList: React.FC<FZIPRestoreListProps> = ({
 
       <div className="restore-items">
         {restoreJobs.map((job) => (
-          <div key={job.restoreId} className="restore-item">
+          <div key={job.jobId} className="restore-item">
             <div className="restore-item__header">
               <div className="restore-info">
                 <h4 className="restore-title">
-                  Restore Job {job.restoreId.slice(0, 8)}...
+                  Restore Job {job.jobId.slice(0, 8)}...
                 </h4>
                 <div className="restore-meta">
                   <span className="restore-date">
-                    Uploaded: {formatDate(job.uploadedAt)}
+                    Uploaded: {formatDate(job.createdAt)}
                   </span>
                   {job.completedAt && (
                     <span className="restore-date">
@@ -212,7 +220,7 @@ const FZIPRestoreList: React.FC<FZIPRestoreListProps> = ({
               </div>
             </div>
 
-            {processingJobs.has(job.restoreId) && (
+            {processingJobs.has(job.jobId) && (
               <div className="restore-progress">
                 <div className="progress-info">
                   <span>
@@ -229,9 +237,9 @@ const FZIPRestoreList: React.FC<FZIPRestoreListProps> = ({
               </div>
             )}
 
-            {job.errorMessage && (
+            {job.error && (
               <div className="restore-error">
-                <strong>Error:</strong> {job.errorMessage}
+                <strong>Error:</strong> {job.error}
               </div>
             )}
 
@@ -250,14 +258,24 @@ const FZIPRestoreList: React.FC<FZIPRestoreListProps> = ({
               </div>
 
               <div className="restore-actions">
+                {canStartRestore(job) && (
+                  <Button
+                    variant="primary"
+                    size="compact"
+                    onClick={() => onStartRestore(job.jobId)}
+                    disabled={processingJobs.has(job.jobId)}
+                  >
+                    Start Restore
+                  </Button>
+                )}
                 <Button
                   variant="danger"
-                  size="small"
+                  size="compact"
                   onClick={() => setDeleteConfirmation({
                     isOpen: true,
-                    restoreId: job.restoreId
+                    restoreId: job.jobId
                   })}
-                  disabled={processingJobs.has(job.restoreId)}
+                  disabled={processingJobs.has(job.jobId)}
                 >
                   Delete
                 </Button>
@@ -273,7 +291,6 @@ const FZIPRestoreList: React.FC<FZIPRestoreListProps> = ({
             variant="secondary"
             onClick={onLoadMore}
             disabled={isLoading}
-            loading={isLoading}
           >
             Load More Restore Jobs
           </Button>
@@ -284,11 +301,11 @@ const FZIPRestoreList: React.FC<FZIPRestoreListProps> = ({
         isOpen={deleteConfirmation.isOpen}
         title="Delete Restore Job"
         message="Are you sure you want to delete this restore job? This action cannot be undone."
-        confirmText="Delete"
-        cancelText="Cancel"
+        confirmButtonText="Delete"
+        cancelButtonText="Cancel"
         onConfirm={handleDelete}
         onCancel={() => setDeleteConfirmation({ isOpen: false, restoreId: '' })}
-        variant="danger"
+        type="danger"
       />
     </div>
   );
