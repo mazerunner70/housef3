@@ -763,6 +763,7 @@ def cancel_fzip_restore_handler(event: Dict[str, Any], user_id: str, job_id: str
 
         restore_job.status = FZIPStatus.RESTORE_CANCELED
         restore_job.error = "Canceled by user"
+        restore_job.completed_at = int(datetime.now(timezone.utc).timestamp() * 1000)
         update_fzip_job(restore_job)
 
         return create_response(200, {
