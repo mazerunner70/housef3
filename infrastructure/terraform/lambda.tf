@@ -1,7 +1,7 @@
 # Run tests and prepare Lambda package
 resource "null_resource" "prepare_lambda" {
   triggers = {
-    source_code_hash = "${sha256(file("../../backend/requirements.txt"))}-${sha256(file("../../backend/build_lambda_package.sh"))}-${sha256(join("", [for f in fileset("../../backend/src", "**"): filesha256("../../backend/src/${f}")])) }"
+    source_code_hash = "${sha256(file("../../backend/requirements.txt"))}-${sha256(file("../../backend/build_lambda_package.sh"))}-${sha256(join("", [for f in fileset("../../backend/src", "**") : filesha256("../../backend/src/${f}")]))}"
   }
 
   provisioner "local-exec" {
@@ -10,17 +10,71 @@ resource "null_resource" "prepare_lambda" {
   }
 }
 
+# Restore Consumer Lambda (S3-triggered)
+resource "aws_lambda_function" "restore_consumer" {
+  filename         = "../../backend/lambda_deploy.zip"
+  function_name    = "${var.project_name}-${var.environment}-restore-consumer"
+  handler          = "consumers/restore_consumer.handler"
+  runtime          = "python3.12"
+  role             = aws_iam_role.lambda_exec.arn
+  timeout          = 300
+  memory_size      = 512
+  source_code_hash = base64encode(local.source_code_hash)
+  depends_on       = [null_resource.prepare_lambda]
+
+  environment {
+    variables = {
+      ENVIRONMENT                  = var.environment
+      FZIP_JOBS_TABLE              = aws_dynamodb_table.fzip_jobs.name
+      FZIP_PACKAGES_BUCKET         = aws_s3_bucket.fzip_packages.bucket
+      FZIP_RESTORE_PACKAGES_BUCKET = aws_s3_bucket.fzip_packages.bucket
+      ACCOUNTS_TABLE               = aws_dynamodb_table.accounts.name
+      TRANSACTIONS_TABLE           = aws_dynamodb_table.transactions.name
+      CATEGORIES_TABLE_NAME        = aws_dynamodb_table.categories.name
+      FILE_MAPS_TABLE              = aws_dynamodb_table.file_maps.name
+      FILES_TABLE                  = aws_dynamodb_table.transaction_files.name
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+    Component   = "restore-consumer"
+  }
+}
+
+resource "aws_cloudwatch_log_group" "restore_consumer" {
+  name              = "/aws/lambda/${aws_lambda_function.restore_consumer.function_name}"
+  retention_in_days = 14
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
+# Allow S3 to invoke Restore Consumer
+resource "aws_lambda_permission" "allow_s3_restore_consumer" {
+  statement_id  = "AllowExecutionFromS3RestoreConsumer"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.restore_consumer.function_name
+  principal     = "s3.amazonaws.com"
+  source_arn    = aws_s3_bucket.fzip_packages.arn
+}
+
 # Calculate source code hash from source files and build script
 locals {
-  source_code_hash = "${sha256(file("../../backend/requirements.txt"))}-${sha256(file("../../backend/build_lambda_package.sh"))}-${sha256(join("", [for f in fileset("../../backend/src", "**"): filesha256("../../backend/src/${f}")])) }"
-  
+  source_code_hash = "${sha256(file("../../backend/requirements.txt"))}-${sha256(file("../../backend/build_lambda_package.sh"))}-${sha256(join("", [for f in fileset("../../backend/src", "**") : filesha256("../../backend/src/${f}")]))}"
+
   # Dynamic version management - read from build script output or use provided version
   app_version_raw = var.app_version != null ? var.app_version : (
-    fileexists("../../backend/.current_version") ? 
-    trimspace(file("../../backend/.current_version")) : 
+    fileexists("../../backend/.current_version") ?
+    trimspace(file("../../backend/.current_version")) :
     "${var.semver_base}.1"
   )
-  
+
   # Transform version to valid Lambda alias name (replace dots with underscores)
   app_version = replace(local.app_version_raw, ".", "_")
 }
@@ -31,12 +85,12 @@ resource "aws_lambda_function" "file_operations" {
   function_name    = "${var.project_name}-${var.environment}-file-operations"
   handler          = "handlers/file_operations.handler"
   runtime          = "python3.12"
-  role            = aws_iam_role.lambda_exec.arn
-  timeout         = 300
-  memory_size     = 256
+  role             = aws_iam_role.lambda_exec.arn
+  timeout          = 300
+  memory_size      = 256
   source_code_hash = base64encode(local.source_code_hash)
-  depends_on      = [null_resource.prepare_lambda]
-  
+  depends_on       = [null_resource.prepare_lambda]
+
   environment {
     variables = {
       ENVIRONMENT         = var.environment
@@ -44,11 +98,11 @@ resource "aws_lambda_function" "file_operations" {
       FILES_TABLE         = aws_dynamodb_table.transaction_files.name
       ACCOUNTS_TABLE      = aws_dynamodb_table.accounts.name
       TRANSACTIONS_TABLE  = aws_dynamodb_table.transactions.name
-      FILE_MAPS_TABLE    = aws_dynamodb_table.file_maps.name
+      FILE_MAPS_TABLE     = aws_dynamodb_table.file_maps.name
       DEPLOYMENT_VERSION  = "v4"
     }
   }
-  
+
   tags = {
     Environment = var.environment
     Project     = var.project_name
@@ -62,25 +116,25 @@ resource "aws_lambda_function" "file_processor" {
   function_name    = "${var.project_name}-${var.environment}-file-processor"
   handler          = "handlers/file_processor.handler"
   runtime          = "python3.12"
-  role            = aws_iam_role.lambda_exec.arn
-  timeout         = 60
-  memory_size     = 256
+  role             = aws_iam_role.lambda_exec.arn
+  timeout          = 60
+  memory_size      = 256
   source_code_hash = base64encode(local.source_code_hash)
-  depends_on      = [null_resource.prepare_lambda]
-  
+  depends_on       = [null_resource.prepare_lambda]
+
   environment {
     variables = {
-      ENVIRONMENT           = var.environment
-      FILES_TABLE           = aws_dynamodb_table.transaction_files.name
-      TRANSACTIONS_TABLE    = aws_dynamodb_table.transactions.name
-      FILE_STORAGE_BUCKET   = aws_s3_bucket.file_storage.id
-      ACCOUNTS_TABLE        = aws_dynamodb_table.accounts.name
-      FILE_MAPS_TABLE       = aws_dynamodb_table.file_maps.name
-      ANALYTICS_DATA_TABLE  = aws_dynamodb_table.analytics_data.name
+      ENVIRONMENT            = var.environment
+      FILES_TABLE            = aws_dynamodb_table.transaction_files.name
+      TRANSACTIONS_TABLE     = aws_dynamodb_table.transactions.name
+      FILE_STORAGE_BUCKET    = aws_s3_bucket.file_storage.id
+      ACCOUNTS_TABLE         = aws_dynamodb_table.accounts.name
+      FILE_MAPS_TABLE        = aws_dynamodb_table.file_maps.name
+      ANALYTICS_DATA_TABLE   = aws_dynamodb_table.analytics_data.name
       ANALYTICS_STATUS_TABLE = aws_dynamodb_table.analytics_status.name
     }
   }
-  
+
   tags = {
     Environment = var.environment
     Project     = var.project_name
@@ -94,12 +148,12 @@ resource "aws_lambda_function" "account_operations" {
   function_name    = "${var.project_name}-${var.environment}-account-operations"
   handler          = "handlers/account_operations.handler"
   runtime          = "python3.12"
-  role            = aws_iam_role.lambda_exec.arn
-  timeout         = 30
-  memory_size     = 256
+  role             = aws_iam_role.lambda_exec.arn
+  timeout          = 30
+  memory_size      = 256
   source_code_hash = base64encode(local.source_code_hash)
-  depends_on      = [null_resource.prepare_lambda]
-  
+  depends_on       = [null_resource.prepare_lambda]
+
   environment {
     variables = {
       ENVIRONMENT         = var.environment
@@ -109,7 +163,7 @@ resource "aws_lambda_function" "account_operations" {
       FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.id
     }
   }
-  
+
   tags = {
     Environment = var.environment
     Project     = var.project_name
@@ -123,20 +177,20 @@ resource "aws_lambda_function" "transaction_operations" {
   function_name    = "${var.project_name}-${var.environment}-transaction-operations"
   handler          = "handlers/transaction_operations.handler"
   runtime          = "python3.12"
-  role            = aws_iam_role.lambda_exec.arn
-  timeout         = 30
-  memory_size     = 256
+  role             = aws_iam_role.lambda_exec.arn
+  timeout          = 30
+  memory_size      = 256
   source_code_hash = base64encode(local.source_code_hash)
-  depends_on      = [null_resource.prepare_lambda]
+  depends_on       = [null_resource.prepare_lambda]
 
   environment {
     variables = {
-      ENVIRONMENT                               = var.environment
-      TRANSACTIONS_TABLE                        = aws_dynamodb_table.transactions.name
-      FILES_TABLE                              = aws_dynamodb_table.transaction_files.name
-      ACCOUNTS_TABLE                           = aws_dynamodb_table.accounts.name
-      TRANSACTION_CATEGORY_ASSIGNMENTS_TABLE   = aws_dynamodb_table.transaction_category_assignments.name
-      CATEGORIES_TABLE_NAME                    = aws_dynamodb_table.categories.name
+      ENVIRONMENT                            = var.environment
+      TRANSACTIONS_TABLE                     = aws_dynamodb_table.transactions.name
+      FILES_TABLE                            = aws_dynamodb_table.transaction_files.name
+      ACCOUNTS_TABLE                         = aws_dynamodb_table.accounts.name
+      TRANSACTION_CATEGORY_ASSIGNMENTS_TABLE = aws_dynamodb_table.transaction_category_assignments.name
+      CATEGORIES_TABLE_NAME                  = aws_dynamodb_table.categories.name
     }
   }
 
@@ -153,23 +207,23 @@ resource "aws_lambda_function" "analytics_operations" {
   function_name    = "${var.project_name}-${var.environment}-analytics-operations"
   handler          = "handlers/analytics_operations.handler"
   runtime          = "python3.12"
-  role            = aws_iam_role.lambda_exec.arn
-  timeout         = 300
-  memory_size     = 512
+  role             = aws_iam_role.lambda_exec.arn
+  timeout          = 300
+  memory_size      = 512
   source_code_hash = base64encode(local.source_code_hash)
-  depends_on      = [null_resource.prepare_lambda]
-  
+  depends_on       = [null_resource.prepare_lambda]
+
   environment {
     variables = {
-      ENVIRONMENT           = var.environment
-      ANALYTICS_DATA_TABLE  = aws_dynamodb_table.analytics_data.name
+      ENVIRONMENT            = var.environment
+      ANALYTICS_DATA_TABLE   = aws_dynamodb_table.analytics_data.name
       ANALYTICS_STATUS_TABLE = aws_dynamodb_table.analytics_status.name
-      TRANSACTIONS_TABLE    = aws_dynamodb_table.transactions.name
-      ACCOUNTS_TABLE        = aws_dynamodb_table.accounts.name
-      FILES_TABLE           = aws_dynamodb_table.transaction_files.name
+      TRANSACTIONS_TABLE     = aws_dynamodb_table.transactions.name
+      ACCOUNTS_TABLE         = aws_dynamodb_table.accounts.name
+      FILES_TABLE            = aws_dynamodb_table.transaction_files.name
     }
   }
-  
+
   tags = {
     Environment = var.environment
     Project     = var.project_name
@@ -181,21 +235,21 @@ resource "aws_lambda_function" "analytics_operations" {
 resource "aws_lambda_function" "getcolors" {
   filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-getcolors"
-  role            = aws_iam_role.lambda_exec.arn
-  handler         = "handlers/getcolors.handler"
+  role             = aws_iam_role.lambda_exec.arn
+  handler          = "handlers/getcolors.handler"
   source_code_hash = base64encode(local.source_code_hash)
-  runtime         = "python3.12"
-  timeout         = 30
-  memory_size     = 128
-  depends_on      = [null_resource.prepare_lambda]
+  runtime          = "python3.12"
+  timeout          = 30
+  memory_size      = 128
+  depends_on       = [null_resource.prepare_lambda]
 
   environment {
     variables = {
-      DYNAMODB_ACCOUNTS_TABLE = aws_dynamodb_table.accounts.name
-      DYNAMODB_FILES_TABLE   = aws_dynamodb_table.transaction_files.name
+      DYNAMODB_ACCOUNTS_TABLE     = aws_dynamodb_table.accounts.name
+      DYNAMODB_FILES_TABLE        = aws_dynamodb_table.transaction_files.name
       DYNAMODB_TRANSACTIONS_TABLE = aws_dynamodb_table.transactions.name
-      S3_BUCKET             = aws_s3_bucket.file_storage.id
-      TESTING              = "false"
+      S3_BUCKET                   = aws_s3_bucket.file_storage.id
+      TESTING                     = "false"
     }
   }
 
@@ -343,7 +397,7 @@ resource "aws_iam_role_policy" "lambda_cloudwatch_metrics" {
         Action = [
           "cloudwatch:PutMetricData"
         ]
-        Effect = "Allow"
+        Effect   = "Allow"
         Resource = "*"
       }
     ]
@@ -411,20 +465,20 @@ resource "aws_lambda_function" "analytics_processor" {
   function_name    = "${var.project_name}-${var.environment}-analytics-processor"
   handler          = "services/analytics_processor_service.handler"
   runtime          = "python3.12"
-  role            = aws_iam_role.lambda_exec.arn
-  timeout         = 300  # 5 minutes timeout for processing
-  memory_size     = 512  # More memory for analytics processing
+  role             = aws_iam_role.lambda_exec.arn
+  timeout          = 300 # 5 minutes timeout for processing
+  memory_size      = 512 # More memory for analytics processing
   source_code_hash = base64encode(local.source_code_hash)
-  depends_on      = [null_resource.prepare_lambda]
+  depends_on       = [null_resource.prepare_lambda]
 
   environment {
     variables = {
-      ENVIRONMENT           = var.environment
-      ANALYTICS_DATA_TABLE  = aws_dynamodb_table.analytics_data.name
+      ENVIRONMENT            = var.environment
+      ANALYTICS_DATA_TABLE   = aws_dynamodb_table.analytics_data.name
       ANALYTICS_STATUS_TABLE = aws_dynamodb_table.analytics_status.name
-      TRANSACTIONS_TABLE    = aws_dynamodb_table.transactions.name
-      ACCOUNTS_TABLE        = aws_dynamodb_table.accounts.name
-      FILES_TABLE           = aws_dynamodb_table.transaction_files.name
+      TRANSACTIONS_TABLE     = aws_dynamodb_table.transactions.name
+      ACCOUNTS_TABLE         = aws_dynamodb_table.accounts.name
+      FILES_TABLE            = aws_dynamodb_table.transaction_files.name
     }
   }
 
@@ -540,20 +594,20 @@ resource "aws_lambda_function" "categories_lambda" {
   role          = aws_iam_role.categories_lambda_role.arn
   handler       = "handlers/category_operations.handler" # Updated handler
   runtime       = "python3.12"
-  timeout       = 30 # seconds
+  timeout       = 30  # seconds
   memory_size   = 256 # MB
 
-  filename         = "../../backend/lambda_deploy.zip"     # Use common deployment package
+  filename         = "../../backend/lambda_deploy.zip"    # Use common deployment package
   source_code_hash = base64encode(local.source_code_hash) # Use common source_code_hash
-  depends_on       = [null_resource.prepare_lambda]        # Add dependency
+  depends_on       = [null_resource.prepare_lambda]       # Add dependency
 
   environment {
     variables = {
-      CATEGORIES_TABLE_NAME                    = aws_dynamodb_table.categories.name # Ensure aws_dynamodb_table.categories is defined
-      TRANSACTION_CATEGORY_ASSIGNMENTS_TABLE  = aws_dynamodb_table.transaction_category_assignments.name
-      TRANSACTIONS_TABLE                       = aws_dynamodb_table.transactions.name
-      ENVIRONMENT                              = var.environment
-      LOG_LEVEL                                = "INFO"
+      CATEGORIES_TABLE_NAME                  = aws_dynamodb_table.categories.name # Ensure aws_dynamodb_table.categories is defined
+      TRANSACTION_CATEGORY_ASSIGNMENTS_TABLE = aws_dynamodb_table.transaction_category_assignments.name
+      TRANSACTIONS_TABLE                     = aws_dynamodb_table.transactions.name
+      ENVIRONMENT                            = var.environment
+      LOG_LEVEL                              = "INFO"
       # Add other necessary environment variables if any, e.g. for utils
     }
   }
@@ -572,27 +626,27 @@ resource "aws_lambda_function" "export_operations" {
   function_name    = "${var.project_name}-${var.environment}-export-operations"
   handler          = "handlers/export_operations.handler"
   runtime          = "python3.12"
-  role            = aws_iam_role.lambda_exec.arn
-  timeout         = 900  # 15 minutes for export processing
-  memory_size     = 1024  # More memory for large exports
+  role             = aws_iam_role.lambda_exec.arn
+  timeout          = 900  # 15 minutes for export processing
+  memory_size      = 1024 # More memory for large exports
   source_code_hash = base64encode(local.source_code_hash)
-  depends_on      = [null_resource.prepare_lambda]
-  
+  depends_on       = [null_resource.prepare_lambda]
+
   environment {
     variables = {
       ENVIRONMENT           = var.environment
-              FZIP_JOBS_TABLE       = aws_dynamodb_table.fzip_jobs.name
+      FZIP_JOBS_TABLE       = aws_dynamodb_table.fzip_jobs.name
       ACCOUNTS_TABLE        = aws_dynamodb_table.accounts.name
       TRANSACTIONS_TABLE    = aws_dynamodb_table.transactions.name
       CATEGORIES_TABLE_NAME = aws_dynamodb_table.categories.name
       FILE_MAPS_TABLE       = aws_dynamodb_table.file_maps.name
-      FILES_TABLE          = aws_dynamodb_table.transaction_files.name
+      FILES_TABLE           = aws_dynamodb_table.transaction_files.name
       ANALYTICS_DATA_TABLE  = aws_dynamodb_table.analytics_data.name
       FILE_STORAGE_BUCKET   = aws_s3_bucket.file_storage.id
-      EVENT_BUS_NAME       = aws_cloudwatch_event_bus.app_events.name
+      EVENT_BUS_NAME        = aws_cloudwatch_event_bus.app_events.name
     }
   }
-  
+
   tags = {
     Environment = var.environment
     Project     = var.project_name
@@ -606,31 +660,31 @@ resource "aws_lambda_function" "fzip_operations" {
   function_name    = "${var.project_name}-${var.environment}-fzip-operations"
   handler          = "handlers/fzip_operations.handler"
   runtime          = "python3.12"
-  role            = aws_iam_role.lambda_exec.arn
-  timeout         = 900  # 15 minutes for backup/restore processing
-  memory_size     = 1024  # More memory for large operations
+  role             = aws_iam_role.lambda_exec.arn
+  timeout          = 900  # 15 minutes for backup/restore processing
+  memory_size      = 1024 # More memory for large operations
   source_code_hash = base64encode(local.source_code_hash)
-  depends_on      = [null_resource.prepare_lambda]
-  publish         = true  # Enable versioning
-  
+  depends_on       = [null_resource.prepare_lambda]
+  publish          = true # Enable versioning
+
   environment {
     variables = {
-      ENVIRONMENT           = var.environment
-      FZIP_JOBS_TABLE       = aws_dynamodb_table.fzip_jobs.name
-      FZIP_PACKAGES_BUCKET  = aws_s3_bucket.fzip_packages.bucket
-      FZIP_RESTORE_PACKAGES_BUCKET = aws_s3_bucket.fzip_packages.bucket
-      ACCOUNTS_TABLE        = aws_dynamodb_table.accounts.name
-      TRANSACTIONS_TABLE    = aws_dynamodb_table.transactions.name
-      CATEGORIES_TABLE_NAME = aws_dynamodb_table.categories.name
-      FILE_MAPS_TABLE       = aws_dynamodb_table.file_maps.name
-      FILES_TABLE          = aws_dynamodb_table.transaction_files.name
-      ANALYTICS_DATA_TABLE  = aws_dynamodb_table.analytics_data.name
-      FILE_STORAGE_BUCKET   = aws_s3_bucket.file_storage.id
-      EVENT_BUS_NAME       = aws_cloudwatch_event_bus.app_events.name
+      ENVIRONMENT                            = var.environment
+      FZIP_JOBS_TABLE                        = aws_dynamodb_table.fzip_jobs.name
+      FZIP_PACKAGES_BUCKET                   = aws_s3_bucket.fzip_packages.bucket
+      FZIP_RESTORE_PACKAGES_BUCKET           = aws_s3_bucket.fzip_packages.bucket
+      ACCOUNTS_TABLE                         = aws_dynamodb_table.accounts.name
+      TRANSACTIONS_TABLE                     = aws_dynamodb_table.transactions.name
+      CATEGORIES_TABLE_NAME                  = aws_dynamodb_table.categories.name
+      FILE_MAPS_TABLE                        = aws_dynamodb_table.file_maps.name
+      FILES_TABLE                            = aws_dynamodb_table.transaction_files.name
+      ANALYTICS_DATA_TABLE                   = aws_dynamodb_table.analytics_data.name
+      FILE_STORAGE_BUCKET                    = aws_s3_bucket.file_storage.id
+      EVENT_BUS_NAME                         = aws_cloudwatch_event_bus.app_events.name
       TRANSACTION_CATEGORY_ASSIGNMENTS_TABLE = aws_dynamodb_table.transaction_category_assignments.name
     }
   }
-  
+
   tags = {
     Environment = var.environment
     Project     = var.project_name
@@ -701,27 +755,27 @@ output "lambda_transaction_operations_name" {
 
 output "lambda_analytics_operations_name" {
   description = "Name of the Analytics Operations Lambda function"
-  value = aws_lambda_function.analytics_operations.function_name
+  value       = aws_lambda_function.analytics_operations.function_name
 }
 
 output "lambda_analytics_operations_arn" {
   description = "ARN of the Analytics Operations Lambda function"
-  value = aws_lambda_function.analytics_operations.arn
+  value       = aws_lambda_function.analytics_operations.arn
 }
 
 output "lambda_analytics_operations_invoke_arn" {
   description = "Invoke ARN of the Analytics Operations Lambda function"
-  value = aws_lambda_function.analytics_operations.invoke_arn
+  value       = aws_lambda_function.analytics_operations.invoke_arn
 }
 
 output "lambda_analytics_processor_name" {
   description = "Name of the Analytics Processor Lambda function"
-  value = aws_lambda_function.analytics_processor.function_name
+  value       = aws_lambda_function.analytics_processor.function_name
 }
 
 output "lambda_analytics_processor_arn" {
   description = "ARN of the Analytics Processor Lambda function"
-  value = aws_lambda_function.analytics_processor.arn
+  value       = aws_lambda_function.analytics_processor.arn
 }
 
 output "lambda_getcolors_name" {
@@ -776,17 +830,17 @@ resource "aws_lambda_function" "file_map_operations" {
   function_name    = "${var.project_name}-${var.environment}-file-map-operations"
   handler          = "handlers/file_map_operations.handler"
   runtime          = "python3.12"
-  role            = aws_iam_role.lambda_exec.arn
-  timeout         = 30
-  memory_size     = 256
+  role             = aws_iam_role.lambda_exec.arn
+  timeout          = 30
+  memory_size      = 256
   source_code_hash = base64encode(local.source_code_hash)
   depends_on       = [null_resource.prepare_lambda]
 
   environment {
     variables = {
-      ENVIRONMENT        = var.environment
-      FILE_MAPS_TABLE   = aws_dynamodb_table.file_maps.name
-      FILES_TABLE       = aws_dynamodb_table.transaction_files.name
+      ENVIRONMENT         = var.environment
+      FILE_MAPS_TABLE     = aws_dynamodb_table.file_maps.name
+      FILES_TABLE         = aws_dynamodb_table.transaction_files.name
       FILE_STORAGE_BUCKET = aws_s3_bucket.file_storage.id
     }
   }

@@ -53,6 +53,10 @@ class ImportException(Exception):
     """Custom exception for import processing errors"""
     pass
 
+class CanceledException(Exception):
+    """Raised to indicate a user-initiated cancel should stop processing."""
+    pass
+
 
 logger = logging.getLogger(__name__)
 
@@ -743,6 +747,7 @@ class FZIPService:
             # Restore in dependency order
             
             # 1. Restore accounts first
+            self._check_cancel(restore_job)
             restore_job.current_phase = "restoring_accounts"
             restore_job.progress = 50
             update_fzip_job(restore_job)
@@ -754,6 +759,7 @@ class FZIPService:
             results['accounts'] = account_results
             
             # 2. Restore categories
+            self._check_cancel(restore_job)
             restore_job.current_phase = "restoring_categories"
             restore_job.progress = 60
             update_fzip_job(restore_job)
@@ -764,6 +770,7 @@ class FZIPService:
             results['categories'] = category_results
             
             # 3. Restore file maps
+            self._check_cancel(restore_job)
             restore_job.current_phase = "restoring_file_maps"
             restore_job.progress = 70
             update_fzip_job(restore_job)
@@ -774,6 +781,7 @@ class FZIPService:
             results['file_maps'] = file_map_results
             
             # 4. Restore transaction files
+            self._check_cancel(restore_job)
             restore_job.current_phase = "restoring_transaction_files"
             restore_job.progress = 80
             update_fzip_job(restore_job)
@@ -784,6 +792,7 @@ class FZIPService:
             results['transaction_files'] = file_results
             
             # 5. Restore transactions
+            self._check_cancel(restore_job)
             restore_job.current_phase = "restoring_transactions"
             restore_job.progress = 90
             update_fzip_job(restore_job)
@@ -809,6 +818,10 @@ class FZIPService:
                 data_summary=results
             ))
             
+        except CanceledException:
+            # Honor user cancellation without marking as failure
+            logger.info(f"Restore {restore_job.job_id} canceled by user. Halting further processing.")
+            return
         except Exception as e:
             logger.error(f"Error during data restore: {str(e)}")
             event_service.publish_event(RestoreFailedEvent(
@@ -818,6 +831,20 @@ class FZIPService:
                 error=str(e)
             ))
             raise
+
+    def _check_cancel(self, restore_job: FZIPJob) -> None:
+        """Reload job and raise CanceledException if status is RESTORE_CANCELED.
+
+        Also ensure terminal timestamp is recorded if missing.
+        """
+        latest = get_fzip_job(str(restore_job.job_id), restore_job.user_id)
+        if latest and latest.status == FZIPStatus.RESTORE_CANCELED:
+            restore_job.status = FZIPStatus.RESTORE_CANCELED
+            restore_job.current_phase = "canceled"
+            if not restore_job.completed_at:
+                restore_job.completed_at = int(datetime.now(timezone.utc).timestamp() * 1000)
+            update_fzip_job(restore_job)
+            raise CanceledException("Restore canceled by user")
     
     def _restore_accounts(self, accounts: list, user_id: str) -> Dict[str, Any]:
         """Restore accounts data to empty profile (no conflicts expected)."""

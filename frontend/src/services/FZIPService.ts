@@ -129,6 +129,13 @@ export interface FZIPRestoreListResponse {
   packageFormat?: string;
 }
 
+export interface FZIPRestoreUploadUrlResponse {
+  restoreId: string;
+  url: string;
+  fields: Record<string, string>;
+  expiresIn: number;
+}
+
 // Get API endpoint from environment variables
 const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/api`;
 
@@ -380,6 +387,20 @@ export const startFZIPRestoreProcessing = async (restoreId: string): Promise<voi
   }
 };
 
+// Get presigned POST for uploading a .fzip restore package (simplified flow)
+export const getFZIPRestoreUploadUrl = async (): Promise<FZIPRestoreUploadUrlResponse> => {
+  try {
+    const response = await authenticatedRequest(`${API_ENDPOINT}/fzip/restore/upload-url`, {
+      method: 'POST'
+    });
+    const data: FZIPRestoreUploadUrlResponse = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error getting FZIP restore upload URL:', error);
+    throw error;
+  }
+};
+
 // Create FZIP restore job
 export const createFZIPRestoreJob = async (
   request: CreateFZIPRestoreRequest = {}
@@ -441,6 +462,18 @@ export const deleteFZIPRestoreJob = async (restoreId: string): Promise<void> => 
     });
   } catch (error) {
     console.error(`Error deleting FZIP restore job ${restoreId}:`, error);
+    throw error;
+  }
+};
+
+// Cancel an in-progress restore (simplified flow)
+export const cancelFZIPRestore = async (restoreId: string): Promise<void> => {
+  try {
+    await authenticatedRequest(`${API_ENDPOINT}/fzip/restore/${restoreId}/cancel`, {
+      method: 'POST'
+    });
+  } catch (error) {
+    console.error(`Error canceling FZIP restore ${restoreId}:`, error);
     throw error;
   }
 };
