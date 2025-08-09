@@ -13,13 +13,13 @@ variable "environment" {
 variable "domain_name" {
   description = "Domain name for the application"
   type        = string
-  default     = "localhost:3000"  # Default for local development
+  default     = "localhost:3000" # Default for local development
 }
 
 variable "aws_region" {
   description = "AWS region to deploy to"
   type        = string
-  default     = "eu-west-2"  # London
+  default     = "eu-west-2" # London
 }
 
 variable "frontend_domain" {

@@ -6,9 +6,9 @@
 
 resource "aws_s3_bucket" "s3_access_logs" {
   bucket = "${var.project_name}-${var.environment}-s3-access-logs"
-  
 
-  
+
+
   tags = {
     Environment = var.environment
     Project     = var.project_name
@@ -45,19 +45,19 @@ resource "aws_s3_bucket_ownership_controls" "s3_access_logs_ownership" {
 # S3 Bucket Lifecycle Configuration
 resource "aws_s3_bucket_lifecycle_configuration" "s3_access_logs_lifecycle" {
   bucket = aws_s3_bucket.s3_access_logs.id
-  
+
   rule {
     id     = "cleanup_old_logs"
     status = "Enabled"
-    
+
     filter {
       prefix = ""
     }
-    
+
     expiration {
-      days = 90  # Keep logs for 90 days
+      days = 90 # Keep logs for 90 days
     }
-    
+
     noncurrent_version_expiration {
       noncurrent_days = 30
     }
@@ -67,7 +67,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "s3_access_logs_lifecycle" {
 # S3 Bucket Public Access Block
 resource "aws_s3_bucket_public_access_block" "s3_access_logs_public_access_block" {
   bucket = aws_s3_bucket.s3_access_logs.id
-  
+
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
@@ -77,7 +77,7 @@ resource "aws_s3_bucket_public_access_block" "s3_access_logs_public_access_block
 # S3 Bucket Policy for Access Logs - Minimal policy for security
 resource "aws_s3_bucket_policy" "s3_access_logs_policy" {
   bucket = aws_s3_bucket.s3_access_logs.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [

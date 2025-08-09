@@ -7,30 +7,30 @@
 # Accounts table
 resource "aws_dynamodb_table" "accounts" {
   name         = "${var.project_name}-${var.environment}-accounts"
-  billing_mode = "PAY_PER_REQUEST"  # On-demand capacity mode
-  hash_key     = "accountId"        # Partition key
+  billing_mode = "PAY_PER_REQUEST" # On-demand capacity mode
+  hash_key     = "accountId"       # Partition key
 
   attribute {
     name = "accountId"
-    type = "S"  # String
+    type = "S" # String
   }
 
   attribute {
     name = "userId"
-    type = "S"  # String
+    type = "S" # String
   }
 
   attribute {
     name = "createdAt"
-    type = "N"  # Changed from S to N (milliseconds since epoch)
+    type = "N" # Changed from S to N (milliseconds since epoch)
   }
 
   # Global Secondary Index for querying accounts by user
   global_secondary_index {
-    name               = "UserIdIndex"
-    hash_key           = "userId"
-    range_key          = "createdAt"
-    projection_type    = "ALL"
+    name            = "UserIdIndex"
+    hash_key        = "userId"
+    range_key       = "createdAt"
+    projection_type = "ALL"
   }
 
   # Enable point-in-time recovery for data protection
