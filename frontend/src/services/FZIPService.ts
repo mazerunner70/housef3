@@ -52,7 +52,8 @@ export enum FZIPRestoreStatus {
   VALIDATION_FAILED = "restore_validation_failed",
   PROCESSING = "restore_processing",
   COMPLETED = "restore_completed",
-  FAILED = "restore_failed"
+  FAILED = "restore_failed",
+  CANCELED = "restore_canceled"
 }
 
 export interface FZIPRestoreJob {
@@ -546,6 +547,8 @@ export const formatRestoreStatus = (status: FZIPRestoreStatus): string => {
       return 'Completed';
     case FZIPRestoreStatus.FAILED:
       return 'Failed';
+    case FZIPRestoreStatus.CANCELED:
+      return 'Canceled';
     default:
       return status;
   }

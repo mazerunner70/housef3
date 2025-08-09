@@ -31,6 +31,7 @@ class FZIPStatus(str, Enum):
     RESTORE_PROCESSING = "restore_processing"
     RESTORE_COMPLETED = "restore_completed"
     RESTORE_FAILED = "restore_failed"
+    RESTORE_CANCELED = "restore_canceled"
 
 
 class FZIPType(str, Enum):
@@ -162,6 +163,12 @@ class FZIPJob(BaseModel):
             converted_item['backupType'] = FZIPBackupType(converted_item['backupType'])
         if 'packageFormat' in converted_item:
             converted_item['packageFormat'] = FZIPFormat(converted_item['packageFormat'])
+        
+        # Ensure default dicts for nested result fields (model_construct bypasses defaults)
+        if 'validationResults' not in converted_item or converted_item.get('validationResults') is None:
+            converted_item['validationResults'] = {}
+        if 'restoreResults' not in converted_item or converted_item.get('restoreResults') is None:
+            converted_item['restoreResults'] = {}
             
         # Use model_construct to bypass validation that would convert enums back to strings
         # This preserves our enum objects instead of converting them to string values

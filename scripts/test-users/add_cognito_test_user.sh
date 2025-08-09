@@ -33,7 +33,7 @@ echo -e "${YELLOW}Adding test user to Cognito User Pool...${NC}"
 
 # Get the directory where the script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Navigate to terraform directory to get outputs
 cd "$PROJECT_ROOT/infrastructure/terraform"
