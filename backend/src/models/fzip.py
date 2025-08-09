@@ -31,6 +31,7 @@ class FZIPStatus(str, Enum):
     RESTORE_PROCESSING = "restore_processing"
     RESTORE_COMPLETED = "restore_completed"
     RESTORE_FAILED = "restore_failed"
+    RESTORE_CANCELED = "restore_canceled"
 
 
 class FZIPType(str, Enum):

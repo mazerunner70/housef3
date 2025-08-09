@@ -13,6 +13,8 @@ Provides unified API endpoints for FZIP (Financial ZIP) backup/restore functiona
 - DELETE /fzip/restore/{jobId} - Delete FZIP restore job
 - POST /fzip/restore/{jobId}/upload - Upload FZIP package and start restore
 - POST /fzip/restore/{jobId}/start - Start restore processing for validated jobs
+- POST /fzip/restore/upload-url - Generate presigned POST for restore package upload
+- POST /fzip/restore/{jobId}/cancel - Cancel an in-progress restore job
 """
 
 import json
@@ -690,12 +692,87 @@ def start_fzip_restore_handler(event: Dict[str, Any], user_id: str, job_id: str)
         }
         
     except Exception as e:
-        logger.error(f"Error uploading FZIP package: {str(e)}")
+        logger.error(f"Error starting FZIP restore: {str(e)}")
         return {
             'statusCode': 500,
-            'body': json.dumps({'error': f'Failed to upload FZIP package: {str(e)}'})
+            'body': json.dumps({'error': f'Failed to start FZIP restore: {str(e)}'})
         }
 
+
+# New simplified restore flow endpoints
+def post_fzip_restore_upload_url_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """
+    Handle POST /fzip/restore/upload-url
+    Generates a presigned POST for uploading a .fzip restore package directly to S3.
+    Key pattern: restore_packages/{userId}/{restoreId}.fzip
+    Includes metadata: x-amz-meta-userid, x-amz-meta-restoreid
+    Returns: { restoreId, url, fields, expiresIn }
+    """
+    try:
+        restore_id = str(uuid.uuid4())
+        bucket = os.environ.get('FZIP_RESTORE_PACKAGES_BUCKET', os.environ.get('FZIP_PACKAGES_BUCKET', 'housef3-dev-fzip-packages'))
+        key = f"restore_packages/{user_id}/{restore_id}.fzip"
+
+        # Limit to 500MB and include required metadata in fields/conditions
+        fields = {
+            'x-amz-meta-userid': user_id,
+            'x-amz-meta-restoreid': restore_id,
+        }
+        conditions = [
+            {'content-length-range': [1, 1024 * 1024 * 500]},
+            {'x-amz-meta-userid': user_id},
+            {'x-amz-meta-restoreid': restore_id},
+        ]
+
+        presigned = get_presigned_post_url(
+            bucket=bucket,
+            key=key,
+            expires_in=3600,
+            conditions=conditions,
+            fields=fields,
+        )
+
+        response = {
+            'restoreId': restore_id,
+            'url': presigned['url'],
+            'fields': presigned['fields'],
+            'expiresIn': 3600,
+        }
+        return create_response(200, response)
+    except Exception as e:
+        logger.error(f"Error generating restore upload URL: {str(e)}")
+        return create_response(500, {"error": "Failed to generate upload URL", "message": str(e)})
+
+
+def cancel_fzip_restore_handler(event: Dict[str, Any], user_id: str, job_id: str) -> Dict[str, Any]:
+    """
+    Handle POST /fzip/restore/{jobId}/cancel
+    Sets job status to restore_canceled and records error message.
+    """
+    try:
+        if not job_id:
+            return create_response(400, {"error": INVALID_JOB_ID_FORMAT_MESSAGE})
+
+        restore_job = get_fzip_job(job_id, user_id)
+        if not restore_job:
+            return create_response(404, {"error": INVALID_RESTORE_JOB_NOT_FOUND_MESSAGE})
+
+        # Only allow cancel if not terminal
+        if restore_job.is_completed() or restore_job.is_failed():
+            return create_response(400, {"error": f"Job already terminal with status {restore_job.status.value}"})
+
+        restore_job.status = FZIPStatus.RESTORE_CANCELED
+        restore_job.error = "Canceled by user"
+        update_fzip_job(restore_job)
+
+        return create_response(200, {
+            'jobId': str(restore_job.job_id),
+            'status': restore_job.status.value,
+            'message': 'Restore job canceled',
+        })
+    except Exception as e:
+        logger.error(f"Error canceling FZIP restore job {job_id}: {str(e)}")
+        return create_response(500, {"error": "Failed to cancel restore job", "message": str(e)})
 
 # ============================================================================
 # MAIN HANDLER
@@ -748,6 +825,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         elif route == "POST /fzip/restore/{jobId}/start":
             job_id = event.get('pathParameters', {}).get('jobId')
             return start_fzip_restore_handler(event, user_id, job_id)
+        elif route == "POST /fzip/restore/upload-url":
+            return post_fzip_restore_upload_url_handler(event, user_id)
+        elif route == "POST /fzip/restore/{jobId}/cancel":
+            job_id = event.get('pathParameters', {}).get('jobId')
+            return cancel_fzip_restore_handler(event, user_id, job_id)
         else:
             return create_response(400, {"message": f"Unsupported FZIP route: {route}"})
             

@@ -139,18 +139,18 @@ Notes:
 ## Detailed implementation steps
 
 1) Models
-   - [ ] Add `RESTORE_CANCELED` to `FZIPStatus` and update any status formatting helpers.
-   - [ ] Update frontend `FZIPRestoreStatus` to include `restore_canceled`.
+   - [x] Add `RESTORE_CANCELED` to `FZIPStatus` and update any status formatting helpers.
+   - [x] Update frontend `FZIPRestoreStatus` to include `restore_canceled`.
 
 2) Backend API
-   - [ ] Implement `post_fzip_restore_upload_url_handler` in `fzip_operations.py` using `get_presigned_post_url`.
-   - [ ] Wire route in `fzip_operations.handler` for `POST /fzip/restore/upload-url`.
-   - [ ] Implement `cancel_fzip_restore_handler` and route `POST /fzip/restore/{jobId}/cancel`.
+   - [x] Implement `post_fzip_restore_upload_url_handler` in `fzip_operations.py` using `get_presigned_post_url`.
+   - [x] Wire route in `fzip_operations.handler` for `POST /fzip/restore/upload-url`.
+   - [x] Implement `cancel_fzip_restore_handler` and route `POST /fzip/restore/{jobId}/cancel`.
 
 3) Restore consumer Lambda
-   - [ ] Create `backend/src/consumers/restore_consumer.py` with S3 event handler.
-   - [ ] Parse metadata and key to determine `userId` and `restoreId`.
-   - [ ] Create/update `FZIPJob` with `RESTORE_VALIDATING`, run validation, then set to `RESTORE_VALIDATION_PASSED` or `RESTORE_VALIDATION_FAILED` and persist `validationResults`.
+   - [x] Create `backend/src/consumers/restore_consumer.py` with S3 event handler.
+   - [x] Parse metadata and key to determine `userId` and `restoreId`.
+   - [x] Create/update `FZIPJob` with `RESTORE_VALIDATING`, run validation, then set to `RESTORE_VALIDATION_PASSED` or `RESTORE_VALIDATION_FAILED` and persist `validationResults`.
 
 4) Service cancel checks
    - [ ] In `FZIPService._restore_data`, before each phase, re-fetch job by id and exit early with `RESTORE_CANCELED` if status changed.
@@ -163,7 +163,7 @@ Notes:
 
 6) Frontend services
    - [ ] Add `getFZIPRestoreUploadUrl` and `cancelFZIPRestore` in `FZIPService.ts`.
-   - [ ] Update `formatRestoreStatus` to include Canceled.
+   - [x] Update `formatRestoreStatus` to include Canceled.
 
 7) Frontend UI
    - [ ] Update `FZIPRestoreUpload.tsx` to use presigned upload and show immediate feedback.
