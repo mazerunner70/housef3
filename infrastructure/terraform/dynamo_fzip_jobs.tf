@@ -166,6 +166,29 @@ resource "aws_s3_bucket_lifecycle_configuration" "fzip_packages_lifecycle" {
   }
 }
 
+# Configure CORS for browser uploads - required for presigned POST uploads
+resource "aws_s3_bucket_cors_configuration" "fzip_packages_cors" {
+  bucket = aws_s3_bucket.fzip_packages.id
+
+  cors_rule {
+    allowed_headers = [
+      "*",
+      "Content-Type",
+      "x-amz-meta-userid",
+      "x-amz-meta-restoreid",
+      "x-amz-date",
+      "x-amz-algorithm",
+      "x-amz-credential",
+      "x-amz-security-token",
+      "authorization"
+    ]
+    allowed_methods = ["POST"]
+    allowed_origins = ["https://${aws_cloudfront_distribution.frontend.domain_name}", "http://localhost:5173"]
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3600
+  }
+}
+
 # S3 Event notification for restore packages prefix to trigger restore consumer
 resource "aws_s3_bucket_notification" "fzip_restore_notifications" {
   bucket = aws_s3_bucket.fzip_packages.id
@@ -197,38 +220,6 @@ resource "aws_s3_bucket_policy" "fzip_packages_policy" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "DenyUnencryptedObjectUploads"
-        Effect = "Deny"
-        Principal = {
-          AWS = "*"
-        }
-        Action = [
-          "s3:PutObject"
-        ]
-        Resource = "${aws_s3_bucket.fzip_packages.arn}/*"
-        Condition = {
-          StringNotEquals = {
-            "s3:x-amz-server-side-encryption" = "AES256"
-          }
-        }
-      },
-      {
-        Sid    = "DenyIncorrectEncryptionHeader"
-        Effect = "Deny"
-        Principal = {
-          AWS = "*"
-        }
-        Action = [
-          "s3:PutObject"
-        ]
-        Resource = "${aws_s3_bucket.fzip_packages.arn}/*"
-        Condition = {
-          StringNotEquals = {
-            "s3:x-amz-server-side-encryption" = "AES256"
-          }
-        }
-      },
-      {
         Sid    = "DenyNonHTTPSRequests"
         Effect = "Deny"
         Principal = {
@@ -244,8 +235,7 @@ resource "aws_s3_bucket_policy" "fzip_packages_policy" {
             "aws:SecureTransport" = "false"
           }
         }
-      }
-      ,
+      },
       {
         Sid    = "AllowLambdaExecRoleAccess"
         Effect = "Allow"
@@ -254,7 +244,6 @@ resource "aws_s3_bucket_policy" "fzip_packages_policy" {
         }
         Action = [
           "s3:GetObject",
-          "s3:HeadObject",
           "s3:PutObject"
         ]
         Resource = "${aws_s3_bucket.fzip_packages.arn}/*"

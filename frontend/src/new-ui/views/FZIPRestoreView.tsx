@@ -10,14 +10,15 @@ const FZIPRestoreView: React.FC = () => {
     restoreJobs,
     isLoading,
     error,
+    // profileError and profileSummary are not used in simplified flow
+    // but remain available for backward compatibility if needed
     profileError,
     profileSummary,
-    createRestoreJob,
-    uploadFile,
     refreshRestoreJobs,
     deleteRestoreJob,
     getRestoreStatus,
     startRestoreProcessing,
+    cancelRestore,
     hasMore,
     loadMore,
     clearErrors
@@ -29,46 +30,17 @@ const FZIPRestoreView: React.FC = () => {
     message: string;
   } | null>(null);
 
-  const handleCreateRestore = async (request: any = {}) => {
-    try {
-      const response = await createRestoreJob(request);
-      setNotification({
-        type: 'success',
-        message: 'Restore job created successfully! You can now upload your FZIP file.'
-      });
-      setTimeout(() => setNotification(null), 5000);
-      return response;
-    } catch (error) {
-      if (error instanceof Error && error.message === 'PROFILE_NOT_EMPTY') {
-        // Profile error is handled separately in the component
-        return Promise.reject(error);
-      }
-      
-      setNotification({
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to create restore job'
-      });
-      setTimeout(() => setNotification(null), 5000);
-      throw error;
-    }
-  };
-
-  const handleUploadFile = async (restoreId: string, file: File, uploadUrl: any) => {
-    try {
-      await uploadFile(restoreId, file, uploadUrl);
-      setNotification({
-        type: 'success',
-        message: 'File uploaded successfully! Validation and restore will begin automatically.'
-      });
-      setShowUpload(false); // Hide upload form after successful upload
-      setTimeout(() => setNotification(null), 5000);
-    } catch (error) {
-      setNotification({
-        type: 'error',
-        message: error instanceof Error ? error.message : 'File upload failed'
-      });
-      setTimeout(() => setNotification(null), 5000);
-    }
+  const handleUploaded = async () => {
+    console.log('handleUploaded called');
+    setNotification({
+      type: 'success',
+      message: 'Uploaded; validation will start automatically.'
+    });
+    setShowUpload(false);
+    setTimeout(() => setNotification(null), 5000);
+    console.log('Calling refreshRestoreJobs...');
+    await refreshRestoreJobs();
+    console.log('refreshRestoreJobs completed');
   };
 
   const handleDelete = async (restoreId: string) => {
@@ -204,8 +176,7 @@ const FZIPRestoreView: React.FC = () => {
             </div>
             
             <FZIPRestoreUpload
-              onCreateRestore={handleCreateRestore}
-              onUploadFile={handleUploadFile}
+              onUploaded={handleUploaded}
               isLoading={isLoading}
               profileError={profileError}
               profileSummary={profileSummary}
@@ -233,6 +204,7 @@ const FZIPRestoreView: React.FC = () => {
             onDelete={handleDelete}
             onRefreshStatus={getRestoreStatus}
             onStartRestore={startRestoreProcessing}
+            onCancelRestore={cancelRestore}
             hasMore={hasMore}
             onLoadMore={loadMore}
           />

@@ -1,0 +1,34 @@
+---
+description: Global conventions for the entire monorepo
+globs: 
+alwaysApply: true
+---
+
+# Monorepo Conventions
+
+## Global Standards
+- Use absolute paths when possible in tool calls
+- Follow the established folder structure
+- Each major component (backend, frontend, infrastructure) has its own build/test scripts
+- Documentation goes in docs/ folder
+- Design decisions should be documented in docs/
+
+## Project Structure
+- backend/ - Python backend with Lambda functions
+- frontend/ - React/TypeScript frontend
+- infrastructure/ - Terraform infrastructure code
+- docs/ - All design and API documentation
+- scripts/ - Build, test, and utility scripts
+
+## Development Workflow
+- Test changes thoroughly before committing
+- Update documentation when making architectural changes
+- Use component-specific build scripts
+- Follow component-specific conventions (see other rules)
+
+## Code Change Standards
+- NEVER edit code without explaining why you have chosen that approach
+- Always provide evidence for your diagnosis before implementing solutions
+- Prefer solutions where you have concrete evidence of the root cause
+- Document your reasoning: what you found, why this fix addresses it, what evidence supports this approach
+- Avoid speculative fixes - investigate and gather evidence first

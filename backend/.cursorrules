@@ -1,0 +1,36 @@
+# Backend-specific Cursor rules
+
+## Code Organization
+- Always put code interacting with DynamoDB into db_utils
+- Use Python 3.12 runtime for all Lambda functions
+- Always activate the backend folder virtual environment during builds
+- Use python3 when running Python commands
+
+## Testing
+- Create unit tests that fail if data isn't being handled correctly
+- When debugging enum conversion issues, create comprehensive unit tests
+- Don't add defensive checks for runtime errors - diagnose and fix the root cause
+- Use `type(obj).__name__` to check exact type names for string-based enums
+
+## DynamoDB and Pydantic Models
+- When converting DynamoDB items to Pydantic models with enums:
+  1. Copy the item to avoid modifying original
+  2. Manually convert string values to enum objects using `EnumClass(string_value)`
+  3. Use `model_construct(**converted_item)` instead of `model_validate()` to preserve enum objects
+- Remember that `use_enum_values=True` in ConfigDict makes `model_validate()` convert enums back to strings
+
+## File Structure
+```
+backend/src/
+├── handlers/          # Lambda handlers
+├── models/           # Pydantic models
+├── services/         # Business logic services
+├── utils/            # Utility functions (especially db_utils for DynamoDB)
+└── consumers/        # Event consumers
+```
+
+## Dependencies
+- Use requirements.txt for main dependencies
+- Use requirements-lambda.txt for Lambda-specific packages
+- Use requirements-dev.txt for development dependencies
+- Use requirements-test.txt for testing dependencies

@@ -1,0 +1,39 @@
+---
+description: Frontend React/TypeScript development rules
+globs: frontend/**
+alwaysApply: false
+---
+
+# Frontend Development Conventions
+
+## File Structure
+- frontend/src/components/ - OLD components (no new files)
+- frontend/src/new-ui/ - NEW modern UI components
+  - new-ui/components/ - Reusable UI components
+  - new-ui/views/ - Page-level components
+  - new-ui/layouts/ - Layout components
+  - new-ui/hooks/ - Custom React hooks
+  - new-ui/styles/ - Global styles/themes
+
+## Component Organization
+- Use new-ui/ for all new components
+- Keep old components in components/ but don't add new ones
+- Follow the established new-ui directory structure
+- Separate business logic into hooks and services
+
+## Testing
+- Run tests via frontend/fe_unit_tests.sh
+- Jest configuration in jest.config.mjs
+- Test files in __tests__/ directories
+- Mock external dependencies appropriately
+
+## Services and Types
+- Keep services in frontend/src/services/
+- TypeScript types in frontend/src/types/
+- Use proper TypeScript patterns
+
+## UI Standards
+- Follow modern UI design patterns
+- Use the established theme system
+- Ensure responsive design
+- Maintain consistent styling across new-ui components

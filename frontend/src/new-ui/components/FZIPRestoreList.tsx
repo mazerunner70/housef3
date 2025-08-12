@@ -11,6 +11,7 @@ interface FZIPRestoreListProps {
   onDelete: (restoreId: string) => Promise<void>;
   onRefreshStatus: (restoreId: string) => Promise<FZIPRestoreJob>;
   onStartRestore: (restoreId: string) => Promise<void>;
+  onCancelRestore?: (restoreId: string) => Promise<void>;
   hasMore?: boolean;
   onLoadMore?: () => Promise<void>;
 }
@@ -21,11 +22,16 @@ const FZIPRestoreList: React.FC<FZIPRestoreListProps> = ({
   onDelete,
   onRefreshStatus,
   onStartRestore,
+  onCancelRestore,
   hasMore = false,
   onLoadMore
 }) => {
   const [processingJobs, setProcessingJobs] = useState<Set<string>>(new Set());
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    isOpen: boolean;
+    restoreId: string;
+  }>({ isOpen: false, restoreId: '' });
+  const [cancelConfirmation, setCancelConfirmation] = useState<{
     isOpen: boolean;
     restoreId: string;
   }>({ isOpen: false, restoreId: '' });
@@ -73,6 +79,19 @@ const FZIPRestoreList: React.FC<FZIPRestoreListProps> = ({
       setDeleteConfirmation({ isOpen: false, restoreId: '' });
     } catch (error) {
       console.error('Delete failed:', error);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!onCancelRestore) {
+      setCancelConfirmation({ isOpen: false, restoreId: '' });
+      return;
+    }
+    try {
+      await onCancelRestore(cancelConfirmation.restoreId);
+      setCancelConfirmation({ isOpen: false, restoreId: '' });
+    } catch (error) {
+      console.error('Cancel failed:', error);
     }
   };
 
@@ -268,6 +287,23 @@ const FZIPRestoreList: React.FC<FZIPRestoreListProps> = ({
                     Start Restore
                   </Button>
                 )}
+                {onCancelRestore && (
+                  // Show Cancel for any non-terminal status (uploaded/validating/validation passed/processing)
+                  [
+                    FZIPRestoreStatus.UPLOADED,
+                    FZIPRestoreStatus.VALIDATING,
+                    FZIPRestoreStatus.VALIDATION_PASSED,
+                    FZIPRestoreStatus.PROCESSING
+                  ].includes(job.status) && (
+                  <Button
+                    variant="secondary"
+                    size="compact"
+                    onClick={() => setCancelConfirmation({ isOpen: true, restoreId: job.jobId })}
+                  >
+                    Cancel
+                  </Button>
+                  )
+                )}
                 <Button
                   variant="danger"
                   size="compact"
@@ -306,6 +342,17 @@ const FZIPRestoreList: React.FC<FZIPRestoreListProps> = ({
         onConfirm={handleDelete}
         onCancel={() => setDeleteConfirmation({ isOpen: false, restoreId: '' })}
         type="danger"
+      />
+
+      <ConfirmationModal
+        isOpen={cancelConfirmation.isOpen}
+        title="Cancel Restore"
+        message="Are you sure you want to cancel this restore? It may stop mid-phase."
+        confirmButtonText="Cancel Restore"
+        cancelButtonText="Keep Running"
+        onConfirm={handleCancel}
+        onCancel={() => setCancelConfirmation({ isOpen: false, restoreId: '' })}
+        type="warning"
       />
     </div>
   );

@@ -1,21 +1,25 @@
-import React, { useState, useRef } from 'react';
-import { CreateFZIPRestoreResponse } from '../../services/FZIPService';
+import React, { useRef, useState } from 'react';
+import { getFZIPRestoreUploadUrl } from '../../services/FZIPService';
 import Button from './Button';
 import './FZIPRestoreUpload.css';
 
 interface FZIPRestoreUploadProps {
-  onCreateRestore: () => Promise<CreateFZIPRestoreResponse>;
-  onUploadFile: (restoreId: string, file: File, uploadUrl: CreateFZIPRestoreResponse['uploadUrl']) => Promise<void>;
+  onUploaded?: () => void | Promise<void>;
   isLoading?: boolean;
   disabled?: boolean;
   profileError?: string | null;
-  profileSummary?: CreateFZIPRestoreResponse['profileSummary'] | null;
+  profileSummary?: {
+    accounts_count: number;
+    transactions_count: number;
+    categories_count: number;
+    file_maps_count: number;
+    transaction_files_count: number;
+  } | null;
   onClearErrors?: () => void;
 }
 
 const FZIPRestoreUpload: React.FC<FZIPRestoreUploadProps> = ({
-  onCreateRestore,
-  onUploadFile,
+  onUploaded,
   isLoading = false,
   disabled = false,
   profileError,
@@ -27,6 +31,7 @@ const FZIPRestoreUpload: React.FC<FZIPRestoreUploadProps> = ({
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleFileSelect = (file: File) => {
     // Validate file type
@@ -80,12 +85,32 @@ const FZIPRestoreUpload: React.FC<FZIPRestoreUploadProps> = ({
     setUploadProgress(0);
 
     try {
-      // Create restore job
-      const restoreResponse = await onCreateRestore();
-      setUploadProgress(25);
+      // Get presigned POST for direct S3 upload
+      const { url, fields } = await getFZIPRestoreUploadUrl();
 
-      // Upload file
-      await onUploadFile(restoreResponse.restoreId, selectedFile, restoreResponse.uploadUrl);
+      // Prepare form data
+      const formData = new FormData();
+      Object.entries(fields).forEach(([key, value]) => formData.append(key, value));
+      formData.append('file', selectedFile);
+
+      // Start upload with abort capability
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
+      // We cannot track true byte progress with fetch; show stepped progress
+      setUploadProgress(50);
+
+      const uploadResponse = await fetch(url, {
+        method: 'POST',
+        body: formData,
+        signal: abortController.signal
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error(`Upload failed: ${uploadResponse.status} ${uploadResponse.statusText}`);
+      }
+
+      console.log('Upload successful, status:', uploadResponse.status);
       setUploadProgress(100);
 
       // Reset form
@@ -93,11 +118,30 @@ const FZIPRestoreUpload: React.FC<FZIPRestoreUploadProps> = ({
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
+
+      // Notify parent to refresh list; validation will start automatically server-side
+      console.log('Calling onUploaded callback...');
+      if (onUploaded) {
+        await onUploaded();
+        console.log('onUploaded callback completed');
+      } else {
+        console.warn('No onUploaded callback provided');
+      }
     } catch (error) {
       console.error('Upload failed:', error);
       setUploadProgress(0);
     } finally {
+      abortControllerRef.current = null;
       setIsUploading(false);
+    }
+  };
+
+  const handleCancelUpload = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -159,7 +203,7 @@ const FZIPRestoreUpload: React.FC<FZIPRestoreUploadProps> = ({
             <p><strong>Suggestion:</strong> Please use a new user account or clear all existing data before attempting to restore.</p>
             <Button
               variant="secondary"
-              size="small"
+              size="compact"
               onClick={onClearErrors}
             >
               Try Again
@@ -195,7 +239,7 @@ const FZIPRestoreUpload: React.FC<FZIPRestoreUploadProps> = ({
                 </div>
                 <Button
                   variant="secondary"
-                  size="small"
+                  size="compact"
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedFile(null);
@@ -225,7 +269,7 @@ const FZIPRestoreUpload: React.FC<FZIPRestoreUploadProps> = ({
           {isUploading && (
             <div className="upload-progress">
               <div className="progress-info">
-                <span>Uploading and processing...</span>
+                <span>Uploading to S3...</span>
                 <span>{uploadProgress}%</span>
               </div>
               <div className="progress-bar">
@@ -233,6 +277,16 @@ const FZIPRestoreUpload: React.FC<FZIPRestoreUploadProps> = ({
                   className="progress-fill"
                   style={{ width: `${uploadProgress}%` }}
                 />
+              </div>
+              <div className="progress-actions">
+                <Button
+                  variant="secondary"
+                  size="compact"
+                  onClick={handleCancelUpload}
+                  disabled={!isUploading}
+                >
+                  Cancel Upload
+                </Button>
               </div>
             </div>
           )}
@@ -242,7 +296,6 @@ const FZIPRestoreUpload: React.FC<FZIPRestoreUploadProps> = ({
               variant="primary"
               onClick={handleUpload}
               disabled={!selectedFile || isFormDisabled}
-              loading={isUploading}
             >
               {isUploading ? 'Uploading...' : 'Start Restore'}
             </Button>

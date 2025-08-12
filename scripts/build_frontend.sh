@@ -23,6 +23,10 @@ if [ ! -d "node_modules" ]; then
   npm install
 fi
 
+# Run frontend unit tests before building
+echo "Running frontend unit tests..."
+bash "$PROJECT_ROOT/frontend/fe_unit_tests.sh"
+
 # Build the application
 echo "Building frontend application..."
 npm run build

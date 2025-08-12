@@ -138,6 +138,34 @@ class TestFZIPJobDynamoDBConversion(unittest.TestCase):
         self.assertEqual(fzip_job.backup_type.value, 'complete')
         self.assertEqual(fzip_job.package_format.value, 'fzip')
 
+    def test_json_and_dynamodb_serialization_restore_canceled(self):
+        """Test JSON and DynamoDB serialization for RESTORE_CANCELED status."""
+        job = FZIPJob(
+            jobId=uuid.uuid4(),
+            userId='user-abc',
+            jobType=FZIPType.RESTORE,
+            status=FZIPStatus.RESTORE_CANCELED,
+            packageFormat=FZIPFormat.FZIP
+        )
+
+        # model_dump should serialize enums to their values due to use_enum_values=True
+        dumped = job.model_dump(by_alias=True)
+        self.assertEqual(dumped['status'], 'restore_canceled')
+        self.assertEqual(dumped['jobType'], 'restore')
+        self.assertEqual(dumped['packageFormat'], 'fzip')
+
+        # to_dynamodb_item should also serialize to strings
+        ddb_item = job.to_dynamodb_item()
+        self.assertEqual(ddb_item['status'], 'restore_canceled')
+        self.assertEqual(ddb_item['jobType'], 'restore')
+        self.assertEqual(ddb_item['packageFormat'], 'fzip')
+
+        # Round trip back to model
+        round_trip = FZIPJob.from_dynamodb_item(ddb_item)
+        self.assertIsInstance(round_trip.status, FZIPStatus)
+        self.assertEqual(round_trip.status, FZIPStatus.RESTORE_CANCELED)
+        self.assertEqual(round_trip.status.value, 'restore_canceled')
+
 
 if __name__ == '__main__':
     unittest.main()
