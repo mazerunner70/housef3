@@ -701,47 +701,57 @@ def start_fzip_restore_handler(event: Dict[str, Any], user_id: str, job_id: str)
 
 # New simplified restore flow endpoints
 def post_fzip_restore_upload_url_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
-    """
-    Handle POST /fzip/restore/upload-url
-    Generates a presigned POST for uploading a .fzip restore package directly to S3.
-    Key pattern: restore_packages/{userId}/{restoreId}.fzip
-    Includes metadata: x-amz-meta-userid, x-amz-meta-restoreid
-    Returns: { restoreId, url, fields, expiresIn }
-    """
+    """Generate a presigned URL for direct S3 upload of FZIP restore package."""
     try:
+        # Generate restore ID (equivalent to file_id in file operations)
         restore_id = str(uuid.uuid4())
         bucket = os.environ.get('FZIP_RESTORE_PACKAGES_BUCKET', os.environ.get('FZIP_PACKAGES_BUCKET', 'housef3-dev-fzip-packages'))
         key = f"restore_packages/{user_id}/{restore_id}.fzip"
-
-        # Limit to 500MB and include required metadata in fields/conditions
+        content_type = 'application/zip'  # FZIP files are ZIP files
+        
+        # Prepare fields for presigned URL (copying file operations pattern)
         fields = {
+            'Content-Type': content_type,
+            'key': key,
             'x-amz-meta-userid': user_id,
-            'x-amz-meta-restoreid': restore_id,
+            'x-amz-meta-restoreid': restore_id
         }
+        
+        # Define policy conditions using AWS-documented format (copying file operations pattern)
         conditions = [
-            {'content-length-range': [1, 1024 * 1024 * 500]},
-            {'x-amz-meta-userid': user_id},
-            {'x-amz-meta-restoreid': restore_id},
+            ['starts-with', '$Content-Type', ''],
+            ['starts-with', '$key', f"restore_packages/{user_id}/"],  # Ensure key starts with correct prefix
+            ['eq', '$x-amz-meta-userid', user_id],
+            ['eq', '$x-amz-meta-restoreid', restore_id],
+            ['content-length-range', 1, 1024 * 1024 * 500]  # 500MB limit
         ]
-
-        presigned = get_presigned_post_url(
-            bucket=bucket,
-            key=key,
-            expires_in=3600,
+            
+        # Log the complete conditions and fields for debugging (copying file operations pattern)
+        logger.info(f"S3 policy conditions: {json.dumps(conditions)}")
+        logger.info(f"S3 policy fields: {json.dumps(fields)}")
+            
+        # Get presigned post data with all fields pre-populated (copying file operations pattern)
+        presigned_data = get_presigned_post_url(
+            bucket, 
+            key, 
+            3600,
             conditions=conditions,
-            fields=fields,
+            fields=fields
         )
-
-        response = {
-            'restoreId': restore_id,
-            'url': presigned['url'],
-            'fields': presigned['fields'],
-            'expiresIn': 3600,
-        }
-        return create_response(200, response)
+        
+        logger.info(f"Generated presigned URL data: {json.dumps(presigned_data)}")
+        
+        return create_response(200, {
+            'url': presigned_data['url'],
+            'fields': presigned_data['fields'],
+            'restoreId': restore_id,  # Use the generated restore_id
+            'expires': 3600  # URL expires in 1 hour
+        })
+    except ValueError as ve:
+        return handle_error(400, str(ve))
     except Exception as e:
-        logger.error(f"Error generating restore upload URL: {str(e)}")
-        return create_response(500, {"error": "Failed to generate upload URL", "message": str(e)})
+        logger.error(f"Error generating S3 upload URL: {str(e)}")
+        return handle_error(500, "Error generating S3 upload URL")
 
 
 def cancel_fzip_restore_handler(event: Dict[str, Any], user_id: str, job_id: str) -> Dict[str, Any]:

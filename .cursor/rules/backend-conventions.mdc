@@ -1,0 +1,37 @@
+---
+description: Backend Python development rules
+globs: backend/**
+alwaysApply: false
+---
+
+# Backend Development Conventions
+
+## Code Organization
+- Always put DynamoDB interaction code in db_utils
+- Use Python 3.12 runtime for Lambda functions
+- Activate backend venv during builds
+- Use python3 command prefix
+
+## Architecture
+- handlers/ - Lambda function handlers
+- models/ - Pydantic models with proper enum handling
+- services/ - Business logic
+- utils/ - Utilities (especially db_utils for DynamoDB)
+- consumers/ - Event consumers
+
+## Testing
+- Run tests via backend/run_tests.sh
+- Create failing unit tests before fixing issues
+- Don't add defensive checks - fix root causes
+- Use type(obj).__name__ for enum type checking
+
+## DynamoDB & Pydantic
+- Use model_construct() instead of model_validate() for enum preservation
+- Manual enum conversion: EnumClass(string_value)
+- Remember use_enum_values=True affects model_validate()
+- Copy DynamoDB items before conversion to avoid modifying originals
+
+## Error Handling
+- Diagnose and fix root causes instead of adding defensive checks
+- When encountering enum errors, create comprehensive unit tests
+- Test that .value attribute access works without AttributeError

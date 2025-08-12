@@ -4,12 +4,12 @@ import {
   FZIPRestoreStatus,
   CreateFZIPRestoreRequest,
   CreateFZIPRestoreResponse,
-  createFZIPRestoreJob,
   getFZIPRestoreStatus,
   listFZIPRestoreJobs,
   deleteFZIPRestoreJob,
-  uploadFZIPPackage,
-  startFZIPRestoreProcessing
+  startFZIPRestoreProcessing,
+  getFZIPRestoreUploadUrl,
+  cancelFZIPRestore
 } from '../../services/FZIPService';
 
 export interface UseFZIPRestoreResult {
@@ -18,12 +18,14 @@ export interface UseFZIPRestoreResult {
   error: string | null;
   profileError: string | null;
   profileSummary: CreateFZIPRestoreResponse['profileSummary'] | null;
+  // Backward compat types remain but functions are no-ops in simplified flow
   createRestoreJob: (request?: CreateFZIPRestoreRequest) => Promise<CreateFZIPRestoreResponse>;
   uploadFile: (restoreId: string, file: File, uploadUrl: CreateFZIPRestoreResponse['uploadUrl']) => Promise<void>;
   refreshRestoreJobs: () => Promise<void>;
   deleteRestoreJob: (restoreId: string) => Promise<void>;
   getRestoreStatus: (restoreId: string) => Promise<FZIPRestoreJob>;
   startRestoreProcessing: (restoreId: string) => Promise<void>;
+  cancelRestore: (restoreId: string) => Promise<void>;
   hasMore: boolean;
   loadMore: () => Promise<void>;
   clearErrors: () => void;
@@ -89,84 +91,42 @@ export const useFZIPRestore = (): UseFZIPRestoreResult => {
   }, [hasMore, isLoading, loadRestoreJobs]);
 
   const createRestoreJob = useCallback(async (
-    request: CreateFZIPRestoreRequest = {}
+    _request: CreateFZIPRestoreRequest = {}
   ): Promise<CreateFZIPRestoreResponse> => {
+    // New flow: directly get upload URL; backend creates job on S3 event
     setError(null);
-    setProfileError(null);
-    setProfileSummary(null);
-    
     try {
-      const response = await createFZIPRestoreJob(request);
-      
-      // Defensive check for response
-      if (!response || !response.restoreId) {
-        throw new Error('Invalid response from restore service');
-      }
-      
-      // Check for profile not empty error
-      if (response.profileSummary) {
-        setProfileError('Financial profile is not empty. Restore requires an empty profile.');
-        setProfileSummary(response.profileSummary);
-        throw new Error('PROFILE_NOT_EMPTY');
-      }
-      
-      // Add new restore job to the beginning of the list
-      const newRestoreJob: FZIPRestoreJob = {
-        jobId: response.restoreId,
-        status: response.status || FZIPRestoreStatus.UPLOADED,
+      const { restoreId, url, fields, expiresIn } = await getFZIPRestoreUploadUrl();
+      // Optimistically add job placeholder
+      const placeholderJob: FZIPRestoreJob = {
+        jobId: restoreId,
+        status: FZIPRestoreStatus.UPLOADED,
         createdAt: Date.now(),
         progress: 0,
-        currentPhase: ''
+        currentPhase: 'awaiting_upload'
       };
-      
-      setRestoreJobs(prev => [newRestoreJob, ...prev]);
-      return response;
+      setRestoreJobs(prev => [placeholderJob, ...prev]);
+      return {
+        restoreId,
+        status: FZIPRestoreStatus.UPLOADED,
+        message: 'Upload URL generated',
+        uploadUrl: { url, fields },
+        suggestion: `Upload URL expires in ${expiresIn} seconds`
+      };
     } catch (err) {
-      if (err instanceof Error && err.message === 'PROFILE_NOT_EMPTY') {
-        // Don't set error for profile not empty - it's handled separately
-        throw err;
-      }
-      
-      let errorMessage = 'Failed to create restore job';
-      if (err instanceof Error) {
-        if (err.message.includes('404') || err.message.includes('Not Found')) {
-          errorMessage = 'Restore service is not available. Please contact support.';
-        } else {
-          errorMessage = err.message;
-        }
-      }
+      const errorMessage = err instanceof Error ? err.message : 'Failed to get upload URL';
       setError(errorMessage);
       throw new Error(errorMessage);
     }
   }, []);
 
+  // Not used in simplified flow; kept for compatibility if older UI calls it
   const uploadFile = useCallback(async (
-    restoreId: string,
-    file: File,
-    uploadUrl: CreateFZIPRestoreResponse['uploadUrl']
+    _restoreId: string,
+    _file: File,
+    _uploadUrl: CreateFZIPRestoreResponse['uploadUrl']
   ): Promise<void> => {
-    setError(null);
-    
-    if (!uploadUrl) {
-      throw new Error('No upload URL provided');
-    }
-    
-    try {
-      await uploadFZIPPackage(restoreId, file, uploadUrl);
-      
-      // Update restore job status
-      setRestoreJobs(prev =>
-        prev.map(job =>
-          job.jobId === restoreId
-            ? { ...job, status: FZIPRestoreStatus.VALIDATING, progress: 10, packageSize: file.size }
-            : job
-        )
-      );
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to upload file';
-      setError(errorMessage);
-      throw new Error(errorMessage);
-    }
+    return Promise.resolve();
   }, []);
 
   const deleteRestoreJob = useCallback(async (restoreId: string): Promise<void> => {
@@ -224,6 +184,24 @@ export const useFZIPRestore = (): UseFZIPRestoreResult => {
     }
   }, []);
 
+  const cancelRestore = useCallback(async (restoreId: string): Promise<void> => {
+    setError(null);
+    try {
+      await cancelFZIPRestore(restoreId);
+      setRestoreJobs(prev =>
+        prev.map(job =>
+          job.jobId === restoreId
+            ? { ...job, status: FZIPRestoreStatus.CANCELED, currentPhase: 'canceled', progress: job.progress }
+            : job
+        )
+      );
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to cancel restore';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    }
+  }, []);
+
   const clearErrors = useCallback(() => {
     setError(null);
     setProfileError(null);
@@ -247,6 +225,7 @@ export const useFZIPRestore = (): UseFZIPRestoreResult => {
     deleteRestoreJob,
     getRestoreStatus,
     startRestoreProcessing,
+    cancelRestore,
     hasMore,
     loadMore,
     clearErrors

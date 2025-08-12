@@ -153,42 +153,42 @@ Notes:
    - [x] Create/update `FZIPJob` with `RESTORE_VALIDATING`, run validation, then set to `RESTORE_VALIDATION_PASSED` or `RESTORE_VALIDATION_FAILED` and persist `validationResults`.
 
 4) Service cancel checks
-   - [ ] In `FZIPService._restore_data`, before each phase, re-fetch job by id and exit early with `RESTORE_CANCELED` if status changed.
-   - [ ] Ensure idempotency and safe early exit.
+   - [x] In `FZIPService._restore_data`, before each phase, re-fetch job by id and exit early with `RESTORE_CANCELED` if status changed.
+   - [x] Ensure idempotency and safe early exit.
 
 5) Terraform
-   - [ ] Add consumer Lambda + permissions.
-   - [ ] Add S3 event notification on restore bucket (prefix `restore_packages/`).
-   - [ ] Add API routes/methods for new endpoints.
+   - [x] Add consumer Lambda + permissions.
+   - [x] Add S3 event notification on restore bucket (prefix `restore_packages/`).
+   - [x] Add API routes/methods for new endpoints.
 
 6) Frontend services
-   - [ ] Add `getFZIPRestoreUploadUrl` and `cancelFZIPRestore` in `FZIPService.ts`.
+   - [x] Add `getFZIPRestoreUploadUrl` and `cancelFZIPRestore` in `FZIPService.ts`.
    - [x] Update `formatRestoreStatus` to include Canceled.
 
 7) Frontend UI
-   - [ ] Update `FZIPRestoreUpload.tsx` to use presigned upload and show immediate feedback.
-   - [ ] Update `FZIPRestoreList.tsx` to show statuses, enable Start and Cancel appropriately, keep polling.
-   - [ ] Update `FZIPRestoreView.tsx` to remove reliance on old create/upload flow.
+   - [x] Update `FZIPRestoreUpload.tsx` to use presigned upload and show immediate feedback.
+   - [x] Update `FZIPRestoreList.tsx` to show statuses, enable Start and Cancel appropriately, keep polling.
+   - [x] Update `FZIPRestoreView.tsx` to remove reliance on old create/upload flow.
 
 8) Backward compatibility (optional)
-   - [ ] Keep old `POST /fzip/restore` and `/upload` handlers for a deprecation period (hidden in UI).
-   - [ ] Add metrics to observe usage before removal.
+   - [x] Keep old `POST /fzip/restore` and `/upload` handlers for a deprecation period (hidden in UI).
+   - [x] Add metrics to observe usage before removal.
 
 ## Testing plan
 
 - Unit tests
-  - [ ] Model: enum round-tripping and JSON serialization for `RESTORE_CANCELED`.
-  - [ ] Handlers: upload URL generation; cancel handler state transitions.
-  - [ ] Consumer: S3 event parsing; validation pass/fail paths; DB writes.
-  - [ ] Service: cancel-aware early exit behavior.
+  - [x] Model: enum round-tripping and JSON serialization for `RESTORE_CANCELED`.
+  - [x] Handlers: upload URL generation; cancel handler state transitions.
+  - [x] Consumer: S3 event parsing; validation pass/fail paths; DB writes.
+  - [x] Service: cancel-aware early exit behavior.
 
 - Integration tests (backend)
   - [ ] Upload → S3 event → validation → job listed with correct status and results.
   - [ ] Start restore → progress updates → completes; cancel mid-way → transitions to `restore_canceled`.
 
 - Frontend tests
-  - [ ] Upload component uses presigned POST and handles cancel.
-  - [ ] List shows correct actions per status; Start and Cancel wire correctly; polling updates UI.
+  - [x] Upload component uses presigned POST and handles cancel.
+  - [x] List shows correct actions per status; Start and Cancel wire correctly; polling updates UI.
 
 ## Rollout
 

@@ -1,4 +1,5 @@
 import { getCurrentUser, refreshToken, isAuthenticated } from './AuthService';
+import { apiEndpoint } from '../utils/env';
 
 // FZIP Backup Types
 export enum FZIPBackupStatus {
@@ -136,8 +137,8 @@ export interface FZIPRestoreUploadUrlResponse {
   expiresIn: number;
 }
 
-// Get API endpoint from environment variables
-const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/api`;
+// Get API endpoint from centralized env util
+const API_ENDPOINT = apiEndpoint;
 
 // Helper function to handle API requests with authentication
 const authenticatedRequest = async (url: string, options: RequestInit = {}) => {

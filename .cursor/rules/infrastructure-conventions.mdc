@@ -1,0 +1,33 @@
+---
+description: Infrastructure and Terraform rules
+globs: infrastructure/**
+alwaysApply: false
+---
+
+# Infrastructure Conventions
+
+## Terraform Organization
+- All Terraform code in infrastructure/terraform/
+- Follow naming conventions: dynamo_*.tf, lambda_*.tf
+- Use consistent resource naming patterns
+- Document major infrastructure decisions
+
+## File Naming Patterns
+- dynamo_*.tf - DynamoDB table definitions
+- lambda_*.tf - Lambda function configurations
+- api_gateway.tf - API Gateway setup
+- s3_*.tf - S3 bucket configurations
+- cloudwatch_*.tf - Monitoring and logging
+
+## Development Practices
+- Use infrastructure scripts for deployment
+- Follow AWS best practices
+- Monitor resource costs and usage
+- Implement proper IAM permissions
+- Use consistent tagging strategies
+
+## Documentation
+- Document infrastructure changes in docs/
+- Maintain clear resource dependencies
+- Include deployment procedures
+- Document rollback strategies
