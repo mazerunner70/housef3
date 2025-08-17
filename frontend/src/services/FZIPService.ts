@@ -51,10 +51,56 @@ export enum FZIPRestoreStatus {
   VALIDATING = "restore_validating",
   VALIDATION_PASSED = "restore_validation_passed",
   VALIDATION_FAILED = "restore_validation_failed",
+  AWAITING_CONFIRMATION = "restore_awaiting_confirmation", // NEW
   PROCESSING = "restore_processing",
   COMPLETED = "restore_completed",
   FAILED = "restore_failed",
   CANCELED = "restore_canceled"
+}
+
+export interface FZIPRestoreSummary {
+  accounts: {
+    count: number;
+    items: Array<{
+      name: string;
+      type: string;
+    }>;
+  };
+  categories: {
+    count: number;
+    hierarchyDepth: number;
+    items: Array<{
+      name: string;
+      level: number;
+      children: number;
+    }>;
+  };
+  file_maps: {
+    count: number;
+    totalSize: string;
+  };
+  transaction_files: {
+    count: number;
+    totalSize: string;
+    fileTypes: string[];
+  };
+  transactions: {
+    count: number;
+    dateRange?: {
+      earliest: string;
+      latest: string;
+    };
+  };
+}
+
+export interface FZIPRestoreResults {
+  accounts_created: number;
+  categories_created: number;
+  file_maps_created: number;
+  transaction_files_created: number;
+  transactions_created: number;
+  total_processing_time: string;
+  warnings: string[];
 }
 
 export interface FZIPRestoreJob {
@@ -65,17 +111,15 @@ export interface FZIPRestoreJob {
   progress: number;
   currentPhase: string;
   packageSize?: number;
+  updatedAt?: number;
+  summary?: FZIPRestoreSummary;           // Only when awaiting confirmation
   validationResults?: {
     profileEmpty: boolean;
     schemaValid: boolean;
+    businessValid?: boolean;
     ready: boolean;
   };
-  restoreResults?: {
-    accounts_restored: number;
-    transactions_restored: number;
-    categories_restored: number;
-    files_restored: number;
-  };
+  restoreResults?: FZIPRestoreResults;    // Only when completed
   error?: string;
 }
 
@@ -388,6 +432,30 @@ export const startFZIPRestoreProcessing = async (restoreId: string): Promise<voi
   }
 };
 
+// Confirm restore start after user reviews summary (NEW)
+export const confirmRestoreStart = async (restoreId: string): Promise<void> => {
+  try {
+    await authenticatedRequest(`${API_ENDPOINT}/fzip/restore/${restoreId}/start`, {
+      method: 'POST'
+    });
+  } catch (error) {
+    console.error(`Error confirming restore start for ${restoreId}:`, error);
+    throw error;
+  }
+};
+
+// Retry failed restore (NEW)
+export const retryRestore = async (restoreId: string): Promise<void> => {
+  try {
+    await authenticatedRequest(`${API_ENDPOINT}/fzip/restore/${restoreId}/retry`, {
+      method: 'POST'
+    });
+  } catch (error) {
+    console.error(`Error retrying restore for ${restoreId}:`, error);
+    throw error;
+  }
+};
+
 // Get presigned POST for uploading a .fzip restore package (simplified flow)
 export const getFZIPRestoreUploadUrl = async (): Promise<FZIPRestoreUploadUrlResponse> => {
   try {
@@ -572,9 +640,11 @@ export const formatRestoreStatus = (status: FZIPRestoreStatus): string => {
     case FZIPRestoreStatus.VALIDATING:
       return 'Validating';
     case FZIPRestoreStatus.VALIDATION_PASSED:
-      return 'Validation Passed';
+      return 'Ready to Start';
     case FZIPRestoreStatus.VALIDATION_FAILED:
       return 'Validation Failed';
+    case FZIPRestoreStatus.AWAITING_CONFIRMATION:
+      return 'Awaiting Confirmation';
     case FZIPRestoreStatus.PROCESSING:
       return 'Processing';
     case FZIPRestoreStatus.COMPLETED:

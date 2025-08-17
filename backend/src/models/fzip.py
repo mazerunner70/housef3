@@ -28,6 +28,7 @@ class FZIPStatus(str, Enum):
     RESTORE_VALIDATING = "restore_validating"
     RESTORE_VALIDATION_PASSED = "restore_validation_passed"
     RESTORE_VALIDATION_FAILED = "restore_validation_failed"
+    RESTORE_AWAITING_CONFIRMATION = "restore_awaiting_confirmation"
     RESTORE_PROCESSING = "restore_processing"
     RESTORE_COMPLETED = "restore_completed"
     RESTORE_FAILED = "restore_failed"
