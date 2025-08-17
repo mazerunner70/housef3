@@ -607,12 +607,19 @@ class FZIPService:
                 manifest_data = zipf.read('manifest.json')
                 manifest = json.loads(manifest_data.decode('utf-8'))
                 
-                # Read data files
+                # Read data files (handle both compressed and uncompressed)
                 data = {}
                 for entity_type in ['accounts', 'transactions', 'categories', 'file_maps', 'transaction_files']:
                     try:
-                        entity_data = zipf.read(f'data/{entity_type}.json')
-                        data[entity_type] = json.loads(entity_data.decode('utf-8'))
+                        # Try compressed file first (.gz)
+                        try:
+                            entity_data = zipf.read(f'data/{entity_type}.json.gz')
+                            import gzip
+                            data[entity_type] = json.loads(gzip.decompress(entity_data).decode('utf-8'))
+                        except KeyError:
+                            # Fall back to uncompressed file
+                            entity_data = zipf.read(f'data/{entity_type}.json')
+                            data[entity_type] = json.loads(entity_data.decode('utf-8'))
                     except KeyError:
                         data[entity_type] = []
                 
