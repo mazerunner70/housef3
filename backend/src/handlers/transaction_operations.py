@@ -119,7 +119,7 @@ def get_transactions_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
         # Transform transactions to TransactionViewItem format with populated category information
         serialized_transactions = []
         for t in transactions_list:
-            transaction_data = t.model_dump(by_alias=True)
+            transaction_data = t.model_dump(by_alias=True, mode='json')
             
             # Convert Decimal fields to strings for JSON compatibility
             if transaction_data.get("amount") is not None:

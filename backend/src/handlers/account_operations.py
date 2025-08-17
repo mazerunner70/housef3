@@ -513,7 +513,7 @@ def get_account_transactions_handler(event: Dict[str, Any], user_id: str) -> Dic
             raise
         
         # Convert transactions to dictionary format
-        transaction_dicts = [transaction.model_dump(by_alias=True) for transaction in transactions]
+        transaction_dicts = [transaction.model_dump(by_alias=True, mode='json') for transaction in transactions]
         logger.info(f"Converted {len(transaction_dicts)} transactions to dictionary format")
         
         return create_response(200, {

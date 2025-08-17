@@ -17,40 +17,42 @@ export const FZIPRestoreResults: React.FC<Props> = ({ results, onClose }) => {
 
       <div className="results-grid">
         <div className="result-item">
-          <span className="result-count">{results.accounts_created.toLocaleString()}</span>
+          <span className="result-count">{results.accounts.created.toLocaleString()}</span>
           <span className="result-label">Accounts</span>
           <span className="result-icon">📊</span>
         </div>
         <div className="result-item">
-          <span className="result-count">{results.categories_created.toLocaleString()}</span>
+          <span className="result-count">{results.categories.created.toLocaleString()}</span>
           <span className="result-label">Categories</span>
           <span className="result-icon">🏷️</span>
         </div>
         <div className="result-item">
-          <span className="result-count">{results.file_maps_created.toLocaleString()}</span>
+          <span className="result-count">{results.file_maps.created.toLocaleString()}</span>
           <span className="result-label">File Maps</span>
           <span className="result-icon">🗂️</span>
         </div>
         <div className="result-item">
-          <span className="result-count">{results.transaction_files_created.toLocaleString()}</span>
+          <span className="result-count">{results.transaction_files.created.toLocaleString()}</span>
           <span className="result-label">Transaction Files</span>
           <span className="result-icon">📄</span>
         </div>
         <div className="result-item">
-          <span className="result-count">{results.transactions_created.toLocaleString()}</span>
+          <span className="result-count">{results.transactions.created.toLocaleString()}</span>
           <span className="result-label">Transactions</span>
           <span className="result-icon">💰</span>
         </div>
       </div>
 
-      <div className="processing-time">
-        <p>
-          <span className="time-icon">⏱️</span>
-          Processing completed in <strong>{results.total_processing_time}</strong>
-        </p>
-      </div>
+      {results.total_processing_time && (
+        <div className="processing-time">
+          <p>
+            <span className="time-icon">⏱️</span>
+            Processing completed in <strong>{results.total_processing_time}</strong>
+          </p>
+        </div>
+      )}
 
-      {results.warnings.length > 0 && (
+      {results.warnings && results.warnings.length > 0 && (
         <div className="warnings-section">
           <h4>⚠️ Warnings</h4>
           <p className="warnings-description">
