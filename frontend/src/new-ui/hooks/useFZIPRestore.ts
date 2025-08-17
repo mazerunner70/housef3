@@ -80,18 +80,40 @@ export const useFZIPRestore = (): UseFZIPRestoreResult => {
   }, [isLoading, lastEvaluatedKey, limit]);
 
   const refreshRestoreJobs = useCallback(async (): Promise<FZIPRestoreJob[]> => {
+    if (isLoading) return restoreJobs;
+    
+    setIsLoading(true);
+    setError(null);
     setLastEvaluatedKey(undefined);
-    await loadRestoreJobs(true);
-    // Return current jobs after refresh - note this is still async so state might not be updated yet
-    // For immediate access, we need to return from the API call
+    
     try {
       const response = await listFZIPRestoreJobs(limit, undefined);
-      return response?.restoreJobs || [];
-    } catch (error) {
-      console.error('Error getting fresh restore jobs list:', error);
+      
+      // Defensive check for response structure
+      if (response && response.restoreJobs && Array.isArray(response.restoreJobs)) {
+        setRestoreJobs(response.restoreJobs);
+        setLastEvaluatedKey(response.nextEvaluatedKey);
+        setHasMore(!!response.nextEvaluatedKey);
+        return response.restoreJobs;
+      } else {
+        // Handle malformed response
+        setRestoreJobs([]);
+        setLastEvaluatedKey(undefined);
+        setHasMore(false);
+        setError('Invalid response from restore service');
+        return [];
+      }
+    } catch (err) {
+      // Ensure restoreJobs is always an array even when there's an error
+      setRestoreJobs([]);
+      setLastEvaluatedKey(undefined);
+      setHasMore(false);
+      setError(err instanceof Error ? err.message : 'Failed to load restore jobs - service may not be available');
       return [];
+    } finally {
+      setIsLoading(false);
     }
-  }, [loadRestoreJobs, limit]);
+  }, [isLoading, restoreJobs, limit]);
 
   const loadMore = useCallback(async () => {
     if (hasMore && !isLoading) {

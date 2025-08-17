@@ -107,11 +107,8 @@ export const useFZIPRestoreStatus = (restoreId: string | null): UseFZIPRestoreSt
     try {
       clearError();
       await retryRestore(restoreId);
-      // Immediately fetch updated status and restart polling
-      const newStatus = await fetchStatus(restoreId);
-      if (newStatus && shouldPoll(newStatus.status)) {
-        setIsPolling(true);
-      }
+      // Immediately fetch updated status - polling will restart automatically via effect
+      await fetchStatus(restoreId);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to retry restore';
       setError(errorMessage);
@@ -135,7 +132,7 @@ export const useFZIPRestoreStatus = (restoreId: string | null): UseFZIPRestoreSt
     }
   }, [restoreId, clearError]);
 
-  // Main polling effect
+  // Main polling effect - responsive to status transitions
   useEffect(() => {
     if (!restoreId) {
       setStatus(null);
@@ -143,7 +140,13 @@ export const useFZIPRestoreStatus = (restoreId: string | null): UseFZIPRestoreSt
       return;
     }
 
-    let intervalId: NodeJS.Timeout | null = null;
+    // Only start polling if status requires it
+    if (status && !shouldPoll(status.status)) {
+      setIsPolling(false);
+      return;
+    }
+
+    let intervalId: number | null = null;
     let isMounted = true;
     const startTime = Date.now();
 
@@ -158,7 +161,7 @@ export const useFZIPRestoreStatus = (restoreId: string | null): UseFZIPRestoreSt
         const nextInterval = getPollingInterval(response.status, elapsedTime);
         
         if (nextInterval > 0 && isMounted) {
-          intervalId = setTimeout(poll, nextInterval);
+          intervalId = window.setTimeout(poll, nextInterval);
         } else {
           setIsPolling(false);
         }
@@ -180,17 +183,7 @@ export const useFZIPRestoreStatus = (restoreId: string | null): UseFZIPRestoreSt
       }
       setIsPolling(false);
     };
-  }, [restoreId, fetchStatus]);
-
-  // Update polling state when status changes
-  useEffect(() => {
-    if (status) {
-      const shouldContinuePolling = shouldPoll(status.status);
-      if (!shouldContinuePolling && isPolling) {
-        setIsPolling(false);
-      }
-    }
-  }, [status, isPolling]);
+  }, [restoreId, fetchStatus, status]);
 
   return {
     status,

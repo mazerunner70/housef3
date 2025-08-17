@@ -10,6 +10,9 @@ import { FZIPRestoreStatus } from '../../services/FZIPService';
 import Button from '../components/Button';
 import './FZIPRestoreView.css';
 
+// Constants for sticky notifications
+const CONFIRMATION_READY_MESSAGE = 'Restore job ready for confirmation! Click "Start Restore" in the job list below.';
+
 const FZIPRestoreView: React.FC = () => {
   const {
     restoreJobs,
@@ -39,15 +42,6 @@ const FZIPRestoreView: React.FC = () => {
   const [activeRestoreId, setActiveRestoreId] = useState<string | null>(null);
   const [showRestoreModal, setShowRestoreModal] = useState(false);
   
-  // DIAGNOSTIC: Track state changes
-  React.useEffect(() => {
-    console.log('🔄 STATE CHANGE - activeRestoreId:', activeRestoreId);
-  }, [activeRestoreId]);
-  
-  React.useEffect(() => {
-    console.log('🔄 STATE CHANGE - showRestoreModal:', showRestoreModal);
-  }, [showRestoreModal]);
-  
   // Enhanced status polling for active restore
   const { 
     status: activeRestoreStatus, 
@@ -55,35 +49,9 @@ const FZIPRestoreView: React.FC = () => {
     retryRestore: retryActiveRestore, 
     abortRestore,
     clearError 
-  } = useFZIPRestoreStatus(activeRestoreId);
-  
-  React.useEffect(() => {
-    console.log('🔄 STATE CHANGE - activeRestoreStatus:', activeRestoreStatus?.status, 'for job:', activeRestoreStatus?.jobId);
-  }, [activeRestoreStatus]);
-  
-  // DIAGNOSTIC: Track modal rendering
-  React.useEffect(() => {
-    if (showRestoreModal && activeRestoreStatus) {
-      console.log(`🎭 MODAL RENDERING for job: ${activeRestoreId}`);
-      console.log(`   Modal status: ${activeRestoreStatus.status}`);
-      console.log(`   Has summary: ${!!activeRestoreStatus.summary}`);
-      console.log(`   Summary data:`, activeRestoreStatus.summary);
-      
-      if (activeRestoreStatus.status === FZIPRestoreStatus.AWAITING_CONFIRMATION) {
-        if (activeRestoreStatus.summary) {
-          console.log('✅ SHOULD RENDER SUMMARY COMPONENT');
-        } else {
-          console.log('⚠️ STATUS IS AWAITING_CONFIRMATION BUT NO SUMMARY DATA');
-        }
-      } else if (activeRestoreStatus.status === FZIPRestoreStatus.VALIDATION_PASSED) {
-        console.log('✅ SHOULD RENDER VALIDATION PASSED COMPONENT');
-        console.log('   Validation results:', activeRestoreStatus.validationResults);
-      }
-    }
-  }, [showRestoreModal, activeRestoreStatus, activeRestoreId]);
+    } = useFZIPRestoreStatus(activeRestoreId);
 
   const handleUploaded = async () => {
-    console.log('handleUploaded called');
     setShowUpload(false);
     
     // Poll for the newly created restore job
@@ -103,7 +71,6 @@ const FZIPRestoreView: React.FC = () => {
     
     while (attempts < maxAttempts && !foundJob) {
       attempts++;
-      console.log(`Polling attempt ${attempts}/${maxAttempts} for new restore job...`);
       
       // Update notification with progress
       setNotification({
@@ -114,20 +81,7 @@ const FZIPRestoreView: React.FC = () => {
       try {
         const updatedJobs = await refreshRestoreJobs();
         
-        // DIAGNOSTIC: Log all current jobs and their statuses
-        console.log(`=== POLLING DIAGNOSTIC (attempt ${attempts}) ===`);
-        console.log(`Current job count: ${currentJobCount}, Updated job count: ${updatedJobs.length}`);
-        console.log('All jobs:');
-        updatedJobs.forEach((job, index) => {
-          console.log(`  [${index}] ${job.jobId}: ${job.status} (progress: ${job.progress}%, phase: ${job.currentPhase})`);
-          if (job.summary) {
-            console.log(`    - Has summary data`);
-          }
-          if (job.validationResults) {
-            console.log(`    - Validation: ${JSON.stringify(job.validationResults)}`);
-          }
-        });
-        console.log('=== END DIAGNOSTIC ===');
+
         
         // Check if we have a new job that's awaiting user confirmation
         const confirmationJob = updatedJobs.find(job => 
@@ -136,25 +90,12 @@ const FZIPRestoreView: React.FC = () => {
         
         if (confirmationJob) {
           foundJob = confirmationJob;
-          console.log(`🎯 FOUND CONFIRMATION-READY JOB: ${confirmationJob.jobId} with status: ${confirmationJob.status}`);
-          console.log(`   Summary available: ${!!confirmationJob.summary}`);
-          console.log(`   Validation results: ${JSON.stringify(confirmationJob.validationResults)}`);
-          
-          // Note: Jobs awaiting confirmation may or may not have summary data depending on the flow
-          if (confirmationJob.status === FZIPRestoreStatus.AWAITING_CONFIRMATION && !confirmationJob.summary) {
-            console.log('ℹ️ Job awaiting confirmation without summary data (simplified validation flow)');
-          }
           break;
         }
         
         // Also check if we simply have more jobs than before (any status)
         if (updatedJobs.length > currentJobCount) {
           const latestJob = updatedJobs[0]; // Jobs should be sorted by creation date
-          console.log(`🆕 FOUND NEW JOB: ${latestJob.jobId} with status: ${latestJob.status}`);
-          console.log(`   Created at: ${new Date(latestJob.createdAt).toISOString()}`);
-          console.log(`   Progress: ${latestJob.progress}%, Phase: ${latestJob.currentPhase}`);
-          console.log(`   Summary available: ${!!latestJob.summary}`);
-          console.log(`   Validation results: ${JSON.stringify(latestJob.validationResults)}`);
           foundJob = latestJob;
           break;
         }
@@ -163,7 +104,6 @@ const FZIPRestoreView: React.FC = () => {
           await new Promise(resolve => setTimeout(resolve, pollInterval));
         }
       } catch (error) {
-        console.error(`Polling attempt ${attempts} failed:`, error);
         // Update notification to show error but continue polling
         setNotification({
           type: 'warning',
@@ -177,24 +117,14 @@ const FZIPRestoreView: React.FC = () => {
     }
     
     if (foundJob) {
-      console.log(`🏁 POLLING COMPLETE - Found job: ${foundJob.jobId}`);
-      console.log(`   Final status: ${foundJob.status}`);
-      console.log(`   Has summary: ${!!foundJob.summary}`);
-      console.log(`   Has validation results: ${!!foundJob.validationResults}`);
-      
       // If the job is ready for user confirmation, show appropriate message without auto-opening modal
       if (foundJob.status === FZIPRestoreStatus.AWAITING_CONFIRMATION) {
-        console.log('✅ JOB READY FOR USER ACTION:', foundJob.jobId);
-        console.log('   Job status:', foundJob.status);
-        console.log('   Not auto-opening modal - user can interact via main page');
-        
         setNotification({
           type: 'success',
-          message: 'Restore job ready for confirmation! Click "Start Restore" in the job list below.'
+          message: CONFIRMATION_READY_MESSAGE
         });
       } else {
         // Job exists but isn't awaiting confirmation - show success message
-        console.log(`📝 JOB EXISTS BUT NOT AWAITING CONFIRMATION: ${foundJob.status}`);
         setNotification({
           type: 'success',
           message: `Restore job created with status: ${foundJob.status}. Check the list below for updates.`
@@ -209,9 +139,12 @@ const FZIPRestoreView: React.FC = () => {
     
     // Clear notification after 5 seconds (except for confirmation message)
     setTimeout(() => {
-      if (notification?.message !== 'Restore job ready for confirmation! Review the backup contents below.') {
-        setNotification(null);
-      }
+      setNotification(currentNotification => {
+        if (currentNotification?.message !== CONFIRMATION_READY_MESSAGE) {
+          return null;
+        }
+        return currentNotification;
+      });
     }, 5000);
   };
 
@@ -261,17 +194,14 @@ const FZIPRestoreView: React.FC = () => {
   // };
 
   const handleConfirmRestore = async () => {
-    console.log(`🔧 CONFIRM RESTORE CALLED for job: ${activeRestoreId}`);
     try {
       await confirmRestore();
-      console.log('✅ CONFIRM RESTORE SUCCESS');
       setNotification({
         type: 'success',
         message: 'Restore confirmed and started'
       });
       setTimeout(() => setNotification(null), 3000);
     } catch (error) {
-      console.error('❌ CONFIRM RESTORE FAILED:', error);
       setNotification({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to confirm restore'
@@ -321,7 +251,9 @@ const FZIPRestoreView: React.FC = () => {
     setShowRestoreModal(false);
     setActiveRestoreId(null);
     clearError();
-    refreshRestoreJobs().catch(console.error);
+    refreshRestoreJobs().catch(() => {
+      // Handle refresh error silently - user will see stale data
+    });
   };
 
   return (
@@ -492,7 +424,21 @@ const FZIPRestoreView: React.FC = () => {
 
       {/* Enhanced Restore Status Modal */}
       {showRestoreModal && activeRestoreStatus && (
-        <div className="restore-modal-overlay">
+        <div 
+          className="restore-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={
+            activeRestoreStatus.status === FZIPRestoreStatus.VALIDATION_PASSED ? "validation-modal-title" :
+            ![FZIPRestoreStatus.AWAITING_CONFIRMATION, FZIPRestoreStatus.VALIDATION_PASSED, FZIPRestoreStatus.COMPLETED, FZIPRestoreStatus.FAILED].includes(activeRestoreStatus.status) ? "progress-modal-title" :
+            "modal-content"
+          }
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              handleCloseModal();
+            }
+          }}
+        >
           <div className="restore-modal">
             {/* Summary View - for awaiting confirmation */}
             {activeRestoreStatus.status === FZIPRestoreStatus.AWAITING_CONFIRMATION && 
@@ -529,7 +475,7 @@ const FZIPRestoreView: React.FC = () => {
             {activeRestoreStatus.status === FZIPRestoreStatus.VALIDATION_PASSED && (
               <div className="restore-validation-passed-modal">
                 <div className="validation-header">
-                  <h3>✅ Restore File Validated</h3>
+                  <h3 id="validation-modal-title">✅ Restore File Validated</h3>
                   <p>Your backup file has been validated and is ready to restore.</p>
                 </div>
                 
@@ -571,7 +517,7 @@ const FZIPRestoreView: React.FC = () => {
             {![FZIPRestoreStatus.AWAITING_CONFIRMATION, FZIPRestoreStatus.VALIDATION_PASSED, FZIPRestoreStatus.COMPLETED, FZIPRestoreStatus.FAILED].includes(activeRestoreStatus.status) && (
               <div className="restore-progress-modal">
                 <div className="progress-header">
-                  <h3>Restore in Progress</h3>
+                  <h3 id="progress-modal-title">Restore in Progress</h3>
                   <p>Status: {activeRestoreStatus.status.replace('restore_', '').replace('_', ' ')}</p>
                 </div>
                 
@@ -601,9 +547,17 @@ const FZIPRestoreView: React.FC = () => {
 
             {/* Close button for modal overlay */}
             <button 
+              type="button"
+              role="button"
               className="modal-close-overlay" 
               onClick={handleCloseModal}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  handleCloseModal();
+                }
+              }}
               aria-label="Close modal"
+              tabIndex={0}
             />
           </div>
         </div>

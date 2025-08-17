@@ -50,6 +50,8 @@ def _ensure_job(user_id: str, restore_id: str, s3_key: str, package_size: Option
         existing.package_size = package_size
         existing.package_format = FZIPFormat.FZIP
         existing.error = None
+        # Ensure validation_results is properly initialized
+        existing.validation_results = existing.validation_results or {}
         update_fzip_job(existing)
         return existing
 
@@ -124,6 +126,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 package_data = fzip_service._parse_package(s3_key)
                 logger.info(f"Successfully parsed package for restore job {restore_id}")
                 logger.debug(f"Package manifest for job {restore_id}: {package_data.get('manifest', {})}")
+
+                # Ensure validation_results is initialized before assigning nested keys
+                job.validation_results = job.validation_results or {}
 
                 # Schema validation
                 job.current_phase = "validating_schema"

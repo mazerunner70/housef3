@@ -94,26 +94,13 @@ export interface FZIPRestoreSummary {
 }
 
 export interface FZIPRestoreResults {
-  accounts: {
-    created: string;
-    errors: string[];
-  };
-  categories: {
-    created: string;
-    errors: string[];
-  };
-  file_maps: {
-    created: string;
-    errors: string[];
-  };
-  transaction_files: {
-    created: string;
-    errors: string[];
-  };
-  transactions: {
-    created: string;
-    errors: string[];
-  };
+  accounts_created: number;
+  categories_created: number;
+  file_maps_created: number;
+  transaction_files_created: number;
+  transactions_created: number;
+  total_processing_time: string;
+  warnings: string[];
 }
 
 export interface FZIPRestoreJob {

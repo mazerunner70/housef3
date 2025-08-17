@@ -496,6 +496,9 @@ class FZIPService:
             # Parse package
             package_data = self._parse_package(package_s3_key)
             
+            # Ensure validation_results is initialized before assigning nested keys
+            restore_job.validation_results = restore_job.validation_results or {}
+            
             # Validate schema
             restore_job.current_phase = "validating_schema"
             restore_job.progress = 20
@@ -723,8 +726,8 @@ class FZIPService:
                 "count": len(accounts),
                 "items": [
                     {
-                        "name": acc.get('name', 'Unknown Account'), 
-                        "type": acc.get('account_type', 'unknown')
+                        "name": acc.get('accountName', 'Unknown Account'), 
+                        "type": acc.get('accountType', 'unknown')
                     }
                     for acc in accounts[:10]  # Show first 10 accounts
                 ]
@@ -750,7 +753,7 @@ class FZIPService:
             transaction_file_summary = {
                 "count": len(transaction_files),
                 "totalSize": self._calculate_transaction_files_size(transaction_files),
-                "fileTypes": list(set(tf.get('file_type', 'unknown') for tf in transaction_files))
+                "fileTypes": list(set(tf.get('fileFormat', 'unknown') for tf in transaction_files))
             }
             
             return {
@@ -779,10 +782,10 @@ class FZIPService:
             
             for category in categories:
                 # Count depth by parent relationships or path separators
-                parent_id = category.get('parent_category_id')
+                parent_id = category.get('parentCategoryId')
                 if not parent_id:
                     # Top-level category
-                    children_count = sum(1 for c in categories if c.get('parent_category_id') == category.get('categoryId'))
+                    children_count = sum(1 for c in categories if c.get('parentCategoryId') == category.get('categoryId'))
                     top_level_categories.append({
                         "name": category.get('name', 'Unknown Category'),
                         "level": 1,
@@ -806,7 +809,7 @@ class FZIPService:
     
     def _calculate_category_depth(self, category: Dict[str, Any], all_categories: List[Dict[str, Any]], current_depth: int) -> int:
         """Recursively calculate category depth"""
-        parent_id = category.get('parent_category_id')
+        parent_id = category.get('parentCategoryId')
         if not parent_id:
             return current_depth
         
@@ -825,13 +828,16 @@ class FZIPService:
             # Extract dates and find range
             dates = []
             for transaction in transactions:
-                date_str = transaction.get('transaction_date')
-                if date_str:
+                date_timestamp = transaction.get('date')
+                if date_timestamp:
                     try:
-                        # Handle various date formats
-                        if isinstance(date_str, str):
-                            # Assume ISO format or similar
-                            date_part = date_str.split('T')[0] if 'T' in date_str else date_str
+                        # Convert milliseconds timestamp to date string
+                        if isinstance(date_timestamp, (int, float)):
+                            date_obj = datetime.fromtimestamp(date_timestamp / 1000, tz=timezone.utc)
+                            dates.append(date_obj.strftime('%Y-%m-%d'))
+                        elif isinstance(date_timestamp, str):
+                            # Handle string dates that might be already formatted
+                            date_part = date_timestamp.split('T')[0] if 'T' in date_timestamp else date_timestamp
                             dates.append(date_part)
                     except Exception:
                         continue
