@@ -659,7 +659,8 @@ def start_fzip_restore_handler(event: Dict[str, Any], user_id: str, job_id: str)
                 'body': json.dumps({'error': INVALID_RESTORE_JOB_NOT_FOUND_MESSAGE})
             }
         
-        if restore_job.status != FZIPStatus.RESTORE_VALIDATION_PASSED:
+        # Accept both awaiting confirmation (new flow) and validation passed (existing jobs during transition)
+        if restore_job.status not in [FZIPStatus.RESTORE_AWAITING_CONFIRMATION, FZIPStatus.RESTORE_VALIDATION_PASSED]:
             return {
                 'statusCode': 400,
                 'body': json.dumps({'error': f'FZIP restore job is not ready to start. Current status: {restore_job.status.value}'})

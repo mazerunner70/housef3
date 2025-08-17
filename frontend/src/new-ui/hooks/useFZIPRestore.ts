@@ -21,7 +21,7 @@ export interface UseFZIPRestoreResult {
   // Backward compat types remain but functions are no-ops in simplified flow
   createRestoreJob: (request?: CreateFZIPRestoreRequest) => Promise<CreateFZIPRestoreResponse>;
   uploadFile: (restoreId: string, file: File, uploadUrl: CreateFZIPRestoreResponse['uploadUrl']) => Promise<void>;
-  refreshRestoreJobs: () => Promise<void>;
+  refreshRestoreJobs: () => Promise<FZIPRestoreJob[]>;
   deleteRestoreJob: (restoreId: string) => Promise<void>;
   getRestoreStatus: (restoreId: string) => Promise<FZIPRestoreJob>;
   startRestoreProcessing: (restoreId: string) => Promise<void>;
@@ -79,10 +79,19 @@ export const useFZIPRestore = (): UseFZIPRestoreResult => {
     }
   }, [isLoading, lastEvaluatedKey, limit]);
 
-  const refreshRestoreJobs = useCallback(async () => {
+  const refreshRestoreJobs = useCallback(async (): Promise<FZIPRestoreJob[]> => {
     setLastEvaluatedKey(undefined);
     await loadRestoreJobs(true);
-  }, [loadRestoreJobs]);
+    // Return current jobs after refresh - note this is still async so state might not be updated yet
+    // For immediate access, we need to return from the API call
+    try {
+      const response = await listFZIPRestoreJobs(limit, undefined);
+      return response?.restoreJobs || [];
+    } catch (error) {
+      console.error('Error getting fresh restore jobs list:', error);
+      return [];
+    }
+  }, [loadRestoreJobs, limit]);
 
   const loadMore = useCallback(async () => {
     if (hasMore && !isLoading) {

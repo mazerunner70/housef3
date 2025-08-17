@@ -36,18 +36,35 @@ const FZIPRestoreList: React.FC<FZIPRestoreListProps> = ({
     restoreId: string;
   }>({ isOpen: false, restoreId: '' });
 
-  // Auto-refresh processing restore jobs
+  // Auto-refresh processing restore jobs (but NOT validation_passed - those wait for user action)
   useEffect(() => {
     const processingIds = restoreJobs
       .filter(job => 
         job.status === FZIPRestoreStatus.UPLOADED ||
         job.status === FZIPRestoreStatus.VALIDATING ||
-        job.status === FZIPRestoreStatus.VALIDATION_PASSED ||
         job.status === FZIPRestoreStatus.PROCESSING
+        // REMOVED: FZIPRestoreStatus.VALIDATION_PASSED - these should wait for user confirmation
       )
       .map(job => job.jobId);
 
-    setProcessingJobs(new Set(processingIds));
+    const newProcessingJobs = new Set(processingIds);
+    
+    // Remove jobs that have reached awaiting_confirmation or validation_passed (they're waiting for user action)
+    restoreJobs.forEach(job => {
+      if (job.status === FZIPRestoreStatus.AWAITING_CONFIRMATION || 
+          job.status === FZIPRestoreStatus.VALIDATION_PASSED) {
+        console.log(`🛑 REMOVING ${job.jobId} from processing jobs - ${job.status}, waiting for user action`);
+        newProcessingJobs.delete(job.jobId);
+      }
+    });
+
+    console.log(`📋 PROCESSING JOBS UPDATE:`, {
+      totalJobs: restoreJobs.length,
+      processingIds: processingIds,
+      finalProcessingJobs: Array.from(newProcessingJobs)
+    });
+
+    setProcessingJobs(newProcessingJobs);
 
     if (processingIds.length > 0) {
       const interval = setInterval(async () => {
@@ -72,6 +89,21 @@ const FZIPRestoreList: React.FC<FZIPRestoreListProps> = ({
       return () => clearInterval(interval);
     }
   }, [restoreJobs, onRefreshStatus]);
+
+  // Log button states for debugging
+  useEffect(() => {
+    restoreJobs.forEach(job => {
+      if (job.status === FZIPRestoreStatus.AWAITING_CONFIRMATION || 
+          job.status === FZIPRestoreStatus.VALIDATION_PASSED) {
+        console.log(`🔘 BUTTON STATE for ${job.jobId}:`, {
+          canStart: canStartRestore(job),
+          isProcessing: processingJobs.has(job.jobId),
+          status: job.status,
+          disabled: processingJobs.has(job.jobId)
+        });
+      }
+    });
+  }, [restoreJobs, processingJobs]);
 
   const handleDelete = async () => {
     try {
@@ -132,9 +164,10 @@ const FZIPRestoreList: React.FC<FZIPRestoreListProps> = ({
   };
 
   const canStartRestore = (job: FZIPRestoreJob): boolean => {
-    // Backend sets status to restore_validation_passed when ready; it may not include a
-    // specific `ready` flag. Allow starting when status indicates validation passed.
-    return job.status === FZIPRestoreStatus.VALIDATION_PASSED;
+    // Backend sets status to restore_awaiting_confirmation when ready for user action
+    // Also support restore_validation_passed for existing jobs during transition
+    return job.status === FZIPRestoreStatus.AWAITING_CONFIRMATION ||
+           job.status === FZIPRestoreStatus.VALIDATION_PASSED;
   };
 
   const renderValidationResults = (job: FZIPRestoreJob) => {
@@ -168,25 +201,37 @@ const FZIPRestoreList: React.FC<FZIPRestoreListProps> = ({
 
     const { restoreResults } = job;
     
+    // Handle the actual API response structure
+    const getCreatedCount = (item: any): string => {
+      if (typeof item === 'object' && item !== null && 'created' in item) {
+        return item.created;
+      }
+      return item?.toString() || '0';
+    };
+    
     return (
       <div className="restore-results">
         <h5>Restore Results:</h5>
         <div className="results-grid">
           <div className="result-item">
             <span className="result-label">Accounts:</span>
-            <span className="result-value">{restoreResults.accounts_restored}</span>
+            <span className="result-value">{getCreatedCount(restoreResults.accounts)}</span>
           </div>
           <div className="result-item">
             <span className="result-label">Transactions:</span>
-            <span className="result-value">{restoreResults.transactions_restored.toLocaleString()}</span>
+            <span className="result-value">{getCreatedCount(restoreResults.transactions)}</span>
           </div>
           <div className="result-item">
             <span className="result-label">Categories:</span>
-            <span className="result-value">{restoreResults.categories_restored}</span>
+            <span className="result-value">{getCreatedCount(restoreResults.categories)}</span>
           </div>
           <div className="result-item">
-            <span className="result-label">Files:</span>
-            <span className="result-value">{restoreResults.files_restored}</span>
+            <span className="result-label">File Maps:</span>
+            <span className="result-value">{getCreatedCount(restoreResults.file_maps)}</span>
+          </div>
+          <div className="result-item">
+            <span className="result-label">Transaction Files:</span>
+            <span className="result-value">{getCreatedCount(restoreResults.transaction_files)}</span>
           </div>
         </div>
       </div>
@@ -281,17 +326,21 @@ const FZIPRestoreList: React.FC<FZIPRestoreListProps> = ({
                   <Button
                     variant="primary"
                     size="compact"
-                    onClick={() => onStartRestore(job.jobId)}
+                    onClick={() => {
+                      console.log(`🚀 START RESTORE CLICKED for ${job.jobId}`);
+                      onStartRestore(job.jobId);
+                    }}
                     disabled={processingJobs.has(job.jobId)}
                   >
                     Start Restore
                   </Button>
                 )}
                 {onCancelRestore && (
-                  // Show Cancel for any non-terminal status (uploaded/validating/validation passed/processing)
+                  // Show Cancel for any non-terminal status (uploaded/validating/awaiting confirmation/validation passed/processing)
                   [
                     FZIPRestoreStatus.UPLOADED,
                     FZIPRestoreStatus.VALIDATING,
+                    FZIPRestoreStatus.AWAITING_CONFIRMATION,
                     FZIPRestoreStatus.VALIDATION_PASSED,
                     FZIPRestoreStatus.PROCESSING
                   ].includes(job.status) && (

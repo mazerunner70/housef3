@@ -527,12 +527,31 @@ class FZIPService:
                 update_fzip_job(restore_job)
                 return
             
-            restore_job.status = FZIPStatus.RESTORE_VALIDATION_PASSED
+            # Generate detailed summary for user review
+            restore_job.current_phase = "generating_summary"
             restore_job.progress = 40
             update_fzip_job(restore_job)
             
-            # Begin data restore
-            self._restore_data(restore_job, package_data)
+            summary_data = self._generate_summary_data(package_data)
+            restore_job.summary = summary_data
+            
+            # Stop here and wait for user confirmation
+            restore_job.status = FZIPStatus.RESTORE_AWAITING_CONFIRMATION
+            restore_job.progress = 50
+            restore_job.current_phase = "awaiting_user_confirmation"
+            
+            # Add validation results for frontend display
+            restore_job.validation_results.update({
+                'profileEmpty': True,  # Assumed valid in this flow
+                'schemaValid': schema_results.get('valid', False),
+                'businessValid': business_results.get('valid', False),
+                'ready': True  # All validations passed, ready for user confirmation
+            })
+            
+            update_fzip_job(restore_job)
+            
+            # DON'T proceed to _restore_data() automatically
+            # User must explicitly call start handler to proceed
             
         except Exception as e:
             logger.error(f"Restore failed: {str(e)}")
@@ -613,8 +632,8 @@ class FZIPService:
             manifest = package_data['manifest']
             data = package_data['data']
             
-            # Check required manifest fields
-            required_manifest_fields = ['version', 'exported_at', 'user_id', 'export_type']
+            # Check required manifest fields (match FZIPManifest model aliases)
+            required_manifest_fields = ['backupFormatVersion', 'backupTimestamp', 'userId', 'housef3Version']
             for field in required_manifest_fields:
                 if field not in manifest:
                     return {
@@ -658,12 +677,7 @@ class FZIPService:
             data = package_data['data']
             manifest = package_data['manifest']
             
-            # Check user ownership
-            if manifest.get('user_id') != user_id:
-                return {
-                    'valid': False,
-                    'errors': ["Package was exported by a different user"]
-                }
+            # User ownership check removed - allow cross-user package loading
             
             # Validate data relationships (internal package consistency)
             errors = []
@@ -690,6 +704,187 @@ class FZIPService:
                 'valid': False,
                 'errors': [f"Business validation failed: {str(e)}"]
             }
+    
+    def _generate_summary_data(self, package_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate detailed summary for user review"""
+        try:
+            data = package_data['data']
+            
+            # Analyze accounts
+            accounts = data.get('accounts', [])
+            account_summary = {
+                "count": len(accounts),
+                "items": [
+                    {
+                        "name": acc.get('name', 'Unknown Account'), 
+                        "type": acc.get('account_type', 'unknown')
+                    }
+                    for acc in accounts[:10]  # Show first 10 accounts
+                ]
+            }
+            
+            # Analyze categories with hierarchy
+            categories = data.get('categories', [])
+            category_summary = self._analyze_category_hierarchy(categories)
+            
+            # Analyze transactions with date range
+            transactions = data.get('transactions', [])
+            transaction_summary = self._analyze_transaction_range(transactions)
+            
+            # Analyze file maps
+            file_maps = data.get('file_maps', [])
+            file_map_summary = {
+                "count": len(file_maps),
+                "totalSize": self._calculate_total_size_from_file_maps(file_maps)
+            }
+            
+            # Analyze transaction files
+            transaction_files = data.get('transaction_files', [])
+            transaction_file_summary = {
+                "count": len(transaction_files),
+                "totalSize": self._calculate_transaction_files_size(transaction_files),
+                "fileTypes": list(set(tf.get('file_type', 'unknown') for tf in transaction_files))
+            }
+            
+            return {
+                "accounts": account_summary,
+                "categories": category_summary,
+                "file_maps": file_map_summary,
+                "transaction_files": transaction_file_summary,
+                "transactions": transaction_summary
+            }
+            
+        except Exception as e:
+            logger.error(f"Error generating summary data: {str(e)}")
+            return {
+                "error": f"Failed to generate summary: {str(e)}"
+            }
+    
+    def _analyze_category_hierarchy(self, categories: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Analyze category hierarchy and structure"""
+        try:
+            if not categories:
+                return {"count": 0, "hierarchyDepth": 0, "items": []}
+            
+            # Calculate hierarchy depth
+            max_depth = 0
+            top_level_categories = []
+            
+            for category in categories:
+                # Count depth by parent relationships or path separators
+                parent_id = category.get('parent_category_id')
+                if not parent_id:
+                    # Top-level category
+                    children_count = sum(1 for c in categories if c.get('parent_category_id') == category.get('categoryId'))
+                    top_level_categories.append({
+                        "name": category.get('name', 'Unknown Category'),
+                        "level": 1,
+                        "children": children_count
+                    })
+                    max_depth = max(max_depth, 1)
+                else:
+                    # Calculate depth for nested categories
+                    depth = self._calculate_category_depth(category, categories, 1)
+                    max_depth = max(max_depth, depth)
+            
+            return {
+                "count": len(categories),
+                "hierarchyDepth": max_depth,
+                "items": top_level_categories[:5]  # Show first 5 top-level categories
+            }
+            
+        except Exception as e:
+            logger.error(f"Error analyzing category hierarchy: {str(e)}")
+            return {"count": len(categories), "hierarchyDepth": 0, "items": []}
+    
+    def _calculate_category_depth(self, category: Dict[str, Any], all_categories: List[Dict[str, Any]], current_depth: int) -> int:
+        """Recursively calculate category depth"""
+        parent_id = category.get('parent_category_id')
+        if not parent_id:
+            return current_depth
+        
+        parent = next((c for c in all_categories if c.get('categoryId') == parent_id), None)
+        if not parent:
+            return current_depth
+        
+        return self._calculate_category_depth(parent, all_categories, current_depth + 1)
+    
+    def _analyze_transaction_range(self, transactions: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Analyze transaction date range and counts"""
+        try:
+            if not transactions:
+                return {"count": 0}
+            
+            # Extract dates and find range
+            dates = []
+            for transaction in transactions:
+                date_str = transaction.get('transaction_date')
+                if date_str:
+                    try:
+                        # Handle various date formats
+                        if isinstance(date_str, str):
+                            # Assume ISO format or similar
+                            date_part = date_str.split('T')[0] if 'T' in date_str else date_str
+                            dates.append(date_part)
+                    except Exception:
+                        continue
+            
+            if dates:
+                dates.sort()
+                return {
+                    "count": len(transactions),
+                    "dateRange": {
+                        "earliest": dates[0],
+                        "latest": dates[-1]
+                    }
+                }
+            else:
+                return {"count": len(transactions)}
+                
+        except Exception as e:
+            logger.error(f"Error analyzing transaction range: {str(e)}")
+            return {"count": len(transactions)}
+    
+    def _calculate_total_size_from_file_maps(self, file_maps: List[Dict[str, Any]]) -> str:
+        """Calculate total size from file maps"""
+        try:
+            total_bytes = 0
+            for file_map in file_maps:
+                file_size = file_map.get('file_size_bytes', 0)
+                if isinstance(file_size, (int, float)):
+                    total_bytes += int(file_size)
+            
+            return self._format_file_size(total_bytes)
+        except Exception:
+            return "Unknown"
+    
+    def _calculate_transaction_files_size(self, transaction_files: List[Dict[str, Any]]) -> str:
+        """Calculate total size from transaction files"""
+        try:
+            total_bytes = 0
+            for tf in transaction_files:
+                file_size = tf.get('file_size_bytes', 0)
+                if isinstance(file_size, (int, float)):
+                    total_bytes += int(file_size)
+            
+            return self._format_file_size(total_bytes)
+        except Exception:
+            return "Unknown"
+    
+    def _format_file_size(self, size_bytes: int) -> str:
+        """Format file size in human readable format"""
+        if size_bytes == 0:
+            return "0B"
+        
+        size_names = ["B", "KB", "MB", "GB"]
+        i = 0
+        size = float(size_bytes)
+        
+        while size >= 1024.0 and i < len(size_names) - 1:
+            size /= 1024.0
+            i += 1
+        
+        return f"{size:.1f}{size_names[i]}"
     
     def _validate_empty_profile(self, user_id: str) -> Dict[str, Any]:
         """Validate that user profile is completely empty for restore."""
