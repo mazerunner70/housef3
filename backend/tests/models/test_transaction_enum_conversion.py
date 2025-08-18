@@ -12,7 +12,7 @@ from typing import Dict, Any
 import pytest
 
 from models.transaction import Transaction, TransactionCategoryAssignment, CategoryAssignmentStatus
-from models.account import Currency
+from models.money import Currency
 
 
 def create_mock_dynamodb_transaction_data() -> Dict[str, Any]:

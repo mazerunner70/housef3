@@ -1,0 +1,74 @@
+{
+    "folders": [
+        {
+            "name": "Root",
+            "path": "."
+        },
+        {
+            "name": "Backend",
+            "path": "./backend"
+        },
+        {
+            "name": "Frontend",
+            "path": "./frontend"
+        },
+        {
+            "name": "Infrastructure",
+            "path": "./infrastructure"
+        }
+    ],
+    "settings": {
+        // Python Configuration for Cursor
+        "python.defaultInterpreterPath": "./backend/venv/bin/python",
+        "python.terminal.activateEnvironment": true,
+        // Cursor Pyright Configuration
+        "cursorpyright.analysisType": "workspace",
+        "cursorpyright.typeCheckingMode": "basic",
+        "cursorpyright.include": [
+            "./backend/src/**",
+            "./backend/tests/**"
+        ],
+        "cursorpyright.exclude": [
+            "./backend/venv/**",
+            "./frontend/**",
+            "./infrastructure/**"
+        ],
+        "cursorpyright.extraPaths": [
+            "./backend/src"
+        ],
+        // Python Testing (if supported in Cursor)
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false,
+        "python.testing.pytestArgs": [
+            "backend/tests"
+        ],
+        "python.testing.cwd": "${workspaceFolder}/backend",
+        // General Editor Settings
+        "editor.formatOnSave": true,
+        "editor.formatOnType": false,
+        "editor.formatOnPaste": true,
+        "editor.rulers": [
+            88
+        ],
+        // File Association
+        "files.associations": {
+            "*.py": "python",
+            "requirements*.txt": "pip-requirements"
+        },
+        // Language-specific settings for Python
+        "[python]": {
+            "editor.insertSpaces": true,
+            "editor.tabSize": 4,
+            "editor.wordWrap": "off"
+        }
+    },
+    "extensions": {
+        "recommendations": [
+            "ms-python.python",
+            "ms-python.vscode-pylance",
+            "ms-python.black-formatter",
+            "ms-python.isort",
+            "ms-python.flake8"
+        ]
+    }
+}
