@@ -1,59 +1,14 @@
-import Decimal from 'decimal.js';
 import { getCurrentUser, refreshToken, isAuthenticated } from './AuthService';
 import { FileMetadata } from './FileService';
+import {
+  Account,
+  AccountListResponse,
+  AccountSchema,
+  AccountListResponseSchema
+} from '../schemas/Account';
 
 
-// Define enums to match backend
-export enum AccountType {
-  CHECKING = "checking",
-  SAVINGS = "savings",
-  CREDIT_CARD = "credit_card",
-  INVESTMENT = "investment",
-  LOAN = "loan",
-  OTHER = "other"
-}
-
-export enum Currency {
-  USD = "USD",
-  EUR = "EUR",
-  GBP = "GBP",
-  CAD = "CAD",
-  JPY = "JPY",
-  AUD = "AUD",
-  CHF = "CHF",
-  CNY = "CNY",
-  OTHER = "other"
-}
-
-// Define interfaces
-export interface Account {
-  accountId: string;
-  userId: string;
-  accountName: string;
-  accountType: AccountType;
-  institution: string;
-  balance: Decimal;
-  currency: Currency;
-  notes?: string;
-  isActive: boolean;
-  defaultFileMapId?: string;
-  lastTransactionDate?: number;  // milliseconds since epoch
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface AccountListResponse {
-  accounts: Account[];
-  user: {
-    id: string;
-    email: string;
-    auth_time: string;
-  };
-  metadata: {
-    totalAccounts: number;
-  };
-}
-
+// Account-specific response interfaces (not moved to types as they're service-specific)
 export interface AccountFilesResponse {
   files: FileMetadata[];
   user: {
@@ -85,71 +40,71 @@ const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/api/accounts`;
 // Helper function to handle API requests with authentication
 const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
   const currentUser = getCurrentUser();
-  
+
   if (!currentUser || !currentUser.token) {
     throw new Error('User not authenticated');
   }
-  
+
   try {
     // Check if token is valid
     if (!isAuthenticated()) {
       // Try to refresh token
       await refreshToken(currentUser.refreshToken);
     }
-    
+
     // Get the user again after potential refresh
     const user = getCurrentUser();
     if (!user || !user.token) {
       throw new Error('Authentication failed');
     }
-    
+
     // Set up headers with authentication
     const headers = {
       'Authorization': user.token,
       'Content-Type': 'application/json',
       ...options.headers
     };
-    
+
     const requestOptions = {
       ...options,
       headers
     };
-    
+
     const response = await fetch(url, requestOptions);
-    
+
     // Handle 401 error specifically - try to refresh token
     if (response.status === 401) {
       try {
         const refreshedUser = await refreshToken(user.refreshToken);
-        
+
         // Update headers with new token
         const retryHeaders = {
           'Authorization': refreshedUser.token,
           'Content-Type': 'application/json',
           ...options.headers
         };
-        
+
         // Retry the request with the new token
         const retryResponse = await fetch(url, {
           ...options,
           headers: retryHeaders
         });
-        
+
         if (!retryResponse.ok) {
           throw new Error(`Request failed after token refresh: ${retryResponse.status} ${retryResponse.statusText}`);
         }
-        
+
         return retryResponse;
       } catch (refreshError) {
         console.error('Error refreshing token:', refreshError);
         throw new Error('Session expired. Please log in again.');
       }
     }
-    
+
     if (!response.ok) {
       throw new Error(`Request failed: ${response.status} ${response.statusText}`);
     }
-    
+
     return response;
   } catch (error) {
     console.error('Error with authenticated request:', error);
@@ -161,7 +116,10 @@ const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
 export const listAccounts = async (): Promise<AccountListResponse> => {
   try {
     const response = await authenticatedRequest(API_ENDPOINT);
-    const data: AccountListResponse = await response.json();
+    const rawData = await response.json();
+
+    // Validate response with Zod
+    const data = AccountListResponseSchema.parse(rawData);
     return data;
   } catch (error) {
     console.error('Error listing accounts:', error);
@@ -173,8 +131,11 @@ export const listAccounts = async (): Promise<AccountListResponse> => {
 export const getAccount = async (accountId: string): Promise<{ account: Account }> => {
   try {
     const response = await authenticatedRequest(`${API_ENDPOINT}/${accountId}`);
-    const data = await response.json();
-    return data;
+    const rawData = await response.json();
+
+    // Validate the account in the response
+    const validatedAccount = AccountSchema.parse(rawData.account);
+    return { account: validatedAccount };
   } catch (error) {
     console.error(`Error getting account ${accountId}:`, error);
     throw error;
@@ -209,7 +170,7 @@ export const getAccountFileUploadUrl = async (
         fileSize
       })
     });
-    
+
     const data: UploadFileToAccountResponse = await response.json();
     return data;
   } catch (error) {
@@ -231,8 +192,11 @@ export const createAccount = async (accountData: Partial<Account>): Promise<{ ac
       method: 'POST',
       body: JSON.stringify(accountData)
     });
-    const data: { account: Account } = await response.json();
-    return data;
+    const rawData = await response.json();
+
+    // Validate the created account in the response
+    const validatedAccount = AccountSchema.parse(rawData.account);
+    return { account: validatedAccount };
   } catch (error) {
     console.error('Error creating account:', error);
     throw error;
@@ -246,8 +210,11 @@ export const updateAccount = async (accountId: string, accountData: Partial<Acco
       method: 'PUT',
       body: JSON.stringify(accountData)
     });
-    const data: { account: Account } = await response.json();
-    return data;
+    const rawData = await response.json();
+
+    // Validate the updated account in the response
+    const validatedAccount = AccountSchema.parse(rawData.account);
+    return { account: validatedAccount };
   } catch (error) {
     console.error(`Error updating account ${accountId}:`, error);
     throw error;
