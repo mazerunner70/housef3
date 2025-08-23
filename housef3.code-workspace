@@ -19,11 +19,12 @@
     ],
     "settings": {
         // Python Configuration for Cursor
-        "python.defaultInterpreterPath": "./backend/venv/bin/python",
+        "python.defaultInterpreterPath": "./backend/venv/bin/python3",
         "python.terminal.activateEnvironment": true,
         // Cursor Pyright Configuration
         "cursorpyright.analysisType": "workspace",
         "cursorpyright.typeCheckingMode": "basic",
+        "cursorpyright.pythonPath": "./backend/venv/bin/python3",
         "cursorpyright.include": [
             "./backend/src/**",
             "./backend/tests/**"
@@ -48,7 +49,7 @@
         "editor.formatOnType": false,
         "editor.formatOnPaste": true,
         "editor.rulers": [
-            88
+            110
         ],
         // File Association
         "files.associations": {
@@ -60,15 +61,26 @@
             "editor.insertSpaces": true,
             "editor.tabSize": 4,
             "editor.wordWrap": "off"
-        }
+        },
+        // Python linting configuration
+        "python.linting.enabled": true,
+        "python.linting.maxLineLength": 110,
+        "python.linting.flake8Enabled": true,
+        "python.linting.flake8Args": [
+            "--max-line-length=110"
+        ],
+        "python.linting.pylintArgs": [
+            "--max-line-length=110"
+        ],
+        // Cursor Pyright line length (if applicable)
+        "cursorpyright.maxLineLength": 110,
+        // Ensure Cursor uses the virtual environment
+        "python.pythonPath": "/home/william/code/personal/2025/housef3/backend/venv/bin/python3"
     },
     "extensions": {
         "recommendations": [
-            "ms-python.python",
-            "ms-python.vscode-pylance",
-            "ms-python.black-formatter",
-            "ms-python.isort",
-            "ms-python.flake8"
+            // Note: Cursor has built-in Python support with Cursor Pyright
+            // Most VS Code Python extensions are not needed in Cursor
         ]
     }
 }
