@@ -49,7 +49,7 @@ export const AccountSchema = z.object({
     notes: z.string().optional(),
     isActive: z.boolean(),
     defaultFileMapId: z.string().optional(),
-    lastTransactionDate: z.number().optional(), // milliseconds since epoch
+    lastTransactionDate: z.number().nullable().optional(), // milliseconds since epoch, can be null
     createdAt: z.number(),
     updatedAt: z.number(),
 });
@@ -80,13 +80,16 @@ export const AccountUpdateSchema = z.object({
 // API Response Schemas
 export const UserSchema = z.object({
     id: z.string(),
-    email: z.string().email(),
-    auth_time: z.string(),
+    email: z.string().email().optional(), // Make email optional
+    auth_time: z.string().optional(), // Make auth_time optional
 });
 
 export const AccountListResponseSchema = z.object({
     accounts: z.array(AccountSchema),
-    user: UserSchema,
+    user: z.string(), // User is just a string (user ID)
+    metadata: z.object({
+        totalAccounts: z.number(),
+    }).optional(), // Metadata is optional
 });
 
 // Account Summary Schema

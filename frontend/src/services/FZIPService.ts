@@ -54,10 +54,16 @@ const API_ENDPOINT = apiEndpoint;
 // Helper function to handle validation errors
 const handleValidationError = (error: any, context: string): never => {
   if (error?.name === 'ZodError') {
-    const validationErrors = error.errors.map((err: any) =>
-      `${err.path.join('.')}: ${err.message}`
-    ).join(', ');
-    throw new Error(`Validation failed in ${context}: ${validationErrors}`);
+    // Log detailed error to console for debugging
+    console.error(`Zod validation failed in ${context}:`, {
+      context,
+      issues: error.issues || error.errors || [],
+      message: error.message,
+      fullError: error
+    });
+
+    // Throw user-friendly error message
+    throw new Error(`Data validation failed. The server response format has changed. Please try again or contact support if the issue persists.`);
   }
   throw error;
 };

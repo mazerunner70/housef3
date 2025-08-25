@@ -1,23 +1,36 @@
-import { getCurrentUser, refreshToken, isAuthenticated } from './AuthService';
 import { Decimal } from 'decimal.js';
 import {
-
   TransactionListResponse,
   TransactionViewItem,
   TransactionsViewResponse,
   TransactionRequestParams,
-
   CategoryInfo,
   AccountInfo,
-  transactionFields
-} from '../types/Transaction';
+  transactionFields,
+  TransactionsViewResponseSchema,
+  CategoriesResponseSchema,
+  AccountInfoSchema,
+  TransactionListResponseSchema,
+  QuickUpdateResponseSchema
+} from '../schemas/Transaction';
+import { ApiClient } from '../utils/apiClient';
+import { validateApiResponse } from '../utils/zodErrorHandler';
+import { z } from 'zod';
+
+// Service-specific response interfaces
+export interface QuickUpdateCategoryResponse {
+  success: boolean;
+  transaction?: TransactionViewItem;
+}
+
+// Schemas are now imported from ../schemas/Transaction.ts
 
 // Get API endpoint from environment variables
-const API_ENDPOINT = import.meta.env.VITE_API_ENDPOINT;
+const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/api`;
 
 // Function to fetch transactions for the main transaction view - Simple LoadMore approach
 export const getUserTransactions = async (params: TransactionRequestParams): Promise<TransactionsViewResponse> => {
-  const pageSize = params.pageSize || 25;
+  const pageSize = params.pageSize || 20;
 
   console.log(`Frontend LoadMore: Fetching ${pageSize} transactions`);
 
@@ -54,100 +67,101 @@ export const getUserTransactions = async (params: TransactionRequestParams): Pro
 
   if (params.ignoreDup !== undefined) query.append('ignoreDup', params.ignoreDup.toString());
 
-  const endpoint = `${API_ENDPOINT}/api/transactions?${query.toString()}`;
+  const endpoint = `${API_ENDPOINT}/transactions?${query.toString()}`;
 
   console.log(`Frontend LoadMore: Requesting from endpoint with lastEvaluatedKey:`, params.lastEvaluatedKey);
 
-  try {
-    const response = await authenticatedRequest(endpoint);
-    const data = response as any; // Backend response format
+  return validateApiResponse(
+    () => ApiClient.getJson<any>(endpoint),
+    (rawData) => {
+      console.log(`Frontend LoadMore: Received ${rawData.transactions?.length || 0} transactions`);
 
-    // Transform backend response to match TransactionViewItem interface
-    const processedTransactions = data.transactions.map((tx: any) => ({
-      ...tx,
-      amount: new Decimal(tx.amount),
-      balance: new Decimal(tx.balance),
-      // Leave primaryCategoryId as-is, will be transformed in the component
-    }));
+      // Transform response to match expected format
+      const processedResponse = {
+        transactions: rawData.transactions.map((tx: any) => ({
+          ...tx,
+          amount: new Decimal(tx.amount?.toString() || '0'),
+          balance: new Decimal(tx.balance?.toString() || '0'),
+        })),
+        loadMore: {
+          hasMore: !!rawData.pagination?.lastEvaluatedKey,
+          lastEvaluatedKey: rawData.pagination?.lastEvaluatedKey,
+          itemsInCurrentBatch: rawData.transactions?.length || 0
+        }
+      };
 
-    console.log(`Frontend LoadMore: Received ${processedTransactions.length} transactions`);
-
-    const processedResponse: TransactionsViewResponse = {
-      transactions: processedTransactions,
-      loadMore: {
-        hasMore: !!data.pagination?.lastEvaluatedKey,
-        lastEvaluatedKey: data.pagination?.lastEvaluatedKey,
-        itemsInCurrentBatch: processedTransactions.length
-      }
-    };
-
-    return processedResponse;
-
-  } catch (error) {
-    console.error(`Frontend LoadMore: Error fetching transactions:`, error);
-    throw error;
-  }
+      return TransactionsViewResponseSchema.parse(processedResponse);
+    },
+    'transaction list data',
+    'Failed to load transactions. The transaction data format is invalid.'
+  );
 };
 
 // Function to fetch all categories
 export const getCategories = async (): Promise<CategoryInfo[]> => {
-  const endpoint = `${API_ENDPOINT}/api/categories`;
-  try {
-    const response = await authenticatedRequest(endpoint);
+  return validateApiResponse(
+    () => ApiClient.getJson<any>(`${API_ENDPOINT}/categories`),
+    (rawData) => {
+      const validatedResponse = CategoriesResponseSchema.parse(rawData);
 
-    // Backend returns { categories: [...], metadata: {...} }
-    if (response && response.categories && Array.isArray(response.categories)) {
-      return response.categories as CategoryInfo[];
-    }
-    // Fallback: if response is already an array (for backward compatibility)
-    if (Array.isArray(response)) {
-      return response as CategoryInfo[];
-    }
-    console.warn('Categories response is not in expected format:', response);
-    return [];
-  } catch (error) {
-    console.error('Error fetching categories:', error);
-    throw error;
-  }
+      // Handle both wrapped and unwrapped formats
+      if (Array.isArray(validatedResponse)) {
+        return validatedResponse;
+      }
+      return validatedResponse.categories;
+    },
+    'categories data',
+    'Failed to load categories. The categories data format is invalid.'
+  );
 };
 
 // Function to fetch all accounts
 export const getAccounts = async (): Promise<AccountInfo[]> => {
-  const endpoint = `${API_ENDPOINT}/api/accounts`;
-  try {
-    const response = await authenticatedRequest(endpoint);
-    // Assuming API returns [{ id: "acc_123", name: "Checking Account" }, ...]
-    return response as AccountInfo[]; // Adjust if API returns a more complex object e.g. { accounts: [] }
-  } catch (error) {
-    console.error('Error fetching accounts:', error);
-    throw error;
-  }
+  return validateApiResponse(
+    () => ApiClient.getJson<any>(`${API_ENDPOINT}/accounts`),
+    (rawData) => {
+      // Handle both array format and wrapped format
+      if (Array.isArray(rawData)) {
+        return z.array(AccountInfoSchema).parse(rawData);
+      }
+      // If wrapped in accounts property
+      if (rawData.accounts && Array.isArray(rawData.accounts)) {
+        return z.array(AccountInfoSchema).parse(rawData.accounts);
+      }
+      throw new Error('Invalid accounts response format');
+    },
+    'accounts data',
+    'Failed to load accounts. The accounts data format is invalid.'
+  );
 };
 
 // Function for quick category update
 export const quickUpdateTransactionCategory = async (transactionId: string, categoryId: string): Promise<TransactionViewItem | { success: boolean }> => {
-  const endpoint = `${API_ENDPOINT}/api/transactions/${transactionId}/category`;
-  try {
-    const response = await authenticatedRequest(endpoint, {
-      method: 'PUT',
-      body: JSON.stringify({ categoryId }),
-    });
+  return validateApiResponse(
+    () => ApiClient.putJson<any>(`${API_ENDPOINT}/transactions/${transactionId}/category`, { categoryId }),
+    (rawData) => {
+      const validatedResponse = QuickUpdateResponseSchema.parse(rawData);
 
-    // If response contains transaction data, parse the amounts
-    if (response && response.amount && response.balance) {
-      return {
-        ...response,
-        amount: new Decimal(response.amount),
-        balance: new Decimal(response.balance),
-      };
-    }
+      // If it's a success response with transaction data
+      if (typeof validatedResponse === 'object' && validatedResponse !== null && 'success' in validatedResponse) {
+        if (validatedResponse.transaction) {
+          return validatedResponse.transaction as any;
+        }
+        return { success: validatedResponse.success };
+      }
 
-    // Otherwise, return the response as-is (likely a simple success message)
-    return response;
-  } catch (error) {
-    console.error('Error updating transaction category:', error);
-    throw error;
-  }
+      // If it's a transaction object directly
+      if (typeof validatedResponse === 'object' && validatedResponse !== null &&
+        ('transactionId' in validatedResponse || 'id' in validatedResponse)) {
+        return validatedResponse as any;
+      }
+
+      // Otherwise return success response
+      return { success: true };
+    },
+    'transaction category update data',
+    `Failed to update category for transaction ${transactionId}. The server response format is invalid.`
+  );
 };
 
 // Re-export transactionFields for backward compatibility
@@ -155,123 +169,24 @@ export { transactionFields };
 
 // --- End of New interfaces and functions ---
 
-// Helper function to handle API requests with authentication
-const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
-  const currentUser = getCurrentUser();
-
-  if (!currentUser || !currentUser.token) {
-    throw new Error('User not authenticated');
-  }
-
-  try {
-    // Check if token is valid
-    if (!isAuthenticated()) {
-      // Try to refresh token
-      await refreshToken(currentUser.refreshToken);
-    }
-
-    // Get the user again after potential refresh
-    const user = getCurrentUser();
-    if (!user || !user.token) {
-      throw new Error('Authentication failed');
-    }
-
-    // Set up headers with authentication
-    const headers = {
-      'Authorization': user.token,
-      'Content-Type': 'application/json',
-      ...options.headers
-    };
-
-    const requestOptions = {
-      ...options,
-      headers
-    };
-
-    const response = await fetch(url, requestOptions);
-
-    // Handle 401 error specifically - try to refresh token
-    if (response.status === 401) {
-      try {
-        const refreshedUser = await refreshToken(user.refreshToken);
-
-        // Update headers with new token
-        const retryHeaders = {
-          'Authorization': refreshedUser.token,
-          'Content-Type': 'application/json',
-          ...options.headers
-        };
-
-        // Retry the request with the new token
-        const retryResponse = await fetch(url, {
-          ...options,
-          headers: retryHeaders
-        });
-
-        if (!retryResponse.ok) {
-          throw new Error(`Request failed after token refresh: ${retryResponse.status} ${retryResponse.statusText}`);
-        }
-
-        return await retryResponse.json();
-      } catch (refreshError) {
-        console.error('Error refreshing token:', refreshError);
-        throw new Error('Session expired. Please log in again.');
-      }
-    }
-
-    if (!response.ok) {
-      throw new Error(`Request failed: ${response.status} ${response.statusText}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error with authenticated request:', error);
-    throw error;
-  }
-};
-
 // Get transactions for a file
 export const getFileTransactions = async (fileId: string): Promise<TransactionListResponse> => {
-  try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/api/files/${fileId}/transactions`);
-
-    // Transform the response to convert string amounts to Decimal objects
-    const processedTransactions = response.transactions.map((tx: any) => ({
-      ...tx,
-      amount: new Decimal(tx.amount),
-      balance: new Decimal(tx.balance),
-    }));
-
-    return {
-      ...response,
-      transactions: processedTransactions
-    };
-  } catch (error) {
-    console.error('Error fetching file transactions:', error);
-    throw error;
-  }
+  return validateApiResponse(
+    () => ApiClient.getJson<any>(`${API_ENDPOINT}/files/${fileId}/transactions`),
+    (rawData) => TransactionListResponseSchema.parse(rawData),
+    'file transactions data',
+    `Failed to load transactions for file ${fileId}. The transaction data format is invalid.`
+  );
 };
 
 // Get transactions for an account
 export const getAccountTransactions = async (accountId: string, limit: number = 50): Promise<TransactionListResponse> => {
-  try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/api/accounts/${accountId}/transactions?limit=${limit}`);
-
-    // Transform the response to convert string amounts to Decimal objects
-    const processedTransactions = response.transactions.map((tx: any) => ({
-      ...tx,
-      amount: new Decimal(tx.amount),
-      balance: new Decimal(tx.balance),
-    }));
-
-    return {
-      ...response,
-      transactions: processedTransactions
-    };
-  } catch (error) {
-    console.error('Error fetching account transactions:', error);
-    throw error;
-  }
+  return validateApiResponse(
+    () => ApiClient.getJson<any>(`${API_ENDPOINT}/accounts/${accountId}/transactions?limit=${limit}`),
+    (rawData) => TransactionListResponseSchema.parse(rawData),
+    'account transactions data',
+    `Failed to load transactions for account ${accountId}. The transaction data format is invalid.`
+  );
 };
 
 // Default export

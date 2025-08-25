@@ -52,6 +52,15 @@ from .analytics import (
     DataDisclaimer
 )
 
+from .user_preferences import (
+    UserPreferences,
+    UserPreferencesCreate,
+    UserPreferencesUpdate,
+    TransferPreferences,
+    UIPreferences,
+    TransactionPreferences
+)
+
 __all__ = [
     'Account',
     'AccountType',
@@ -84,6 +93,12 @@ __all__ = [
     'AnalyticsData',
     'DataGap',
     'DataDisclaimer',
+    'UserPreferences',
+    'UserPreferencesCreate',
+    'UserPreferencesUpdate',
+    'TransferPreferences',
+    'UIPreferences',
+    'TransactionPreferences',
 ]
 
 from .account import AccountCreate, AccountUpdate
