@@ -1,4 +1,4 @@
-language: "python"
+language: "en-GB"
 reviews:
   profile: "chill"
   request_changes_workflow: false

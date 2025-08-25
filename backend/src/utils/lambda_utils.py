@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import json
 from decimal import Decimal
 import uuid
@@ -77,3 +77,32 @@ def mandatory_body_parameter(event: Dict[str, Any], parameter_name: str) -> str:
     if not parameter_value:
         raise KeyError(f"Body parameter {parameter_name} is required")
     return parameter_value
+
+
+def extract_user_id_from_event(event: Dict[str, Any]) -> Optional[str]:
+    """
+    Extract user ID from an authenticated Lambda event.
+    
+    This function assumes the event has already been authenticated and contains
+    user information in the request context. It's designed to work with the
+    require_auth decorator.
+    
+    Args:
+        event: The Lambda event object containing the request context
+        
+    Returns:
+        The user's unique identifier (sub) if found, None otherwise
+    """
+    try:
+        request_context = event.get("requestContext", {})
+        authorizer = request_context.get("authorizer", {})
+        claims = authorizer.get("jwt", {}).get("claims", {})
+        
+        user_sub = claims.get("sub")
+        return user_sub
+    except Exception as e:
+        # Log error but don't raise - this function should be used after authentication
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error extracting user ID from event: {str(e)}")
+        return None
