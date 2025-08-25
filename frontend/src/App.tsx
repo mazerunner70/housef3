@@ -3,7 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import Login from './new-ui/components/Login';
 import NewUILayout from './new-ui/layouts/NewUILayout';
 import AccountsView from './new-ui/views/AccountsView';
-import TransactionsView from './new-ui/views/TransactionsView';
+import TransactionsPage from '@/new-ui/pages/TransactionsPage';
 import AnalyticsView from './new-ui/views/AnalyticsView';
 import FZIPManagementView from './new-ui/views/FZIPManagementView';
 import { getCurrentUser, isAuthenticated, refreshToken } from './services/AuthService';
@@ -17,11 +17,11 @@ function App() {
   useEffect(() => {
     const checkAuth = async () => {
       setLoading(true);
-      
+
       try {
         // Get current user
         const currentUser = getCurrentUser();
-        
+
         // Check if user is authenticated
         if (currentUser) {
           // If token expired, try to refresh
@@ -36,14 +36,14 @@ function App() {
               return;
             }
           }
-          
+
           // Token still valid
           if (isAuthenticated()) {
             setAuthenticated(true);
             return;
           }
         }
-        
+
         // No user or invalid token
         setAuthenticated(false);
       } catch (error) {
@@ -53,7 +53,7 @@ function App() {
         setLoading(false);
       }
     };
-    
+
     checkAuth();
   }, []);
 
@@ -84,7 +84,7 @@ function App() {
       <Route path="/*" element={<NewUILayout onSignOut={handleSignOut} />}>
         <Route index element={<Navigate to="accounts" replace />} />
         <Route path="accounts" element={<AccountsView />} />
-        <Route path="transactions" element={<TransactionsView />} />
+        <Route path="transactions" element={<TransactionsPage />} />
         <Route path="analytics" element={<AnalyticsView />} />
         <Route path="backup" element={<FZIPManagementView />} />
         <Route path="*" element={<div><p>Page Not Found</p></div>} />

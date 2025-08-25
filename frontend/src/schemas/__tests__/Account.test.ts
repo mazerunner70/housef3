@@ -136,10 +136,9 @@ describe('Account Zod Schemas', () => {
                         updatedAt: 1640995200000,
                     }
                 ],
-                user: {
-                    id: 'user-456',
-                    email: 'user@example.com',
-                    auth_time: '2024-01-01T00:00:00Z',
+                user: 'user-456', // User is now just a string (user ID)
+                metadata: {
+                    totalAccounts: 1
                 }
             };
 

@@ -31,17 +31,17 @@
     text-decoration: none;
     border: var(--border-width) solid transparent;
     transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-    
+
     /* Standard size */
     padding: var(--button-padding-standard-vertical) var(--button-padding-standard-horizontal);
     font-size: var(--font-size-button);
     min-height: var(--button-height-standard);
-    
+
     /* Primary variant */
     background-color: var(--color-primary-brand);
     color: var(--color-white);
     border-color: var(--color-primary-brand);
-    
+
     margin-bottom: var(--spacing-xl);
 }
 
@@ -67,17 +67,17 @@
     text-decoration: none;
     border: var(--border-width) solid transparent;
     transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-    
+
     /* Compact size for back button */
     padding: var(--button-padding-compact-vertical) var(--button-padding-compact-horizontal);
     font-size: var(--font-size-small);
     min-height: var(--button-height-compact);
-    
+
     /* Tertiary variant */
     background-color: transparent;
     color: var(--color-primary-brand);
     border-color: var(--color-borders-dividers);
-    
+
     margin-bottom: var(--spacing-xl);
 }
 
@@ -109,15 +109,40 @@
     border: var(--border-width) solid var(--color-error-danger-border);
     margin-bottom: var(--spacing-l);
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: var(--spacing-m);
 }
 
-.accounts-error-container .error-message {
+.accounts-error-container .error-content {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-s);
     flex: 1;
+}
+
+.accounts-error-container .error-icon {
+    font-size: 1.2em;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.accounts-error-container .error-details {
+    flex: 1;
+}
+
+.accounts-error-container .error-details h4 {
+    margin: 0 0 var(--spacing-xs) 0;
+    font-size: var(--font-size-medium);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-error-danger);
+}
+
+.accounts-error-container .error-details p {
     margin: 0;
-    font-weight: var(--font-weight-medium);
+    font-size: var(--font-size-small);
+    color: var(--color-error-danger);
+    line-height: 1.4;
 }
 
 .accounts-error-container .clear-error-button {
@@ -128,17 +153,17 @@
     cursor: pointer;
     border: var(--border-width) solid transparent;
     transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out;
-    
+
     /* Compact size */
     padding: var(--button-padding-compact-vertical) var(--button-padding-compact-horizontal);
     font-size: var(--font-size-small);
     min-height: var(--button-height-compact);
-    
+
     /* Danger variant */
     background-color: var(--color-error-danger);
     color: var(--color-white);
     border-color: var(--color-error-danger);
-    
+
     flex-shrink: 0;
 }
 
@@ -166,26 +191,30 @@
     .accounts-view-container {
         padding: var(--spacing-l);
     }
-    
+
     .accounts-view-container h1 {
         font-size: var(--font-size-h2);
         margin-bottom: var(--spacing-l);
     }
-    
+
     .add-account-button,
     .back-button {
         width: 100%;
         justify-content: center;
     }
-    
+
     .accounts-error-container {
         flex-direction: column;
         align-items: stretch;
-        text-align: center;
     }
-    
+
+    .accounts-error-container .error-content {
+        text-align: left;
+        margin-bottom: var(--spacing-s);
+    }
+
     .accounts-error-container .clear-error-button {
         width: 100%;
-        margin-top: var(--spacing-s);
+        align-self: stretch;
     }
-} 
+}

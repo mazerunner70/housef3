@@ -1,0 +1,60 @@
+language: "python"
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: true
+  review_status: true
+  collapse_ellipsis: false
+  auto_reply: true
+  
+chat:
+  auto_reply: true
+
+# Python-specific configuration
+python:
+  # Set the Python path to include backend/src
+  pythonpath:
+    - "backend/src"
+  
+  # Specify the root directory for Python imports
+  root_directory: "backend"
+  
+  # Virtual environment path
+  venv_path: "backend/venv"
+  
+  # Test configuration
+  test_framework: "pytest"
+  test_directory: "backend/tests"
+  
+  # Linting configuration
+  linters:
+    - "flake8"
+    - "pylint"
+  
+  # Import resolution
+  import_resolution:
+    - "backend/src"
+    - "backend/tests"
+
+# File patterns to review
+include:
+  - "backend/**/*.py"
+  - "frontend/**/*.ts"
+  - "frontend/**/*.tsx"
+  - "infrastructure/**/*.tf"
+  - "**/*.md"
+  - "**/*.yml"
+  - "**/*.yaml"
+  - "**/*.json"
+
+# File patterns to ignore
+exclude:
+  - "backend/venv/**"
+  - "**/node_modules/**"
+  - "**/__pycache__/**"
+  - "**/*.pyc"
+  - "**/dist/**"
+  - "**/build/**"
+  - "**/.terraform/**"
+  - "**/terraform.tfstate*"

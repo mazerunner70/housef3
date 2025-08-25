@@ -1,12 +1,13 @@
-.transactions-view-container {
+.transactions-page-container {
   padding: 20px;
-  background-color: #fff; /* Or a light neutral background */
+  background-color: #fff;
+  /* Or a light neutral background */
   height: 100%;
   display: flex;
   flex-direction: column;
 }
 
-.transactions-view {
+.transactions-page {
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -16,7 +17,7 @@
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
-.transactions-view-header {
+.transactions-page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -24,7 +25,7 @@
   border-bottom: 1px solid #eee;
 }
 
-.transactions-view-header h1 {
+.transactions-page-header h1 {
   margin: 0;
   font-size: 1.8em;
   color: #333;
@@ -32,24 +33,30 @@
 
 /* Styles for the global Add Transaction button in the header */
 .add-transaction-button-global {
-  background-color: #28a745; /* Green for "add" actions */
+  background-color: #28a745;
+  /* Green for "add" actions */
   color: white;
   border: none;
-  padding: 8px 12px; /* Adjusted padding for a tighter fit */
+  padding: 8px 12px;
+  /* Adjusted padding for a tighter fit */
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.9em; /* Slightly smaller font if needed, or adjust padding */
+  font-size: 0.9em;
+  /* Slightly smaller font if needed, or adjust padding */
   font-weight: 500;
   transition: background-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-  line-height: 1; /* Helps to vertically align icon and text if they differ in size */
-  width: fit-content; /* Explicitly set width to content size */
+  line-height: 1;
+  /* Helps to vertically align icon and text if they differ in size */
+  width: fit-content;
+  /* Explicitly set width to content size */
 }
 
 .add-transaction-button-global span[role="img"],
 .tab-button span[role="img"],
 .action-button span[role="img"],
 .modal-close-button span[role="img"] {
-  margin-right: 6px; /* Space between icon and text */
+  margin-right: 6px;
+  /* Space between icon and text */
 }
 
 .add-transaction-button-global:hover {
@@ -58,32 +65,39 @@
 }
 
 /* Tab Navigation Styles */
-.transactions-view-tabs {
+.transactions-page-tabs {
   display: flex;
   margin-bottom: 20px;
-  border-bottom: 2px solid #dee2e6; /* Modern tab underline */
+  border-bottom: 2px solid #dee2e6;
+  /* Modern tab underline */
 }
 
 .tab-button {
-  padding: 12px 15px; /* Adjusted padding to accommodate icons better */
+  padding: 12px 15px;
+  /* Adjusted padding to accommodate icons better */
   cursor: pointer;
   border: none;
   background-color: transparent;
   font-size: 1em;
   font-weight: 500;
-  color: #495057; /* Subtler text color for inactive tabs */
+  color: #495057;
+  /* Subtler text color for inactive tabs */
   margin-right: 5px;
-  border-bottom: 2px solid transparent; /* For active state */
+  border-bottom: 2px solid transparent;
+  /* For active state */
   transition: color 0.2s ease, border-bottom-color 0.2s ease;
 }
 
 .tab-button:hover {
-  color: #007bff; /* Primary color on hover */
+  color: #007bff;
+  /* Primary color on hover */
 }
 
 .tab-button.active {
-  color: #007bff; /* Primary color for active tab text */
-  border-bottom-color: #007bff; /* Primary color for active tab underline */
+  color: #007bff;
+  /* Primary color for active tab text */
+  border-bottom-color: #007bff;
+  /* Primary color for active tab underline */
   font-weight: 600;
 }
 
@@ -101,7 +115,8 @@
   background-color: #007bff;
   color: white;
   border: none;
-  padding: 8px 12px; /* Adjusted padding */
+  padding: 8px 12px;
+  /* Adjusted padding */
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.9em;
@@ -122,7 +137,8 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000; /* Ensure it's on top */
+  z-index: 1000;
+  /* Ensure it's on top */
 }
 
 .modal-content-placeholder {
@@ -142,7 +158,8 @@
 }
 
 .modal-close-button {
-  background-color: #6c757d; /* Secondary/neutral button color */
+  background-color: #6c757d;
+  /* Secondary/neutral button color */
   color: white;
   border: none;
   padding: 8px 15px;
@@ -150,8 +167,10 @@
   cursor: pointer;
   font-size: 0.9em;
   margin-top: 20px;
-  display: block; /* Or float right if preferred */
-  margin-left: auto; /* Aligns to the right if it's a block */
+  display: block;
+  /* Or float right if preferred */
+  margin-left: auto;
+  /* Aligns to the right if it's a block */
 }
 
 .modal-close-button:hover {
@@ -159,7 +178,8 @@
 }
 
 .error-message {
-  color: #d9534f; /* Bootstrap danger color */
+  color: #d9534f;
+  /* Bootstrap danger color */
   background-color: #f2dede;
   border: 1px solid #ebccd1;
   padding: 15px;
@@ -178,13 +198,13 @@
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
-  .transactions-view-header {
+  .transactions-page-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 10px;
   }
 
-  .transactions-view {
+  .transactions-page {
     padding: 15px;
   }
-} 
+}

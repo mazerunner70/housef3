@@ -6,20 +6,62 @@ alwaysApply: false
 
 # Frontend Development Conventions
 
+## Architecture Principles
+
+### Component Hierarchy
+```
+App.tsx (Router Setup)
+├── NewUILayout (Overall Layout with <Outlet />)
+    └── Pages (React Router driven - route-level containers)
+        └── Business Components (Domain-specific features)
+            └── UI Components (Reusable, domain-agnostic)
+```
+
+### Layer Responsibilities
+1. **Layout**: `NewUILayout` provides app shell with navigation and `<Outlet />` for router content
+2. **Pages**: Route-level containers that compose business components, follow `{Feature}Page.tsx` naming
+3. **Business Components**: Domain-specific, can use domain terminology, not reusable across domains
+4. **UI Components**: Domain-agnostic, reusable, no business terminology, composable only with other UI components
+
 ## File Structure
 - frontend/src/components/ - OLD components (no new files)
 - frontend/src/new-ui/ - NEW modern UI components
-  - new-ui/components/ - Reusable UI components
-  - new-ui/views/ - Page-level components
-  - new-ui/layouts/ - Layout components
+  - new-ui/layouts/ - App-level layouts (NewUILayout)
+  - new-ui/pages/ - Route-level page components (AccountsPage, TransactionsPage, etc.)
+  - new-ui/components/
+    - business/ - Domain-specific components organized by domain
+      - accounts/ - Account management components
+      - transactions/ - Transaction-related components  
+      - categories/ - Category management components
+      - fzip/ - Backup/restore components
+    - ui/ - Reusable, domain-agnostic components
   - new-ui/hooks/ - Custom React hooks
   - new-ui/styles/ - Global styles/themes
 
-## Component Organization
-- Use new-ui/ for all new components
-- Keep old components in components/ but don't add new ones
-- Follow the established new-ui directory structure
-- Separate business logic into hooks and services
+## Component Rules
+
+### Business Components
+- Located in `new-ui/components/business/{domain}/`
+- Can use domain-specific terminology (Account, Transaction, Category, etc.)
+- Not reusable across different business domains
+- Can compose other business components from same domain OR ui components
+- Should handle domain-specific logic and state
+
+### UI Components  
+- Located in `new-ui/components/ui/`
+- Must be domain-agnostic (no business terminology)
+- Reusable across the entire application
+- Can only compose other UI components
+- Should be pure presentation components with minimal logic
+- Examples: Button, DateCell, CurrencyDisplay, StatusBadge
+
+### Pages
+- Located in `new-ui/pages/`
+- Follow `{Feature}Page.tsx` naming convention (AccountsPage, TransactionsPage, etc.)
+- Should be thin containers that primarily compose business components
+- Handle routing-level concerns and page-level state
+- Minimal direct UI logic - delegate to business components
+- Directly referenced by React Router routes
 
 ## Testing
 - Run tests via frontend/fe_unit_tests.sh
@@ -30,10 +72,31 @@ alwaysApply: false
 ## Services and Types
 - Keep services in frontend/src/services/
 - TypeScript types in frontend/src/types/
+- Zod schemas in frontend/src/schemas/
 - Use proper TypeScript patterns
+
+## Error Handling
+
+### Zod Validation Errors
+- Use `zodErrorHandler.ts` utility for consistent error processing
+- Provide user-friendly error messages that avoid technical jargon
+- Include clear console logging for debugging with full error context
+- Transform Zod validation errors into actionable user feedback
+- Log validation errors with structured data for troubleshooting
+- Example pattern:
+  ```typescript
+  try {
+    const result = schema.parse(data);
+  } catch (error) {
+    const userMessage = handleZodError(error);
+    console.error('Validation failed:', { error, data, schema: schema._def });
+    showUserError(userMessage);
+  }
+  ```
 
 ## UI Standards
 - Follow modern UI design patterns
-- Use the established theme system
+- Use the established theme system in new-ui/styles/
 - Ensure responsive design
 - Maintain consistent styling across new-ui components
+- Each component should have its own CSS file when needed

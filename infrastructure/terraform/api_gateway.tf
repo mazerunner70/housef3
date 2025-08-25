@@ -305,6 +305,15 @@ resource "aws_apigatewayv2_integration" "transaction_operations" {
   description            = "Lambda integration for transaction operations"
 }
 
+# Transfer Operations Integration
+resource "aws_apigatewayv2_integration" "transfer_operations" {
+  api_id                 = aws_apigatewayv2_api.main.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.transfer_operations.invoke_arn
+  payload_format_version = "2.0"
+  description            = "Lambda integration for transfer operations"
+}
+
 # Transaction Routes
 resource "aws_apigatewayv2_route" "get_transactions" {
   api_id             = aws_apigatewayv2_api.main.id
@@ -318,6 +327,39 @@ resource "aws_apigatewayv2_route" "delete_transaction" {
   api_id             = aws_apigatewayv2_api.main.id
   route_key          = "DELETE /transactions/{id}"
   target             = "integrations/${aws_apigatewayv2_integration.transaction_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Transfer Routes
+resource "aws_apigatewayv2_route" "detect_transfers" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /transfers/detect"
+  target             = "integrations/${aws_apigatewayv2_integration.transfer_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "get_paired_transfers" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /transfers/paired"
+  target             = "integrations/${aws_apigatewayv2_integration.transfer_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "mark_transfer_pair" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /transfers/mark-pair"
+  target             = "integrations/${aws_apigatewayv2_integration.transfer_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "bulk_mark_transfers" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /transfers/bulk-mark"
+  target             = "integrations/${aws_apigatewayv2_integration.transfer_operations.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
@@ -842,6 +884,15 @@ resource "aws_lambda_permission" "api_gateway_transactions" {
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/transactions*"
 }
 
+# Lambda permission for transfer operations
+resource "aws_lambda_permission" "api_gateway_transfers" {
+  statement_id  = "AllowAPIGatewayInvokeTransfers"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.transfer_operations.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/transfers*"
+}
+
 # Lambda permission for getcolors
 resource "aws_lambda_permission" "getcolors" {
   statement_id  = "AllowAPIGatewayInvoke"
@@ -893,6 +944,60 @@ resource "aws_lambda_permission" "api_gateway_fzip" {
   function_name = aws_lambda_alias.fzip_operations_version.arn
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/fzip*"
+}
+
+# =========================================
+# USER PREFERENCES API INTEGRATION
+# =========================================
+
+# Integration for user preferences operations
+resource "aws_apigatewayv2_integration" "user_preferences_operations" {
+  api_id             = aws_apigatewayv2_api.main.id
+  integration_type   = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri    = aws_lambda_function.user_preferences_operations.invoke_arn
+}
+
+# Routes for user preferences operations
+resource "aws_apigatewayv2_route" "get_user_preferences" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /user-preferences"
+  target             = "integrations/${aws_apigatewayv2_integration.user_preferences_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "update_user_preferences" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "PUT /user-preferences"
+  target             = "integrations/${aws_apigatewayv2_integration.user_preferences_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "get_transfer_preferences" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /user-preferences/transfers"
+  target             = "integrations/${aws_apigatewayv2_integration.user_preferences_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "update_transfer_preferences" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "PUT /user-preferences/transfers"
+  target             = "integrations/${aws_apigatewayv2_integration.user_preferences_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Lambda permission for user preferences
+resource "aws_lambda_permission" "api_gateway_user_preferences_ops" {
+  statement_id  = "AllowAPIGatewayInvokeUserPreferencesLambda"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.user_preferences_operations.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
 }
 
 # Outputs

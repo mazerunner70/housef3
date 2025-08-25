@@ -605,7 +605,7 @@ def _select_optimal_gsi(
     
     # 3. Status filter (efficient for duplicate detection or status-specific queries)
     if ignore_dup:
-        key_condition = Key('status').eq('processed')  # Assuming non-duplicates have 'processed' status
+        key_condition = Key('status').eq('new')  # Non-duplicates have 'new' status
         key_condition = _add_date_range(key_condition)
         logger.debug("Using StatusDateIndex for ignore_dup filter")
         return 'StatusDateIndex', key_condition

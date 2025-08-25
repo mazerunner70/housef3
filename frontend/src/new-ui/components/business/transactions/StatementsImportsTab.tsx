@@ -1,5 +1,5 @@
 import React from 'react';
-import ImportTransactionsView from './ImportTransactionsView'; // Import the detailed view
+import ImportTransactionsView from '@/new-ui/views/ImportTransactionsView'; // Import the detailed view
 
 const StatementsImportsTab: React.FC = () => {
   return (

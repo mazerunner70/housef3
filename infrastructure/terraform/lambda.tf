@@ -201,6 +201,36 @@ resource "aws_lambda_function" "transaction_operations" {
   }
 }
 
+# Transfer Operations Lambda
+resource "aws_lambda_function" "transfer_operations" {
+  filename         = "../../backend/lambda_deploy.zip"
+  function_name    = "${var.project_name}-${var.environment}-transfer-operations"
+  handler          = "handlers/transfer_operations.handler"
+  runtime          = "python3.12"
+  role             = aws_iam_role.lambda_exec.arn
+  timeout          = 60
+  memory_size      = 512
+  source_code_hash = base64encode(local.source_code_hash)
+  depends_on       = [null_resource.prepare_lambda]
+
+  environment {
+    variables = {
+      ENVIRONMENT                            = var.environment
+      TRANSACTIONS_TABLE                     = aws_dynamodb_table.transactions.name
+      ACCOUNTS_TABLE                         = aws_dynamodb_table.accounts.name
+      CATEGORIES_TABLE_NAME                  = aws_dynamodb_table.categories.name
+      TRANSACTION_CATEGORY_ASSIGNMENTS_TABLE = aws_dynamodb_table.transaction_category_assignments.name
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+    Component   = "transfer-operations"
+  }
+}
+
 # Analytics Operations Lambda
 resource "aws_lambda_function" "analytics_operations" {
   filename         = "../../backend/lambda_deploy.zip"
@@ -448,6 +478,17 @@ resource "aws_cloudwatch_log_group" "transaction_operations" {
   }
 }
 
+resource "aws_cloudwatch_log_group" "transfer_operations" {
+  name              = "/aws/lambda/${aws_lambda_function.transfer_operations.function_name}"
+  retention_in_days = 14
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
 resource "aws_cloudwatch_log_group" "analytics_operations" {
   name              = "/aws/lambda/${aws_lambda_function.analytics_operations.function_name}"
   retention_in_days = 14
@@ -585,6 +626,38 @@ resource "aws_iam_role_policy_attachment" "categories_lambda_dynamodb_attachment
 resource "aws_iam_role_policy_attachment" "categories_lambda_basic_execution" {
   role       = aws_iam_role.categories_lambda_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# =========================================
+# USER PREFERENCES LAMBDA IAM PERMISSIONS
+# =========================================
+
+data "aws_iam_policy_document" "user_preferences_lambda_dynamodb_policy_doc" {
+  statement {
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:Query",
+      "dynamodb:Scan"
+    ]
+    resources = [
+      aws_dynamodb_table.user_preferences.arn,
+      "${aws_dynamodb_table.user_preferences.arn}/index/*"
+    ]
+  }
+}
+
+resource "aws_iam_policy" "user_preferences_lambda_dynamodb_policy" {
+  name        = "${var.project_name}-${var.environment}-user-preferences-lambda-dynamodb-policy"
+  description = "IAM policy for User Preferences Lambda to access User Preferences DynamoDB table"
+  policy      = data.aws_iam_policy_document.user_preferences_lambda_dynamodb_policy_doc.json
+}
+
+resource "aws_iam_role_policy_attachment" "user_preferences_lambda_dynamodb_attachment" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = aws_iam_policy.user_preferences_lambda_dynamodb_policy.arn
 }
 # End Categories Lambda IAM Resources
 
@@ -871,6 +944,50 @@ resource "aws_lambda_permission" "api_gateway_file_maps" {
   function_name = aws_lambda_function.file_map_operations.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+}
+
+# =========================================
+# USER PREFERENCES LAMBDA FUNCTION
+# =========================================
+
+# Lambda function for user preferences operations
+resource "aws_lambda_function" "user_preferences_operations" {
+  filename         = "../../backend/lambda_deploy.zip"
+  function_name    = "${var.project_name}-${var.environment}-user-preferences-operations"
+  role            = aws_iam_role.lambda_exec.arn
+  handler         = "handlers.user_preferences_operations.user_preferences_handler"
+  source_code_hash = base64encode(local.source_code_hash)
+  runtime         = "python3.12"
+  timeout         = 30
+  depends_on       = [null_resource.prepare_lambda]
+
+  environment {
+    variables = {
+      USER_PREFERENCES_TABLE = aws_dynamodb_table.user_preferences.name
+      ENVIRONMENT           = var.environment
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
+# Lambda permission for API Gateway to invoke user preferences operations
+resource "aws_lambda_permission" "api_gateway_user_preferences" {
+  statement_id  = "AllowAPIGatewayInvokeUserPreferences"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.user_preferences_operations.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+}
+
+# Output the Lambda function name
+output "lambda_user_preferences_operations_name" {
+  description = "The name of the user preferences operations Lambda function"
+  value       = aws_lambda_function.user_preferences_operations.function_name
 }
 
 # Output the Lambda function name

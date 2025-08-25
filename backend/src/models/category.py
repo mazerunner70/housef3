@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 class CategoryType(str, Enum):
     INCOME = "INCOME"
     EXPENSE = "EXPENSE"
+    TRANSFER = "TRANSFER"
 
 class MatchCondition(str, Enum):
     CONTAINS = "contains"
