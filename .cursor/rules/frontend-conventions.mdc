@@ -100,3 +100,6 @@ App.tsx (Router Setup)
 - Ensure responsive design
 - Maintain consistent styling across new-ui components
 - Each component should have its own CSS file when needed
+
+## Accessibility Rules
+- Visible, non-interactive elements with click handlers must have at least one keyboard listener

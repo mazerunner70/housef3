@@ -44,6 +44,9 @@ export const useTransferPreferences = (): UseTransferPreferencesReturn => {
 
     // Update preferences
     const updatePreferences = useCallback(async (updates: Partial<TransferPreferences>) => {
+        // Capture original state before optimistic update
+        const originalPreferences = preferences;
+
         try {
             setError(null);
 
@@ -57,8 +60,8 @@ export const useTransferPreferences = (): UseTransferPreferencesReturn => {
             console.error('Failed to update transfer preferences:', err);
             setError(err instanceof Error ? err.message : 'Failed to update preferences');
 
-            // Revert optimistic update on error
-            setPreferences(preferences);
+            // Revert optimistic update on error using original state
+            setPreferences(originalPreferences);
             throw err;
         }
     }, [preferences]);

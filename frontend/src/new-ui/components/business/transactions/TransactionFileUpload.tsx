@@ -77,14 +77,14 @@ const TransactionFileUpload: React.FC<TransactionFileUploadProps> = ({
       // Read first 1KB of file to check for OFX headers
       const chunk = file.slice(0, 1024);
       const text = await chunk.text();
-      
+
       // Check for OFX header indicators
-      const hasOFXHeader = text.includes('<OFX>') || 
-                          text.includes('OFXHEADER:') || 
-                          text.includes('VERSION:') ||
-                          text.includes('<STMTRS>') ||
-                          text.includes('<CCSTMTRS>');
-      
+      const hasOFXHeader = text.includes('<OFX>') ||
+        text.includes('OFXHEADER:') ||
+        text.includes('VERSION:') ||
+        text.includes('<STMTRS>') ||
+        text.includes('<CCSTMTRS>');
+
       return hasOFXHeader;
     } catch (error) {
       console.warn('Could not validate OFX content:', error);
@@ -103,30 +103,30 @@ const TransactionFileUpload: React.FC<TransactionFileUploadProps> = ({
       // Read first 2KB of file to check for CSV structure
       const chunk = file.slice(0, 2048);
       const text = await chunk.text();
-      
+
       // Split into lines and check structure
       const lines = text.split('\n').filter(line => line.trim().length > 0);
-      
+
       if (lines.length < 2) {
         return false; // Need at least header + 1 data row
       }
-      
+
       // Check for common delimiters
       const firstLine = lines[0];
-      const hasCommonDelimiters = firstLine.includes(',') || 
-                                 firstLine.includes(';') || 
-                                 firstLine.includes('\t');
-      
+      const hasCommonDelimiters = firstLine.includes(',') ||
+        firstLine.includes(';') ||
+        firstLine.includes('\t');
+
       if (!hasCommonDelimiters) {
         return false; // No recognizable CSV delimiters
       }
-      
+
       // Check if all lines have similar structure (similar number of delimiters)
-      const delimiter = firstLine.includes(',') ? ',' : 
-                       firstLine.includes(';') ? ';' : '\t';
-      
+      const delimiter = firstLine.includes(',') ? ',' :
+        firstLine.includes(';') ? ';' : '\t';
+
       const headerColumnCount = firstLine.split(delimiter).length;
-      
+
       // Check first few data rows for consistency
       const dataLinesToCheck = Math.min(3, lines.length - 1);
       for (let i = 1; i <= dataLinesToCheck; i++) {
@@ -136,7 +136,7 @@ const TransactionFileUpload: React.FC<TransactionFileUploadProps> = ({
           console.warn(`CSV validation: Inconsistent column count. Header: ${headerColumnCount}, Row ${i}: ${columnCount}`);
         }
       }
-      
+
       return true;
     } catch (error) {
       console.warn('Could not validate CSV content:', error);
@@ -154,14 +154,14 @@ const TransactionFileUpload: React.FC<TransactionFileUploadProps> = ({
       // Read first 1KB of file to check for QIF structure
       const chunk = file.slice(0, 1024);
       const text = await chunk.text();
-      
+
       // Check for QIF indicators (starts with !Type: or !Account)
-      const hasQIFHeader = text.includes('!Type:') || 
-                          text.includes('!Account') ||
-                          text.includes('!Option:') ||
-                          // Check for common QIF transaction markers
-                          (text.includes('D') && text.includes('T') && text.includes('^'));
-      
+      const hasQIFHeader = text.includes('!Type:') ||
+        text.includes('!Account') ||
+        text.includes('!Option:') ||
+        // Check for common QIF transaction markers
+        (text.includes('D') && text.includes('T') && text.includes('^'));
+
       return hasQIFHeader;
     } catch (error) {
       console.warn('Could not validate QIF content:', error);
@@ -263,7 +263,7 @@ const TransactionFileUpload: React.FC<TransactionFileUploadProps> = ({
   const handleDrag = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     if (disabled) return;
 
     if (e.type === 'dragenter' || e.type === 'dragover') {
@@ -278,7 +278,7 @@ const TransactionFileUpload: React.FC<TransactionFileUploadProps> = ({
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    
+
     if (disabled) return;
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
@@ -302,7 +302,7 @@ const TransactionFileUpload: React.FC<TransactionFileUploadProps> = ({
     setValidationResult({ isValid: false });
     onValidationChange({ isValid: false });
     onFileSelect(null);
-    
+
     // Reset file input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -312,6 +312,14 @@ const TransactionFileUpload: React.FC<TransactionFileUploadProps> = ({
   // Handle click to open file dialog
   const handleUploadAreaClick = () => {
     if (!disabled) {
+      fileInputRef.current?.click();
+    }
+  };
+
+  // Handle keyboard interaction for accessibility
+  const handleUploadAreaKeyDown = (e: React.KeyboardEvent) => {
+    if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
       fileInputRef.current?.click();
     }
   };
@@ -335,13 +343,17 @@ const TransactionFileUpload: React.FC<TransactionFileUploadProps> = ({
       </label>
 
       {/* File Upload Area */}
-      <div 
+      <div
         className={`upload-area ${dragActive ? 'drag-active' : ''} ${selectedFile ? 'has-file' : ''} ${disabled ? 'disabled' : ''} ${validationResult.error ? 'has-error' : ''}`}
         onDragEnter={handleDrag}
         onDragOver={handleDrag}
         onDragLeave={handleDrag}
         onDrop={handleDrop}
         onClick={handleUploadAreaClick}
+        onKeyDown={handleUploadAreaKeyDown}
+        tabIndex={disabled ? -1 : 0}
+        role="button"
+        aria-label="Click or press Enter/Space to select a file, or drag and drop a file here"
       >
         <input
           type="file"
@@ -357,8 +369,8 @@ const TransactionFileUpload: React.FC<TransactionFileUploadProps> = ({
             <div className="file-selected">
               <div className="file-icon">
                 {validationResult.fileType === 'ofx' ? '📄' :
-                 validationResult.fileType === 'csv' ? '📊' :
-                 validationResult.fileType === 'qif' ? '💰' : '📋'}
+                  validationResult.fileType === 'csv' ? '📊' :
+                    validationResult.fileType === 'qif' ? '💰' : '📋'}
               </div>
               <div className="file-info">
                 <div className="file-name">{selectedFile.name}</div>
@@ -430,8 +442,8 @@ const TransactionFileUpload: React.FC<TransactionFileUploadProps> = ({
             <div className="format-info ofx-info">
               <h5>OFX File Information</h5>
               <p>
-                OFX (Open Financial Exchange) files contain structured financial data 
-                exported directly from your bank or financial institution. This format 
+                OFX (Open Financial Exchange) files contain structured financial data
+                exported directly from your bank or financial institution. This format
                 provides rich transaction details including:
               </p>
               <ul>
@@ -447,7 +459,7 @@ const TransactionFileUpload: React.FC<TransactionFileUploadProps> = ({
             <div className="format-info csv-info">
               <h5>CSV File Information</h5>
               <p>
-                CSV (Comma-Separated Values) files are spreadsheet-format files that require 
+                CSV (Comma-Separated Values) files are spreadsheet-format files that require
                 field mapping to match your bank's column structure. Common CSV columns include:
               </p>
               <ul>
@@ -464,7 +476,7 @@ const TransactionFileUpload: React.FC<TransactionFileUploadProps> = ({
             <div className="format-info qif-info">
               <h5>QIF File Information</h5>
               <p>
-                QIF (Quicken Interchange Format) files are text-based files with a specific 
+                QIF (Quicken Interchange Format) files are text-based files with a specific
                 structure used by Quicken and other financial software:
               </p>
               <ul>
@@ -480,7 +492,7 @@ const TransactionFileUpload: React.FC<TransactionFileUploadProps> = ({
             <div className="format-info qfx-info">
               <h5>QFX File Information</h5>
               <p>
-                QFX (Quicken Financial Exchange) files are similar to OFX but optimized 
+                QFX (Quicken Financial Exchange) files are similar to OFX but optimized
                 for Quicken software. They contain:
               </p>
               <ul>
