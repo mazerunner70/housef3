@@ -8,7 +8,7 @@ resource "aws_s3_bucket" "frontend" {
   bucket = "${var.project_name}-${var.environment}-frontend"
 
   tags = merge(var.tags, {
-    Name = "${var.project_name}-${var.environment}-frontend"
+    Name        = "${var.project_name}-${var.environment}-frontend"
     Description = "S3 bucket for frontend website hosting"
   })
 
@@ -29,9 +29,9 @@ resource "aws_s3_bucket_public_access_block" "frontend" {
   bucket = aws_s3_bucket.frontend.id
 
   block_public_acls       = true
-  block_public_policy     = true   # ✅ BLOCK public policies
-  ignore_public_acls      = true   # ✅ IGNORE public ACLs
-  restrict_public_buckets = true   # ✅ RESTRICT public buckets
+  block_public_policy     = true # ✅ BLOCK public policies
+  ignore_public_acls      = true # ✅ IGNORE public ACLs
+  restrict_public_buckets = true # ✅ RESTRICT public buckets
 }
 
 # Enable versioning for the frontend bucket
@@ -63,7 +63,7 @@ data "aws_iam_policy_document" "frontend_policy" {
       type        = "Service"
       identifiers = ["cloudfront.amazonaws.com"]
     }
-    
+
     condition {
       test     = "StringEquals"
       variable = "AWS:SourceArn"

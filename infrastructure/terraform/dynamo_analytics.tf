@@ -1,8 +1,8 @@
 resource "aws_dynamodb_table" "analytics_data" {
-  name           = "${var.project_name}-${var.environment}-analytics-data"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "pk"
-  range_key      = "sk"
+  name         = "${var.project_name}-${var.environment}-analytics-data"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
 
   attribute {
     name = "pk"
@@ -47,10 +47,10 @@ resource "aws_dynamodb_table" "analytics_data" {
 }
 
 resource "aws_dynamodb_table" "analytics_status" {
-  name           = "${var.project_name}-${var.environment}-analytics-status"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "pk"
-  range_key      = "sk"
+  name         = "${var.project_name}-${var.environment}-analytics-status"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
 
   attribute {
     name = "pk"

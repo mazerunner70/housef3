@@ -216,6 +216,56 @@ def checked_optional_file_map(file_map_id: Optional[uuid.UUID], user_id: str) ->
     check_user_owns_resource(file_map.user_id, user_id)
     return file_map
 
+def checked_mandatory_transaction(transaction_id: uuid.UUID, user_id: str) -> 'Transaction':
+    """Check if transaction exists and user has access to it."""
+    from models.transaction import Transaction
+    
+    # Get transaction using the existing function from handlers
+    try:
+        table = get_transactions_table()
+        if not table:
+            raise NotFound("Transaction database not available")
+        
+        response = table.get_item(Key={'transactionId': str(transaction_id)})
+        item = response.get('Item')
+        
+        if not item:
+            raise NotFound("Transaction not found")
+        
+        transaction = Transaction.from_dynamodb_item(item)
+        check_user_owns_resource(transaction.user_id, user_id)
+        return transaction
+    except Exception as e:
+        logger.error(f"Error getting transaction {transaction_id}: {str(e)}")
+        raise NotFound("Transaction not found")
+
+def checked_optional_transaction(transaction_id: Optional[uuid.UUID], user_id: str) -> Optional['Transaction']:
+    """Check if transaction exists and user has access to it, allowing None."""
+    if not transaction_id:
+        return None
+    try:
+        return checked_mandatory_transaction(transaction_id, user_id)
+    except NotFound:
+        return None
+
+def checked_mandatory_category(category_id: uuid.UUID, user_id: str) -> 'Category':
+    """Check if category exists and user has access to it."""
+    from models.category import Category
+    
+    category = get_category_by_id_from_db(category_id, user_id)
+    if not category:
+        raise NotFound("Category not found")
+    return category
+
+def checked_optional_category(category_id: Optional[uuid.UUID], user_id: str) -> Optional['Category']:
+    """Check if category exists and user has access to it, allowing None."""
+    if not category_id:
+        return None
+    try:
+        return checked_mandatory_category(category_id, user_id)
+    except NotFound:
+        return None
+
 def get_account(account_id: uuid.UUID) -> Optional[Account]:
     """
     Retrieve an account by ID.
@@ -605,7 +655,7 @@ def _select_optimal_gsi(
     
     # 3. Status filter (efficient for duplicate detection or status-specific queries)
     if ignore_dup:
-        key_condition = Key('status').eq('processed')  # Assuming non-duplicates have 'processed' status
+        key_condition = Key('status').eq('new')  # Non-duplicates have 'new' status
         key_condition = _add_date_range(key_condition)
         logger.debug("Using StatusDateIndex for ignore_dup filter")
         return 'StatusDateIndex', key_condition
@@ -2027,23 +2077,5 @@ def cleanup_expired_fzip_jobs() -> int:
         return 0
 
 
-# =============================================================================
-# BACKWARD COMPATIBILITY ALIASES
-# =============================================================================
-
-# TODO: Remove these aliases after migration is complete
-# These aliases ensure no breaking changes during the import/export → backup/restore migration
-
-# Export/Import job aliases (same functions, new semantic meaning)
-create_export_job = create_fzip_job  # Backward compatibility
-create_import_job = create_fzip_job  # Backward compatibility
-get_export_job = get_fzip_job  # Backward compatibility  
-get_import_job = get_fzip_job  # Backward compatibility
-update_export_job = update_fzip_job  # Backward compatibility
-update_import_job = update_fzip_job  # Backward compatibility
-list_user_export_jobs = list_user_fzip_jobs  # Backward compatibility
-list_user_import_jobs = list_user_fzip_jobs  # Backward compatibility
-delete_export_job = delete_fzip_job  # Backward compatibility
-delete_import_job = delete_fzip_job  # Backward compatibility
 
 

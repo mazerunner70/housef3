@@ -1,0 +1,86 @@
+{
+    "folders": [
+        {
+            "name": "Root",
+            "path": "."
+        },
+        {
+            "name": "Backend",
+            "path": "./backend"
+        },
+        {
+            "name": "Frontend",
+            "path": "./frontend"
+        },
+        {
+            "name": "Infrastructure",
+            "path": "./infrastructure"
+        }
+    ],
+    "settings": {
+        // Python Configuration for Cursor
+        "python.defaultInterpreterPath": "./backend/venv/bin/python3",
+        "python.terminal.activateEnvironment": true,
+        // Cursor Pyright Configuration
+        "cursorpyright.analysisType": "workspace",
+        "cursorpyright.typeCheckingMode": "basic",
+        "cursorpyright.pythonPath": "./backend/venv/bin/python3",
+        "cursorpyright.include": [
+            "./backend/src/**",
+            "./backend/tests/**"
+        ],
+        "cursorpyright.exclude": [
+            "./backend/venv/**",
+            "./frontend/**",
+            "./infrastructure/**"
+        ],
+        "cursorpyright.extraPaths": [
+            "./backend/src"
+        ],
+        // Python Testing (if supported in Cursor)
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false,
+        "python.testing.pytestArgs": [
+            "backend/tests"
+        ],
+        "python.testing.cwd": "${workspaceFolder}/backend",
+        // General Editor Settings
+        "editor.formatOnSave": true,
+        "editor.formatOnType": false,
+        "editor.formatOnPaste": true,
+        "editor.rulers": [
+            110
+        ],
+        // File Association
+        "files.associations": {
+            "*.py": "python",
+            "requirements*.txt": "pip-requirements"
+        },
+        // Language-specific settings for Python
+        "[python]": {
+            "editor.insertSpaces": true,
+            "editor.tabSize": 4,
+            "editor.wordWrap": "off"
+        },
+        // Python linting configuration
+        "python.linting.enabled": true,
+        "python.linting.maxLineLength": 110,
+        "python.linting.flake8Enabled": true,
+        "python.linting.flake8Args": [
+            "--max-line-length=110"
+        ],
+        "python.linting.pylintArgs": [
+            "--max-line-length=110"
+        ],
+        // Cursor Pyright line length (if applicable)
+        "cursorpyright.maxLineLength": 110,
+        // Ensure Cursor uses the virtual environment
+        "python.pythonPath": "/home/william/code/personal/2025/housef3/backend/venv/bin/python3"
+    },
+    "extensions": {
+        "recommendations": [
+            // Note: Cursor has built-in Python support with Cursor Pyright
+            // Most VS Code Python extensions are not needed in Cursor
+        ]
+    }
+}

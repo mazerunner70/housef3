@@ -211,7 +211,7 @@ class AccountCreatedEvent(BaseEvent):
     """Published when account is created"""
     
     def __init__(self, user_id: str, account_id: str, account_name: str, 
-                 account_type: str, currency: str, **kwargs):
+                 account_type: str, currency: Optional[str] = None, **kwargs):
         super().__init__(
             event_id=str(uuid.uuid4()),
             event_type='account.created',
@@ -223,7 +223,7 @@ class AccountCreatedEvent(BaseEvent):
                 'accountId': account_id,
                 'accountName': account_name,
                 'accountType': account_type,
-                'currency': currency,
+                'currency': currency ,
                 **kwargs
             }
         )
@@ -394,6 +394,145 @@ class ExportFailedEvent(BaseEvent):
                 **kwargs
             }
         )
+
+
+
+# =============================================================================
+# FZIP BACKUP/RESTORE EVENTS
+# =============================================================================
+
+@dataclass
+class BackupInitiatedEvent(BaseEvent):
+    """Published when a backup job is initiated"""
+
+    def __init__(self, user_id: str, backup_id: str,
+                 description: Optional[str] = None, **kwargs):
+        super().__init__(
+            event_id=str(uuid.uuid4()),
+            event_type='backup.initiated',
+            event_version='1.0',
+            timestamp=int(datetime.now().timestamp() * 1000),
+            source='fzip.service',
+            user_id=user_id,
+            data={
+                'backupId': backup_id,
+                'description': description,
+                **kwargs
+            }
+        )
+
+
+@dataclass
+class BackupCompletedEvent(BaseEvent):
+    """Published when a backup job is completed successfully"""
+
+    def __init__(self, user_id: str, backup_id: str, package_size: int,
+                 s3_key: str, data_summary: Optional[Dict[str, Any]] = None, **kwargs):
+        super().__init__(
+            event_id=str(uuid.uuid4()),
+            event_type='backup.completed',
+            event_version='1.0',
+            timestamp=int(datetime.now().timestamp() * 1000),
+            source='fzip.service',
+            user_id=user_id,
+            data={
+                'backupId': backup_id,
+                'packageSize': package_size,
+                's3Key': s3_key,
+                'dataSummary': data_summary,
+                **kwargs
+            }
+        )
+
+
+@dataclass
+class BackupFailedEvent(BaseEvent):
+    """Published when a backup job fails"""
+
+    def __init__(self, user_id: str, backup_id: str, error: str,
+                 error_details: Optional[Dict[str, Any]] = None, **kwargs):
+        super().__init__(
+            event_id=str(uuid.uuid4()),
+            event_type='backup.failed',
+            event_version='1.0',
+            timestamp=int(datetime.now().timestamp() * 1000),
+            source='fzip.service',
+            user_id=user_id,
+            data={
+                'backupId': backup_id,
+                'error': error,
+                'errorDetails': error_details,
+                **kwargs
+            }
+        )
+
+
+@dataclass
+class RestoreInitiatedEvent(BaseEvent):
+    """Published when a restore job is initiated"""
+
+    def __init__(self, user_id: str, restore_id: str, backup_id: str,
+                 s3_key: str, **kwargs):
+        super().__init__(
+            event_id=str(uuid.uuid4()),
+            event_type='restore.initiated',
+            event_version='1.0',
+            timestamp=int(datetime.now().timestamp() * 1000),
+            source='fzip.service',
+            user_id=user_id,
+            data={
+                'restoreId': restore_id,
+                'backupId': backup_id,
+                's3Key': s3_key,
+                **kwargs
+            }
+        )
+
+
+@dataclass
+class RestoreCompletedEvent(BaseEvent):
+    """Published when a restore job is completed successfully"""
+
+    def __init__(self, user_id: str, restore_id: str, backup_id: str,
+                 data_summary: Optional[Dict[str, Any]] = None, **kwargs):
+        super().__init__(
+            event_id=str(uuid.uuid4()),
+            event_type='restore.completed',
+            event_version='1.0',
+            timestamp=int(datetime.now().timestamp() * 1000),
+            source='fzip.service',
+            user_id=user_id,
+            data={
+                'restoreId': restore_id,
+                'backupId': backup_id,
+                'dataSummary': data_summary,
+                **kwargs
+            }
+        )
+
+
+@dataclass
+class RestoreFailedEvent(BaseEvent):
+    """Published when a restore job fails"""
+
+    def __init__(self, user_id: str, restore_id: str, backup_id: str,
+                 error: str, error_details: Optional[Dict[str, Any]] = None, **kwargs):
+        super().__init__(
+            event_id=str(uuid.uuid4()),
+            event_type='restore.failed',
+            event_version='1.0',
+            timestamp=int(datetime.now().timestamp() * 1000),
+            source='fzip.service',
+            user_id=user_id,
+            data={
+                'restoreId': restore_id,
+                'backupId': backup_id,
+                'error': error,
+                'errorDetails': error_details,
+                **kwargs
+            }
+        )
+
 
 
 # =============================================================================

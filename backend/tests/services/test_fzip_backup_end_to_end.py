@@ -20,7 +20,7 @@ from models.transaction import Transaction
 from models.category import Category, CategoryType
 from models.file_map import FileMap, FieldMapping
 from models.transaction_file import TransactionFile, FileFormat, ProcessingStatus
-from models.fzip import FZIPJob, FZIPStatus, FZIPExportType, FZIPType
+from models.fzip import FZIPJob, FZIPStatus, FZIPBackupType, FZIPType
 from services.fzip_service import FZIPService
 from services.export_data_processors import (
     AccountExporter, TransactionExporter, CategoryExporter, 
@@ -237,7 +237,7 @@ class TestFZIPBackupEndToEnd:
             # Collect data
             collected_data = fzip_service.collect_user_data(
                 user_id=test_user_id,
-                backup_type=FZIPExportType.COMPLETE,
+                backup_type=FZIPBackupType.COMPLETE,
                 include_analytics=False
             )
 
@@ -262,7 +262,7 @@ class TestFZIPBackupEndToEnd:
             jobType=FZIPType.BACKUP,
             userId=test_user_id,
             status=FZIPStatus.BACKUP_PROCESSING,
-            backupType=FZIPExportType.COMPLETE,
+            backupType=FZIPBackupType.COMPLETE,
             includeAnalytics=False
         )
 
@@ -307,7 +307,7 @@ class TestFZIPBackupEndToEnd:
                 # Collect data first
                 collected_data = fzip_service.collect_user_data(
                     user_id=test_user_id,
-                    backup_type=FZIPExportType.COMPLETE,
+                    backup_type=FZIPBackupType.COMPLETE,
                     include_analytics=False
                 )
 
@@ -329,7 +329,7 @@ class TestFZIPBackupEndToEnd:
             jobType=FZIPType.BACKUP,
             userId=test_user_id,
             status=FZIPStatus.BACKUP_PROCESSING,
-            backupType=FZIPExportType.COMPLETE,
+            backupType=FZIPBackupType.COMPLETE,
             includeAnalytics=False
         )
 
@@ -417,19 +417,19 @@ class TestFZIPBackupEndToEnd:
                 # Step 1: Initiate export
                 backup_job = fzip_service.initiate_backup(
                     user_id=test_user_id,
-                    backup_type=FZIPExportType.COMPLETE,
+                    backup_type=FZIPBackupType.COMPLETE,
                     include_analytics=False,
                     description="Test backup"
                 )
 
                 assert backup_job.user_id == test_user_id
                 assert backup_job.status == FZIPStatus.BACKUP_INITIATED
-                assert backup_job.backup_type == FZIPExportType.COMPLETE
+                assert backup_job.backup_type == FZIPBackupType.COMPLETE
 
                 # Step 2: Collect data
                 collected_data = fzip_service.collect_user_data(
                     user_id=test_user_id,
-                    backup_type=FZIPExportType.COMPLETE,
+                    backup_type=FZIPBackupType.COMPLETE,
                     include_analytics=False
                 )
 
@@ -457,7 +457,7 @@ class TestFZIPBackupEndToEnd:
             with pytest.raises(Exception) as exc_info:
                 fzip_service.collect_user_data(
                     user_id=test_user_id,
-                    backup_type=FZIPExportType.COMPLETE,
+                    backup_type=FZIPBackupType.COMPLETE,
                     include_analytics=False
                 )
             
@@ -468,7 +468,7 @@ class TestFZIPBackupEndToEnd:
             jobType=FZIPType.BACKUP,
             userId=test_user_id,
             status=FZIPStatus.BACKUP_PROCESSING,
-            backupType=FZIPExportType.COMPLETE
+            backupType=FZIPBackupType.COMPLETE
         )
         
         with patch('services.fzip_service.ExportPackageBuilder') as mock_builder:
@@ -491,7 +491,7 @@ class TestFZIPBackupEndToEnd:
             # Test accounts-only export
             collected_data = fzip_service.collect_user_data(
                 user_id=test_user_id,
-                export_type=FZIPExportType.ACCOUNTS_ONLY,
+                backup_type=FZIPBackupType.ACCOUNTS_ONLY,
                 include_analytics=False
             )
 
@@ -520,7 +520,7 @@ class TestFZIPBackupEndToEnd:
 
             collected_data = fzip_service.collect_user_data(
                 user_id=test_user_id,
-                backup_type=FZIPExportType.COMPLETE,
+                backup_type=FZIPBackupType.COMPLETE,
                 include_analytics=True
             )
 

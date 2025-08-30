@@ -1,12 +1,13 @@
 import React, { useState, useCallback, useEffect } from 'react';
 // Use AccountService for fetching accounts
-import { listAccounts, Account as ServiceAccount } from '../../services/AccountService';
-import { getUploadUrl, uploadFileToS3, listFiles, FileMetadata, deleteFile, parseFile, updateFileFieldMapAssociation, getProcessedFileMetadata, FileProcessResult, updateFileBalance, updateFileClosingBalance, associateFileWithAccount } from '../../services/FileService'; // Added parseFile, updateFileBalance, updateFileClosingBalance, and associateFileWithAccount
-import { listFieldMaps, getFieldMap, createFieldMap, updateFieldMap, FieldMap } from '../../services/FileMapService'; // Import more from FileMapService
-import { getCurrentUser } from '../../services/AuthService'; // Import getCurrentUser
+import { listAccounts } from '@/services/AccountService';
+import { Account as ServiceAccount } from '@/schemas/Account';
+import { getUploadUrl, uploadFileToS3, listFiles, FileMetadata, deleteFile, parseFile, updateFileFieldMapAssociation, getProcessedFileMetadata, FileProcessResult, updateFileBalance, updateFileClosingBalance, associateFileWithAccount } from '@/services/FileService'; // Added parseFile, updateFileBalance, updateFileClosingBalance, and associateFileWithAccount
+import { listFieldMaps, getFieldMap, createFieldMap, updateFieldMap, FieldMap } from '@/services/FileMapService'; // Import more from FileMapService
+import { getCurrentUser } from '@/services/AuthService'; // Import getCurrentUser
 import ImportMappingDialog from '../components/ImportMappingDialog'; // Import the new dialog component
 import type { TransactionRow, ColumnMapping } from '../components/ImportStep2Preview'; // Import types
-import TransactionFileUpload from '../components/TransactionFileUpload'; // Enhanced file upload
+import TransactionFileUpload from '@/new-ui/components/business/transactions/TransactionFileUpload'; // Enhanced file upload
 import ImportHistoryTable from '../components/ImportHistoryTable'; // Import the new reusable table
 import { FileValidationResult } from '../utils/fileValidation'; // File validation types
 import { detectFileType } from '../utils/fileValidation'; // Import file type detection
@@ -15,9 +16,9 @@ import Decimal from 'decimal.js';
 
 // Define TARGET_TRANSACTION_FIELDS (should match what ImportStep2Preview expects)
 const TARGET_TRANSACTION_FIELDS = [
-  { 
-    field: 'date', 
-    label: 'Transaction Date', 
+  {
+    field: 'date',
+    label: 'Transaction Date',
     required: true,
     regex: [
       '^\\d{4}-\\d{2}-\\d{2}$',           // YYYY-MM-DD (ISO format)
@@ -96,7 +97,7 @@ const ImportTransactionsView: React.FC = () => {
   const [availableFileMaps, setAvailableFileMaps] = useState<AvailableMapInfo[]>([]);
   const [currentlyLoadedFieldMapDetails, setCurrentlyLoadedFieldMapDetails] = useState<ColumnMapping[] | undefined>(undefined);
   const [currentlyLoadedFieldMapData, setCurrentlyLoadedFieldMapData] = useState<FieldMap | undefined>(undefined); // Store full field map data
-  const [initialFieldMapForStep2, setInitialFieldMapForStep2] = useState<{id: string, name: string} | undefined>(undefined);
+  const [initialFieldMapForStep2, setInitialFieldMapForStep2] = useState<{ id: string, name: string } | undefined>(undefined);
   const [isLoadingFieldMaps, setIsLoadingFieldMaps] = useState<boolean>(false);
 
   // New state for default mapping dropdown
@@ -108,7 +109,7 @@ const ImportTransactionsView: React.FC = () => {
   const [successAlert, setSuccessAlert] = useState<ImportResultForView | null>(null);
 
   // Note: Inline editing state is now managed by ImportHistoryTable component
-  
+
   // State for enhanced file validation
   const [fileValidation, setFileValidation] = useState<FileValidationResult>({ isValid: false });
 
@@ -164,36 +165,36 @@ const ImportTransactionsView: React.FC = () => {
       setIsLoadingHistory(false);
       setIsLoadingFieldMaps(false);
     }
-  }, []); 
+  }, []);
 
   const fetchDefaultMapping = async (accountId: string) => {
     try {
       setIsLoadingDefaultMapping(true);
       setDefaultMappingName('');
       setSelectedDefaultMapping('');
-      
+
       console.log(`[ImportTransactionsView] Fetching default mapping for account: ${accountId}`);
       console.log(`[ImportTransactionsView] Available file maps:`, availableFileMaps);
-      
+
       // Get the account details to retrieve the defaultFieldMapId  
       const response = await listAccounts();
       const account = response.accounts.find(acc => acc.accountId === accountId);
-      
+
       console.log(`[ImportTransactionsView] Found account:`, account);
       console.log(`[ImportTransactionsView] Account defaultFileMapId:`, account?.defaultFileMapId);
-      
+
       if (account && account.defaultFileMapId) {
         // Check if the default mapping exists in available field maps
         const mappingExists = availableFileMaps.some(map => map.id === account.defaultFileMapId);
         console.log(`[ImportTransactionsView] Default mapping ${account.defaultFileMapId} exists in available maps:`, mappingExists);
-        
+
         if (!mappingExists) {
           console.warn(`[ImportTransactionsView] Account's default mapping ${account.defaultFileMapId} not found in available field maps. Available maps:`, availableFileMaps.map((m: AvailableMapInfo) => m.id));
           setDefaultMappingName('');
           setSelectedDefaultMapping('');
           return;
         }
-        
+
         // Fetch the field map details
         const fieldMap = await getFieldMap(account.defaultFileMapId);
         setDefaultMappingName(fieldMap.name);
@@ -310,27 +311,27 @@ const ImportTransactionsView: React.FC = () => {
       setIsLoadingHistory(false);
     }
   };
-  
+
 
 
   const proceedToStep2Logic = async (fileMetaForMapLookup?: FileMetadata) => {
     // 1. Determine initialFieldMapForStep2
-    let initialMap: {id: string, name: string} | undefined = undefined;
+    let initialMap: { id: string, name: string } | undefined = undefined;
     if (fileMetaForMapLookup?.fieldMap?.fileMapId && fileMetaForMapLookup?.fieldMap?.name) {
-        initialMap = { 
-            id: fileMetaForMapLookup.fieldMap.fileMapId, 
-            name: fileMetaForMapLookup.fieldMap.name 
-        };
-        console.log("[ImportTransactionsView] Found initial field map for mapping dialog from file metadata:", initialMap);
-        setInitialFieldMapForStep2(initialMap);
-        // Pre-load its details
-        if (initialMap) {
-            await handleLoadFieldMapDetails(initialMap.id); // This will set currentlyLoadedFieldMapDetails
-        }
+      initialMap = {
+        id: fileMetaForMapLookup.fieldMap.fileMapId,
+        name: fileMetaForMapLookup.fieldMap.name
+      };
+      console.log("[ImportTransactionsView] Found initial field map for mapping dialog from file metadata:", initialMap);
+      setInitialFieldMapForStep2(initialMap);
+      // Pre-load its details
+      if (initialMap) {
+        await handleLoadFieldMapDetails(initialMap.id); // This will set currentlyLoadedFieldMapDetails
+      }
     } else {
-        console.log("[ImportTransactionsView] No initial field map found for this file for mapping dialog.");
-        setInitialFieldMapForStep2(undefined);
-        setCurrentlyLoadedFieldMapDetails(undefined);
+      console.log("[ImportTransactionsView] No initial field map found for this file for mapping dialog.");
+      setInitialFieldMapForStep2(undefined);
+      setCurrentlyLoadedFieldMapDetails(undefined);
     }
     setShowMappingDialog(true);
   };
@@ -349,7 +350,7 @@ const ImportTransactionsView: React.FC = () => {
         setIsLoading(false);
         return;
       }
-      
+
       // Detect file type and provide appropriate MIME type if empty
       let mimeType = selectedFile.type;
       if (!mimeType || mimeType.trim() === '') {
@@ -372,7 +373,7 @@ const ImportTransactionsView: React.FC = () => {
         }
         console.log(`[ImportTransactionsView] Empty MIME type detected for ${selectedFile.name}. Using fallback: ${mimeType}`);
       }
-      
+
       const presignedData = await getUploadUrl(
         selectedFile.name, mimeType, selectedFile.size, currentUser.id, selectedAccount || undefined
       );
@@ -396,24 +397,24 @@ const ImportTransactionsView: React.FC = () => {
         setCsvHeaders(parseResult.headers);
         const transactions = parseResult.data.map((item: any, index: number) => ({ id: item.id || `csv-${index}`, ...item }));
         setParsedTransactionData(transactions);
-      } else { 
-         if (!parseResult.data) {
+      } else {
+        if (!parseResult.data) {
           setErrorMessage(`${determinedFileType.toUpperCase()} parsing did not return data.`);
           setIsLoading(false);
           return;
         }
         const transactions = parseResult.data.map((item: any, index: number) => ({ id: item.id || `parsed-${index}`, ...item }));
         setParsedTransactionData(transactions);
-        setCsvHeaders([]); 
+        setCsvHeaders([]);
       }
       // Check if a default mapping is selected - if so, bypass Step 2 and go straight to import
       if (selectedDefaultMapping && defaultMappingName) {
         console.log(`[ImportTransactionsView] Default mapping selected: ${defaultMappingName} (${selectedDefaultMapping}). Bypassing Step 2.`);
-        
+
         // Associate the selected default mapping with the file and complete import
         const preliminaryFileName = selectedFile?.name || 'Unknown File';
         const preliminaryAccountName = accounts.find(a => a.id === selectedAccount)?.name || 'Unassigned';
-        
+
         try {
           // Associate the mapping and process the file
           const processApiResult = await updateFileFieldMapAssociation(newFileId, selectedDefaultMapping);
@@ -428,7 +429,7 @@ const ImportTransactionsView: React.FC = () => {
             errorDetails: !success ? (processApiResult.message || 'Processing failed.') : undefined,
           });
           setCurrentStep(1);
-          
+
         } catch (error: any) {
           console.error("[ImportTransactionsView] Error with direct import using default mapping:", error);
           setSuccessAlert({
@@ -449,7 +450,7 @@ const ImportTransactionsView: React.FC = () => {
         if (parseResult && typeof parseResult === 'object' && 'file_metadata' in parseResult) {
           const meta = (parseResult as any).file_metadata as FileMetadata; // Cast to any then FileMetadata
           if (meta && meta.fieldMap) {
-              newFileMetaForMapLookup = meta;
+            newFileMetaForMapLookup = meta;
           }
         }
         await proceedToStep2Logic(newFileMetaForMapLookup);
@@ -457,13 +458,13 @@ const ImportTransactionsView: React.FC = () => {
     } catch (error: any) {
       console.error("Error during file upload and parse process:", error);
       setErrorMessage(error.message || "Failed to process file. Please try again.");
-      setCurrentFileId(null); 
+      setCurrentFileId(null);
     } finally {
       setIsLoading(false);
     }
   };
 
-        const handleCompleteImportStep2 = async (
+  const handleCompleteImportStep2 = async (
     mappedData: TransactionRow[], // Currently unused as backend does processing
     finalFieldMapToAssociate?: { id: string; name: string } // Passed from ImportStep2Preview
   ) => {
@@ -515,14 +516,14 @@ const ImportTransactionsView: React.FC = () => {
         accountName: preliminaryAccountName,
       });
       setShowMappingDialog(false); // Close the dialog
-      setCurrentStep(1); 
+      setCurrentStep(1);
     } finally {
       setIsLoading(false);
     }
   };
 
 
-  
+
   const resetProcess = () => {
     setCurrentStep(1);
     setSelectedFile(null);
@@ -579,20 +580,20 @@ const ImportTransactionsView: React.FC = () => {
 
       if (mapIdToUpdate) {
         // updateFieldMap expects fileMapId and a Partial<FieldMap> object for updates
-        serviceResponse = await updateFieldMap(mapIdToUpdate, { 
-          name, 
+        serviceResponse = await updateFieldMap(mapIdToUpdate, {
+          name,
           mappings: preparedMappings,
-          reverseAmounts: reverseAmounts || false 
+          reverseAmounts: reverseAmounts || false
         });
       } else {
         // createFieldMap expects an Omit<FieldMap, 'fileMapId' | 'createdAt' | 'updatedAt'> object
         serviceResponse = await createFieldMap({
-            name,
-            mappings: preparedMappings,
-            reverseAmounts: reverseAmounts || false,
-            // Optionally include accountId if relevant and available
-            // accountId: selectedAccount || undefined, 
-            // description can also be added if there's a UI for it
+          name,
+          mappings: preparedMappings,
+          reverseAmounts: reverseAmounts || false,
+          // Optionally include accountId if relevant and available
+          // accountId: selectedAccount || undefined, 
+          // description can also be added if there's a UI for it
         });
       }
       // After successful save/update, refresh the list of available maps
@@ -607,11 +608,11 @@ const ImportTransactionsView: React.FC = () => {
         setInitialFieldMapForStep2({ id: serviceResponse.fileMapId, name: serviceResponse.name });
         // And if it was the initial map, also update currentlyLoadedFieldMapDetails as it might have changed (e.g. name)
         if (mapIdToUpdate && mapIdToUpdate === initialFieldMapForStep2?.id) {
-            const transformed = serviceResponse.mappings.map(m => ({csvColumn: m.sourceField, targetField: m.targetField, isValid: undefined}));
-            setCurrentlyLoadedFieldMapDetails(transformed);
+          const transformed = serviceResponse.mappings.map(m => ({ csvColumn: m.sourceField, targetField: m.targetField, isValid: undefined }));
+          setCurrentlyLoadedFieldMapDetails(transformed);
         }
       }
-      
+
       return { success: true, newMapId: serviceResponse.fileMapId, newName: serviceResponse.name, message: mapIdToUpdate ? 'Updated' : 'Saved' };
     } catch (error: any) {
       console.error("[ImportTransactionsView] Error saving/updating field map:", error);
@@ -634,16 +635,16 @@ const ImportTransactionsView: React.FC = () => {
     try {
       // Call the service to update the balance
       const updatedFile = await updateFileBalance(fileId, newBalance);
-      
+
       // Update the import history state
-      setImportHistory(prevHistory => 
-        prevHistory.map(file => 
-          file.fileId === fileId 
-            ? { ...file, openingBalance: updatedFile.openingBalance } 
+      setImportHistory(prevHistory =>
+        prevHistory.map(file =>
+          file.fileId === fileId
+            ? { ...file, openingBalance: updatedFile.openingBalance }
             : file
         )
       );
-      
+
       alert("Opening balance updated successfully!"); // Or a more subtle notification
 
     } catch (error: any) {
@@ -669,16 +670,16 @@ const ImportTransactionsView: React.FC = () => {
     try {
       // Call the service to update the closing balance (which calculates new opening balance)
       const updatedFile = await updateFileClosingBalance(fileId, newBalance);
-      
+
       // Update the import history state with the complete updated file from backend
-      setImportHistory(prevHistory => 
-        prevHistory.map(file => 
-          file.fileId === fileId 
+      setImportHistory(prevHistory =>
+        prevHistory.map(file =>
+          file.fileId === fileId
             ? updatedFile  // Replace entire file object with backend response
             : file
         )
       );
-      
+
       alert("Closing balance updated successfully! Opening balance has been recalculated."); // Or a more subtle notification
 
     } catch (error: any) {
@@ -701,25 +702,25 @@ const ImportTransactionsView: React.FC = () => {
     try {
       // Associate the new mapping with the file
       await updateFileFieldMapAssociation(fileId, mappingId);
-      
+
       // Get the mapping name for display
       const mappingName = fieldMapsData[mappingId] || availableFileMaps.find(m => m.id === mappingId)?.name || 'Unknown';
-      
+
       // Update the import history state
-      setImportHistory(prevHistory => 
-        prevHistory.map(file => 
-          file.fileId === fileId 
-            ? { 
-                ...file, 
-                fieldMap: { 
-                  fileMapId: mappingId, 
-                  name: mappingName 
-                } 
-              } 
+      setImportHistory(prevHistory =>
+        prevHistory.map(file =>
+          file.fileId === fileId
+            ? {
+              ...file,
+              fieldMap: {
+                fileMapId: mappingId,
+                name: mappingName
+              }
+            }
             : file
         )
       );
-      
+
       alert("Mapping updated successfully!");
 
     } catch (error: any) {
@@ -737,23 +738,23 @@ const ImportTransactionsView: React.FC = () => {
     try {
       // Call the API to associate the file with the account
       await associateFileWithAccount(fileId, accountId);
-      
+
       // Get the account name for display
       const accountName = accounts.find(acc => acc.id === accountId)?.name || 'Unknown';
-      
+
       // Update the import history state after successful API call
-      setImportHistory(prevHistory => 
-        prevHistory.map(file => 
-          file.fileId === fileId 
-            ? { 
-                ...file, 
-                accountId: accountId || undefined,
-                accountName: accountName 
-              } 
+      setImportHistory(prevHistory =>
+        prevHistory.map(file =>
+          file.fileId === fileId
+            ? {
+              ...file,
+              accountId: accountId || undefined,
+              accountName: accountName
+            }
             : file
         )
       );
-      
+
       alert("Account updated successfully!");
 
     } catch (error: any) {
@@ -775,7 +776,7 @@ const ImportTransactionsView: React.FC = () => {
   };
 
   if (isLoading && accounts.length === 0 && currentStep === 1) {
-      return <div className="loading-overlay">Loading accounts...</div>;
+    return <div className="loading-overlay">Loading accounts...</div>;
   }
 
   // Simplified main loading check for now
@@ -787,7 +788,7 @@ const ImportTransactionsView: React.FC = () => {
       <p>Follow the steps below to import your transaction data.</p>
 
       {errorMessage && (
-          <div className="error-message-container">{errorMessage}</div>
+        <div className="error-message-container">{errorMessage}</div>
       )}
 
       {successAlert && (
@@ -829,37 +830,37 @@ const ImportTransactionsView: React.FC = () => {
       {currentStep === 1 && (
         <div className="step-container">
           <h3 className="import-header">Step 1: File Upload & Account Selection</h3>
-          
+
           <div className="account-selection-row">
             <div className="account-select-group">
               <label htmlFor="account-select" className="label-common">Select Account:</label>
-              <select 
+              <select
                 id="account-select"
-                value={selectedAccount} 
-                onChange={e => setSelectedAccount(e.target.value)} 
+                value={selectedAccount}
+                onChange={e => setSelectedAccount(e.target.value)}
                 className="select-common"
-                disabled={accounts.length === 0 && !isLoading} 
+                disabled={accounts.length === 0 && !isLoading}
               >
                 <option value="">{isLoading && accounts.length === 0 ? "Loading accounts..." : accounts.length === 0 ? "No accounts found" : "-- Select an Account --"}</option>
                 {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
               </select>
             </div>
-            
+
             <div className="default-mapping-group">
               <label htmlFor="default-mapping-select" className="label-common">Default Mapping:</label>
-              <select 
+              <select
                 id="default-mapping-select"
-                value={selectedDefaultMapping} 
+                value={selectedDefaultMapping}
                 onChange={e => setSelectedDefaultMapping(e.target.value)}
                 className="select-common"
                 disabled={!selectedAccount || isLoadingDefaultMapping || isLoadingFieldMaps}
               >
                 <option value="">
-                  {!selectedAccount ? "Select account first" : 
-                   isLoadingDefaultMapping || isLoadingFieldMaps ? "Loading mappings..." : 
-                   "-- Select Mapping --"}
+                  {!selectedAccount ? "Select account first" :
+                    isLoadingDefaultMapping || isLoadingFieldMaps ? "Loading mappings..." :
+                      "-- Select Mapping --"}
                 </option>
-                  {availableFileMaps.map(mapping => (
+                {availableFileMaps.map(mapping => (
                   <option key={mapping.id} value={mapping.id}>
                     {mapping.name} {mapping.id === (accounts.find(acc => acc.id === selectedAccount)?.defaultfileMapid) ? "(Account Default)" : ""}
                   </option>
@@ -874,7 +875,7 @@ const ImportTransactionsView: React.FC = () => {
               selectedFile={selectedFile}
               onFileSelect={handleEnhancedFileSelect}
               onValidationChange={handleFileValidationChange}
-              disabled={ isLoading}
+              disabled={isLoading}
               showPreview={true}
             />
           </div>
@@ -892,25 +893,25 @@ const ImportTransactionsView: React.FC = () => {
             </div>
           )}
 
-          <button 
-            onClick={proceedToStep2} 
+          <button
+            onClick={proceedToStep2}
             disabled={!selectedFile || !fileValidation.isValid || isLoading || isLoadingHistory}
             className="button-common button-primary"
           >
-            {(isLoading && !isLoadingHistory && selectedFile) ? 'Uploading & Processing...' : 
-             (isLoadingHistory) ? 'Loading Data...' : 
-             (selectedDefaultMapping && defaultMappingName) ? 'Upload & Import with Default Mapping' : 
-             'Upload & Map Fields'}
+            {(isLoading && !isLoadingHistory && selectedFile) ? 'Uploading & Processing...' :
+              (isLoadingHistory) ? 'Loading Data...' :
+                (selectedDefaultMapping && defaultMappingName) ? 'Upload & Import with Default Mapping' :
+                  'Upload & Map Fields'}
           </button>
 
-          <div style={{marginTop: '30px'}}>
+          <div style={{ marginTop: '30px' }}>
             <h4 className="import-header">Import History</h4>
             <ImportHistoryTable
               importHistory={importHistory}
               accounts={accounts}
               availableFileMaps={availableFileMaps}
               isLoading={isLoadingHistory}
-                             selectedHistoryFileId={selectedHistoryFileId || undefined}
+              selectedHistoryFileId={selectedHistoryFileId || undefined}
               onRowClick={handleHistoryRowClick}
               onUpdateAccount={handleSaveAccount}
               onUpdateMapping={handleSaveMapping}
@@ -920,8 +921,8 @@ const ImportTransactionsView: React.FC = () => {
               showSelection={true}
               showActions={true}
               sortable={true}
-              helpText={selectedHistoryFileId 
-                ? "Click on any field above to edit file attributes. Opening and closing balances are editable inline." 
+              helpText={selectedHistoryFileId
+                ? "Click on any field above to edit file attributes. Opening and closing balances are editable inline."
                 : "Select a file to edit its attributes, mapping, or metadata."}
             />
           </div>

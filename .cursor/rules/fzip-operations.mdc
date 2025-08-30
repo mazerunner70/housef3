@@ -1,0 +1,41 @@
+---
+description: FZIP backup/restore specific rules
+globs: "**/*fzip*"
+alwaysApply: false
+---
+
+# FZIP Operations Conventions
+
+## Implementation Standards
+- Follow FZIP backup/restore design patterns
+- Use proper state management for long-running operations
+- Implement proper error handling and rollback
+- Reference docs/fzip-*.md for implementation details
+
+## State Management
+- Track job progress through well-defined states
+- Implement proper cancellation mechanisms
+- Handle timeouts and retries appropriately
+- Provide clear status updates to users
+
+## Error Handling
+- Implement comprehensive error recovery
+- Provide clear error messages to users
+- Log detailed error information for debugging
+- Implement proper rollback procedures
+
+## Documentation References
+- docs/fzip-backup-restore-guide.md - General guide
+- docs/fzip-restore-flow.md - Restore flow specifics
+- docs/fzip-restore-simplified-implementation.md - Implementation details
+
+## Testing
+- Test backup and restore roundtrip scenarios
+- Test cancellation at various stages
+- Test error conditions and recovery
+- Validate data integrity throughout process
+
+## File Naming
+- Use consistent *fzip* naming patterns
+- Separate backup and restore operations clearly
+- Follow established service/handler patterns

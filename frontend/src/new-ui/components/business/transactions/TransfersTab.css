@@ -1,0 +1,398 @@
+.transfers-tab {
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.transfers-tab-header {
+    margin-bottom: 30px;
+}
+
+.transfers-tab-header h2 {
+    margin: 0 0 8px 0;
+    color: #1f2937;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.transfers-tab-header p {
+    margin: 0;
+    color: #6b7280;
+    font-size: 14px;
+}
+
+.transfers-tab-loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 200px;
+    color: #6b7280;
+    font-size: 16px;
+}
+
+.transfers-tab-error {
+    background-color: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #dc2626;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    font-size: 14px;
+}
+
+.transfers-section {
+    margin-bottom: 40px;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 24px;
+}
+
+.transfers-section h3 {
+    margin: 0 0 20px 0;
+    color: #1f2937;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.transfers-section h4 {
+    margin: 0 0 16px 0;
+    color: #374151;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.transfers-empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6b7280;
+    font-size: 14px;
+    background-color: #f9fafb;
+    border-radius: 8px;
+    border: 1px dashed #d1d5db;
+}
+
+.transfers-detection-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.transfers-detection-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.transfers-detection-controls label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #374151;
+    font-weight: 500;
+}
+
+.date-range-input {
+    padding: 6px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    width: 80px;
+}
+
+.date-range-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.detect-button {
+    background-color: #3b82f6;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.detect-button:hover:not(:disabled) {
+    background-color: #2563eb;
+}
+
+.detect-button:disabled {
+    background-color: #9ca3af;
+    cursor: not-allowed;
+}
+
+.detected-transfers-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.bulk-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.select-all-button {
+    background-color: #f3f4f6;
+    color: #374151;
+    border: 1px solid #d1d5db;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.select-all-button:hover {
+    background-color: #e5e7eb;
+}
+
+.bulk-mark-button {
+    background-color: #10b981;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.bulk-mark-button:hover:not(:disabled) {
+    background-color: #059669;
+}
+
+.bulk-mark-button:disabled {
+    background-color: #9ca3af;
+    cursor: not-allowed;
+}
+
+.transfers-table-container {
+    overflow-x: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+}
+
+.transfers-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.transfers-table th {
+    background-color: #f9fafb;
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    color: #374151;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.transfers-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #f3f4f6;
+    vertical-align: middle;
+}
+
+.transfers-table tbody tr:hover {
+    background-color: #f9fafb;
+}
+
+.detected-table tbody tr.selected {
+    background-color: #eff6ff;
+}
+
+.detected-table tbody tr.selected:hover {
+    background-color: #dbeafe;
+}
+
+.amount-negative {
+    color: #dc2626;
+    font-weight: 500;
+}
+
+.amount-positive {
+    color: #059669;
+    font-weight: 500;
+}
+
+/* Override CurrencyDisplay colors for transfers */
+.currency-negative {
+    color: #dc2626 !important;
+    font-weight: 500;
+}
+
+.currency-positive {
+    color: #059669 !important;
+    font-weight: 500;
+}
+
+.no-detected-transfers {
+    text-align: center;
+    padding: 20px;
+    color: #6b7280;
+    font-size: 14px;
+    background-color: #f9fafb;
+    border-radius: 8px;
+    border: 1px dashed #d1d5db;
+}
+
+.date-range-suggestion {
+    background-color: #fef3c7;
+    border: 1px solid #f59e0b;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 16px;
+}
+
+.suggestion-content h4 {
+    margin: 0 0 8px 0;
+    color: #92400e;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.suggestion-content p {
+    margin: 0 0 16px 0;
+    color: #92400e;
+    font-size: 14px;
+}
+
+.suggestion-buttons {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.suggestion-button {
+    background-color: #f59e0b;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.suggestion-button:hover:not(:disabled) {
+    background-color: #d97706;
+}
+
+.suggestion-button:disabled {
+    background-color: #9ca3af;
+    cursor: not-allowed;
+}
+
+.suggestion-button.secondary {
+    background-color: #6b7280;
+    color: white;
+}
+
+.suggestion-button.secondary:hover:not(:disabled) {
+    background-color: #4b5563;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .transfers-tab {
+        padding: 16px;
+    }
+
+    .transfers-detection-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .transfers-detection-controls {
+        justify-content: space-between;
+    }
+
+    .detected-transfers-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .bulk-actions {
+        justify-content: space-between;
+    }
+
+    .transfers-table-container {
+        font-size: 12px;
+    }
+
+    .transfers-table th,
+    .transfers-table td {
+        padding: 8px 12px;
+    }
+}
+
+/* Date Range Section Styles */
+.date-range-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+.quick-range-buttons {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.quick-range-btn {
+    padding: 4px 12px;
+    border: 1px solid #d1d5db;
+    background-color: #f9fafb;
+    color: #374151;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 40px;
+}
+
+.quick-range-btn:hover {
+    background-color: #e5e7eb;
+    border-color: #9ca3af;
+}
+
+.quick-range-btn.active {
+    background-color: #3b82f6;
+    color: white;
+    border-color: #2563eb;
+}
+
+.quick-range-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Responsive adjustments for date range section */
+@media (max-width: 768px) {
+    .date-range-section {
+        width: 100%;
+    }
+
+    .quick-range-buttons {
+        justify-content: flex-start;
+    }
+}
