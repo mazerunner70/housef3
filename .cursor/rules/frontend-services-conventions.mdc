@@ -124,25 +124,38 @@ export interface TransferPreferences {
 
 ## Error Handling
 
-### Standard Pattern
+### ✅ Automatic Error Handling (Recommended)
+With efficient logging patterns, error handling is automatic:
+
 ```typescript
-export const getAccount = async (accountId: string): Promise<Account> => {
-    try {
-        return await ApiClient.getJson<Account>(`/accounts/${accountId}`);
-    } catch (error) {
-        console.error('Failed to get account:', error);
-        throw error; // Re-throw to let caller handle
-    }
-};
+// ✅ BEST: Automatic error handling with withApiLogging
+export const getAccount = (accountId: string) => withApiLogging(
+  'AccountService',
+  `/accounts/${accountId}`,
+  'GET',
+  async () => ApiClient.getJson<Account>(`/accounts/${accountId}`),
+  {
+    operationName: `getAccount:${accountId}`,
+    successData: (result) => ({ accountName: result.accountName })
+  }
+);
+// Automatically logs: request, response, errors, performance, context
 ```
 
-### Graceful Degradation (when appropriate)
+### ✅ Graceful Degradation with Logging
 ```typescript
+// ✅ GOOD: Graceful degradation with proper logging
 export const getTransferPreferences = async (): Promise<TransferPreferences> => {
+    const logger = createLogger('UserPreferencesService');
+    
     try {
         return await ApiClient.getJson<TransferPreferences>('/user-preferences/transfers');
     } catch (error) {
-        console.error('Failed to get transfer preferences:', error);
+        logger.warn('Failed to get transfer preferences, using defaults', {
+            operation: 'getTransferPreferences',
+            fallbackUsed: true
+        });
+        
         // Return sensible defaults for non-critical data
         return {
             defaultDateRangeDays: 7,
@@ -153,37 +166,104 @@ export const getTransferPreferences = async (): Promise<TransferPreferences> => 
 };
 ```
 
-### Error Logging
-- Always log errors with descriptive messages
-- Include the operation context in error messages
-- Use `console.error()` for error logging
-- Re-throw errors unless providing fallback behavior
+### ❌ Manual Error Handling (Avoid)
+```typescript
+// ❌ AVOID: Manual error handling with console.error
+export const getAccount = async (accountId: string): Promise<Account> => {
+    try {
+        return await ApiClient.getJson<Account>(`/accounts/${accountId}`);
+    } catch (error) {
+        console.error('Failed to get account:', error); // Not structured
+        throw error; // No context preservation
+    }
+};
+```
+
+### Error Handling Best Practices
+- ✅ **Use efficient logging patterns** - Automatic error handling with context
+- ✅ **Structured error data** - Automatic error extraction and logging
+- ✅ **Context preservation** - userId, sessionId, operation details
+- ✅ **Performance tracking** - Duration even for failed operations
+- ✅ **Type safety** - Safe error handling for any thrown value
+- ❌ **Avoid manual console.error** - Use structured logging instead
 
 ## File Organization
 
-### Service File Structure
+### Service File Structure with Efficient Logging
 ```typescript
 // 1. Imports
 import ApiClient from "@/utils/apiClient";
 import { SomeType } from "@/types/SomeType";
+import { validateApiResponse } from "@/utils/zodErrorHandler";
+import { z } from 'zod';
 
-// 2. Type Definitions (interfaces, types)
+// 2. Efficient logging imports
+import { 
+  withApiLogging,
+  withServiceLogging,
+  createLogger
+} from '@/utils/logger';
+
+// 3. Type Definitions (interfaces, types)
 export interface ServiceResponse { ... }
 export interface ServiceRequest { ... }
 
-// 3. Constants (if needed)
-const DEFAULT_LIMIT = 50;
+// 4. Constants and logger setup
+const API_ENDPOINT = '/items';
+const logger = createLogger('ItemService'); // For simple operations
 
-// 4. Exported Functions (grouped by functionality)
-// CRUD operations first
-export const listItems = async (): Promise<Item[]> => { ... }
-export const getItem = async (id: string): Promise<Item> => { ... }
-export const createItem = async (data: CreateItemRequest): Promise<Item> => { ... }
-export const updateItem = async (id: string, data: Partial<Item>): Promise<Item> => { ... }
-export const deleteItem = async (id: string): Promise<void> => { ... }
+// 5. Exported Functions (using efficient logging patterns)
+// ✅ API operations with withApiLogging
+export const listItems = withApiLogging(
+  'ItemService',
+  API_ENDPOINT,
+  'GET',
+  async () => ApiClient.getJson<Item[]>(API_ENDPOINT),
+  {
+    successData: (result) => ({ itemCount: result.length })
+  }
+);
 
-// Domain-specific operations after CRUD
-export const performSpecialOperation = async (): Promise<void> => { ... }
+export const getItem = (id: string) => withApiLogging(
+  'ItemService',
+  `${API_ENDPOINT}/${id}`,
+  'GET',
+  async () => ApiClient.getJson<Item>(`${API_ENDPOINT}/${id}`),
+  {
+    operationName: `getItem:${id}`,
+    successData: (result) => ({ itemId: id, itemName: result.name })
+  }
+);
+
+// ✅ Service operations with withServiceLogging
+export const createItem = withServiceLogging(
+  'ItemService',
+  'createItem',
+  async (data: CreateItemRequest) => {
+    return validateApiResponse(
+      () => ApiClient.postJson<any>(API_ENDPOINT, data),
+      (rawData) => ItemSchema.parse(rawData),
+      'created item data'
+    );
+  },
+  {
+    logArgs: ([data]) => ({ itemType: data.type, fieldsProvided: Object.keys(data) }),
+    logResult: (result) => ({ itemId: result.id, itemName: result.name })
+  }
+);
+
+// ✅ Simple operations with basic logger
+export const deleteItem = async (id: string): Promise<void> => {
+  logger.info('Deleting item', { itemId: id });
+  
+  try {
+    await ApiClient.delete(`${API_ENDPOINT}/${id}`);
+    logger.info('Item deleted successfully', { itemId: id });
+  } catch (error) {
+    logger.error('Item deletion failed', { itemId: id });
+    throw error;
+  }
+};
 ```
 
 ### Naming
@@ -635,9 +715,161 @@ describe('AccountService', () => {
 
 ## Logging Standards
 
-### Structured Logging
+### ✅ Efficient Logging Patterns (Recommended)
+
+#### Ultra-Efficient API Logging with `withApiLogging`
 ```typescript
-// Logging utility for services
+import { withApiLogging, withServiceLogging, createLogger } from '@/utils/logger';
+
+// ✅ BEST: API operations with automatic logging (94% less boilerplate)
+export const listAccounts = withApiLogging(
+  'AccountService',
+  '/accounts',
+  'GET',
+  async () => {
+    return validateApiResponse(
+      () => ApiClient.getJson<any>('/accounts'),
+      (rawData) => AccountListResponseSchema.parse(rawData),
+      'account list data'
+    );
+  },
+  {
+    successData: (result) => ({ accountCount: result.accounts.length })
+  }
+);
+
+// ✅ BEST: Parameterized API operations
+export const getAccount = (accountId: string) => withApiLogging(
+  'AccountService',
+  `/accounts/${accountId}`,
+  'GET',
+  async () => {
+    return validateApiResponse(
+      () => ApiClient.getJson<any>(`/accounts/${accountId}`),
+      (rawData) => {
+        const validatedAccount = AccountSchema.parse(rawData.account);
+        return { account: validatedAccount };
+      },
+      'account data',
+      `Failed to load account ${accountId}. The account data format is invalid.`
+    );
+  },
+  {
+    operationName: `getAccount:${accountId}`,
+    successData: (result) => ({
+      accountId,
+      accountName: result.account.accountName,
+      accountType: result.account.accountType
+    })
+  }
+);
+
+// ✅ BEST: Service-level operations with argument/result logging
+export const createAccount = withServiceLogging(
+  'AccountService',
+  'createAccount',
+  async (accountData: Partial<Account>) => {
+    return validateApiResponse(
+      () => ApiClient.postJson<any>('/accounts', accountData),
+      (rawData) => {
+        const validatedAccount = AccountSchema.parse(rawData.account);
+        return { account: validatedAccount };
+      },
+      'created account data',
+      'Failed to create account. The server response format is invalid.'
+    );
+  },
+  {
+    logArgs: ([accountData]) => ({
+      accountName: accountData.accountName,
+      accountType: accountData.accountType,
+      fieldsProvided: Object.keys(accountData)
+    }),
+    logResult: (result) => ({
+      accountId: result.account.accountId,
+      accountName: result.account.accountName,
+      accountType: result.account.accountType
+    })
+  }
+);
+
+// ✅ GOOD: Simple operations with basic logging
+const logger = createLogger('AccountService');
+
+export const deleteAccount = async (accountId: string): Promise<void> => {
+  logger.info('Deleting account', { accountId });
+  
+  try {
+    await ApiClient.delete(`/accounts/${accountId}`);
+    logger.info('Account deleted successfully', { accountId });
+  } catch (error) {
+    logger.error('Account deletion failed', { accountId });
+    throw error;
+  }
+};
+```
+
+#### Automatic Features of Efficient Logging
+- ✅ **Automatic context collection**: timestamp, userId, sessionId, url, component
+- ✅ **Performance tracking**: duration, memory usage (when available)
+- ✅ **Request/response logging**: method, endpoint, status codes
+- ✅ **Error handling**: safe error extraction, stack traces
+- ✅ **Type safety**: structured, serializable log data
+- ✅ **Production ready**: extensible to external logging services
+
+#### When to Use Each Pattern
+
+1. **`withApiLogging`** - For API operations (GET, POST, PUT, DELETE)
+   - Handles request/response/error logging automatically
+   - Customizable success data extraction
+   - Automatic performance tracking
+   - Perfect for CRUD operations
+
+2. **`withServiceLogging`** - For business logic operations
+   - Logs operation start/completion automatically
+   - Customizable argument and result logging
+   - Great for complex business functions
+   - Automatic error handling with context
+
+3. **Basic `createLogger`** - For simple operations
+   - Manual control when wrappers are overkill
+   - Still gets automatic context collection
+   - Good for simple utility functions
+
+### ❌ Legacy Manual Logging (Avoid)
+
+```typescript
+// ❌ AVOID: Manual logging with lots of boilerplate
+export const getAccount = async (accountId: string): Promise<Account> => {
+    const startTime = performance.now();
+    console.log(`[AccountService] Fetching account ${accountId}`);
+    
+    try {
+        const account = await ApiClient.getJson<Account>(`/accounts/${accountId}`);
+        const duration = performance.now() - startTime;
+        console.log(`[AccountService] Account fetched successfully`, {
+            accountId,
+            accountName: account.name,
+            duration: `${duration.toFixed(2)}ms`,
+            timestamp: new Date().toISOString()
+        });
+        return account;
+    } catch (error) {
+        const duration = performance.now() - startTime;
+        console.error(`[AccountService] Failed to fetch account`, {
+            accountId,
+            error: error.message,
+            duration: `${duration.toFixed(2)}ms`,
+            timestamp: new Date().toISOString()
+        });
+        throw error;
+    }
+};
+```
+
+### Legacy Structured Logging (For Reference Only)
+```typescript
+// ⚠️ LEGACY: Only use if efficient patterns don't fit your needs
 export const createLogger = (serviceName: string) => {
     const log = (level: 'info' | 'warn' | 'error', message: string, data?: any) => {
         const logEntry = {
@@ -668,65 +900,40 @@ export const createLogger = (serviceName: string) => {
         error: (message: string, data?: any) => log('error', message, data)
     };
 };
-
-// Usage in services
-const logger = createLogger('AccountService');
-
-export const getAccount = async (accountId: string): Promise<Account> => {
-    logger.info('Fetching account', { accountId });
-    
-    try {
-        const account = await ApiClient.getJson<Account>(`/accounts/${accountId}`);
-        logger.info('Account fetched successfully', { accountId, accountName: account.name });
-        return account;
-    } catch (error) {
-        logger.error('Failed to fetch account', { accountId, error: error.message });
-        throw error;
-    }
-};
 ```
 
-### Performance Logging
-```typescript
-// Performance monitoring for service calls
-export const withPerformanceLogging = <T extends any[], R>(
-    fn: (...args: T) => Promise<R>,
-    operationName: string
-) => {
-    return async (...args: T): Promise<R> => {
-        const startTime = performance.now();
-        
-        try {
-            const result = await fn(...args);
-            const duration = performance.now() - startTime;
-            
-            logger.info(`${operationName} completed`, { 
-                duration: `${duration.toFixed(2)}ms`,
-                success: true 
-            });
-            
-            return result;
-        } catch (error) {
-            const duration = performance.now() - startTime;
-            
-            logger.error(`${operationName} failed`, { 
-                duration: `${duration.toFixed(2)}ms`,
-                error: error.message 
-            });
-            
-            throw error;
-        }
-    };
-};
+### Migration from Legacy Logging
 
-// Usage
+#### ✅ Migrate to Efficient Patterns
+```typescript
+// ❌ OLD: Manual performance logging
 export const getAccount = withPerformanceLogging(
     async (accountId: string): Promise<Account> => {
         return await ApiClient.getJson<Account>(`/accounts/${accountId}`);
     },
     'getAccount'
 );
+
+// ✅ NEW: Use withApiLogging instead
+export const getAccount = (accountId: string) => withApiLogging(
+  'AccountService',
+  `/accounts/${accountId}`,
+  'GET',
+  async () => ApiClient.getJson<Account>(`/accounts/${accountId}`),
+  {
+    operationName: `getAccount:${accountId}`,
+    successData: (result) => ({ accountName: result.accountName })
+  }
+);
 ```
+
+#### Benefits of Migration
+- **94% less code** - Eliminate logging boilerplate
+- **Automatic context** - userId, sessionId, timestamps
+- **Better error handling** - Safe error extraction
+- **Type safety** - Structured, serializable data
+- **Consistent patterns** - Same approach across all services
+- **Production ready** - Built-in extensibility
 
 ### Error Context Logging
 ```typescript

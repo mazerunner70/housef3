@@ -1,9 +1,10 @@
 import { z } from 'zod';
-import { ApiClient } from '@/utils/apiClient';
+import ApiClient from '@/utils/apiClient';
 import { validateApiResponse } from '@/utils/zodErrorHandler';
 import { TransactionViewItem } from '@/schemas/Transaction';
+import { withApiLogging, withServiceLogging, createLogger } from '@/utils/logger';
 
-// Transfer pair interfaces
+// Transfer domain interfaces
 export interface TransferPair {
     outgoingTransaction: TransactionViewItem;
     incomingTransaction: TransactionViewItem;
@@ -18,7 +19,35 @@ export interface DetectedTransfer {
     dateDifference: number;
 }
 
-// API response schemas
+// Request/Response interfaces following conventions
+export interface TransferDetectionRequest {
+    startDate: string; // ISO format
+    endDate: string;   // ISO format
+}
+
+export interface PairedTransfersResponse {
+    pairedTransfers: TransferPair[];
+    count: number;
+}
+
+export interface DetectedTransfersResponse {
+    transfers: TransferPair[];
+    count: number;
+}
+
+export interface MarkTransferPairRequest {
+    outgoingTransactionId: string;
+    incomingTransactionId: string;
+}
+
+export interface BulkMarkTransfersRequest {
+    transferPairs: Array<{
+        outgoingTransactionId: string;
+        incomingTransactionId: string;
+    }>;
+}
+
+// Zod validation schemas
 const TransferPairSchema = z.object({
     outgoingTransaction: z.any(), // Will be validated as TransactionViewItem
     incomingTransaction: z.any(), // Will be validated as TransactionViewItem
@@ -51,16 +80,16 @@ const BulkMarkResponseSchema = z.object({
 
 
 
-// API base path - ApiClient will handle the full URL construction
-const API_ENDPOINT = '';
+// Logger for simple operations
+const logger = createLogger('TransferService');
 
 /**
  * Get existing paired transfer transactions within a date range
+ * @param startDate Optional start date for filtering
+ * @param endDate Optional end date for filtering
+ * @returns Promise resolving to array of transfer pairs
  */
-export const getPairedTransfers = async (
-    startDate?: Date,
-    endDate?: Date
-): Promise<TransferPair[]> => {
+export const listPairedTransfers = (startDate?: Date, endDate?: Date) => {
     const query = new URLSearchParams();
 
     if (startDate && endDate) {
@@ -70,98 +99,165 @@ export const getPairedTransfers = async (
     }
 
     const url = query.toString()
-        ? `${API_ENDPOINT}/transfers/paired?${query.toString()}`
-        : `${API_ENDPOINT}/transfers/paired`;
+        ? `/transfers/paired?${query.toString()}`
+        : `/transfers/paired`;
 
-    return validateApiResponse(
-        () => ApiClient.getJson<any>(url),
-        (rawData) => {
-            const validatedResponse = PairedTransfersResponseSchema.parse(rawData);
-            return validatedResponse.pairedTransfers;
+    return withApiLogging(
+        'TransferService',
+        url,
+        'GET',
+        async () => {
+            return validateApiResponse(
+                () => ApiClient.getJson<any>(url),
+                (rawData) => {
+                    const validatedResponse = PairedTransfersResponseSchema.parse(rawData);
+                    return validatedResponse.pairedTransfers;
+                },
+                'paired transfers data',
+                'Failed to load paired transfers. The transfer data format is invalid.'
+            );
         },
-        'paired transfers data',
-        'Failed to load paired transfers. The transfer data format is invalid.'
+        {
+            operationName: 'getPairedTransfers',
+            successData: (result) => ({ transferCount: result.length })
+        }
     );
 };
 
 /**
  * Detect potential transfer transactions within a date range
+ * @param startDate Start date for detection period
+ * @param endDate End date for detection period
+ * @returns Promise resolving to array of detected transfer pairs
  */
-export const detectTransfers = async (
-    startDate: Date,
-    endDate: Date
-): Promise<TransferPair[]> => {
+export const detectPotentialTransfers = (startDate: Date, endDate: Date) => {
     const query = new URLSearchParams();
 
     // Use specific start and end dates (ISO 8601)
     query.append('startDate', startDate.toISOString());
     query.append('endDate', endDate.toISOString());
 
-    return validateApiResponse(
-        () => ApiClient.getJson<any>(`${API_ENDPOINT}/transfers/detect?${query.toString()}`),
-        (rawData) => {
-            const validatedResponse = DetectedTransfersResponseSchema.parse(rawData);
-            return validatedResponse.transfers;
+    const url = `/transfers/detect?${query.toString()}`;
+
+    return withApiLogging(
+        'TransferService',
+        url,
+        'GET',
+        async () => {
+            return validateApiResponse(
+                () => ApiClient.getJson<any>(url),
+                (rawData) => {
+                    const validatedResponse = DetectedTransfersResponseSchema.parse(rawData);
+                    return validatedResponse.transfers;
+                },
+                'detected transfers data',
+                'Failed to detect transfers. The transfer data format is invalid.'
+            );
         },
-        'detected transfers data',
-        'Failed to detect transfers. The transfer data format is invalid.'
+        {
+            operationName: 'detectTransfers',
+            successData: (result) => ({ detectedCount: result.length })
+        }
     );
 };
 
 /**
  * Mark a single pair of transactions as transfers
+ * @param outgoingTransactionId ID of the outgoing transaction
+ * @param incomingTransactionId ID of the incoming transaction
+ * @returns Promise resolving to boolean indicating success
  */
-export const markTransferPair = async (
-    outgoingTransactionId: string,
-    incomingTransactionId: string
-): Promise<boolean> => {
-    return validateApiResponse(
-        () => ApiClient.postJson<any>(`${API_ENDPOINT}/transfers/mark-pair`, {
-            outgoingTransactionId,
-            incomingTransactionId
-        }),
-        (rawData) => {
-            return rawData.message === "Transfer pair marked successfully";
+export const markTransferPair = (outgoingTransactionId: string, incomingTransactionId: string) => {
+    return withApiLogging(
+        'TransferService',
+        '/transfers/mark-pair',
+        'POST',
+        async () => {
+            return validateApiResponse(
+                () => ApiClient.postJson<any>('/transfers/mark-pair', {
+                    outgoingTransactionId,
+                    incomingTransactionId
+                }),
+                (rawData) => {
+                    return rawData.message === "Transfer pair marked successfully";
+                },
+                'transfer pair marking response',
+                'Failed to mark transfer pair. The server response format is invalid.'
+            );
         },
-        'transfer pair marking response',
-        'Failed to mark transfer pair. The server response format is invalid.'
+        {
+            operationName: `markTransferPair:${outgoingTransactionId}-${incomingTransactionId}`,
+            successData: () => ({ outgoingTransactionId, incomingTransactionId })
+        }
     );
 };
 
 /**
  * Mark multiple detected transfer pairs as transfers
+ * @param transferPairs Array of transfer pairs to mark
+ * @returns Promise resolving to bulk operation results
  */
-export const bulkMarkTransfers = async (transferPairs: DetectedTransfer[]): Promise<{
+export interface BulkMarkTransfersResponse {
     successCount: number;
     failureCount: number;
     successful: Array<{ outgoingTransactionId: string; incomingTransactionId: string }>;
     failed: Array<{ pair: any; error: string }>;
-}> => {
-    return validateApiResponse(
-        () => ApiClient.postJson<any>(`${API_ENDPOINT}/transfers/bulk-mark`, {
-            transferPairs: transferPairs.map(pair => ({
-                outgoingTransactionId: pair.outgoingTransactionId,
-                incomingTransactionId: pair.incomingTransactionId
-            }))
+}
+
+export const bulkMarkTransfers = withServiceLogging(
+    'TransferService',
+    'bulkMarkTransfers',
+    async (transferPairs: DetectedTransfer[]): Promise<BulkMarkTransfersResponse> => {
+        return validateApiResponse(
+            () => ApiClient.postJson<any>('/transfers/bulk-mark', {
+                transferPairs: transferPairs.map(pair => ({
+                    outgoingTransactionId: pair.outgoingTransactionId,
+                    incomingTransactionId: pair.incomingTransactionId
+                }))
+            }),
+            (rawData) => {
+                return BulkMarkResponseSchema.parse(rawData);
+            },
+            'bulk transfer marking response',
+            'Failed to bulk mark transfers. The server response format is invalid.'
+        );
+    },
+    {
+        logArgs: ([transferPairs]) => ({
+            pairCount: transferPairs.length,
+            transactionIds: transferPairs.map(p => `${p.outgoingTransactionId}-${p.incomingTransactionId}`)
         }),
-        (rawData) => {
-            return BulkMarkResponseSchema.parse(rawData);
-        },
-        'bulk transfer marking response',
-        'Failed to bulk mark transfers. The server response format is invalid.'
-    );
-};
+        logResult: (result) => ({
+            successCount: result.successCount,
+            failureCount: result.failureCount
+        })
+    }
+);
 
 
 
-// Additional utility functions for date range handling
+// Utility functions for date range handling
+
+/**
+ * Convert number of days to a date range ending today
+ * @param days Number of days to go back from today
+ * @returns Object with startDate and endDate
+ */
 export const convertDaysToDateRange = (days: number): { startDate: Date; endDate: Date } => {
+    logger.info('Converting days to date range', { days });
+
     const endDate = new Date();
     const startDate = new Date();
     startDate.setDate(endDate.getDate() - days);
+
     return { startDate, endDate };
 };
 
+/**
+ * Format a date for display in US locale
+ * @param date Date to format
+ * @returns Formatted date string (e.g., "Jan 15, 2024")
+ */
 export const formatDateForDisplay = (date: Date): string => {
     return date.toLocaleDateString('en-US', {
         year: 'numeric',
@@ -170,12 +266,36 @@ export const formatDateForDisplay = (date: Date): string => {
     });
 };
 
-// Default export
+/**
+ * Format date for API requests (ISO format)
+ * @param date Date to format
+ * @returns ISO date string (YYYY-MM-DD)
+ */
+export const formatDateForAPI = (date: Date): string => {
+    return date.toISOString().split('T')[0];
+};
+
+/**
+ * Create a date range for transfer operations
+ * @param startDate Start date
+ * @param endDate End date
+ * @returns Formatted date range for API requests
+ */
+export const createTransferDateRange = (startDate: Date, endDate: Date): TransferDetectionRequest => {
+    return {
+        startDate: formatDateForAPI(startDate),
+        endDate: formatDateForAPI(endDate)
+    };
+};
+
+// Default export with all service functions
 export default {
-    getPairedTransfers,
-    detectTransfers,
+    listPairedTransfers,
+    detectPotentialTransfers,
     markTransferPair,
     bulkMarkTransfers,
     convertDaysToDateRange,
-    formatDateForDisplay
+    formatDateForDisplay,
+    formatDateForAPI,
+    createTransferDateRange
 };

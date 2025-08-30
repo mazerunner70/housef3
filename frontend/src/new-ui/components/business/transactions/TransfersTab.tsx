@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
-    getPairedTransfers,
-    detectTransfers,
+    listPairedTransfers,
+    detectPotentialTransfers,
     bulkMarkTransfers,
     TransferPair,
-    convertDaysToDateRange,
-    formatDateForDisplay
+    convertDaysToDateRange
 } from '@/services/TransferService';
 import { getAccounts } from '@/services/TransactionService';
 import { AccountInfo } from '@/schemas/Transaction';
@@ -34,7 +33,6 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
 
     // Use preferences hook for legacy support and user preferences
     const {
-        currentDateRange: dateRangeDays,
         quickRangeOptions,
         updateDateRange,
         autoExpandSuggestion,
@@ -52,7 +50,7 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
         setError(null);
         try {
             const [transfersData, accountsData] = await Promise.all([
-                getPairedTransfers(currentDateRange.startDate, currentDateRange.endDate),
+                listPairedTransfers(currentDateRange.startDate, currentDateRange.endDate)(),
                 getAccounts()
             ]);
             setPairedTransfers(transfersData);
@@ -70,7 +68,7 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
         setShowDateRangeSuggestion(false);
         try {
             // Use date range API
-            const detected = await detectTransfers(currentDateRange.startDate, currentDateRange.endDate);
+            const detected = await detectPotentialTransfers(currentDateRange.startDate, currentDateRange.endDate)();
             setDetectedTransfers(detected);
             setSelectedDetectedTransfers(new Set());
 
@@ -110,7 +108,7 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
 
             if (result.successCount > 0) {
                 // Reload paired transfers to show the newly marked ones
-                const updatedTransfers = await getPairedTransfers(currentDateRange.startDate, currentDateRange.endDate);
+                const updatedTransfers = await listPairedTransfers(currentDateRange.startDate, currentDateRange.endDate)();
                 setPairedTransfers(updatedTransfers);
 
                 // Remove successfully marked transfers from detected list
@@ -155,30 +153,13 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
         setDetectLoading(true);
         setError(null);
         try {
-            const detected = await detectTransfers(newRange.startDate, newRange.endDate);
+            const detected = await detectPotentialTransfers(newRange.startDate, newRange.endDate)();
             setDetectedTransfers(detected);
             setSelectedDetectedTransfers(new Set());
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to detect transfers');
         } finally {
             setDetectLoading(false);
-        }
-    };
-
-    const handleDateRangeChange = async (newDays: number) => {
-        const newRange = convertDaysToDateRange(newDays);
-        setCurrentDateRange(newRange);
-        await updateDateRange(newDays);
-
-        // Reload paired transfers with new date range
-        try {
-            setLoading(true);
-            const updatedTransfers = await getPairedTransfers(newRange.startDate, newRange.endDate);
-            setPairedTransfers(updatedTransfers);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to reload transfers with new date range');
-        } finally {
-            setLoading(false);
         }
     };
 
@@ -191,7 +172,7 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
         // Reload paired transfers with new date range
         try {
             setLoading(true);
-            const updatedTransfers = await getPairedTransfers(newRange.startDate, newRange.endDate);
+            const updatedTransfers = await listPairedTransfers(newRange.startDate, newRange.endDate)();
             setPairedTransfers(updatedTransfers);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to reload transfers with new date range');

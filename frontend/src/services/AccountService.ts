@@ -9,6 +9,13 @@ import { ApiClient } from '@/utils/apiClient';
 import { validateApiResponse } from '@/utils/zodErrorHandler';
 import { z } from 'zod';
 
+// Import efficient logging utilities
+import {
+  withApiLogging,
+  withServiceLogging,
+  createLogger
+} from '@/utils/logger';
+
 
 // Account-specific response interfaces (not moved to types as they're service-specific)
 export interface AccountFilesResponse {
@@ -66,96 +73,201 @@ const UploadFileToAccountResponseSchema = z.object({
 // API endpoint path - ApiClient will handle the full URL construction
 const API_ENDPOINT = '/accounts';
 
+// Logger for simple operations that don't need API wrapper
+const logger = createLogger('AccountService');
 
+// ============ EFFICIENT LOGGING IMPLEMENTATIONS ============
 
-// Get list of accounts
-export const listAccounts = async (): Promise<AccountListResponse> => {
-  return validateApiResponse(
-    () => ApiClient.getJson<any>(API_ENDPOINT),
-    (rawData) => {
-      // Log raw data for debugging (only in development)
-      if (process.env.NODE_ENV === 'development') {
-        console.log('Raw account data received:', rawData);
-      }
-      return AccountListResponseSchema.parse(rawData);
-    },
-    'account list data'
-  );
-};
+// Get list of accounts - with automatic API logging
+export const listAccounts = withApiLogging(
+  'AccountService',
+  API_ENDPOINT,
+  'GET',
+  async () => {
+    return validateApiResponse(
+      () => ApiClient.getJson<any>(API_ENDPOINT),
+      (rawData) => {
+        // Only log business-specific data - everything else is automatic
+        if (process.env.NODE_ENV === 'development') {
+          logger.info('Account list processed', {
+            accountCount: rawData.accounts?.length || 0,
+            hasMetadata: !!rawData.metadata
+          });
+        }
+        return AccountListResponseSchema.parse(rawData);
+      },
+      'account list data'
+    );
+  },
+  {
+    successData: (result) => ({ accountCount: result.accounts.length })
+  }
+);
 
-// Get single account by ID
-export const getAccount = async (accountId: string): Promise<{ account: Account }> => {
-  return validateApiResponse(
-    () => ApiClient.getJson<any>(`${API_ENDPOINT}/${accountId}`),
-    (rawData) => {
-      const validatedAccount = AccountSchema.parse(rawData.account);
-      return { account: validatedAccount };
-    },
-    'account data',
-    `Failed to load account ${accountId}. The account data format is invalid.`
-  );
-};
+// Get single account by ID - with automatic API logging
+export const getAccount = (accountId: string) => withApiLogging(
+  'AccountService',
+  `${API_ENDPOINT}/${accountId}`,
+  'GET',
+  async () => {
+    return validateApiResponse(
+      () => ApiClient.getJson<any>(`${API_ENDPOINT}/${accountId}`),
+      (rawData) => {
+        const validatedAccount = AccountSchema.parse(rawData.account);
+        return { account: validatedAccount };
+      },
+      'account data',
+      `Failed to load account ${accountId}. The account data format is invalid.`
+    );
+  },
+  {
+    operationName: `getAccount:${accountId}`,
+    successData: (result) => ({
+      accountId,
+      accountName: result.account.accountName,
+      accountType: result.account.accountType,
+      balance: result.account.balance.toString()
+    })
+  }
+);
 
-// List files associated with an account
-export const listAccountFiles = async (accountId: string): Promise<AccountFilesResponse> => {
-  return validateApiResponse(
-    () => ApiClient.getJson<any>(`${API_ENDPOINT}/${accountId}/files`),
-    (rawData) => AccountFilesResponseSchema.parse(rawData),
-    'account files data',
-    `Failed to load files for account ${accountId}. The file data format is invalid.`
-  );
-};
+// List files associated with an account - with automatic API logging
+export const listAccountFiles = (accountId: string) => withApiLogging(
+  'AccountService',
+  `${API_ENDPOINT}/${accountId}/files`,
+  'GET',
+  async () => {
+    return validateApiResponse(
+      () => ApiClient.getJson<any>(`${API_ENDPOINT}/${accountId}/files`),
+      (rawData) => {
+        // Log business-specific data for large file sets
+        if (rawData.files?.length > 50) {
+          logger.info('Large file set detected', {
+            accountId,
+            fileCount: rawData.files.length,
+            totalSize: rawData.files.reduce((sum: number, f: any) => sum + (f.fileSize || 0), 0)
+          });
+        }
+        return AccountFilesResponseSchema.parse(rawData);
+      },
+      'account files data',
+      `Failed to load files for account ${accountId}. The file data format is invalid.`
+    );
+  },
+  {
+    operationName: `listAccountFiles:${accountId}`,
+    successData: (result) => ({
+      accountId,
+      fileCount: result.files.length,
+      totalFiles: result.metadata.totalFiles
+    })
+  }
+);
 
-// Get upload URL for a file associated with an account
-export const getAccountFileUploadUrl = async (
+// Get upload URL for a file associated with an account - with automatic API logging
+export const getAccountFileUploadUrl = (
   accountId: string,
   fileName: string,
   contentType: string,
   fileSize: number
-): Promise<UploadFileToAccountResponse> => {
-  return validateApiResponse(
-    () => ApiClient.postJson<any>(`${API_ENDPOINT}/${accountId}/files`, {
-      fileName,
-      contentType,
-      fileSize
-    }),
-    (rawData) => UploadFileToAccountResponseSchema.parse(rawData),
-    'file upload URL data',
-    `Failed to get upload URL for account ${accountId}. The server response format is invalid.`
-  );
-};
+) => withApiLogging(
+  'AccountService',
+  `${API_ENDPOINT}/${accountId}/files`,
+  'POST',
+  async () => {
+    return validateApiResponse(
+      () => ApiClient.postJson<any>(`${API_ENDPOINT}/${accountId}/files`, {
+        fileName,
+        contentType,
+        fileSize
+      }),
+      (rawData) => UploadFileToAccountResponseSchema.parse(rawData),
+      'file upload URL data',
+      `Failed to get upload URL for account ${accountId}. The server response format is invalid.`
+    );
+  },
+  {
+    operationName: `getUploadUrl:${accountId}:${fileName}`,
+    successData: (result) => ({
+      accountId,
+      fileId: result.fileId,
+      fileName: result.fileName,
+      fileFormat: result.fileFormat,
+      fileSizeMB: Math.round(fileSize / 1024 / 1024 * 100) / 100
+    })
+  }
+);
 
+// Delete account - simple operation with basic logging
 export const deleteAccount = async (accountId: string): Promise<void> => {
-  await ApiClient.delete(`${API_ENDPOINT}/${accountId}`);
+  logger.info('Deleting account', { accountId });
+
+  try {
+    await ApiClient.delete(`${API_ENDPOINT}/${accountId}`);
+    logger.info('Account deleted successfully', { accountId });
+  } catch (error) {
+    logger.error('Account deletion failed', { accountId });
+    throw error;
+  }
 };
 
-// Create a new account
-export const createAccount = async (accountData: Partial<Account>): Promise<{ account: Account }> => {
-  return validateApiResponse(
-    () => ApiClient.postJson<any>(API_ENDPOINT, accountData),
-    (rawData) => {
-      const validatedAccount = AccountSchema.parse(rawData.account);
-      return { account: validatedAccount };
-    },
-    'created account data',
-    'Failed to create account. The server response format is invalid.'
-  );
-};
+// Create a new account - with service-level logging
+export const createAccount = withServiceLogging(
+  'AccountService',
+  'createAccount',
+  async (accountData: Partial<Account>) => {
+    return validateApiResponse(
+      () => ApiClient.postJson<any>(API_ENDPOINT, accountData),
+      (rawData) => {
+        const validatedAccount = AccountSchema.parse(rawData.account);
+        return { account: validatedAccount };
+      },
+      'created account data',
+      'Failed to create account. The server response format is invalid.'
+    );
+  },
+  {
+    logArgs: ([accountData]) => ({
+      accountName: accountData.accountName,
+      accountType: accountData.accountType,
+      fieldsProvided: Object.keys(accountData)
+    }),
+    logResult: (result) => ({
+      accountId: result.account.accountId,
+      accountName: result.account.accountName,
+      accountType: result.account.accountType
+    })
+  }
+);
 
-// Update an existing account
-export const updateAccount = async (accountId: string, accountData: Partial<Account>): Promise<{ account: Account }> => {
-  return validateApiResponse(
-    () => ApiClient.putJson<any>(`${API_ENDPOINT}/${accountId}`, accountData),
-    (rawData) => {
-      const validatedAccount = AccountSchema.parse(rawData.account);
-      return { account: validatedAccount };
-    },
-    'updated account data',
-    `Failed to update account ${accountId}. The server response format is invalid.`
-  );
-};
+// Update an existing account - with automatic API logging
+export const updateAccount = (accountId: string, accountData: Partial<Account>) => withApiLogging(
+  'AccountService',
+  `${API_ENDPOINT}/${accountId}`,
+  'PUT',
+  async () => {
+    return validateApiResponse(
+      () => ApiClient.putJson<any>(`${API_ENDPOINT}/${accountId}`, accountData),
+      (rawData) => {
+        const validatedAccount = AccountSchema.parse(rawData.account);
+        return { account: validatedAccount };
+      },
+      'updated account data',
+      `Failed to update account ${accountId}. The server response format is invalid.`
+    );
+  },
+  {
+    operationName: `updateAccount:${accountId}`,
+    successData: (result) => ({
+      accountId,
+      accountName: result.account.accountName,
+      accountType: result.account.accountType,
+      updatedFields: Object.keys(accountData)
+    })
+  }
+);
 
-interface TimelineResponse {
+export interface TimelineResponse {
   timeline: FileMetadata[];
   accountId: string;
 }
@@ -166,15 +278,27 @@ const TimelineResponseSchema = z.object({
   accountId: z.string()
 });
 
-// Get file timeline (overlaps) for an account
-export const getFileTimeline = async (accountId: string): Promise<TimelineResponse> => {
-  return validateApiResponse(
-    () => ApiClient.getJson<any>(`${API_ENDPOINT}/${accountId}/timeline`),
-    (rawData) => TimelineResponseSchema.parse(rawData),
-    'file timeline data',
-    `Failed to load file timeline for account ${accountId}. The timeline data format is invalid.`
-  );
-};
+// Get file timeline (overlaps) for an account - with automatic API logging
+export const getFileTimeline = (accountId: string) => withApiLogging(
+  'AccountService',
+  `${API_ENDPOINT}/${accountId}/timeline`,
+  'GET',
+  async () => {
+    return validateApiResponse(
+      () => ApiClient.getJson<any>(`${API_ENDPOINT}/${accountId}/timeline`),
+      (rawData) => TimelineResponseSchema.parse(rawData),
+      'file timeline data',
+      `Failed to load file timeline for account ${accountId}. The timeline data format is invalid.`
+    );
+  },
+  {
+    operationName: `getFileTimeline:${accountId}`,
+    successData: (result) => ({
+      accountId,
+      timelineEntries: result.timeline.length
+    })
+  }
+);
 
 export default {
   listAccounts,
@@ -183,5 +307,6 @@ export default {
   getAccountFileUploadUrl,
   deleteAccount,
   createAccount,
-  updateAccount
+  updateAccount,
+  getFileTimeline
 }; 
