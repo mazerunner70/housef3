@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import './TransactionFilters.css';
-import { CategoryInfo } from '../../services/TransactionService'; // Keep CategoryInfo
-import { Account } from '../../services/AccountService'; // Import Account from AccountService
-import CustomMultiSelect from './CustomMultiSelect';
+import { CategoryInfo } from '@/schemas/Transaction'; // Keep CategoryInfo
+import { Account } from '@/schemas/Account'; // Import Account from AccountService
+import CustomMultiSelect from '@/new-ui/components/CustomMultiSelect';
 
 export interface FilterValues {
   startDate?: string;
@@ -47,7 +47,7 @@ const TransactionFilters: React.FC<TransactionFiltersProps> = ({
     if (categories.length > 0 && filters.categoryIds && filters.categoryIds.length > 0) {
       const validCategoryIds = categories.map(cat => cat.categoryId);
       const filteredCategoryIds = filters.categoryIds.filter(id => validCategoryIds.includes(id));
-      
+
       // Only update local display state if we found orphaned IDs
       if (filteredCategoryIds.length !== filters.categoryIds.length) {
         setFilters(prev => ({ ...prev, categoryIds: filteredCategoryIds }));
@@ -70,7 +70,7 @@ const TransactionFilters: React.FC<TransactionFiltersProps> = ({
     const filteredValues = selectedValues.filter(id => validCategoryIds.includes(id));
     setFilters(prev => ({ ...prev, categoryIds: filteredValues }));
   };
-  
+
   const handleTransactionTypeChange = (type: FilterValues['transactionType']) => {
     setFilters(prev => ({ ...prev, transactionType: type }));
   };
@@ -91,21 +91,21 @@ const TransactionFilters: React.FC<TransactionFiltersProps> = ({
         {/* Date Range Picker */}
         <div className="filter-group date-range-group">
           <label htmlFor="startDate">From:</label>
-          <input 
-            type="date" 
-            id="startDate" 
-            name="startDate" 
-            value={filters.startDate || ''} 
-            onChange={handleChange} 
+          <input
+            type="date"
+            id="startDate"
+            name="startDate"
+            value={filters.startDate || ''}
+            onChange={handleChange}
             className="filter-input"
           />
           <label htmlFor="endDate">To:</label>
-          <input 
-            type="date" 
-            id="endDate" 
-            name="endDate" 
-            value={filters.endDate || ''} 
-            onChange={handleChange} 
+          <input
+            type="date"
+            id="endDate"
+            name="endDate"
+            value={filters.endDate || ''}
+            onChange={handleChange}
             className="filter-input"
           />
         </div>
@@ -139,14 +139,14 @@ const TransactionFilters: React.FC<TransactionFiltersProps> = ({
             className="filter-select"
           />
         </div>
-        
+
         {/* Transaction Type Filter */}
         <div className="filter-group transaction-type-group">
           <label>Type:</label>
           <div className="button-group">
             {(['all', 'income', 'expense', 'transfer'] as const).map(type => (
-              <button 
-                key={type} 
+              <button
+                key={type}
                 type="button"
                 className={`filter-button type-button ${filters.transactionType === type ? 'active' : ''}`}
                 onClick={() => handleTransactionTypeChange(type)}
@@ -160,13 +160,13 @@ const TransactionFilters: React.FC<TransactionFiltersProps> = ({
         {/* Search Bar */}
         <div className="filter-group search-group">
           <label htmlFor="searchTerm">Search:</label>
-          <input 
-            type="text" 
-            id="searchTerm" 
-            name="searchTerm" 
-            placeholder="Description, payee, notes..." 
-            value={filters.searchTerm || ''} 
-            onChange={handleChange} 
+          <input
+            type="text"
+            id="searchTerm"
+            name="searchTerm"
+            placeholder="Description, payee, notes..."
+            value={filters.searchTerm || ''}
+            onChange={handleChange}
             className="filter-input search-input"
           />
         </div>

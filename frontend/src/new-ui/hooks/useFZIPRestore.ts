@@ -21,7 +21,7 @@ export interface UseFZIPRestoreResult {
   // Backward compat types remain but functions are no-ops in simplified flow
   createRestoreJob: (request?: CreateFZIPRestoreRequest) => Promise<CreateFZIPRestoreResponse>;
   uploadFile: (restoreId: string, file: File, uploadUrl: CreateFZIPRestoreResponse['uploadUrl']) => Promise<void>;
-  refreshRestoreJobs: () => Promise<void>;
+  refreshRestoreJobs: () => Promise<FZIPRestoreJob[]>;
   deleteRestoreJob: (restoreId: string) => Promise<void>;
   getRestoreStatus: (restoreId: string) => Promise<FZIPRestoreJob>;
   startRestoreProcessing: (restoreId: string) => Promise<void>;
@@ -79,10 +79,41 @@ export const useFZIPRestore = (): UseFZIPRestoreResult => {
     }
   }, [isLoading, lastEvaluatedKey, limit]);
 
-  const refreshRestoreJobs = useCallback(async () => {
+  const refreshRestoreJobs = useCallback(async (): Promise<FZIPRestoreJob[]> => {
+    if (isLoading) return restoreJobs;
+    
+    setIsLoading(true);
+    setError(null);
     setLastEvaluatedKey(undefined);
-    await loadRestoreJobs(true);
-  }, [loadRestoreJobs]);
+    
+    try {
+      const response = await listFZIPRestoreJobs(limit, undefined);
+      
+      // Defensive check for response structure
+      if (response && response.restoreJobs && Array.isArray(response.restoreJobs)) {
+        setRestoreJobs(response.restoreJobs);
+        setLastEvaluatedKey(response.nextEvaluatedKey);
+        setHasMore(!!response.nextEvaluatedKey);
+        return response.restoreJobs;
+      } else {
+        // Handle malformed response
+        setRestoreJobs([]);
+        setLastEvaluatedKey(undefined);
+        setHasMore(false);
+        setError('Invalid response from restore service');
+        return [];
+      }
+    } catch (err) {
+      // Ensure restoreJobs is always an array even when there's an error
+      setRestoreJobs([]);
+      setLastEvaluatedKey(undefined);
+      setHasMore(false);
+      setError(err instanceof Error ? err.message : 'Failed to load restore jobs - service may not be available');
+      return [];
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isLoading, restoreJobs, limit]);
 
   const loadMore = useCallback(async () => {
     if (hasMore && !isLoading) {

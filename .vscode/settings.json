@@ -1,32 +1,16 @@
 {
-    "python.analysis.include": ["backend/src/**/*", "backend/tests/**/*"],
-    "python.analysis.exclude": ["**/node_modules", "**/__pycache__", "**/build", ".git", "myenv/**"],
-    "python.linting.enabled": true,
-    "python.languageServer": "None",
-    "python.analysis.typeCheckingMode": "basic",
-    "python.analysis.diagnosticMode": "workspace",
-    "python.analysis.autoImportCompletions": true,
-    "python.linting.pylintEnabled": false,
-    "python.linting.flake8Enabled": true,
-    "python.linting.mypyEnabled": true,
-    "[python]": {
-        "editor.formatOnSave": true,
-        "editor.defaultFormatter": "ms-python.black-formatter",
-        "editor.codeActionsOnSave": {
-            "source.organizeImports": "explicit"
-        }
-    },
-    "python.formatting.provider": "black",
-    "python.sortImports.args": [
-        "--profile",
-        "black"
+    "python.defaultInterpreterPath": "./backend/venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestArgs": [
+        "backend/tests"
     ],
-    "python.defaultInterpreterPath": "${workspaceFolder}/backend/venv/bin/python",
-    "python.analysis.extraPaths": [
-        "${workspaceFolder}/backend/src"
-    ],
+    "python.testing.cwd": "${workspaceFolder}/backend",
+    "terminal.integrated.cwd": "${workspaceFolder}",
+    "editor.formatOnSave": true,
     "sonarlint.connectedMode.project": {
         "connectionId": "mazerunner70",
         "projectKey": "mazerunner70_housef3"
     }
-} 
+}

@@ -452,6 +452,14 @@ class Transaction(BaseModel):
                 if isinstance(converted_data[field], Decimal):
                     converted_data[field] = int(converted_data[field])
 
+        # Manually convert string values to enum objects before model_construct
+        if 'currency' in converted_data and isinstance(converted_data['currency'], str):
+            try:
+                converted_data['currency'] = Currency(converted_data['currency'])
+            except ValueError:
+                logger.warning(f"Invalid currency value from database: {converted_data['currency']}, setting to None")
+                converted_data['currency'] = None
+
         # Handle category assignments reconstruction
         if 'categories' in converted_data and converted_data['categories']:
             processed_categories = []
@@ -486,7 +494,8 @@ class Transaction(BaseModel):
             
             converted_data['categories'] = processed_categories
 
-        return cls.model_validate(converted_data, context={'from_database': True})
+        # Use model_construct to preserve enum objects (model_validate would convert them back to strings due to use_enum_values=True)
+        return cls.model_construct(**converted_data)
 
 
 def transaction_to_json(transaction_input: Union[Transaction, Dict[str, Any]]) -> str:

@@ -20,7 +20,7 @@ const initialFilters: FilterValues = {
   searchTerm: '',
 };
 
-const DEFAULT_TRANSACTIONS_PAGE_SIZE = 25;
+const DEFAULT_TRANSACTIONS_PAGE_SIZE = 20;
 
 interface TransactionsUIStore {
   filters: FilterValues;
@@ -42,29 +42,29 @@ export const useTransactionsUIStore = create<TransactionsUIStore>()(
 
       setFilters: (newFilters) =>
         set((state) => ({ filters: { ...state.filters, ...newFilters } })),
-      
+
       setCurrentPage: (page) => set({ currentPage: page }),
-      
-      setPageSize: (size) => 
+
+      setPageSize: (size) =>
         set({ pageSize: size, currentPage: 1 }),
 
-      resetPaginationAndFilters: () => 
-        set({ 
-          filters: initialFilters, 
-          currentPage: 1, 
-          pageSize: DEFAULT_TRANSACTIONS_PAGE_SIZE 
+      resetPaginationAndFilters: () =>
+        set({
+          filters: initialFilters,
+          currentPage: 1,
+          pageSize: DEFAULT_TRANSACTIONS_PAGE_SIZE
         }),
 
-      applyNewFilters: (newFiltersSet) => 
+      applyNewFilters: (newFiltersSet) =>
         set({ filters: newFiltersSet, currentPage: 1 }),
     }),
     {
       name: 'transactions-ui-storage',
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ 
+      partialize: (state) => ({
         filters: state.filters,
         currentPage: state.currentPage,
-        pageSize: state.pageSize 
+        pageSize: state.pageSize
       }),
     }
   )

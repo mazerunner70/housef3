@@ -1,8 +1,12 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import json
+import logging
 from decimal import Decimal
 import uuid
+from pydantic import ValidationError
 from models.transaction_file import DateRange
+
+logger = logging.getLogger(__name__)
 
 class DecimalEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -77,3 +81,60 @@ def mandatory_body_parameter(event: Dict[str, Any], parameter_name: str) -> str:
     if not parameter_value:
         raise KeyError(f"Body parameter {parameter_name} is required")
     return parameter_value
+
+
+def extract_user_id_from_event(event: Dict[str, Any]) -> Optional[str]:
+    """
+    Extract user ID from an authenticated Lambda event.
+    
+    This function assumes the event has already been authenticated and contains
+    user information in the request context. It's designed to work with the
+    require_auth decorator.
+    
+    Args:
+        event: The Lambda event object containing the request context
+        
+    Returns:
+        The user's unique identifier (sub) if found, None otherwise
+    """
+    try:
+        request_context = event.get("requestContext", {})
+        authorizer = request_context.get("authorizer", {})
+        claims = authorizer.get("jwt", {}).get("claims", {})
+        
+        user_sub = claims.get("sub")
+        return user_sub
+    except Exception as e:
+        # Log error but don't raise - this function should be used after authentication
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error extracting user ID from event: {str(e)}")
+        return None
+
+
+def parse_and_validate_json(event: Dict[str, Any], model_class):
+    """
+    Parse JSON body and validate using Pydantic model.
+    
+    This utility function follows the backend conventions for consistent
+    request validation across all handlers.
+    
+    Args:
+        event: Lambda event containing the request body
+        model_class: Pydantic model class to validate against
+        
+    Returns:
+        Tuple of (validated_model, error_dict) where one will be None
+    """
+    body_str = event.get('body')
+    if not body_str:
+        return None, {"message": "Request body is missing or empty"}
+    
+    try:
+        return model_class.model_validate_json(body_str), None
+    except ValidationError as e:
+        logger.error(f"Validation error: {str(e)}")
+        return None, {"message": "Invalid request data", "details": e.errors()}
+    except json.JSONDecodeError:
+        logger.error("Invalid JSON format in request body")
+        return None, {"message": "Invalid JSON format in request body"}

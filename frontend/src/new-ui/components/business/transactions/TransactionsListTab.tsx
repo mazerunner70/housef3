@@ -1,20 +1,17 @@
-import React, { useEffect, useCallback, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getUserTransactions,
   getCategories,
   quickUpdateTransactionCategory,
-  TransactionViewItem,
-  CategoryInfo,
-  TransactionRequestParams,
-} from '../../services/TransactionService';
-import { listAccounts, Account } from '../../services/AccountService';
-import TransactionFilters, { FilterValues as ComponentFilterValues } from '../components/TransactionFilters';
-import TransactionTable from '../components/TransactionTable';
-import './TransactionsView.css';
-import { useTransactionsUIStore, FilterValues as StoreFilterValues } from '../../stores/transactionsStore';
-
-const DEFAULT_PAGE_SIZE = 25;
+} from '@/services/TransactionService';
+import { listAccounts } from '@/services/AccountService';
+import { TransactionViewItem, CategoryInfo, TransactionRequestParams } from '@/schemas/Transaction';
+import { Account } from '@/schemas/Account';
+import TransactionFilters, { FilterValues as ComponentFilterValues } from './TransactionFilters';
+import TransactionTable from './TransactionTable';
+import '@/new-ui/pages/TransactionsPage.css';
+import { useTransactionsUIStore } from '@/stores/transactionsStore';
 
 // Helper functions
 const parseDateString = (dateStr: string | undefined): Date | null => {
@@ -92,7 +89,7 @@ const TransactionsListTab: React.FC = () => {
   // Load more function
   const handleLoadMore = async () => {
     if (!lastEvaluatedKey || isLoadingMore) return;
-    
+
     setIsLoadingMore(true);
     try {
       const response = await getUserTransactions(buildParams(true));
@@ -109,7 +106,7 @@ const TransactionsListTab: React.FC = () => {
   const handleApplyFilters = (newFilters: ComponentFilterValues) => {
     setAllTransactions([]);
     setLastEvaluatedKey(undefined);
-    
+
     applyNewFilters({
       startDate: newFilters.startDate,
       endDate: newFilters.endDate,
@@ -144,12 +141,15 @@ const TransactionsListTab: React.FC = () => {
   // Transform transactions with category info
   const transformedTransactions = useMemo(() => {
     if (!allTransactions.length || !categories.length) return allTransactions;
-    
+
     const categoriesMap = new Map(categories.map(cat => [cat.categoryId, cat]));
-    
+
     return allTransactions.map(transaction => ({
       ...transaction,
-      category: transaction.primaryCategoryId ? categoriesMap.get(transaction.primaryCategoryId) : undefined
+      // Keep category as the category ID string for compatibility
+      category: transaction.primaryCategoryId || undefined,
+      // Add category object as a separate field for display purposes
+      categoryInfo: transaction.primaryCategoryId ? categoriesMap.get(transaction.primaryCategoryId) : undefined
     }));
   }, [allTransactions, categories]);
 
@@ -186,11 +186,11 @@ const TransactionsListTab: React.FC = () => {
         onPageSizeChange={handlePageSizeChange}
       />
 
-      {isLoading && !transformedTransactions.length && 
+      {isLoading && !transformedTransactions.length &&
         <div className="loading-spinner">Loading transactions...</div>
       }
-      
-      {!isLoading && !transformedTransactions.length && 
+
+      {!isLoading && !transformedTransactions.length &&
         <div className="transaction-table-empty">No transactions found.</div>
       }
     </>

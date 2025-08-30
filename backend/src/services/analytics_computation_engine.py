@@ -10,7 +10,8 @@ from collections import defaultdict
 
 from models.account import AccountType
 from models.transaction import Transaction
-from utils.db_utils import list_user_accounts, list_user_transactions
+from models.category import CategoryType
+from utils.db_utils import list_user_accounts, list_user_transactions, list_categories_by_user_from_db
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -24,7 +25,41 @@ class AnalyticsComputationEngine:
     """
 
     def __init__(self):
-        pass
+        self._transfer_category_cache = {}
+    
+    def _get_transfer_category_ids(self, user_id: str) -> set:
+        """Get the category IDs for transfer categories for this user."""
+        if user_id in self._transfer_category_cache:
+            return self._transfer_category_cache[user_id]
+        
+        try:
+            categories = list_categories_by_user_from_db(user_id)
+            transfer_category_ids = {
+                str(cat.categoryId) for cat in categories 
+                if cat.type == CategoryType.TRANSFER
+            }
+            self._transfer_category_cache[user_id] = transfer_category_ids
+            return transfer_category_ids
+        except Exception as e:
+            logger.warning(f"Error getting transfer categories for user {user_id}: {str(e)}")
+            return set()
+    
+    def _is_transfer_transaction(self, transaction: Transaction, user_id: str) -> bool:
+        """Check if a transaction is categorized as a transfer."""
+        if not transaction.categories:
+            return False
+        
+        transfer_category_ids = self._get_transfer_category_ids(user_id)
+        
+        for assignment in transaction.categories:
+            if str(assignment.category_id) in transfer_category_ids:
+                return True
+        
+        return False
+    
+    def _filter_non_transfer_transactions(self, transactions: List[Transaction], user_id: str) -> List[Transaction]:
+        """Filter out transfer transactions from the list."""
+        return [tx for tx in transactions if not self._is_transfer_transaction(tx, user_id)]
 
     def compute_cash_flow_analytics(self, user_id: str, time_period: str,
                                     account_id: Optional[str] = None) -> Dict[str, Any]:
@@ -48,8 +83,12 @@ class AnalyticsComputationEngine:
 
             # Get transactions for the period
             account_ids = [uuid.UUID(account_id)] if account_id else None
-            transactions = self._get_transactions_for_period(user_id, start_date, end_date, account_ids)
-            logger.info(f"Found {len(transactions)} transactions in period")
+            all_transactions = self._get_transactions_for_period(user_id, start_date, end_date, account_ids)
+            logger.info(f"Found {len(all_transactions)} transactions in period")
+            
+            # Filter out transfer transactions
+            transactions = self._filter_non_transfer_transactions(all_transactions, user_id)
+            logger.info(f"After filtering transfers: {len(transactions)} transactions")
 
             # Separate income and expenses
             income_transactions = []
@@ -140,7 +179,10 @@ class AnalyticsComputationEngine:
         try:
             start_date, end_date = self._parse_time_period(time_period)
             account_ids = [uuid.UUID(account_id)] if account_id else None
-            transactions = self._get_transactions_for_period(user_id, start_date, end_date, account_ids)
+            all_transactions = self._get_transactions_for_period(user_id, start_date, end_date, account_ids)
+            
+            # Filter out transfer transactions
+            transactions = self._filter_non_transfer_transactions(all_transactions, user_id)
 
             # Group transactions by category
             # Note: Transaction model doesn't have direct category field yet
