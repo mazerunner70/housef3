@@ -1,8 +1,12 @@
 from typing import Dict, Any, Optional
 import json
+import logging
 from decimal import Decimal
 import uuid
+from pydantic import ValidationError
 from models.transaction_file import DateRange
+
+logger = logging.getLogger(__name__)
 
 class DecimalEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -106,3 +110,31 @@ def extract_user_id_from_event(event: Dict[str, Any]) -> Optional[str]:
         logger = logging.getLogger(__name__)
         logger.error(f"Error extracting user ID from event: {str(e)}")
         return None
+
+
+def parse_and_validate_json(event: Dict[str, Any], model_class):
+    """
+    Parse JSON body and validate using Pydantic model.
+    
+    This utility function follows the backend conventions for consistent
+    request validation across all handlers.
+    
+    Args:
+        event: Lambda event containing the request body
+        model_class: Pydantic model class to validate against
+        
+    Returns:
+        Tuple of (validated_model, error_dict) where one will be None
+    """
+    body_str = event.get('body')
+    if not body_str:
+        return None, {"message": "Request body is missing or empty"}
+    
+    try:
+        return model_class.model_validate_json(body_str), None
+    except ValidationError as e:
+        logger.error(f"Validation error: {str(e)}")
+        return None, {"message": "Invalid request data", "details": e.errors()}
+    except json.JSONDecodeError:
+        logger.error("Invalid JSON format in request body")
+        return None, {"message": "Invalid JSON format in request body"}

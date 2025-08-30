@@ -9,10 +9,12 @@ from decimal import Decimal
 
 from models.account import (
     Account,
+    AccountCreate,
+    AccountUpdate,
     AccountType,
     convert_currency_input,
 )
-from models.transaction_file import FileFormat
+from models.transaction_file import FileFormat, TransactionFileCreate
 from utils.db_utils import (
     get_account,
     list_user_accounts,
@@ -25,15 +27,19 @@ from utils.db_utils import (
     list_account_transactions,
     list_file_transactions,
     checked_mandatory_account,
+    create_transaction_file,
 )
 from utils.auth import get_user_from_event
 from utils.lambda_utils import (
+    create_response,
     mandatory_body_parameter,
     mandatory_path_parameter,
     mandatory_query_parameter,
     optional_body_parameter,
+    parse_and_validate_json,
 )
 from utils.s3_dao import generate_upload_url
+from utils.handler_decorators import api_handler, standard_error_handling, require_authenticated_user
 
 # Event-driven architecture imports
 from services.event_service import event_service
@@ -97,295 +103,156 @@ except ImportError as e:
         raise
 
 
-# Custom JSON encoder to handle Decimal values
-class DecimalEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, Decimal):
-            return str(obj)
-        if isinstance(obj, uuid.UUID):
-            return str(obj)
-        return super(DecimalEncoder, self).default(obj)
+# Note: Using centralized create_response and DecimalEncoder from utils.lambda_utils
+# This ensures consistent JSON serialization across all handlers
 
 
-def create_response(status_code: int, body: Any) -> Dict[str, Any]:
-    """Create an API Gateway response object."""
+@api_handler()
+def create_account_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """Create a new financial account using Pydantic DTO pattern."""
+    # Parse and validate JSON using Pydantic DTO
+    account_data, error_response = parse_and_validate_json(event, AccountCreate)
+    if error_response:
+        # Return validation error (status handled by decorator)
+        raise ValueError(error_response["message"])
+    
+    # account_data is guaranteed to be valid AccountCreate here
+    assert account_data is not None
+    
+    # Convert AccountCreate to Account
+    account_create_data = account_data.model_dump()
+    account_create_data["user_id"] = user_id  # Override with authenticated user_id
+    
+    account = Account(
+        accountId=uuid.uuid4(),  # Generate new ID
+        **account_create_data
+    )
+
+    # Create and publish event
+    create_account(account)
+    
+    try:
+        create_event = AccountCreatedEvent(
+            user_id=user_id,
+            account_id=str(account.account_id),
+            account_name=account.account_name,
+            account_type=account.account_type.value,
+            currency=account.currency.value if account.currency else None,
+        )
+        event_service.publish_event(create_event)
+        logger.info(f"AccountCreatedEvent published for account creation: {account.account_id}")
+    except Exception as e:
+        logger.warning(f"Failed to publish account creation event: {str(e)}")
+
     return {
-        "statusCode": status_code,
-        "headers": {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "Content-Type,Authorization",
-            "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-        },
-        "body": json.dumps(body, cls=DecimalEncoder),
+        "message": "Account created successfully", 
+        "account": account.model_dump(by_alias=True, mode='json')
     }
 
 
-def create_account_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
-    """Create a new financial account."""
-    try:
-        account_name = mandatory_body_parameter(event, "accountName")
-        account_type = mandatory_body_parameter(event, "accountType")
-        currency = mandatory_body_parameter(event, "currency")
-        institution = optional_body_parameter(event, "institution")
-        balance = optional_body_parameter(event, "balance")
-        notes = optional_body_parameter(event, "notes")
-        is_active = optional_body_parameter(event, "isActive")
-        default_field_map_id = optional_body_parameter(event, "defaultfileMapid")
-
-        # Convert currency input to Currency enum
-        currency_enum = convert_currency_input(currency)
-
-        account = Account(
-            userId=user_id,
-            accountId=uuid.uuid4(),
-            accountName=account_name,
-            accountType=AccountType(account_type),
-            currency=currency_enum,
-            institution=institution,
-            balance=Decimal(balance),
-            notes=notes,
-            isActive=bool(is_active) if is_active is not None else True,
-            defaultFileMapId=(
-                uuid.UUID(default_field_map_id) if default_field_map_id else None
-            ),
-        )
-
-        # Validate and create the account
-        create_account(account)
-
-        # Publish account creation event
-        try:
-            create_event = AccountCreatedEvent(
-                user_id=user_id,
-                account_id=str(account.account_id),
-                account_name=account.account_name,
-                account_type=account.account_type.value,
-                currency=account.currency.value if account.currency else "USD",
-            )
-            event_service.publish_event(create_event)
-            logger.info(
-                f"AccountCreatedEvent published for account creation: {account.account_id}"
-            )
-        except Exception as e:
-            logger.warning(f"Failed to publish account creation event: {str(e)}")
-
-        # Return the created account
-        account_dict = account.model_dump(by_alias=True)
-
-        return create_response(
-            201, {"message": "Account created successfully", "account": account_dict}
-        )
-    except ValueError as e:
-        logger.error(f"Validation error: {str(e)}")
-        logger.error(f"Stacktrace: {traceback.format_exc()}")
-        return create_response(400, {"message": str(e)})
-    except Exception as e:
-        logger.error(f"Error creating account: {str(e)}")
-        logger.error(f"Stacktrace: {traceback.format_exc()}")
-        return create_response(500, {"message": "Error creating account"})
-
-
-def get_account_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+@api_handler(require_ownership=("id", "account"))
+def get_account_handler(event: Dict[str, Any], user_id: str, account: Account) -> Dict[str, Any]:
     """Get a specific account by ID."""
-    try:
-        # Get account ID from path parameters
-        account_id = mandatory_path_parameter(event, "id")
-
-        # Get the account
-        account = checked_mandatory_account(uuid.UUID(account_id), user_id)
-
-        # Convert account to dictionary
-        account_dict = account.model_dump(by_alias=True)
-        logger.info(f"Account: {account_dict}")
-        return create_response(200, {"account": account_dict})
-    except Exception as e:
-        logger.error(f"Error getting account: {str(e)}")
-        logger.error(f"Stacktrace: {traceback.format_exc()}")
-        return create_response(500, {"message": "Error retrieving account"})
+    # Account ownership already verified by decorator
+    return {"account": account.model_dump(by_alias=True, mode='json')}
 
 
+@api_handler()
 def list_accounts_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """List all accounts for the current user."""
+    accounts = list_user_accounts(user_id)
+    account_dicts = [account.model_dump(by_alias=True, mode='json') for account in accounts]
+    
+    return {
+        "accounts": account_dicts,
+        "user": user_id,
+        "metadata": {"totalAccounts": len(account_dicts)},
+    }
+
+
+@api_handler(require_ownership=("id", "account"))
+def update_account_handler(event: Dict[str, Any], user_id: str, account: Account) -> Dict[str, Any]:
+    """Update an existing account using Pydantic DTO pattern."""
+    # Parse and validate JSON using Pydantic DTO
+    update_data, error_response = parse_and_validate_json(event, AccountUpdate)
+    if error_response:
+        # Return validation error (status handled by decorator)
+        raise ValueError(error_response["message"])
+    
+    # update_data is guaranteed to be valid AccountUpdate here
+    assert update_data is not None
+    
+    # Convert AccountUpdate to update dict (only non-None fields)
+    update_dict = {k: v for k, v in update_data.model_dump().items() if v is not None}
+
+    # Update account
+    updated_account = update_account(account.account_id, user_id, update_dict)
+
+    # Publish update event
     try:
-
-        # Get accounts for the user
-        accounts = list_user_accounts(user_id)
-
-        # Convert accounts to dictionary format
-        account_dicts = [account.model_dump(by_alias=True) for account in accounts]
-
-        return create_response(
-            200,
-            {
-                "accounts": account_dicts,
-                "user": user_id,
-                "metadata": {"totalAccounts": len(account_dicts)},
-            },
+        changes = []
+        if account.account_name != updated_account.account_name:
+            changes.append({
+                "field": "accountName",
+                "oldValue": account.account_name,
+                "newValue": updated_account.account_name,
+            })
+        
+        update_event = AccountUpdatedEvent(
+            user_id=user_id, 
+            account_id=str(account.account_id), 
+            changes=changes
         )
+        event_service.publish_event(update_event)
+        logger.info(f"AccountUpdatedEvent published for account update: {account.account_id}")
     except Exception as e:
-        # Always log stacktrace
-        logger.error(f"Error listing accounts: {str(e)}")
-        logger.error(f"Stacktrace: {traceback.format_exc()}")
-        return create_response(500, {"message": "Error listing accounts"})
+        logger.warning(f"Failed to publish account update event: {str(e)}")
+
+    return {
+        "message": "Account updated successfully", 
+        "account": updated_account.model_dump(by_alias=True, mode='json')
+    }
 
 
-def update_account_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
-    """Update an existing account."""
-    try:
-        # Get account ID from path parameters
-        account_id = mandatory_path_parameter(event, "id")
-        account_name = optional_body_parameter(event, "accountName")
-        account_type = optional_body_parameter(event, "accountType")
-        currency = optional_body_parameter(event, "currency")
-        institution = optional_body_parameter(event, "institution")
-        balance = optional_body_parameter(event, "balance")
-        notes = optional_body_parameter(event, "notes")
-        is_active = optional_body_parameter(event, "isActive")
-        default_field_map_id = optional_body_parameter(event, "defaultfileMapid")
-
-        # Convert currency input to Currency enum if provided
-        currency_enum = (
-            convert_currency_input(currency) if currency is not None else None
-        )
-
-        # Get original account for change tracking
-        original_account = get_account(uuid.UUID(account_id))
-
-        # Update the account
-        updated_account = update_account(
-            uuid.UUID(account_id),
-            user_id,
-            {
-                "account_name": account_name,
-                "account_type": account_type,
-                "currency": currency_enum,
-                "institution": institution,
-                "balance": balance,
-                "notes": notes,
-                "is_active": is_active,
-                "default_file_map_id": default_field_map_id,
-            },
-        )
-
-        # Publish account update event
-        try:
-            # Track changes
-            changes = []
-            if original_account and updated_account:
-                if original_account.account_name != updated_account.account_name:
-                    changes.append(
-                        {
-                            "field": "accountName",
-                            "oldValue": original_account.account_name,
-                            "newValue": updated_account.account_name,
-                        }
-                    )
-                if original_account.account_type != updated_account.account_type:
-                    changes.append(
-                        {
-                            "field": "accountType",
-                            "oldValue": original_account.account_type.value,
-                            "newValue": updated_account.account_type.value,
-                        }
-                    )
-                # Add other fields as needed
-
-            update_event = AccountUpdatedEvent(
-                user_id=user_id, account_id=account_id, changes=changes
-            )
-            event_service.publish_event(update_event)
-            logger.info(
-                f"AccountUpdatedEvent published for account update: {account_id}"
-            )
-        except Exception as e:
-            logger.warning(f"Failed to publish account update event: {str(e)}")
-
-        # Return the updated account
-        account_dict = updated_account.model_dump(by_alias=True)
-
-        return create_response(
-            200, {"message": "Account updated successfully", "account": account_dict}
-        )
-    except ValueError as e:
-        logger.error(f"Validation error: {str(e)}")
-        logger.error(f"Stacktrace: {traceback.format_exc()}")
-        return create_response(400, {"message": str(e)})
-    except Exception as e:
-        logger.error(f"Error updating account: {str(e)}")
-        logger.error(f"Stacktrace: {traceback.format_exc()}")
-        return create_response(500, {"message": "Error updating account"})
-
-
-def delete_account_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+@api_handler(require_ownership=("id", "account"))
+def delete_account_handler(event: Dict[str, Any], user_id: str, account: Account) -> Dict[str, Any]:
     """Delete an account."""
+    # Delete the account
+    delete_account(account.account_id, user_id)
+
+    # Publish deletion event
     try:
-        # Get account ID from path parameters
-        account_id = mandatory_path_parameter(event, "id")
-
-        # Verify the account exists and belongs to the user
-        account_to_delete = checked_mandatory_account(uuid.UUID(account_id), user_id)
-
-        # Delete the account
-        delete_account(uuid.UUID(account_id), user_id)
-
-        # Publish account deletion event
-        try:
-            # TODO: Get actual transaction count for this account
-            transaction_count = 0  # Would need to count transactions before deletion
-
-            delete_event = AccountDeletedEvent(
-                user_id=user_id,
-                account_id=account_id,
-                transaction_count=transaction_count,
-            )
-            event_service.publish_event(delete_event)
-            logger.info(
-                f"AccountDeletedEvent published for account deletion: {account_id}"
-            )
-        except Exception as e:
-            logger.warning(f"Failed to publish account deletion event: {str(e)}")
-
-        return create_response(
-            200, {"message": "Account deleted successfully", "accountId": account_id}
+        delete_event = AccountDeletedEvent(
+            user_id=user_id,
+            account_id=str(account.account_id),
+            transaction_count=0,  # TODO: Get actual count
         )
+        event_service.publish_event(delete_event)
+        logger.info(f"AccountDeletedEvent published for account deletion: {account.account_id}")
     except Exception as e:
-        logger.error(f"Error deleting account: {str(e)}")
-        logger.error(f"Stacktrace: {traceback.format_exc()}")
-        return create_response(500, {"message": "Error deleting account"})
+        logger.warning(f"Failed to publish account deletion event: {str(e)}")
+
+    return {
+        "message": "Account deleted successfully", 
+        "accountId": str(account.account_id)
+    }
 
 
-def account_files_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+@api_handler(require_ownership=("id", "account"))
+def account_files_handler(event: Dict[str, Any], user_id: str, account: Account) -> Dict[str, Any]:
     """List all files associated with an account."""
-    try:
-        # Get account ID from path parameters
-        account_id = mandatory_path_parameter(event, "id")
+    files = list_account_files(account.account_id)
+    file_dicts = [file.model_dump(by_alias=True, mode='json') for file in files]
 
-        # Verify the account exists and belongs to the user
-        existing_account = checked_mandatory_account(uuid.UUID(account_id), user_id)
-
-        # Get files for the account
-        files = list_account_files(uuid.UUID(account_id))
-
-        # Convert files to dictionary format
-        file_dicts = [file.model_dump(by_alias=True) for file in files]
-
-        return create_response(
-            200,
-            {
-                "files": file_dicts,
-                "user": user_id,
-                "metadata": {
-                    "totalFiles": len(file_dicts),
-                    "accountId": account_id,
-                    "accountName": existing_account.account_name,
-                },
-            },
-        )
-    except Exception as e:
-        logger.error(f"Error listing account files: {str(e)}")
-        logger.error(f"Stacktrace: {traceback.format_exc()}")
-        return create_response(500, {"message": "Error listing account files"})
+    return {
+        "files": file_dicts,
+        "user": user_id,
+        "metadata": {
+            "totalFiles": len(file_dicts),
+            "accountId": str(account.account_id),
+            "accountName": account.account_name,
+        },
+    }
 
 
 def delete_account_files_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
@@ -505,7 +372,7 @@ def account_file_upload_handler(event: Dict[str, Any], user_id: str) -> Dict[str
         201,
         {
             "message": "File uploaded successfully",
-            "file": transaction_file.model_dump(by_alias=True),
+            "file": transaction_file.model_dump(by_alias=True, mode='json'),
         },
     )
 
@@ -532,72 +399,30 @@ def delete_all_accounts_handler(event: Dict[str, Any], user_id: str) -> Dict[str
         return create_response(500, {"message": "Error deleting accounts"})
 
 
-def get_account_transactions_handler(
-    event: Dict[str, Any], user_id: str
-) -> Dict[str, Any]:
+@api_handler(require_ownership=("id", "account"))
+def get_account_transactions_handler(event: Dict[str, Any], user_id: str, account: Account) -> Dict[str, Any]:
     """Get paginated transactions for an account."""
-    try:
-        logger.info(
-            f"Starting get_account_transactions_handler with event: {json.dumps(event)}"
-        )
+    # Get pagination parameters
+    limit = int(mandatory_query_parameter(event, "limit"))
+    last_evaluated_key = event.get("queryStringParameters", {}).get("lastEvaluatedKey")
 
-        # Get account ID from path parameters
-        account_id = mandatory_path_parameter(event, "id")
-        logger.info(f"Account ID from path parameters: {account_id}")
+    # Get transactions
+    transactions = list_account_transactions(str(account.account_id), limit, last_evaluated_key)
 
-        # Verify the account exists and belongs to the user
-        logger.info(f"Fetching account with ID: {account_id}")
-        existing_account = checked_mandatory_account(uuid.UUID(account_id), user_id)
+    # Convert to response format
+    transaction_dicts = [
+        transaction.model_dump(by_alias=True, mode="json")
+        for transaction in transactions
+    ]
 
-        # Get query parameters for pagination
-        query_params = event.get("queryStringParameters", {}) or {}
-
-        limit = int(mandatory_query_parameter(event, "limit"))
-        last_evaluated_key = event.get("queryStringParameters", {}).get(
-            "lastEvaluatedKey"
-        )
-
-        # Get transactions for the account
-        try:
-            transactions = list_account_transactions(
-                account_id, limit, last_evaluated_key
-            )
-            logger.info(f"Retrieved {len(transactions)} transactions")
-        except Exception as tx_error:
-            logger.error(f"Error fetching transactions: {str(tx_error)}")
-            logger.error(f"Error type: {type(tx_error).__name__}")
-            raise
-
-        # Convert transactions to dictionary format
-        transaction_dicts = [
-            transaction.model_dump(by_alias=True, mode="json")
-            for transaction in transactions
-        ]
-        logger.info(
-            f"Converted {len(transaction_dicts)} transactions to dictionary format"
-        )
-
-        return create_response(
-            200,
-            {
-                "transactions": transaction_dicts,
-                "metadata": {
-                    "totalTransactions": len(transaction_dicts),
-                    "accountId": account_id,
-                    "accountName": existing_account.account_name,
-                },
-            },
-        )
-    except Exception as e:
-        logger.error(f"Error in get_account_transactions_handler: {str(e)}")
-        logger.error(f"Error type: {type(e).__name__}")
-        logger.error(
-            f"Full error details: {json.dumps(e.__dict__) if hasattr(e, '__dict__') else 'No additional error details'}"
-        )
-        logger.error(f"Stacktrace: {traceback.format_exc()}")
-        return create_response(
-            500, {"message": "Error retrieving account transactions"}
-        )
+    return {
+        "transactions": transaction_dicts,
+        "metadata": {
+            "totalTransactions": len(transaction_dicts),
+            "accountId": str(account.account_id),
+            "accountName": account.account_name,
+        },
+    }
 
 
 def account_file_timeline_handler(
@@ -671,52 +496,31 @@ def account_file_timeline_handler(
         return create_response(500, {"message": "Error building file timeline"})
 
 
-def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Main handler for account operations."""
-    try:
-        # Get user from Cognito
-        user = get_user_from_event(event)
-        if not user:
-            return create_response(401, {"message": "Unauthorized"})
-        user_id = user["id"]
-        # Get route from event
-        route = event.get("routeKey")
-        if not route:
-            return create_response(400, {"message": "Route not specified"})
+@require_authenticated_user
+@standard_error_handling
+def handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """Main handler for account operations - much cleaner routing!"""
+    route = event.get("routeKey")
+    if not route:
+        raise ValueError("Route not specified")
 
-            # Log request details
-            # Get the HTTP method and route
-        method = (
-            event.get("requestContext", {}).get("http", {}).get("method", "").upper()
-        )
-        logger.info(f"Request: {route}")
-
-        # Route to appropriate handler
-        if route == "GET /accounts":
-            return list_accounts_handler(event, user_id)
-        elif route == "POST /accounts":
-            return create_account_handler(event, user_id)
-        elif route == "GET /accounts/{id}":
-            return get_account_handler(event, user_id)
-        elif route == "PUT /accounts/{id}":
-            return update_account_handler(event, user_id)
-        elif route == "DELETE /accounts/{id}":
-            return delete_account_handler(event, user_id)
-        elif route == "DELETE /accounts":
-            return delete_all_accounts_handler(event, user_id)
-        elif route == "GET /accounts/{id}/files":
-            return account_files_handler(event, user_id)
-        elif route == "POST /accounts/{id}/files":
-            return account_file_upload_handler(event, user_id)
-        elif route == "DELETE /accounts/{id}/files":
-            return delete_account_files_handler(event, user_id)
-        elif route == "GET /accounts/{id}/transactions":
-            return get_account_transactions_handler(event, user_id)
-        elif route == "GET /accounts/{id}/timeline":
-            return account_file_timeline_handler(event, user_id)
-        else:
-            return create_response(400, {"message": f"Unsupported route: {route}"})
-    except Exception as e:
-        logger.error(f"Error in account operations handler: {str(e)}")
-        logger.error(f"Stacktrace: {traceback.format_exc()}")
-        return create_response(500, {"message": "Internal server error"})
+    # Route to appropriate handler - no need for individual try/catch blocks
+    route_map = {
+        "GET /accounts": list_accounts_handler,
+        "POST /accounts": create_account_handler,
+        "GET /accounts/{id}": get_account_handler,
+        "PUT /accounts/{id}": update_account_handler,
+        "DELETE /accounts/{id}": delete_account_handler,
+        "DELETE /accounts": delete_all_accounts_handler,
+        "GET /accounts/{id}/files": account_files_handler,
+        "POST /accounts/{id}/files": account_file_upload_handler,
+        "DELETE /accounts/{id}/files": delete_account_files_handler,
+        "GET /accounts/{id}/transactions": get_account_transactions_handler,
+        "GET /accounts/{id}/timeline": account_file_timeline_handler,
+    }
+    
+    handler_func = route_map.get(route)
+    if not handler_func:
+        raise ValueError(f"Unsupported route: {route}")
+    
+    return handler_func(event, user_id)

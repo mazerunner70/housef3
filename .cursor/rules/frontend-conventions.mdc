@@ -101,5 +101,11 @@ App.tsx (Router Setup)
 - Maintain consistent styling across new-ui components
 - Each component should have its own CSS file when needed
 
+## Import Ordering
+- All imports must start with external libraries first, then internal imports
+- Use consistent import grouping and ordering for maintainability
+- Use path aliases for internal imports: `@/` maps to `src/` (configured in tsconfig.app.json)
+- Example: `import { Button } from '@/new-ui/components/ui/Button'`
+
 ## Accessibility Rules
 - Visible, non-interactive elements with click handlers must have at least one keyboard listener

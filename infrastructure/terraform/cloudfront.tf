@@ -160,22 +160,10 @@ resource "aws_cloudfront_distribution" "frontend" {
     viewer_protocol_policy = "redirect-to-https"
   }
 
-  # Only apply SPA routing (serving index.html) for frontend routes
-  # These won't affect /api/* routes due to the ordered_cache_behavior above
-  # which takes precedence for /api/* paths
-  custom_error_response {
-    error_code            = 403
-    response_code         = 403
-    response_page_path    = "/index.html"
-    error_caching_min_ttl = 0
-  }
-
-  custom_error_response {
-    error_code            = 404
-    response_code         = 404
-    response_page_path    = "/index.html"
-    error_caching_min_ttl = 0
-  }
+  # SPA routing for frontend only - custom_error_response affects ALL origins
+  # so we cannot use it for API error handling. Instead, we'll handle SPA routing
+  # in the frontend application itself or use CloudFront Functions for more
+  # granular control if needed in the future.
 
   price_class = "PriceClass_100"
 

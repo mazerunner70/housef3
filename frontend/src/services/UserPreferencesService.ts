@@ -1,4 +1,7 @@
-import { apiClient } from '@/utils/apiClient';
+import ApiClient from "@/utils/apiClient";
+import { createLogger } from "@/utils/logger";
+
+const logger = createLogger('UserPreferencesService');
 
 export interface TransferPreferences {
     defaultDateRangeDays?: number;
@@ -41,11 +44,29 @@ export interface UserPreferencesUpdate {
  * Get all user preferences
  */
 export const getUserPreferences = async (): Promise<UserPreferences> => {
+    logger.info('Fetching user preferences');
+    const startTime = performance.now();
+
     try {
-        const response = await apiClient.get('/user-preferences');
-        return response.data;
+        const preferences = await ApiClient.getJson<UserPreferences>('/user-preferences');
+        const duration = performance.now() - startTime;
+
+        logger.info('User preferences fetched successfully', {
+            duration: `${duration.toFixed(2)}ms`,
+            hasPreferences: !!preferences.preferences
+        });
+
+        return preferences;
     } catch (error) {
-        console.error('Failed to get user preferences:', error);
+        const duration = performance.now() - startTime;
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+        logger.error('Failed to fetch user preferences from API', {
+            duration: `${duration.toFixed(2)}ms`,
+            error: errorMessage,
+            operation: 'getUserPreferences'
+        });
+
         throw error;
     }
 };
@@ -54,11 +75,36 @@ export const getUserPreferences = async (): Promise<UserPreferences> => {
  * Update user preferences
  */
 export const updateUserPreferences = async (preferences: Partial<UserPreferences['preferences']>): Promise<UserPreferences> => {
+    const prefsToUpdate = preferences || {};
+    logger.info('Updating user preferences', {
+        updateKeys: Object.keys(prefsToUpdate),
+        hasTransfers: !!prefsToUpdate.transfers,
+        hasUI: !!prefsToUpdate.ui,
+        hasTransactions: !!prefsToUpdate.transactions
+    });
+    const startTime = performance.now();
+
     try {
-        const response = await apiClient.put('/user-preferences', { preferences });
-        return response.data;
+        const updatedPreferences = await ApiClient.putJson<UserPreferences>('/user-preferences', { preferences });
+        const duration = performance.now() - startTime;
+
+        logger.info('User preferences updated successfully', {
+            duration: `${duration.toFixed(2)}ms`,
+            updatedKeys: Object.keys(prefsToUpdate)
+        });
+
+        return updatedPreferences;
     } catch (error) {
-        console.error('Failed to update user preferences:', error);
+        const duration = performance.now() - startTime;
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+        logger.error('Failed to update user preferences via API', {
+            duration: `${duration.toFixed(2)}ms`,
+            error: errorMessage,
+            operation: 'updateUserPreferences',
+            attemptedUpdate: Object.keys(prefsToUpdate)
+        });
+
         throw error;
     }
 };
@@ -67,11 +113,30 @@ export const updateUserPreferences = async (preferences: Partial<UserPreferences
  * Get transfer-specific preferences
  */
 export const getTransferPreferences = async (): Promise<TransferPreferences> => {
+    logger.info('Fetching transfer preferences');
+    const startTime = performance.now();
+
     try {
-        const response = await apiClient.get('/user-preferences/transfers');
-        return response.data;
+        const preferences = await ApiClient.getJson<TransferPreferences>('/user-preferences/transfers');
+        const duration = performance.now() - startTime;
+
+        logger.info('Transfer preferences fetched successfully', {
+            duration: `${duration.toFixed(2)}ms`,
+            defaultDays: preferences.defaultDateRangeDays,
+            hasLastUsedRanges: !!preferences.lastUsedDateRanges?.length
+        });
+
+        return preferences;
     } catch (error) {
-        console.error('Failed to get transfer preferences:', error);
+        const duration = performance.now() - startTime;
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+        logger.warn('Failed to fetch transfer preferences, returning defaults', {
+            duration: `${duration.toFixed(2)}ms`,
+            error: errorMessage,
+            operation: 'getTransferPreferences'
+        });
+
         // Return defaults on error
         return {
             defaultDateRangeDays: 7,
@@ -85,11 +150,35 @@ export const getTransferPreferences = async (): Promise<TransferPreferences> => 
  * Update transfer-specific preferences
  */
 export const updateTransferPreferences = async (transferPrefs: Partial<TransferPreferences>): Promise<UserPreferences> => {
+    logger.info('Updating transfer preferences', {
+        updateKeys: Object.keys(transferPrefs),
+        defaultDays: transferPrefs.defaultDateRangeDays,
+        hasDateRanges: !!transferPrefs.lastUsedDateRanges?.length,
+        autoExpand: transferPrefs.autoExpandSuggestion
+    });
+    const startTime = performance.now();
+
     try {
-        const response = await apiClient.put('/user-preferences/transfers', transferPrefs);
-        return response.data;
+        const updatedPreferences = await ApiClient.putJson<UserPreferences>('/user-preferences/transfers', transferPrefs);
+        const duration = performance.now() - startTime;
+
+        logger.info('Transfer preferences updated successfully', {
+            duration: `${duration.toFixed(2)}ms`,
+            updatedKeys: Object.keys(transferPrefs)
+        });
+
+        return updatedPreferences;
     } catch (error) {
-        console.error('Failed to update transfer preferences:', error);
+        const duration = performance.now() - startTime;
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+        logger.error('Failed to update transfer preferences via API', {
+            duration: `${duration.toFixed(2)}ms`,
+            error: errorMessage,
+            operation: 'updateTransferPreferences',
+            attemptedUpdate: Object.keys(transferPrefs)
+        });
+
         throw error;
     }
 };

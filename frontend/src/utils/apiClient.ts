@@ -1,4 +1,5 @@
 import { getCurrentUser, refreshToken, isAuthenticated } from '../services/AuthService';
+import { apiEndpoint } from './env';
 
 /**
  * Configuration options for API requests
@@ -21,14 +22,25 @@ export interface ApiRequestOptions extends RequestInit {
  */
 export class ApiClient {
     /**
+     * Resolves a relative API path to a full API endpoint
+     * All paths are treated as API endpoints and get the /api prefix automatically
+     */
+    private static resolveUrl(path: string): string {
+        // Ensure path starts with /
+        const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+        return `${apiEndpoint}${normalizedPath}`;
+    }
+
+    /**
      * Makes an authenticated API request with automatic token management
      * 
-     * @param url - The API endpoint URL
+     * @param path - The API endpoint path (automatically gets /api prefix)
      * @param options - Request options (method, body, headers, etc.)
      * @returns Promise<Response> - The fetch response
      * @throws Error if authentication fails or request fails after retry
      */
-    static async request(url: string, options: ApiRequestOptions = {}): Promise<Response> {
+    static async request(path: string, options: ApiRequestOptions = {}): Promise<Response> {
+        const url = this.resolveUrl(path);
         const currentUser = getCurrentUser();
 
         if (!currentUser || !currentUser.token) {

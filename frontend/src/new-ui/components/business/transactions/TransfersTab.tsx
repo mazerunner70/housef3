@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
-    getPairedTransfers,
-    detectTransfers,
+    listPairedTransfers,
+    detectPotentialTransfers,
     bulkMarkTransfers,
-    TransferPair
+    TransferPair,
+    convertDaysToDateRange
 } from '@/services/TransferService';
 import { getAccounts } from '@/services/TransactionService';
 import { AccountInfo } from '@/schemas/Transaction';
-import CurrencyDisplay from '../../ui/CurrencyDisplay';
-import { useDateRangePreferences } from '../../hooks/useTransferPreferences';
+import CurrencyDisplay from '@/new-ui/components/ui/CurrencyDisplay';
+import DateRangePicker, { DateRange } from '@/new-ui/components/ui/DateRangePicker';
+import { useDateRangePreferences } from '@/new-ui/hooks/useTransferPreferences';
 import './TransfersTab.css';
 
 interface TransfersTabProps { }
@@ -24,9 +26,13 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
     const [selectedDetectedTransfers, setSelectedDetectedTransfers] = useState<Set<string>>(new Set());
     const [showDateRangeSuggestion, setShowDateRangeSuggestion] = useState(false);
 
-    // Use preferences hook for date range management
+    // Date range management - use both new date range and legacy support
+    const [currentDateRange, setCurrentDateRange] = useState<DateRange>(
+        convertDaysToDateRange(7) // Default to 7 days
+    );
+
+    // Use preferences hook for legacy support and user preferences
     const {
-        currentDateRange: dateRangeDays,
         quickRangeOptions,
         updateDateRange,
         autoExpandSuggestion,
@@ -44,7 +50,7 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
         setError(null);
         try {
             const [transfersData, accountsData] = await Promise.all([
-                getPairedTransfers(),
+                listPairedTransfers(currentDateRange.startDate, currentDateRange.endDate)(),
                 getAccounts()
             ]);
             setPairedTransfers(transfersData);
@@ -61,12 +67,16 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
         setError(null);
         setShowDateRangeSuggestion(false);
         try {
-            const detected = await detectTransfers(dateRangeDays);
+            // Use date range API
+            const detected = await detectPotentialTransfers(currentDateRange.startDate, currentDateRange.endDate)();
             setDetectedTransfers(detected);
             setSelectedDetectedTransfers(new Set());
 
+            // Calculate days for suggestion logic
+            const daysDiff = Math.ceil((currentDateRange.endDate.getTime() - currentDateRange.startDate.getTime()) / (1000 * 60 * 60 * 24));
+
             // Show suggestion to expand date range if no matches found, current range is small, and user has auto-expand enabled
-            if (detected.length === 0 && dateRangeDays < 30 && autoExpandSuggestion) {
+            if (detected.length === 0 && daysDiff < 30 && autoExpandSuggestion) {
                 setShowDateRangeSuggestion(true);
             }
         } catch (err) {
@@ -98,7 +108,8 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
 
             if (result.successCount > 0) {
                 // Reload paired transfers to show the newly marked ones
-                await loadInitialData();
+                const updatedTransfers = await listPairedTransfers(currentDateRange.startDate, currentDateRange.endDate)();
+                setPairedTransfers(updatedTransfers);
 
                 // Remove successfully marked transfers from detected list
                 const successfulIds = new Set(
@@ -134,13 +145,15 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
     };
 
     const handleExpandDateRange = async (newDays: number) => {
+        const newRange = convertDaysToDateRange(newDays);
+        setCurrentDateRange(newRange);
         await updateDateRange(newDays);
         setShowDateRangeSuggestion(false);
         // Automatically trigger detection with new range
         setDetectLoading(true);
         setError(null);
         try {
-            const detected = await detectTransfers(newDays);
+            const detected = await detectPotentialTransfers(newRange.startDate, newRange.endDate)();
             setDetectedTransfers(detected);
             setSelectedDetectedTransfers(new Set());
         } catch (err) {
@@ -150,8 +163,22 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
         }
     };
 
-    const handleDateRangeChange = async (newDays: number) => {
-        await updateDateRange(newDays);
+    const handleDateRangePickerChange = async (newRange: DateRange) => {
+        setCurrentDateRange(newRange);
+        // Calculate days for legacy support
+        const days = Math.ceil((newRange.endDate.getTime() - newRange.startDate.getTime()) / (1000 * 60 * 60 * 24));
+        updateDateRange(days);
+
+        // Reload paired transfers with new date range
+        try {
+            setLoading(true);
+            const updatedTransfers = await listPairedTransfers(newRange.startDate, newRange.endDate)();
+            setPairedTransfers(updatedTransfers);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to reload transfers with new date range');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const toggleDetectedTransfer = (index: string) => {
@@ -246,29 +273,12 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
                     <h3>Detect New Transfers</h3>
                     <div className="transfers-detection-controls">
                         <div className="date-range-section">
-                            <label>
-                                Date Range (days):
-                                <input
-                                    type="number"
-                                    min="1"
-                                    max="30"
-                                    value={dateRangeDays}
-                                    onChange={(e) => handleDateRangeChange(parseInt(e.target.value) || 7)}
-                                    className="date-range-input"
-                                />
-                            </label>
-                            <div className="quick-range-buttons">
-                                {quickRangeOptions.map(days => (
-                                    <button
-                                        key={days}
-                                        onClick={() => handleDateRangeChange(days)}
-                                        className={`quick-range-btn ${dateRangeDays === days ? 'active' : ''}`}
-                                        type="button"
-                                    >
-                                        {days}d
-                                    </button>
-                                ))}
-                            </div>
+                            <DateRangePicker
+                                value={currentDateRange}
+                                onChange={handleDateRangePickerChange}
+                                quickRangeOptions={quickRangeOptions.map((days: number) => ({ label: `${days} days`, days }))}
+                                className="transfers-date-picker"
+                            />
                         </div>
                         <button
                             onClick={handleDetectTransfers}
@@ -367,7 +377,7 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
                 {showDateRangeSuggestion && (
                     <div className="date-range-suggestion">
                         <div className="suggestion-content">
-                            <h4>No transfers found in {dateRangeDays} days</h4>
+                            <h4>No transfers found in current date range</h4>
                             <p>Try expanding the date range to find more potential matches:</p>
                             <div className="suggestion-buttons">
                                 <button
