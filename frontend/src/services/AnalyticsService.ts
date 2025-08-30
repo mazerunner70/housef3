@@ -480,7 +480,8 @@ class AnalyticsService {
   }
 
   /**
-   * Convert string monetary values to Decimal objects and handle existing Decimal objects
+   * Convert string monetary values to Decimal objects
+   * Backend only sends Decimal values as strings for accuracy
    */
   private convertMonetaryStringsToDecimals(data: any): any {
     if (data === null || data === undefined) {
@@ -492,56 +493,20 @@ class AnalyticsService {
     }
 
     if (typeof data === 'object') {
-      // Handle case where backend returns Decimal objects (check for Decimal-like structure)
-      if (data.hasOwnProperty('s') && data.hasOwnProperty('e') && data.hasOwnProperty('d')) {
-        // This looks like a serialized Decimal object from decimal.js
-        try {
-          const decimalLike = data as { s: number; e: number; d: number[] };
-          return new Decimal(decimalLike.s === 1 ? 1 : -1).mul(new Decimal(decimalLike.d.join(''))).div(new Decimal(10).pow(decimalLike.d.length - 1 - decimalLike.e));
-        } catch (error) {
-          console.warn('Failed to reconstruct Decimal from backend object:', data, error);
-          return toDecimal(0);
-        }
-      }
-
       const converted: any = {};
       for (const [key, value] of Object.entries(data)) {
         if (value !== null && value !== undefined) {
-          // Handle existing Decimal objects from backend
-          if (typeof value === 'object' && value.hasOwnProperty('s') && value.hasOwnProperty('e') && value.hasOwnProperty('d')) {
-            try {
-              // Reconstruct Decimal from serialized form
-              const decimalLike = value as { s: number; e: number; d: number[] };
-              const sign = decimalLike.s === 1 ? 1 : -1;
-              const digits = decimalLike.d;
-              const exponent = decimalLike.e;
-
-              // Convert digits array to number string
-              const digitString = digits.join('');
-              const decimalPlaces = digits.length - 1 - exponent;
-
-              if (decimalPlaces <= 0) {
-                // No decimal places needed
-                converted[key] = new Decimal(sign * parseInt(digitString) * Math.pow(10, -decimalPlaces));
-              } else {
-                // Insert decimal point
-                const beforeDecimal = digitString.slice(0, -decimalPlaces) || '0';
-                const afterDecimal = digitString.slice(-decimalPlaces);
-                const fullString = `${sign < 0 ? '-' : ''}${beforeDecimal}.${afterDecimal}`;
-                converted[key] = new Decimal(fullString);
-              }
-            } catch (error) {
-              console.warn('Failed to reconstruct Decimal for key', key, ':', value, error);
-              converted[key] = toDecimal(0);
-            }
-          }
           // Convert string numbers to Decimal objects for monetary fields
-          else if (typeof value === 'string' && this.isMonetaryField(key) && this.isNumericString(value)) {
-            converted[key] = toDecimal(value);
-          }
-          // Convert regular numbers to Decimal objects for monetary fields
-          else if (typeof value === 'number' && this.isMonetaryField(key)) {
-            converted[key] = toDecimal(value);
+          if (typeof value === 'string' && this.isMonetaryField(key)) {
+            try {
+              converted[key] = new Decimal(value);
+            } catch (error) {
+              throw new AnalyticsError(
+                'DECIMAL_CONVERSION_ERROR',
+                `Failed to convert monetary field '${key}' with value '${value}' to Decimal: ${error}`,
+                { key, value, error }
+              );
+            }
           }
           // Recursively process nested objects
           else if (typeof value === 'object') {

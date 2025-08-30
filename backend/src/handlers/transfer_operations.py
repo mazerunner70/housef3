@@ -52,25 +52,20 @@ def detect_transfers_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
     
     # Parse date range
     if start_date_param and end_date_param:
-        # Parse specific start and end dates (ISO 8601 strings or timestamps)
+        # Parse specific start and end dates as milliseconds since epoch
         try:
             from datetime import datetime
-            # Try parsing as ISO 8601 string first, then as timestamp
-            try:
-                start_date = datetime.fromisoformat(start_date_param.replace('Z', '+00:00'))
-                end_date = datetime.fromisoformat(end_date_param.replace('Z', '+00:00'))
-            except ValueError:
-                # Fallback to parsing as millisecond timestamps
-                start_date = datetime.fromtimestamp(int(start_date_param) / 1000)
-                end_date = datetime.fromtimestamp(int(end_date_param) / 1000)
+            start_date_ts = int(start_date_param)
+            end_date_ts = int(end_date_param)
             
-            start_date_ts = int(start_date.timestamp() * 1000)
-            end_date_ts = int(end_date.timestamp() * 1000)
+            # Convert to datetime objects for logging
+            start_date = datetime.fromtimestamp(start_date_ts / 1000)
+            end_date = datetime.fromtimestamp(end_date_ts / 1000)
             
             logger.info(f"Using date range: {start_date.isoformat()} to {end_date.isoformat()}")
         except (ValueError, TypeError) as e:
             logger.error(f"Invalid date format: {e}")
-            raise ValueError("Invalid date format. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ) or millisecond timestamps")
+            raise ValueError("Invalid date format. Expected milliseconds since epoch")
     else:
         # Default: last 7 days if no dates provided
         from datetime import datetime, timedelta
@@ -157,25 +152,20 @@ def get_paired_transfers_handler(event: Dict[str, Any], user_id: str) -> Dict[st
     end_date_ts = None
     
     if start_date_param and end_date_param:
-        # Parse specific start and end dates
+        # Parse specific start and end dates as milliseconds since epoch
         try:
             from datetime import datetime
-            # Try parsing as ISO 8601 string first, then as timestamp
-            try:
-                start_date = datetime.fromisoformat(start_date_param.replace('Z', '+00:00'))
-                end_date = datetime.fromisoformat(end_date_param.replace('Z', '+00:00'))
-            except ValueError:
-                # Fallback to parsing as millisecond timestamps
-                start_date = datetime.fromtimestamp(int(start_date_param) / 1000)
-                end_date = datetime.fromtimestamp(int(end_date_param) / 1000)
+            start_date_ts = int(start_date_param)
+            end_date_ts = int(end_date_param)
             
-            start_date_ts = int(start_date.timestamp() * 1000)
-            end_date_ts = int(end_date.timestamp() * 1000)
+            # Convert to datetime objects for logging
+            start_date = datetime.fromtimestamp(start_date_ts / 1000)
+            end_date = datetime.fromtimestamp(end_date_ts / 1000)
             
             logger.info(f"Filtering paired transfers from {start_date.isoformat()} to {end_date.isoformat()}")
         except (ValueError, TypeError) as e:
             logger.error(f"Invalid date format: {e}")
-            raise ValueError("Invalid date format. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ) or millisecond timestamps")
+            raise ValueError("Invalid date format. Expected milliseconds since epoch")
     
     # Initialize transfer detection service
     transfer_service = TransferDetectionService()

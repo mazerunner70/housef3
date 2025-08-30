@@ -21,8 +21,8 @@ export interface DetectedTransfer {
 
 // Request/Response interfaces following conventions
 export interface TransferDetectionRequest {
-    startDate: string; // ISO format
-    endDate: string;   // ISO format
+    startDate: string; // Milliseconds since epoch as string
+    endDate: string;   // Milliseconds since epoch as string
 }
 
 export interface PairedTransfersResponse {
@@ -93,9 +93,9 @@ export const listPairedTransfers = (startDate?: Date, endDate?: Date) => {
     const query = new URLSearchParams();
 
     if (startDate && endDate) {
-        // Use specific start and end dates (ISO 8601)
-        query.append('startDate', startDate.toISOString());
-        query.append('endDate', endDate.toISOString());
+        // Use specific start and end dates (milliseconds since epoch)
+        query.append('startDate', startDate.getTime().toString());
+        query.append('endDate', endDate.getTime().toString());
     }
 
     const url = query.toString()
@@ -133,9 +133,9 @@ export const listPairedTransfers = (startDate?: Date, endDate?: Date) => {
 export const detectPotentialTransfers = (startDate: Date, endDate: Date) => {
     const query = new URLSearchParams();
 
-    // Use specific start and end dates (ISO 8601)
-    query.append('startDate', startDate.toISOString());
-    query.append('endDate', endDate.toISOString());
+    // Use specific start and end dates (milliseconds since epoch)
+    query.append('startDate', startDate.getTime().toString());
+    query.append('endDate', endDate.getTime().toString());
 
     const url = `/transfers/detect?${query.toString()}`;
 
@@ -267,19 +267,19 @@ export const formatDateForDisplay = (date: Date): string => {
 };
 
 /**
- * Format date for API requests (ISO format)
+ * Format date for API requests (milliseconds since epoch)
  * @param date Date to format
- * @returns ISO date string (YYYY-MM-DD)
+ * @returns Milliseconds since epoch as string
  */
 export const formatDateForAPI = (date: Date): string => {
-    return date.toISOString().split('T')[0];
+    return date.getTime().toString();
 };
 
 /**
  * Create a date range for transfer operations
  * @param startDate Start date
  * @param endDate End date
- * @returns Formatted date range for API requests
+ * @returns Formatted date range for API requests (milliseconds since epoch)
  */
 export const createTransferDateRange = (startDate: Date, endDate: Date): TransferDetectionRequest => {
     return {

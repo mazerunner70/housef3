@@ -57,6 +57,10 @@ def standard_error_handling(func: Callable) -> Callable:
             logger.error(f"Validation error in {func.__name__}: {str(e)}")
             return create_response(400, {"message": str(e)})
             
+        except NotImplementedError as e:
+            logger.error(f"Configuration error in {func.__name__}: {str(e)}")
+            return create_response(400, {"message": str(e)})
+            
         except NotFound as e:
             logger.warning(f"Resource not found in {func.__name__}: {str(e)}")
             return create_response(404, {"message": str(e)})

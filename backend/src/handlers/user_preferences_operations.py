@@ -74,8 +74,9 @@ def update_user_preferences_handler(event: Dict[str, Any], user_id: str) -> Dict
     if error:
         raise ValueError(error["message"])
     
-    # update_data is guaranteed to be valid here
-    assert update_data is not None
+    # Validate that update_data was successfully parsed
+    if update_data is None:
+        raise ValueError("Failed to parse request body: update data is None")
 
     # Update preferences
     service = UserPreferencesService()

@@ -13,6 +13,9 @@ interface DateRangePickerProps {
     className?: string;
 }
 
+// Constants
+const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24;
+
 const DEFAULT_QUICK_RANGES = [
     { label: '7 days', days: 7 },
     { label: '14 days', days: 14 },
@@ -29,7 +32,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
     const [mode, setMode] = useState<'quick' | 'custom'>('quick');
     const [customRange, setCustomRange] = useState<DateRange>(
         value || {
-            startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+            startDate: new Date(Date.now() - 7 * MILLISECONDS_PER_DAY),
             endDate: new Date()
         }
     );
@@ -94,8 +97,8 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
         startDate.setDate(endDate.getDate() - days);
 
         // Check if current range matches this quick range (within 1 day tolerance)
-        const daysDiff = Math.abs(value.endDate.getTime() - endDate.getTime()) / (1000 * 60 * 60 * 24);
-        const startDiff = Math.abs(value.startDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
+        const daysDiff = Math.abs(value.endDate.getTime() - endDate.getTime()) / MILLISECONDS_PER_DAY;
+        const startDiff = Math.abs(value.startDate.getTime() - startDate.getTime()) / MILLISECONDS_PER_DAY;
 
         return daysDiff < 1 && startDiff < 1;
     };
