@@ -28,9 +28,11 @@ class FZIPStatus(str, Enum):
     RESTORE_VALIDATING = "restore_validating"
     RESTORE_VALIDATION_PASSED = "restore_validation_passed"
     RESTORE_VALIDATION_FAILED = "restore_validation_failed"
+    RESTORE_AWAITING_CONFIRMATION = "restore_awaiting_confirmation"
     RESTORE_PROCESSING = "restore_processing"
     RESTORE_COMPLETED = "restore_completed"
     RESTORE_FAILED = "restore_failed"
+    RESTORE_CANCELED = "restore_canceled"
 
 
 class FZIPType(str, Enum):
@@ -139,22 +141,39 @@ class FZIPJob(BaseModel):
     @classmethod
     def from_dynamodb_item(cls, item: Dict[str, Any]) -> 'FZIPJob':
         """Create FZIPJob from DynamoDB item"""
+        # Make a copy to avoid modifying the original
+        converted_item = item.copy()
+        
+        # Convert Decimal values to int for numeric fields
+        int_fields = ['createdAt', 'completedAt', 'expiresAt', 'packageSize', 'progress']
+        for field in int_fields:
+            if field in converted_item and converted_item[field] is not None:
+                if isinstance(converted_item[field], Decimal):
+                    converted_item[field] = int(converted_item[field])
+        
         # Convert string UUIDs back to UUID objects
-        if 'jobId' in item:
-            item['jobId'] = uuid.UUID(item['jobId'])
+        if 'jobId' in converted_item:
+            converted_item['jobId'] = uuid.UUID(converted_item['jobId'])
             
         # Convert string enums back to enum objects
-        if 'status' in item:
-            item['status'] = FZIPStatus(item['status'])
-        if 'jobType' in item:
-            item['jobType'] = FZIPType(item['jobType'])
-        if 'backupType' in item and item['backupType']:
-            item['backupType'] = FZIPBackupType(item['backupType'])
-
-        if 'packageFormat' in item:
-            item['packageFormat'] = FZIPFormat(item['packageFormat'])
+        if 'status' in converted_item:
+            converted_item['status'] = FZIPStatus(converted_item['status'])
+        if 'jobType' in converted_item:
+            converted_item['jobType'] = FZIPType(converted_item['jobType'])
+        if 'backupType' in converted_item and converted_item['backupType']:
+            converted_item['backupType'] = FZIPBackupType(converted_item['backupType'])
+        if 'packageFormat' in converted_item:
+            converted_item['packageFormat'] = FZIPFormat(converted_item['packageFormat'])
+        
+        # Ensure default dicts for nested result fields (model_construct bypasses defaults)
+        if 'validationResults' not in converted_item or converted_item.get('validationResults') is None:
+            converted_item['validationResults'] = {}
+        if 'restoreResults' not in converted_item or converted_item.get('restoreResults') is None:
+            converted_item['restoreResults'] = {}
             
-        return cls.model_validate(item)
+        # Use model_construct to bypass validation that would convert enums back to strings
+        # This preserves our enum objects instead of converting them to string values
+        return cls.model_construct(**converted_item)
 
     def is_backup(self) -> bool:
         """Check if this is a backup job"""
@@ -218,7 +237,6 @@ class FZIPResponse(BaseModel):
     message: Optional[str] = None
     
     # Backup-specific fields
-    estimated_size: Optional[str] = Field(default=None, alias="estimatedSize")
     estimated_completion: Optional[str] = Field(default=None, alias="estimatedCompletion")
     
     # Restore-specific fields

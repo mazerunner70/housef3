@@ -6,49 +6,49 @@
 
 # DynamoDB table for transaction files
 resource "aws_dynamodb_table" "transaction_files" {
-  name           = "${var.project_name}-${var.environment}-transaction-files"
-  billing_mode   = "PAY_PER_REQUEST"  # On-demand capacity mode
-  hash_key       = "fileId"           # Partition key
+  name         = "${var.project_name}-${var.environment}-transaction-files"
+  billing_mode = "PAY_PER_REQUEST" # On-demand capacity mode
+  hash_key     = "fileId"          # Partition key
 
   attribute {
     name = "fileId"
-    type = "S"  # String
+    type = "S" # String
   }
 
   attribute {
     name = "userId"
-    type = "S"  # String
+    type = "S" # String
   }
 
   attribute {
     name = "accountId"
-    type = "S"  # String (for financial account association)
+    type = "S" # String (for financial account association)
   }
 
   attribute {
     name = "s3Key"
-    type = "S"  # String (for S3 object key)
+    type = "S" # String (for S3 object key)
   }
 
   # Global Secondary Index for querying files by user
   global_secondary_index {
-    name               = "UserIdIndex"
-    hash_key           = "userId"
-    projection_type    = "ALL"
+    name            = "UserIdIndex"
+    hash_key        = "userId"
+    projection_type = "ALL"
   }
-  
+
   # Global Secondary Index for querying files by account
   global_secondary_index {
-    name               = "AccountIdIndex"
-    hash_key           = "accountId"
-    projection_type    = "ALL"
+    name            = "AccountIdIndex"
+    hash_key        = "accountId"
+    projection_type = "ALL"
   }
 
   # Global Secondary Index for querying files by S3 key
   global_secondary_index {
-    name               = "S3KeyIndex"
-    hash_key           = "s3Key"
-    projection_type    = "ALL"
+    name            = "S3KeyIndex"
+    hash_key        = "s3Key"
+    projection_type = "ALL"
   }
 
   # Enable point-in-time recovery for data protection

@@ -6,9 +6,9 @@
 # Also supports legacy import/export job compatibility.
 
 resource "aws_dynamodb_table" "fzip_jobs" {
-  name           = "${var.project_name}-${var.environment}-fzip-jobs"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "jobId"
+  name         = "${var.project_name}-${var.environment}-fzip-jobs"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "jobId"
 
   attribute {
     name = "jobId"
@@ -42,41 +42,41 @@ resource "aws_dynamodb_table" "fzip_jobs" {
 
   # Global Secondary Index for querying jobs by user and creation date
   global_secondary_index {
-    name               = "UserIdIndex"
-    hash_key           = "userId"
-    range_key          = "createdAt"
-    projection_type    = "ALL"
+    name            = "UserIdIndex"
+    hash_key        = "userId"
+    range_key       = "createdAt"
+    projection_type = "ALL"
   }
 
   # Global Secondary Index for querying jobs by type (backup/restore, legacy export/import)
   global_secondary_index {
-    name               = "JobTypeIndex"
-    hash_key           = "jobType"
-    range_key          = "createdAt"
-    projection_type    = "ALL"
+    name            = "JobTypeIndex"
+    hash_key        = "jobType"
+    range_key       = "createdAt"
+    projection_type = "ALL"
   }
 
   # Global Secondary Index for querying jobs by status
   global_secondary_index {
-    name               = "StatusIndex"
-    hash_key           = "status"
-    range_key          = "createdAt"
-    projection_type    = "ALL"
+    name            = "StatusIndex"
+    hash_key        = "status"
+    range_key       = "createdAt"
+    projection_type = "ALL"
   }
 
   # Global Secondary Index for querying jobs by user and type
   global_secondary_index {
-    name               = "UserJobTypeIndex"
-    hash_key           = "userId"
-    range_key          = "jobType"
-    projection_type    = "ALL"
+    name            = "UserJobTypeIndex"
+    hash_key        = "userId"
+    range_key       = "jobType"
+    projection_type = "ALL"
   }
 
   # Global Secondary Index for expired jobs cleanup
   global_secondary_index {
-    name               = "ExpiresAtIndex"
-    hash_key           = "expiresAt"
-    projection_type    = "ALL"
+    name            = "ExpiresAtIndex"
+    hash_key        = "expiresAt"
+    projection_type = "ALL"
   }
 
   # Enable TTL for automatic cleanup of old FZIP jobs
@@ -122,7 +122,7 @@ output "fzip_jobs_table_arn" {
 
 resource "aws_s3_bucket" "fzip_packages" {
   bucket = "${var.project_name}-${var.environment}-fzip-packages"
-  
+
   tags = {
     Environment = var.environment
     Project     = var.project_name
@@ -147,29 +147,65 @@ resource "aws_s3_bucket_versioning" "fzip_packages_versioning" {
 # S3 Bucket Lifecycle Configuration
 resource "aws_s3_bucket_lifecycle_configuration" "fzip_packages_lifecycle" {
   bucket = aws_s3_bucket.fzip_packages.id
-  
+
   rule {
     id     = "cleanup_expired_packages"
     status = "Enabled"
-    
+
     filter {
       prefix = ""
     }
-    
+
     expiration {
-      days = 7  # Keep packages for 7 days
+      days = 7 # Keep packages for 7 days
     }
-    
+
     noncurrent_version_expiration {
       noncurrent_days = 1
     }
   }
 }
 
+# Configure CORS for browser uploads - required for presigned POST uploads
+resource "aws_s3_bucket_cors_configuration" "fzip_packages_cors" {
+  bucket = aws_s3_bucket.fzip_packages.id
+
+  cors_rule {
+    allowed_headers = [
+      "*",
+      "Content-Type",
+      "x-amz-meta-userid",
+      "x-amz-meta-restoreid",
+      "x-amz-date",
+      "x-amz-algorithm",
+      "x-amz-credential",
+      "x-amz-security-token",
+      "authorization"
+    ]
+    allowed_methods = ["POST"]
+    allowed_origins = ["https://${aws_cloudfront_distribution.frontend.domain_name}", "http://localhost:5173"]
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3600
+  }
+}
+
+# S3 Event notification for restore packages prefix to trigger restore consumer
+resource "aws_s3_bucket_notification" "fzip_restore_notifications" {
+  bucket = aws_s3_bucket.fzip_packages.id
+
+  lambda_function {
+    lambda_function_arn = aws_lambda_function.restore_consumer.arn
+    events              = ["s3:ObjectCreated:*"]
+    filter_prefix       = "restore_packages/"
+  }
+
+  depends_on = [aws_lambda_permission.allow_s3_restore_consumer]
+}
+
 # S3 Bucket Public Access Block
 resource "aws_s3_bucket_public_access_block" "fzip_packages_public_access_block" {
   bucket = aws_s3_bucket.fzip_packages.id
-  
+
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
@@ -179,42 +215,10 @@ resource "aws_s3_bucket_public_access_block" "fzip_packages_public_access_block"
 # S3 Bucket Policy for FZIP Packages
 resource "aws_s3_bucket_policy" "fzip_packages_policy" {
   bucket = aws_s3_bucket.fzip_packages.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      {
-        Sid    = "DenyUnencryptedObjectUploads"
-        Effect = "Deny"
-        Principal = {
-          AWS = "*"
-        }
-        Action = [
-          "s3:PutObject"
-        ]
-        Resource = "${aws_s3_bucket.fzip_packages.arn}/*"
-        Condition = {
-          StringNotEquals = {
-            "s3:x-amz-server-side-encryption" = "AES256"
-          }
-        }
-      },
-      {
-        Sid    = "DenyIncorrectEncryptionHeader"
-        Effect = "Deny"
-        Principal = {
-          AWS = "*"
-        }
-        Action = [
-          "s3:PutObject"
-        ]
-        Resource = "${aws_s3_bucket.fzip_packages.arn}/*"
-        Condition = {
-          StringNotEquals = {
-            "s3:x-amz-server-side-encryption" = "AES256"
-          }
-        }
-      },
       {
         Sid    = "DenyNonHTTPSRequests"
         Effect = "Deny"
@@ -231,6 +235,18 @@ resource "aws_s3_bucket_policy" "fzip_packages_policy" {
             "aws:SecureTransport" = "false"
           }
         }
+      },
+      {
+        Sid    = "AllowLambdaExecRoleAccess"
+        Effect = "Allow"
+        Principal = {
+          AWS = aws_iam_role.lambda_exec.arn
+        }
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject"
+        ]
+        Resource = "${aws_s3_bucket.fzip_packages.arn}/*"
       }
     ]
   })

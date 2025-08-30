@@ -53,6 +53,10 @@ class ImportException(Exception):
     """Custom exception for import processing errors"""
     pass
 
+class CanceledException(Exception):
+    """Raised to indicate a user-initiated cancel should stop processing."""
+    pass
+
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +67,14 @@ class FZIPService:
     def __init__(self):
         self.housef3_version = "2.5.0"  # Current version
         self.fzip_format_version = "1.0"
+        # Bucket used to store exported backup packages
         self.fzip_bucket = os.environ.get('FZIP_PACKAGES_BUCKET', 'housef3-dev-fzip-packages')
+        # Bucket used to receive uploaded restore packages
+        self.restore_packages_bucket = os.environ.get(
+            'FZIP_RESTORE_PACKAGES_BUCKET',
+            os.environ.get('FZIP_PACKAGES_BUCKET', 'housef3-dev-fzip-packages')
+        )
+        self.file_storage_bucket = os.environ.get('FILE_STORAGE_BUCKET', 'housef3-dev-file-storage')
         self.batch_size = 1000  # For large datasets
         
     # =============================================================================
@@ -113,7 +124,7 @@ class FZIPService:
                 user_id=user_id,
                 backup_id=str(backup_job.job_id),
                 description=description,
-                backup_type=backup_type.value,
+                backup_type=backup_type,
                 include_analytics=include_analytics
             )
             event_service.publish_event(event)
@@ -192,7 +203,7 @@ class FZIPService:
                 entity_type: summary['processed_count'] 
                 for entity_type, summary in export_summaries.items()
             }
-            fzip_metrics.record_backup_data_volume(entity_counts, backup_type.value)
+            fzip_metrics.record_backup_data_volume(entity_counts, backup_type)
             
             logger.info("Enhanced data collection complete using specialized exporters")
             for entity_type, summary in export_summaries.items():
@@ -210,7 +221,7 @@ class FZIPService:
             fzip_metrics.record_backup_error(
                 error_type=type(e).__name__,
                 error_message=str(e),
-                backup_type=backup_type.value,
+                backup_type=backup_type,
                 phase="data_collection"
             )
             raise
@@ -219,7 +230,7 @@ class FZIPService:
             fzip_metrics.record_backup_error(
                 error_type=type(e).__name__,
                 error_message=str(e),
-                backup_type=backup_type.value,
+                backup_type=backup_type,
                 phase="data_collection"
             )
             raise
@@ -258,8 +269,8 @@ class FZIPService:
                 max_memory_usage=200 * 1024 * 1024  # 200MB for larger backups
             )
             
-            # Create enhanced package builder
-            package_builder = ExportPackageBuilder(self.fzip_bucket, streaming_options)
+            # Create enhanced package builder with file storage bucket for transaction files
+            package_builder = ExportPackageBuilder(self.fzip_bucket, streaming_options, self.file_storage_bucket)
             
             # Create temporary directory
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -313,7 +324,7 @@ class FZIPService:
                 ))
 
                 # Record package size metrics
-                backup_type = backup_job.backup_type.value if backup_job.backup_type else "complete"
+                backup_type = backup_job.backup_type if backup_job.backup_type else "complete"
                 fzip_metrics.record_backup_package_size(package_size, backup_type)
                 
                 logger.info(f"Enhanced backup package created: {s3_key}")
@@ -327,7 +338,7 @@ class FZIPService:
         except Exception as e:
             logger.error(f"Failed to build enhanced backup package for job {backup_job.job_id}: {str(e)}")
             # Record error metrics
-            backup_type = backup_job.backup_type.value if backup_job.backup_type else "complete"
+            backup_type = backup_job.backup_type if backup_job.backup_type else "complete"
             fzip_metrics.record_backup_error(
                 error_type=type(e).__name__,
                 error_message=str(e),
@@ -485,6 +496,9 @@ class FZIPService:
             # Parse package
             package_data = self._parse_package(package_s3_key)
             
+            # Ensure validation_results is initialized before assigning nested keys
+            restore_job.validation_results = restore_job.validation_results or {}
+            
             # Validate schema
             restore_job.current_phase = "validating_schema"
             restore_job.progress = 20
@@ -516,15 +530,61 @@ class FZIPService:
                 update_fzip_job(restore_job)
                 return
             
-            restore_job.status = FZIPStatus.RESTORE_VALIDATION_PASSED
+            # Generate detailed summary for user review
+            restore_job.current_phase = "generating_summary"
             restore_job.progress = 40
             update_fzip_job(restore_job)
             
-            # Begin data restore
-            self._restore_data(restore_job, package_data)
+            summary_data = self._generate_summary_data(package_data)
+            restore_job.summary = summary_data
+            
+            # Stop here and wait for user confirmation
+            restore_job.status = FZIPStatus.RESTORE_AWAITING_CONFIRMATION
+            restore_job.progress = 50
+            restore_job.current_phase = "awaiting_user_confirmation"
+            
+            # Add validation results for frontend display
+            restore_job.validation_results.update({
+                'profileEmpty': True,  # Assumed valid in this flow
+                'schemaValid': schema_results.get('valid', False),
+                'businessValid': business_results.get('valid', False),
+                'ready': True  # All validations passed, ready for user confirmation
+            })
+            
+            update_fzip_job(restore_job)
+            
+            # DON'T proceed to _restore_data() automatically
+            # User must explicitly call start handler to proceed
             
         except Exception as e:
             logger.error(f"Restore failed: {str(e)}")
+            restore_job.status = FZIPStatus.RESTORE_FAILED
+            restore_job.error = str(e)
+            update_fzip_job(restore_job)
+            event_service.publish_event(RestoreFailedEvent(
+                user_id=restore_job.user_id,
+                restore_id=str(restore_job.job_id),
+                backup_id=restore_job.backup_id or '',
+                error=str(e)
+            ))
+    
+    def resume_restore(self, restore_job: FZIPJob):
+        """Resume restore processing from validation passed state."""
+        try:
+            # Update status to processing
+            restore_job.status = FZIPStatus.RESTORE_PROCESSING
+            restore_job.current_phase = "Starting restore..."
+            restore_job.progress = 50
+            update_fzip_job(restore_job)
+            
+            # Re-parse the package to get the data
+            package_data = self._parse_package(restore_job.s3_key)
+            
+            # Continue with data restoration
+            self._restore_data(restore_job, package_data)
+            
+        except Exception as e:
+            logger.error(f"Resume restore failed: {str(e)}")
             restore_job.status = FZIPStatus.RESTORE_FAILED
             restore_job.error = str(e)
             update_fzip_job(restore_job)
@@ -539,7 +599,8 @@ class FZIPService:
         """Parse the ZIP package and extract data."""
         try:
             # Download package from S3
-            package_data = get_object_content(package_s3_key, self.fzip_bucket)
+            # Read the uploaded restore package from the restore bucket
+            package_data = get_object_content(package_s3_key, self.restore_packages_bucket)
             if not package_data:
                 raise ImportException("Could not download package from S3")
             
@@ -549,12 +610,19 @@ class FZIPService:
                 manifest_data = zipf.read('manifest.json')
                 manifest = json.loads(manifest_data.decode('utf-8'))
                 
-                # Read data files
+                # Read data files (handle both compressed and uncompressed)
                 data = {}
                 for entity_type in ['accounts', 'transactions', 'categories', 'file_maps', 'transaction_files']:
                     try:
-                        entity_data = zipf.read(f'data/{entity_type}.json')
-                        data[entity_type] = json.loads(entity_data.decode('utf-8'))
+                        # Try compressed file first (.gz)
+                        try:
+                            entity_data = zipf.read(f'data/{entity_type}.json.gz')
+                            import gzip
+                            data[entity_type] = json.loads(gzip.decompress(entity_data).decode('utf-8'))
+                        except KeyError:
+                            # Fall back to uncompressed file
+                            entity_data = zipf.read(f'data/{entity_type}.json')
+                            data[entity_type] = json.loads(entity_data.decode('utf-8'))
                     except KeyError:
                         data[entity_type] = []
                 
@@ -574,8 +642,8 @@ class FZIPService:
             manifest = package_data['manifest']
             data = package_data['data']
             
-            # Check required manifest fields
-            required_manifest_fields = ['version', 'exported_at', 'user_id', 'export_type']
+            # Check required manifest fields (match FZIPManifest model aliases)
+            required_manifest_fields = ['backupFormatVersion', 'backupTimestamp', 'userId', 'housef3Version']
             for field in required_manifest_fields:
                 if field not in manifest:
                     return {
@@ -619,12 +687,7 @@ class FZIPService:
             data = package_data['data']
             manifest = package_data['manifest']
             
-            # Check user ownership
-            if manifest.get('user_id') != user_id:
-                return {
-                    'valid': False,
-                    'errors': ["Package was exported by a different user"]
-                }
+            # User ownership check removed - allow cross-user package loading
             
             # Validate data relationships (internal package consistency)
             errors = []
@@ -651,6 +714,190 @@ class FZIPService:
                 'valid': False,
                 'errors': [f"Business validation failed: {str(e)}"]
             }
+    
+    def _generate_summary_data(self, package_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate detailed summary for user review"""
+        try:
+            data = package_data['data']
+            
+            # Analyze accounts
+            accounts = data.get('accounts', [])
+            account_summary = {
+                "count": len(accounts),
+                "items": [
+                    {
+                        "name": acc.get('accountName', 'Unknown Account'), 
+                        "type": acc.get('accountType', 'unknown')
+                    }
+                    for acc in accounts[:10]  # Show first 10 accounts
+                ]
+            }
+            
+            # Analyze categories with hierarchy
+            categories = data.get('categories', [])
+            category_summary = self._analyze_category_hierarchy(categories)
+            
+            # Analyze transactions with date range
+            transactions = data.get('transactions', [])
+            transaction_summary = self._analyze_transaction_range(transactions)
+            
+            # Analyze file maps
+            file_maps = data.get('file_maps', [])
+            file_map_summary = {
+                "count": len(file_maps),
+                "totalSize": self._calculate_total_size_from_file_maps(file_maps)
+            }
+            
+            # Analyze transaction files
+            transaction_files = data.get('transaction_files', [])
+            transaction_file_summary = {
+                "count": len(transaction_files),
+                "totalSize": self._calculate_transaction_files_size(transaction_files),
+                "fileTypes": list(set(tf.get('fileFormat', 'unknown') for tf in transaction_files))
+            }
+            
+            return {
+                "accounts": account_summary,
+                "categories": category_summary,
+                "file_maps": file_map_summary,
+                "transaction_files": transaction_file_summary,
+                "transactions": transaction_summary
+            }
+            
+        except Exception as e:
+            logger.error(f"Error generating summary data: {str(e)}")
+            return {
+                "error": f"Failed to generate summary: {str(e)}"
+            }
+    
+    def _analyze_category_hierarchy(self, categories: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Analyze category hierarchy and structure"""
+        try:
+            if not categories:
+                return {"count": 0, "hierarchyDepth": 0, "items": []}
+            
+            # Calculate hierarchy depth
+            max_depth = 0
+            top_level_categories = []
+            
+            for category in categories:
+                # Count depth by parent relationships or path separators
+                parent_id = category.get('parentCategoryId')
+                if not parent_id:
+                    # Top-level category
+                    children_count = sum(1 for c in categories if c.get('parentCategoryId') == category.get('categoryId'))
+                    top_level_categories.append({
+                        "name": category.get('name', 'Unknown Category'),
+                        "level": 1,
+                        "children": children_count
+                    })
+                    max_depth = max(max_depth, 1)
+                else:
+                    # Calculate depth for nested categories
+                    depth = self._calculate_category_depth(category, categories, 1)
+                    max_depth = max(max_depth, depth)
+            
+            return {
+                "count": len(categories),
+                "hierarchyDepth": max_depth,
+                "items": top_level_categories[:5]  # Show first 5 top-level categories
+            }
+            
+        except Exception as e:
+            logger.error(f"Error analyzing category hierarchy: {str(e)}")
+            return {"count": len(categories), "hierarchyDepth": 0, "items": []}
+    
+    def _calculate_category_depth(self, category: Dict[str, Any], all_categories: List[Dict[str, Any]], current_depth: int) -> int:
+        """Recursively calculate category depth"""
+        parent_id = category.get('parentCategoryId')
+        if not parent_id:
+            return current_depth
+        
+        parent = next((c for c in all_categories if c.get('categoryId') == parent_id), None)
+        if not parent:
+            return current_depth
+        
+        return self._calculate_category_depth(parent, all_categories, current_depth + 1)
+    
+    def _analyze_transaction_range(self, transactions: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Analyze transaction date range and counts"""
+        try:
+            if not transactions:
+                return {"count": 0}
+            
+            # Extract dates and find range
+            dates = []
+            for transaction in transactions:
+                date_timestamp = transaction.get('date')
+                if date_timestamp:
+                    try:
+                        # Convert milliseconds timestamp to date string
+                        if isinstance(date_timestamp, (int, float)):
+                            date_obj = datetime.fromtimestamp(date_timestamp / 1000, tz=timezone.utc)
+                            dates.append(date_obj.strftime('%Y-%m-%d'))
+                        elif isinstance(date_timestamp, str):
+                            # Handle string dates that might be already formatted
+                            date_part = date_timestamp.split('T')[0] if 'T' in date_timestamp else date_timestamp
+                            dates.append(date_part)
+                    except Exception:
+                        continue
+            
+            if dates:
+                dates.sort()
+                return {
+                    "count": len(transactions),
+                    "dateRange": {
+                        "earliest": dates[0],
+                        "latest": dates[-1]
+                    }
+                }
+            else:
+                return {"count": len(transactions)}
+                
+        except Exception as e:
+            logger.error(f"Error analyzing transaction range: {str(e)}")
+            return {"count": len(transactions)}
+    
+    def _calculate_total_size_from_file_maps(self, file_maps: List[Dict[str, Any]]) -> str:
+        """Calculate total size from file maps"""
+        try:
+            total_bytes = 0
+            for file_map in file_maps:
+                file_size = file_map.get('file_size_bytes', 0)
+                if isinstance(file_size, (int, float)):
+                    total_bytes += int(file_size)
+            
+            return self._format_file_size(total_bytes)
+        except Exception:
+            return "Unknown"
+    
+    def _calculate_transaction_files_size(self, transaction_files: List[Dict[str, Any]]) -> str:
+        """Calculate total size from transaction files"""
+        try:
+            total_bytes = 0
+            for tf in transaction_files:
+                file_size = tf.get('file_size_bytes', 0)
+                if isinstance(file_size, (int, float)):
+                    total_bytes += int(file_size)
+            
+            return self._format_file_size(total_bytes)
+        except Exception:
+            return "Unknown"
+    
+    def _format_file_size(self, size_bytes: int) -> str:
+        """Format file size in human readable format"""
+        if size_bytes == 0:
+            return "0B"
+        
+        size_names = ["B", "KB", "MB", "GB"]
+        i = 0
+        size = float(size_bytes)
+        
+        while size >= 1024.0 and i < len(size_names) - 1:
+            size /= 1024.0
+            i += 1
+        
+        return f"{size:.1f}{size_names[i]}"
     
     def _validate_empty_profile(self, user_id: str) -> Dict[str, Any]:
         """Validate that user profile is completely empty for restore."""
@@ -708,6 +955,7 @@ class FZIPService:
             # Restore in dependency order
             
             # 1. Restore accounts first
+            self._check_cancel(restore_job)
             restore_job.current_phase = "restoring_accounts"
             restore_job.progress = 50
             update_fzip_job(restore_job)
@@ -719,6 +967,7 @@ class FZIPService:
             results['accounts'] = account_results
             
             # 2. Restore categories
+            self._check_cancel(restore_job)
             restore_job.current_phase = "restoring_categories"
             restore_job.progress = 60
             update_fzip_job(restore_job)
@@ -729,6 +978,7 @@ class FZIPService:
             results['categories'] = category_results
             
             # 3. Restore file maps
+            self._check_cancel(restore_job)
             restore_job.current_phase = "restoring_file_maps"
             restore_job.progress = 70
             update_fzip_job(restore_job)
@@ -739,6 +989,7 @@ class FZIPService:
             results['file_maps'] = file_map_results
             
             # 4. Restore transaction files
+            self._check_cancel(restore_job)
             restore_job.current_phase = "restoring_transaction_files"
             restore_job.progress = 80
             update_fzip_job(restore_job)
@@ -749,6 +1000,7 @@ class FZIPService:
             results['transaction_files'] = file_results
             
             # 5. Restore transactions
+            self._check_cancel(restore_job)
             restore_job.current_phase = "restoring_transactions"
             restore_job.progress = 90
             update_fzip_job(restore_job)
@@ -774,6 +1026,10 @@ class FZIPService:
                 data_summary=results
             ))
             
+        except CanceledException:
+            # Honor user cancellation without marking as failure
+            logger.info(f"Restore {restore_job.job_id} canceled by user. Halting further processing.")
+            return
         except Exception as e:
             logger.error(f"Error during data restore: {str(e)}")
             event_service.publish_event(RestoreFailedEvent(
@@ -783,6 +1039,20 @@ class FZIPService:
                 error=str(e)
             ))
             raise
+
+    def _check_cancel(self, restore_job: FZIPJob) -> None:
+        """Reload job and raise CanceledException if status is RESTORE_CANCELED.
+
+        Also ensure terminal timestamp is recorded if missing.
+        """
+        latest = get_fzip_job(str(restore_job.job_id), restore_job.user_id)
+        if latest and latest.status == FZIPStatus.RESTORE_CANCELED:
+            restore_job.status = FZIPStatus.RESTORE_CANCELED
+            restore_job.current_phase = "canceled"
+            if not restore_job.completed_at:
+                restore_job.completed_at = int(datetime.now(timezone.utc).timestamp() * 1000)
+            update_fzip_job(restore_job)
+            raise CanceledException("Restore canceled by user")
     
     def _restore_accounts(self, accounts: list, user_id: str) -> Dict[str, Any]:
         """Restore accounts data to empty profile (no conflicts expected)."""

@@ -5,9 +5,9 @@
 # used to store user-defined transaction categories.
 
 resource "aws_dynamodb_table" "categories" {
-  name           = "${var.project_name}-${var.environment}-categories"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "categoryId"
+  name         = "${var.project_name}-${var.environment}-categories"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "categoryId"
 
   attribute {
     name = "categoryId"
@@ -31,18 +31,18 @@ resource "aws_dynamodb_table" "categories" {
 
   # GSI to query categories by user, sorted by name
   global_secondary_index {
-    name               = "UserIdIndex"
-    hash_key           = "userId"
-    range_key          = "name"
-    projection_type    = "ALL"
+    name            = "UserIdIndex"
+    hash_key        = "userId"
+    range_key       = "name"
+    projection_type = "ALL"
   }
 
   # GSI to query categories by user and parent category
   global_secondary_index {
-    name               = "UserIdParentCategoryIdIndex"
-    hash_key           = "userId"
-    range_key          = "parentCategoryId"
-    projection_type    = "ALL"
+    name            = "UserIdParentCategoryIdIndex"
+    hash_key        = "userId"
+    range_key       = "parentCategoryId"
+    projection_type = "ALL"
   }
 
   # Enable point-in-time recovery for data protection

@@ -1,0 +1,49 @@
+---
+description: Backend Python development rules
+globs: backend/**
+alwaysApply: false
+---
+
+# Backend Development Conventions
+
+## Code Organization
+- Always put DynamoDB interaction code in db_utils
+- Use Python 3.12 runtime for Lambda functions
+- Activate backend venv during builds
+- Use python3 command prefix
+
+## Architecture
+- handlers/ - Lambda function handlers
+- models/ - Pydantic models with proper enum handling
+- services/ - Business logic
+- utils/ - Utilities (especially db_utils for DynamoDB)
+- consumers/ - Event consumers
+
+## Testing
+- Run tests via backend/run_tests.sh
+- Create failing unit tests before fixing issues
+- Don't add defensive checks - fix root causes
+- Use type(obj).__name__ for enum type checking
+
+## DynamoDB & Pydantic
+- Use model_construct() instead of model_validate() for enum preservation
+- Manual enum conversion: EnumClass(string_value)
+- Remember use_enum_values=True affects model_validate()
+- Copy DynamoDB items before conversion to avoid modifying originals
+
+## Model Creation & Modification
+- Models can ONLY be created using corresponding ..Create objects (e.g., CategoryCreate, TransactionCreate)
+- Models can ONLY be modified using corresponding ..Update objects (e.g., CategoryUpdate, TransactionUpdate)
+- Never directly instantiate or modify model objects outside of these DTOs
+- This ensures proper validation, field constraints, and data integrity
+- Use model.update_model_details(update_dto) pattern for updates
+
+## Error Handling
+- Diagnose and fix root causes instead of adding defensive checks
+- When encountering errors, create comprehensive unit tests
+- Test that .value attribute access works without AttributeError
+- always add a stack trace to exception handling code
+
+## Handler Conventions
+- Handler-specific patterns and conventions are documented in backend-handler-conventions.mdc
+- All handlers should follow the standard patterns defined there

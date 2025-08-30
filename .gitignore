@@ -217,5 +217,11 @@ test_usecase/config.json
 # Ignore test_usecase/usecase_data/
 scripts/test_usecase/usecase_data/**
 
+# Build number tracking files
+backend/.build_number
+backend/.current_version
 
 .venv_build/
+
+# Test account credentials
+test-accounts.env

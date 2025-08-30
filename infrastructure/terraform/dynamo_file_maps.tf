@@ -1,8 +1,8 @@
 resource "aws_dynamodb_table" "file_maps" {
-  name           = "${var.project_name}-${var.environment}-file-maps"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "fileMapId"
-  
+  name         = "${var.project_name}-${var.environment}-file-maps"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "fileMapId"
+
   attribute {
     name = "fileMapId"
     type = "S"
@@ -19,15 +19,15 @@ resource "aws_dynamodb_table" "file_maps" {
   }
 
   global_secondary_index {
-    name               = "UserIdIndex"
-    hash_key           = "userId"
-    projection_type    = "ALL"
+    name            = "UserIdIndex"
+    hash_key        = "userId"
+    projection_type = "ALL"
   }
 
   global_secondary_index {
-    name               = "AccountIdIndex"
-    hash_key           = "accountId"
-    projection_type    = "ALL"
+    name            = "AccountIdIndex"
+    hash_key        = "accountId"
+    projection_type = "ALL"
   }
 
   tags = {

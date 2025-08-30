@@ -13,12 +13,12 @@ resource "aws_cloudwatch_event_rule" "analytics_events" {
   name           = "${var.project_name}-${var.environment}-analytics-events"
   description    = "Route events that should trigger analytics processing"
   event_bus_name = aws_cloudwatch_event_bus.app_events.name
-  
+
   event_pattern = jsonencode({
-    source      = ["transaction.service", "account.service"]
+    source = ["transaction.service", "account.service"]
     detail-type = [
       "file.processed",
-      "transactions.created", 
+      "transactions.created",
       "transaction.updated",
       "transactions.deleted",
       "account.created",
@@ -30,7 +30,7 @@ resource "aws_cloudwatch_event_rule" "analytics_events" {
       data = {
         processingStatus = [
           {
-            "anything-but": "failed"
+            "anything-but" : "failed"
           }
         ]
       }
@@ -54,7 +54,7 @@ resource "aws_cloudwatch_event_rule" "categorization_events" {
   name           = "${var.project_name}-${var.environment}-categorization-events"
   description    = "Route transaction creation events for categorization"
   event_bus_name = aws_cloudwatch_event_bus.app_events.name
-  
+
   event_pattern = jsonencode({
     source      = ["transaction.service"]
     detail-type = ["transactions.created"]
@@ -63,7 +63,7 @@ resource "aws_cloudwatch_event_rule" "categorization_events" {
       data = {
         transactionCount = [
           {
-            "numeric": [">", 0]
+            "numeric" : [">", 0]
           }
         ]
       }
@@ -83,7 +83,7 @@ resource "aws_cloudwatch_event_rule" "category_rule_events" {
   name           = "${var.project_name}-${var.environment}-category-rule-events"
   description    = "Route category rule creation events for re-categorization"
   event_bus_name = aws_cloudwatch_event_bus.app_events.name
-  
+
   event_pattern = jsonencode({
     source      = ["category.service"]
     detail-type = ["category.rule_created"]
@@ -112,12 +112,12 @@ resource "aws_cloudwatch_event_rule" "audit_events" {
   name           = "${var.project_name}-${var.environment}-audit-events"
   description    = "Route all events to audit logging"
   event_bus_name = aws_cloudwatch_event_bus.app_events.name
-  
+
   # Match all events from our application sources
   event_pattern = jsonencode({
     source = [
       "transaction.service",
-      "account.service", 
+      "account.service",
       "category.service",
       "file.service"
     ]
@@ -140,16 +140,16 @@ resource "aws_cloudwatch_event_rule" "notification_events" {
   name           = "${var.project_name}-${var.environment}-notification-events"
   description    = "Route critical events for user notifications"
   event_bus_name = aws_cloudwatch_event_bus.app_events.name
-  
+
   event_pattern = jsonencode({
-    source      = ["transaction.service", "account.service"]
+    source = ["transaction.service", "account.service"]
     detail-type = [
       "file.processed",
       "transactions.deleted",
       "account.deleted"
     ]
     # Include failed processing and bulk deletions
-    "$or": [
+    "$or" : [
       {
         detail = {
           data = {
@@ -187,7 +187,7 @@ resource "aws_cloudwatch_event_rule" "failed_events" {
   name           = "${var.project_name}-${var.environment}-failed-events"
   description    = "Route failed events to dead letter queue"
   event_bus_name = aws_cloudwatch_event_bus.app_events.name
-  
+
   # This will be used by Lambda destinations for failed invocations
   event_pattern = jsonencode({
     source      = ["lambda"]
@@ -196,7 +196,7 @@ resource "aws_cloudwatch_event_rule" "failed_events" {
       responseElements = {
         functionName = [
           {
-            "prefix": "${var.project_name}-${var.environment}"
+            "prefix" : "${var.project_name}-${var.environment}"
           }
         ]
       }
@@ -220,11 +220,11 @@ resource "aws_cloudwatch_event_rule" "monitoring_events" {
   name           = "${var.project_name}-${var.environment}-monitoring-events"
   description    = "Route events for monitoring and metrics"
   event_bus_name = aws_cloudwatch_event_bus.app_events.name
-  
+
   event_pattern = jsonencode({
     source = [
       "transaction.service",
-      "account.service", 
+      "account.service",
       "category.service"
     ]
     # Monitor all event types for metrics
@@ -245,16 +245,16 @@ resource "aws_cloudwatch_event_rule" "monitoring_events" {
 # Rule for development/testing - only active in non-production environments
 resource "aws_cloudwatch_event_rule" "debug_events" {
   count = var.environment == "dev" ? 1 : 0
-  
+
   name           = "${var.project_name}-${var.environment}-debug-events"
   description    = "Route all events for debugging (dev environment only)"
   event_bus_name = aws_cloudwatch_event_bus.app_events.name
-  
+
   # Match all events for debugging
   event_pattern = jsonencode({
     source = [
       {
-        "prefix": ""  # Matches all sources
+        "prefix" : "" # Matches all sources
       }
     ]
   })

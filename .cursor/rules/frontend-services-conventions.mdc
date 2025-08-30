@@ -1,0 +1,975 @@
+---
+description: Frontend Services development patterns and conventions
+globs: frontend/src/services/**
+alwaysApply: false
+---
+
+# Frontend Services Conventions
+
+## Core Principles
+
+### Service Architecture
+- **Single Responsibility**: Each service handles one domain (Auth, Account, Transaction, etc.)
+- **Functional Exports**: Prefer named function exports over class-based services
+- **Type Safety**: All functions must have proper TypeScript types for parameters and returns
+- **Centralized API**: All HTTP requests must go through the ApiClient utility
+
+## ApiClient Usage
+
+### ✅ Correct Usage
+```typescript
+import ApiClient from "@/utils/apiClient";
+
+// Use simple paths - ApiClient automatically adds /api prefix
+export const getUserPreferences = async (): Promise<UserPreferences> => {
+    return await ApiClient.getJson<UserPreferences>('/user-preferences');
+};
+
+export const updateAccount = async (accountId: string, data: Partial<Account>): Promise<Account> => {
+    return await ApiClient.putJson<Account>(`/accounts/${accountId}`, data);
+};
+```
+
+### ❌ Incorrect Usage
+```typescript
+// DON'T manually construct API endpoints
+const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/api/user-preferences`;
+
+// DON'T use fetch directly
+const response = await fetch('/api/accounts');
+
+// DON'T duplicate /api prefix
+await ApiClient.getJson('/api/user-preferences'); // Wrong - double /api
+```
+
+### ApiClient Methods
+- `ApiClient.getJson<T>(path)` - GET requests expecting JSON
+- `ApiClient.postJson<T>(path, body)` - POST requests with JSON body
+- `ApiClient.putJson<T>(path, body)` - PUT requests with JSON body
+- `ApiClient.deleteJson<T>(path)` - DELETE requests
+- `ApiClient.request(path, options)` - Custom requests
+
+## Function Naming Conventions
+
+### CRUD Operations
+```typescript
+// List/Get operations
+export const listAccounts = async (): Promise<Account[]> => { ... }
+export const getAccount = async (id: string): Promise<Account> => { ... }
+export const getUserPreferences = async (): Promise<UserPreferences> => { ... }
+
+// Create operations
+export const createAccount = async (data: CreateAccountRequest): Promise<Account> => { ... }
+
+// Update operations
+export const updateAccount = async (id: string, data: Partial<Account>): Promise<Account> => { ... }
+export const updateUserPreferences = async (prefs: Partial<UserPreferences>): Promise<UserPreferences> => { ... }
+
+// Delete operations
+export const deleteAccount = async (id: string): Promise<void> => { ... }
+```
+
+### Domain-Specific Operations
+```typescript
+// Use descriptive verbs for business operations
+export const uploadFileToS3 = async (data: UploadData, file: Blob): Promise<void> => { ... }
+export const associateFileWithAccount = async (fileId: string, accountId: string): Promise<void> => { ... }
+export const startFZIPRestoreProcessing = async (restoreId: string): Promise<void> => { ... }
+export const quickUpdateTransactionCategory = async (txId: string, categoryId: string): Promise<Transaction> => { ... }
+```
+
+## TypeScript Interface Conventions
+
+### Request/Response Types
+```typescript
+// Suffix interfaces with Request/Response
+export interface AccountListResponse {
+    accounts: Account[];
+    total: number;
+}
+
+export interface CreateAccountRequest {
+    name: string;
+    type: AccountType;
+    initialBalance?: number;
+}
+
+// Use descriptive names for complex parameters
+export interface TransactionRequestParams {
+    accountIds?: string[];
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+    offset?: number;
+}
+```
+
+### Domain Types
+```typescript
+// Define clear domain interfaces
+export interface UserPreferences {
+    preferences: {
+        ui?: UIPreferences;
+        transactions?: TransactionPreferences;
+        transfers?: TransferPreferences;
+    };
+}
+
+export interface TransferPreferences {
+    defaultDateRangeDays?: number;
+    lastUsedDateRanges?: number[];
+    autoExpandSuggestion?: boolean;
+}
+```
+
+## Error Handling
+
+### ✅ Automatic Error Handling (Recommended)
+With efficient logging patterns, error handling is automatic:
+
+```typescript
+// ✅ BEST: Automatic error handling with withApiLogging
+export const getAccount = (accountId: string) => withApiLogging(
+  'AccountService',
+  `/accounts/${accountId}`,
+  'GET',
+  async () => ApiClient.getJson<Account>(`/accounts/${accountId}`),
+  {
+    operationName: `getAccount:${accountId}`,
+    successData: (result) => ({ accountName: result.accountName })
+  }
+);
+// Automatically logs: request, response, errors, performance, context
+```
+
+### ✅ Graceful Degradation with Logging
+```typescript
+// ✅ GOOD: Graceful degradation with proper logging
+export const getTransferPreferences = async (): Promise<TransferPreferences> => {
+    const logger = createLogger('UserPreferencesService');
+    
+    try {
+        return await ApiClient.getJson<TransferPreferences>('/user-preferences/transfers');
+    } catch (error) {
+        logger.warn('Failed to get transfer preferences, using defaults', {
+            operation: 'getTransferPreferences',
+            fallbackUsed: true
+        });
+        
+        // Return sensible defaults for non-critical data
+        return {
+            defaultDateRangeDays: 7,
+            lastUsedDateRanges: [7, 14, 30],
+            autoExpandSuggestion: true
+        };
+    }
+};
+```
+
+### ❌ Manual Error Handling (Avoid)
+```typescript
+// ❌ AVOID: Manual error handling with console.error
+export const getAccount = async (accountId: string): Promise<Account> => {
+    try {
+        return await ApiClient.getJson<Account>(`/accounts/${accountId}`);
+    } catch (error) {
+        console.error('Failed to get account:', error); // Not structured
+        throw error; // No context preservation
+    }
+};
+```
+
+### Error Handling Best Practices
+- ✅ **Use efficient logging patterns** - Automatic error handling with context
+- ✅ **Structured error data** - Automatic error extraction and logging
+- ✅ **Context preservation** - userId, sessionId, operation details
+- ✅ **Performance tracking** - Duration even for failed operations
+- ✅ **Type safety** - Safe error handling for any thrown value
+- ❌ **Avoid manual console.error** - Use structured logging instead
+
+## File Organization
+
+### Service File Structure with Efficient Logging
+```typescript
+// 1. Imports
+import ApiClient from "@/utils/apiClient";
+import { SomeType } from "@/types/SomeType";
+import { validateApiResponse } from "@/utils/zodErrorHandler";
+import { z } from 'zod';
+
+// 2. Efficient logging imports
+import { 
+  withApiLogging,
+  withServiceLogging,
+  createLogger
+} from '@/utils/logger';
+
+// 3. Type Definitions (interfaces, types)
+export interface ServiceResponse { ... }
+export interface ServiceRequest { ... }
+
+// 4. Constants and logger setup
+const API_ENDPOINT = '/items';
+const logger = createLogger('ItemService'); // For simple operations
+
+// 5. Exported Functions (using efficient logging patterns)
+// ✅ API operations with withApiLogging
+export const listItems = withApiLogging(
+  'ItemService',
+  API_ENDPOINT,
+  'GET',
+  async () => ApiClient.getJson<Item[]>(API_ENDPOINT),
+  {
+    successData: (result) => ({ itemCount: result.length })
+  }
+);
+
+export const getItem = (id: string) => withApiLogging(
+  'ItemService',
+  `${API_ENDPOINT}/${id}`,
+  'GET',
+  async () => ApiClient.getJson<Item>(`${API_ENDPOINT}/${id}`),
+  {
+    operationName: `getItem:${id}`,
+    successData: (result) => ({ itemId: id, itemName: result.name })
+  }
+);
+
+// ✅ Service operations with withServiceLogging
+export const createItem = withServiceLogging(
+  'ItemService',
+  'createItem',
+  async (data: CreateItemRequest) => {
+    return validateApiResponse(
+      () => ApiClient.postJson<any>(API_ENDPOINT, data),
+      (rawData) => ItemSchema.parse(rawData),
+      'created item data'
+    );
+  },
+  {
+    logArgs: ([data]) => ({ itemType: data.type, fieldsProvided: Object.keys(data) }),
+    logResult: (result) => ({ itemId: result.id, itemName: result.name })
+  }
+);
+
+// ✅ Simple operations with basic logger
+export const deleteItem = async (id: string): Promise<void> => {
+  logger.info('Deleting item', { itemId: id });
+  
+  try {
+    await ApiClient.delete(`${API_ENDPOINT}/${id}`);
+    logger.info('Item deleted successfully', { itemId: id });
+  } catch (error) {
+    logger.error('Item deletion failed', { itemId: id });
+    throw error;
+  }
+};
+```
+
+### Naming
+- Service files: `{Domain}Service.ts` (e.g., `AccountService.ts`, `UserPreferencesService.ts`)
+- Use PascalCase for service file names
+- Use camelCase for function names
+- Use PascalCase for interfaces and types
+
+## Testing Considerations
+
+### Testable Functions
+```typescript
+// Good - pure function, easy to test
+export const calculateTotalAmount = (transactions: Transaction[]): number => {
+    return transactions.reduce((sum, tx) => sum + tx.amount, 0);
+};
+
+// Good - clear dependencies, mockable
+export const getUserTransactions = async (userId: string): Promise<Transaction[]> => {
+    return await ApiClient.getJson<Transaction[]>(`/users/${userId}/transactions`);
+};
+```
+
+### Avoid
+- Functions with side effects that are hard to test
+- Direct DOM manipulation in service functions
+- Tight coupling to specific UI components
+
+## Performance Considerations
+
+### Efficient API Calls
+```typescript
+// Good - batch operations when possible
+export const updateMultipleAccounts = async (updates: AccountUpdate[]): Promise<Account[]> => {
+    return await ApiClient.postJson<Account[]>('/accounts/batch-update', { updates });
+};
+
+// Good - pagination for large datasets
+export const getTransactions = async (params: TransactionRequestParams): Promise<TransactionResponse> => {
+    const queryParams = new URLSearchParams({
+        limit: params.limit?.toString() || '50',
+        offset: params.offset?.toString() || '0',
+        ...params
+    });
+    return await ApiClient.getJson<TransactionResponse>(`/transactions?${queryParams}`);
+};
+```
+
+### Caching Strategy
+- Let React Query handle caching at the component level
+- Services should be stateless and not implement their own caching
+- Use React Query's `staleTime` and `cacheTime` for performance optimization
+
+## Security Considerations
+
+### Authentication
+- Never store or handle raw credentials in services
+- All API calls automatically include authentication via ApiClient
+- Let ApiClient handle token refresh and authentication errors
+
+### Data Validation
+```typescript
+// Validate critical parameters
+export const transferFunds = async (fromAccount: string, toAccount: string, amount: number): Promise<Transfer> => {
+    if (!fromAccount || !toAccount) {
+        throw new Error('Both source and destination accounts are required');
+    }
+    if (amount <= 0) {
+        throw new Error('Transfer amount must be positive');
+    }
+    
+    return await ApiClient.postJson<Transfer>('/transfers', {
+        fromAccount,
+        toAccount,
+        amount
+    });
+};
+```
+
+## Migration Guide
+
+### Updating Existing Services
+1. **Remove manual API endpoint construction**:
+   ```typescript
+   // Before
+   const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/api/accounts`;
+   
+   // After - just use paths directly
+   await ApiClient.getJson('/accounts');
+   ```
+
+2. **Update import statements**:
+   ```typescript
+   // Remove unused imports
+   // import { apiEndpoint } from '../utils/env'; // Not needed anymore
+   ```
+
+3. **Simplify URL construction**:
+   ```typescript
+   // Before
+   await ApiClient.getJson(`${API_ENDPOINT}/${accountId}`);
+   
+   // After
+   await ApiClient.getJson(`/accounts/${accountId}`);
+   ```
+
+## React Query Integration Patterns
+
+### Service Functions with React Query
+Services should be designed to work seamlessly with React Query hooks:
+
+```typescript
+// Service function - pure, no React Query logic
+export const getUserTransactions = async (params: TransactionRequestParams): Promise<TransactionResponse> => {
+    const queryParams = new URLSearchParams({
+        accountIds: params.accountIds?.join(',') || '',
+        startDate: params.startDate || '',
+        endDate: params.endDate || '',
+        limit: params.limit?.toString() || '50',
+        offset: params.offset?.toString() || '0'
+    });
+    return await ApiClient.getJson<TransactionResponse>(`/transactions?${queryParams}`);
+};
+
+// React Query hook - separate from service
+export const useUserTransactions = (params: TransactionRequestParams) => {
+    return useQuery({
+        queryKey: ['transactions', params],
+        queryFn: () => getUserTransactions(params),
+        staleTime: 1000 * 60 * 5, // 5 minutes
+        enabled: !!params.accountIds?.length
+    });
+};
+```
+
+### Mutation Functions
+```typescript
+// Service function for mutations
+export const updateAccount = async (accountId: string, data: Partial<Account>): Promise<Account> => {
+    return await ApiClient.putJson<Account>(`/accounts/${accountId}`, data);
+};
+
+// React Query mutation hook
+export const useUpdateAccount = () => {
+    const queryClient = useQueryClient();
+    
+    return useMutation({
+        mutationFn: ({ accountId, data }: { accountId: string; data: Partial<Account> }) => 
+            updateAccount(accountId, data),
+        onSuccess: (updatedAccount) => {
+            // Invalidate and refetch account queries
+            queryClient.invalidateQueries({ queryKey: ['accounts'] });
+            queryClient.setQueryData(['accounts', updatedAccount.accountId], updatedAccount);
+        }
+    });
+};
+```
+
+### Query Key Patterns
+```typescript
+// Consistent query key patterns
+export const accountKeys = {
+    all: ['accounts'] as const,
+    lists: () => [...accountKeys.all, 'list'] as const,
+    list: (filters: string) => [...accountKeys.lists(), { filters }] as const,
+    details: () => [...accountKeys.all, 'detail'] as const,
+    detail: (id: string) => [...accountKeys.details(), id] as const,
+    files: (id: string) => [...accountKeys.detail(id), 'files'] as const,
+};
+```
+
+## File Upload/Download Conventions
+
+### File Upload Pattern
+```typescript
+export interface UploadFileRequest {
+    file: File;
+    accountId?: string;
+    metadata?: Record<string, any>;
+}
+
+export interface UploadUrlResponse {
+    uploadUrl: string;
+    fileId: string;
+    fields: Record<string, string>;
+}
+
+// Two-step upload process
+export const getUploadUrl = async (filename: string, contentType: string): Promise<UploadUrlResponse> => {
+    return await ApiClient.postJson<UploadUrlResponse>('/files/upload-url', {
+        filename,
+        contentType
+    });
+};
+
+export const uploadFileToS3 = async (uploadData: UploadUrlResponse, file: File): Promise<void> => {
+    const formData = new FormData();
+    
+    // Add all required fields from the presigned URL
+    Object.entries(uploadData.fields).forEach(([key, value]) => {
+        formData.append(key, value);
+    });
+    
+    // Add the file last
+    formData.append('file', file);
+    
+    const response = await fetch(uploadData.uploadUrl, {
+        method: 'POST',
+        body: formData
+    });
+    
+    if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`);
+    }
+};
+
+// Complete upload flow
+export const uploadFile = async (request: UploadFileRequest): Promise<string> => {
+    const uploadData = await getUploadUrl(request.file.name, request.file.type);
+    await uploadFileToS3(uploadData, request.file);
+    
+    // Optionally associate with account
+    if (request.accountId) {
+        await associateFileWithAccount(uploadData.fileId, request.accountId);
+    }
+    
+    return uploadData.fileId;
+};
+```
+
+### File Download Pattern
+```typescript
+export interface DownloadUrlResponse {
+    downloadUrl: string;
+    filename: string;
+    expiresAt: string;
+}
+
+export const getDownloadUrl = async (fileId: string): Promise<DownloadUrlResponse> => {
+    return await ApiClient.getJson<DownloadUrlResponse>(`/files/${fileId}/download-url`);
+};
+
+export const downloadFile = async (fileId: string, customFilename?: string): Promise<void> => {
+    const { downloadUrl, filename } = await getDownloadUrl(fileId);
+    
+    const response = await fetch(downloadUrl);
+    if (!response.ok) {
+        throw new Error(`Download failed: ${response.statusText}`);
+    }
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = customFilename || filename;
+    document.body.appendChild(link);
+    link.click();
+    
+    // Cleanup
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+};
+```
+
+## Pagination Standards
+
+### Consistent Pagination Parameters
+```typescript
+export interface PaginationParams {
+    limit?: number;
+    offset?: number;
+    cursor?: string; // For cursor-based pagination
+}
+
+export interface PaginatedResponse<T> {
+    items: T[];
+    total: number;
+    hasMore: boolean;
+    nextCursor?: string;
+    pagination: {
+        limit: number;
+        offset: number;
+        total: number;
+    };
+}
+
+// Standard pagination implementation
+export const getTransactions = async (
+    params: TransactionRequestParams & PaginationParams
+): Promise<PaginatedResponse<Transaction>> => {
+    const queryParams = new URLSearchParams({
+        limit: (params.limit || 50).toString(),
+        offset: (params.offset || 0).toString(),
+        ...(params.cursor && { cursor: params.cursor }),
+        ...(params.startDate && { startDate: params.startDate }),
+        ...(params.endDate && { endDate: params.endDate })
+    });
+    
+    return await ApiClient.getJson<PaginatedResponse<Transaction>>(`/transactions?${queryParams}`);
+};
+```
+
+### Infinite Query Pattern
+```typescript
+export const useInfiniteTransactions = (params: TransactionRequestParams) => {
+    return useInfiniteQuery({
+        queryKey: ['transactions', 'infinite', params],
+        queryFn: ({ pageParam = 0 }) => 
+            getTransactions({ ...params, offset: pageParam }),
+        getNextPageParam: (lastPage) => 
+            lastPage.hasMore ? lastPage.pagination.offset + lastPage.pagination.limit : undefined,
+        staleTime: 1000 * 60 * 5
+    });
+};
+```
+
+## Date/Time Handling
+
+### Standardized Date Formats
+```typescript
+// Use ISO 8601 format for all API communications
+export const formatDateForAPI = (date: Date): string => {
+    return date.toISOString().split('T')[0]; // YYYY-MM-DD
+};
+
+export const formatDateTimeForAPI = (date: Date): string => {
+    return date.toISOString(); // Full ISO 8601 with timezone
+};
+
+// Parse dates from API responses
+export const parseDateFromAPI = (dateString: string): Date => {
+    return new Date(dateString);
+};
+
+// Date range utilities
+export interface DateRange {
+    startDate: string; // ISO format YYYY-MM-DD
+    endDate: string;   // ISO format YYYY-MM-DD
+}
+
+export const createDateRange = (days: number): DateRange => {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - days);
+    
+    return {
+        startDate: formatDateForAPI(startDate),
+        endDate: formatDateForAPI(endDate)
+    };
+};
+```
+
+## Environment-Specific Configurations
+
+### Environment Detection
+```typescript
+// Environment utilities
+export const getEnvironment = (): 'development' | 'staging' | 'production' => {
+    const hostname = window.location.hostname;
+    
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return 'development';
+    }
+    if (hostname.includes('staging') || hostname.includes('dev')) {
+        return 'staging';
+    }
+    return 'production';
+};
+
+// Environment-specific configurations
+export const getApiConfig = () => {
+    const env = getEnvironment();
+    
+    return {
+        timeout: env === 'development' ? 30000 : 10000,
+        retryAttempts: env === 'development' ? 1 : 3,
+        enableDebugLogging: env === 'development',
+        enableAnalytics: env === 'production'
+    };
+};
+```
+
+### Feature Flags
+```typescript
+export interface FeatureFlags {
+    enableNewTransferFlow: boolean;
+    enableAdvancedFiltering: boolean;
+    enableBetaFeatures: boolean;
+}
+
+export const getFeatureFlags = async (): Promise<FeatureFlags> => {
+    try {
+        return await ApiClient.getJson<FeatureFlags>('/feature-flags');
+    } catch (error) {
+        console.error('Failed to load feature flags:', error);
+        // Return safe defaults
+        return {
+            enableNewTransferFlow: false,
+            enableAdvancedFiltering: false,
+            enableBetaFeatures: false
+        };
+    }
+};
+```
+
+## Service Testing Patterns
+
+### Unit Testing Services
+```typescript
+// Example test file: AccountService.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { getAccount, updateAccount } from '../AccountService';
+import ApiClient from '@/utils/apiClient';
+
+// Mock ApiClient
+vi.mock('@/utils/apiClient', () => ({
+    default: {
+        getJson: vi.fn(),
+        putJson: vi.fn()
+    }
+}));
+
+describe('AccountService', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    describe('getAccount', () => {
+        it('should fetch account by ID', async () => {
+            const mockAccount = { accountId: '123', name: 'Test Account' };
+            vi.mocked(ApiClient.getJson).mockResolvedValue(mockAccount);
+
+            const result = await getAccount('123');
+
+            expect(ApiClient.getJson).toHaveBeenCalledWith('/accounts/123');
+            expect(result).toEqual(mockAccount);
+        });
+
+        it('should handle errors gracefully', async () => {
+            const error = new Error('Network error');
+            vi.mocked(ApiClient.getJson).mockRejectedValue(error);
+
+            await expect(getAccount('123')).rejects.toThrow('Network error');
+        });
+    });
+});
+```
+
+## Logging Standards
+
+### ✅ Efficient Logging Patterns (Recommended)
+
+#### Ultra-Efficient API Logging with `withApiLogging`
+```typescript
+import { withApiLogging, withServiceLogging, createLogger } from '@/utils/logger';
+
+// ✅ BEST: API operations with automatic logging (94% less boilerplate)
+export const listAccounts = withApiLogging(
+  'AccountService',
+  '/accounts',
+  'GET',
+  async () => {
+    return validateApiResponse(
+      () => ApiClient.getJson<any>('/accounts'),
+      (rawData) => AccountListResponseSchema.parse(rawData),
+      'account list data'
+    );
+  },
+  {
+    successData: (result) => ({ accountCount: result.accounts.length })
+  }
+);
+
+// ✅ BEST: Parameterized API operations
+export const getAccount = (accountId: string) => withApiLogging(
+  'AccountService',
+  `/accounts/${accountId}`,
+  'GET',
+  async () => {
+    return validateApiResponse(
+      () => ApiClient.getJson<any>(`/accounts/${accountId}`),
+      (rawData) => {
+        const validatedAccount = AccountSchema.parse(rawData.account);
+        return { account: validatedAccount };
+      },
+      'account data',
+      `Failed to load account ${accountId}. The account data format is invalid.`
+    );
+  },
+  {
+    operationName: `getAccount:${accountId}`,
+    successData: (result) => ({
+      accountId,
+      accountName: result.account.accountName,
+      accountType: result.account.accountType
+    })
+  }
+);
+
+// ✅ BEST: Service-level operations with argument/result logging
+export const createAccount = withServiceLogging(
+  'AccountService',
+  'createAccount',
+  async (accountData: Partial<Account>) => {
+    return validateApiResponse(
+      () => ApiClient.postJson<any>('/accounts', accountData),
+      (rawData) => {
+        const validatedAccount = AccountSchema.parse(rawData.account);
+        return { account: validatedAccount };
+      },
+      'created account data',
+      'Failed to create account. The server response format is invalid.'
+    );
+  },
+  {
+    logArgs: ([accountData]) => ({
+      accountName: accountData.accountName,
+      accountType: accountData.accountType,
+      fieldsProvided: Object.keys(accountData)
+    }),
+    logResult: (result) => ({
+      accountId: result.account.accountId,
+      accountName: result.account.accountName,
+      accountType: result.account.accountType
+    })
+  }
+);
+
+// ✅ GOOD: Simple operations with basic logging
+const logger = createLogger('AccountService');
+
+export const deleteAccount = async (accountId: string): Promise<void> => {
+  logger.info('Deleting account', { accountId });
+  
+  try {
+    await ApiClient.delete(`/accounts/${accountId}`);
+    logger.info('Account deleted successfully', { accountId });
+  } catch (error) {
+    logger.error('Account deletion failed', { accountId });
+    throw error;
+  }
+};
+```
+
+#### Automatic Features of Efficient Logging
+- ✅ **Automatic context collection**: timestamp, userId, sessionId, url, component
+- ✅ **Performance tracking**: duration, memory usage (when available)
+- ✅ **Request/response logging**: method, endpoint, status codes
+- ✅ **Error handling**: safe error extraction, stack traces
+- ✅ **Type safety**: structured, serializable log data
+- ✅ **Production ready**: extensible to external logging services
+
+#### When to Use Each Pattern
+
+1. **`withApiLogging`** - For API operations (GET, POST, PUT, DELETE)
+   - Handles request/response/error logging automatically
+   - Customizable success data extraction
+   - Automatic performance tracking
+   - Perfect for CRUD operations
+
+2. **`withServiceLogging`** - For business logic operations
+   - Logs operation start/completion automatically
+   - Customizable argument and result logging
+   - Great for complex business functions
+   - Automatic error handling with context
+
+3. **Basic `createLogger`** - For simple operations
+   - Manual control when wrappers are overkill
+   - Still gets automatic context collection
+   - Good for simple utility functions
+
+### ❌ Legacy Manual Logging (Avoid)
+
+```typescript
+// ❌ AVOID: Manual logging with lots of boilerplate
+export const getAccount = async (accountId: string): Promise<Account> => {
+    const startTime = performance.now();
+    console.log(`[AccountService] Fetching account ${accountId}`);
+    
+    try {
+        const account = await ApiClient.getJson<Account>(`/accounts/${accountId}`);
+        const duration = performance.now() - startTime;
+        console.log(`[AccountService] Account fetched successfully`, {
+            accountId,
+            accountName: account.name,
+            duration: `${duration.toFixed(2)}ms`,
+            timestamp: new Date().toISOString()
+        });
+        return account;
+    } catch (error) {
+        const duration = performance.now() - startTime;
+        console.error(`[AccountService] Failed to fetch account`, {
+            accountId,
+            error: error.message,
+            duration: `${duration.toFixed(2)}ms`,
+            timestamp: new Date().toISOString()
+        });
+        throw error;
+    }
+};
+```
+
+### Legacy Structured Logging (For Reference Only)
+```typescript
+// ⚠️ LEGACY: Only use if efficient patterns don't fit your needs
+export const createLogger = (serviceName: string) => {
+    const log = (level: 'info' | 'warn' | 'error', message: string, data?: any) => {
+        const logEntry = {
+            timestamp: new Date().toISOString(),
+            service: serviceName,
+            level,
+            message,
+            ...(data && { data })
+        };
+
+        if (level === 'error') {
+            console.error(`[${serviceName}] ${message}`, data);
+        } else if (level === 'warn') {
+            console.warn(`[${serviceName}] ${message}`, data);
+        } else {
+            console.log(`[${serviceName}] ${message}`, data);
+        }
+
+        // In production, send to logging service
+        if (getEnvironment() === 'production') {
+            // sendToLoggingService(logEntry);
+        }
+    };
+
+    return {
+        info: (message: string, data?: any) => log('info', message, data),
+        warn: (message: string, data?: any) => log('warn', message, data),
+        error: (message: string, data?: any) => log('error', message, data)
+    };
+};
+```
+
+### Migration from Legacy Logging
+
+#### ✅ Migrate to Efficient Patterns
+```typescript
+// ❌ OLD: Manual performance logging
+export const getAccount = withPerformanceLogging(
+    async (accountId: string): Promise<Account> => {
+        return await ApiClient.getJson<Account>(`/accounts/${accountId}`);
+    },
+    'getAccount'
+);
+
+// ✅ NEW: Use withApiLogging instead
+export const getAccount = (accountId: string) => withApiLogging(
+  'AccountService',
+  `/accounts/${accountId}`,
+  'GET',
+  async () => ApiClient.getJson<Account>(`/accounts/${accountId}`),
+  {
+    operationName: `getAccount:${accountId}`,
+    successData: (result) => ({ accountName: result.accountName })
+  }
+);
+```
+
+#### Benefits of Migration
+- **94% less code** - Eliminate logging boilerplate
+- **Automatic context** - userId, sessionId, timestamps
+- **Better error handling** - Safe error extraction
+- **Type safety** - Structured, serializable data
+- **Consistent patterns** - Same approach across all services
+- **Production ready** - Built-in extensibility
+
+### Error Context Logging
+```typescript
+// Enhanced error handling with context
+export const handleServiceError = (
+    operation: string,
+    error: unknown,
+    context?: Record<string, any>
+): never => {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    logger.error(`Service operation failed: ${operation}`, {
+        operation,
+        error: errorMessage,
+        stack: errorStack,
+        context,
+        timestamp: new Date().toISOString(),
+        userAgent: navigator.userAgent,
+        url: window.location.href
+    });
+    
+    // Re-throw with enhanced context
+    const enhancedError = new Error(`${operation} failed: ${errorMessage}`);
+    enhancedError.cause = error;
+    throw enhancedError;
+};
+
+// Usage in services
+export const updateAccount = async (accountId: string, data: Partial<Account>): Promise<Account> => {
+    try {
+        return await ApiClient.putJson<Account>(`/accounts/${accountId}`, data);
+    } catch (error) {
+        handleServiceError('updateAccount', error, { accountId, updateData: data });
+    }
+};
+```
+
+This ensures consistent, maintainable, and secure service layer across the frontend application with comprehensive patterns for all common scenarios.

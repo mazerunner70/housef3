@@ -7,9 +7,9 @@
 # File Storage S3 Bucket
 resource "aws_s3_bucket" "file_storage" {
   bucket = "${var.project_name}-${var.environment}-file-storage"
-  
+
   tags = merge(var.tags, {
-    Name = "${var.project_name}-${var.environment}-file-storage"
+    Name        = "${var.project_name}-${var.environment}-file-storage"
     Description = "S3 bucket for file storage and management"
   })
 
@@ -23,7 +23,7 @@ resource "aws_s3_bucket" "file_storage" {
 # Enable versioning for the file storage bucket
 resource "aws_s3_bucket_versioning" "file_storage" {
   bucket = aws_s3_bucket.file_storage.id
-  
+
   versioning_configuration {
     status = "Enabled"
   }
@@ -74,28 +74,28 @@ resource "aws_s3_bucket_lifecycle_configuration" "file_storage" {
     abort_incomplete_multipart_upload {
       days_after_initiation = 7
     }
-    
+
     # Filter with empty prefix to apply to all objects
     filter {
       prefix = ""
     }
   }
-  
+
   rule {
     id     = "transition-to-ia"
     status = "Enabled"
-    
+
     # Apply to all objects in the bucket
     filter {
       prefix = ""
     }
-    
+
     # Move objects to infrequent access after 30 days
     transition {
       days          = 30
       storage_class = "STANDARD_IA"
     }
-    
+
     # Optional: Move to Glacier after 90 days
     transition {
       days          = 90
@@ -126,7 +126,7 @@ data "aws_iam_policy_document" "file_storage_policy" {
       values   = [aws_cloudfront_distribution.frontend.arn]
     }
   }
-  
+
   # Allow authenticated users to perform file operations
   statement {
     sid    = "AllowAuthenticatedUploads"
@@ -136,9 +136,9 @@ data "aws_iam_policy_document" "file_storage_policy" {
       identifiers = ["arn:aws:iam::661792079381:user/terraform-housef2", aws_iam_role.lambda_exec.arn]
     }
     actions = [
-      "s3:PutObject",
-      "s3:GetObject",
       "s3:DeleteObject",
+      "s3:GetObject",
+      "s3:PutObject",
       "s3:PutObjectAcl"
     ]
     resources = [
@@ -180,7 +180,7 @@ resource "aws_s3_bucket_public_access_block" "file_storage" {
   bucket = aws_s3_bucket.file_storage.id
 
   block_public_acls       = true
-  block_public_policy     = true   # ✅ BLOCK public policies
+  block_public_policy     = true # ✅ BLOCK public policies
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
@@ -192,7 +192,7 @@ resource "aws_s3_bucket_notification" "file_upload_notification" {
   lambda_function {
     lambda_function_arn = aws_lambda_function.file_processor.arn
     events              = ["s3:ObjectCreated:*"]
-    filter_suffix       = ""  # Process all file types
+    filter_suffix       = "" # Process all file types
   }
 
   depends_on = [aws_lambda_permission.allow_s3]
@@ -211,19 +211,19 @@ output "file_storage_bucket_arn" {
 
 # Lambda execution role with permission to access file storage
 resource "aws_iam_role_policy" "lambda_file_storage_access" {
-  name   = "file-storage-s3-access"
-  role   = aws_iam_role.lambda_exec.id
+  name = "file-storage-s3-access"
+  role = aws_iam_role.lambda_exec.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
         Action = [
-          "s3:GetObject",
-          "s3:PutObject",
           "s3:DeleteObject",
-          "s3:ListBucket"
+          "s3:GetObject",
+          "s3:ListBucket",
+          "s3:PutObject"
         ]
-        Effect   = "Allow"
+        Effect = "Allow"
         Resource = [
           aws_s3_bucket.file_storage.arn,
           "${aws_s3_bucket.file_storage.arn}/*"

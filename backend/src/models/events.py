@@ -211,7 +211,7 @@ class AccountCreatedEvent(BaseEvent):
     """Published when account is created"""
     
     def __init__(self, user_id: str, account_id: str, account_name: str, 
-                 account_type: str, currency: str, **kwargs):
+                 account_type: str, currency: Optional[str] = None, **kwargs):
         super().__init__(
             event_id=str(uuid.uuid4()),
             event_type='account.created',
@@ -223,7 +223,7 @@ class AccountCreatedEvent(BaseEvent):
                 'accountId': account_id,
                 'accountName': account_name,
                 'accountType': account_type,
-                'currency': currency,
+                'currency': currency ,
                 **kwargs
             }
         )

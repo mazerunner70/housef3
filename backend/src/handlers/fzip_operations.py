@@ -12,6 +12,9 @@ Provides unified API endpoints for FZIP (Financial ZIP) backup/restore functiona
 - GET /fzip/restore/{jobId}/status - Get FZIP restore status
 - DELETE /fzip/restore/{jobId} - Delete FZIP restore job
 - POST /fzip/restore/{jobId}/upload - Upload FZIP package and start restore
+- POST /fzip/restore/{jobId}/start - Start restore processing for validated jobs
+- POST /fzip/restore/upload-url - Generate presigned POST for restore package upload
+- POST /fzip/restore/{jobId}/cancel - Cancel an in-progress restore job
 """
 
 import json
@@ -42,7 +45,7 @@ from utils.db_utils import (
     create_fzip_job, get_fzip_job, update_fzip_job, 
     list_user_fzip_jobs, delete_fzip_job
 )
-from utils.s3_dao import get_presigned_post_url, put_object
+from utils.s3_dao import get_presigned_post_url, get_object_metadata
 
 # Configure logging
 logger = logging.getLogger()
@@ -111,8 +114,7 @@ def initiate_fzip_backup_handler(event: Dict[str, Any], user_id: str) -> Dict[st
                 jobId=processed_job.job_id,
                 jobType=processed_job.job_type,
                 status=processed_job.status,
-                packageFormat=FZIPFormat.FZIP,
-                estimatedSize=f"~{processed_job.package_size or 0}B" if processed_job.package_size else None
+                packageFormat=FZIPFormat.FZIP
             )
             
             return create_response(201, response.model_dump(by_alias=True))
@@ -207,19 +209,22 @@ def get_fzip_backup_download_handler(event: Dict[str, Any], user_id: str) -> Dic
         if not backup_job.s3_key:
             return create_response(404, {"error": "FZIP backup package not found"})
         
+        # Verify the backup file actually exists in S3 before generating presigned URL
+        fzip_bucket = fzip_service_instance.fzip_bucket
+        metadata = get_object_metadata(backup_job.s3_key, fzip_bucket)
+        if not metadata:
+            logger.error(f"FZIP backup file not found in S3: {backup_job.s3_key}")
+            return create_response(404, {"error": "FZIP backup package file not found in storage"})
+        
         try:
             download_url = fzip_service_instance.generate_download_url(backup_job.s3_key)
             
-            # Return redirect response  
-            return {
-                "statusCode": 302,
-                "headers": {
-                    "Location": download_url,
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Origin": "*"
-                },
-                "body": json.dumps({"downloadUrl": download_url, "packageFormat": "fzip"})
-            }
+            # Return JSON response with download URL (more reliable than 302 redirect)
+            return create_response(200, {
+                "downloadUrl": download_url, 
+                "packageFormat": "fzip",
+                "filename": f"backup_{job_id}.fzip"
+            })
             
         except Exception as e:
             logger.error(f"Failed to generate download URL: {str(e)}")
@@ -232,7 +237,7 @@ def get_fzip_backup_download_handler(event: Dict[str, Any], user_id: str) -> Dic
 
 def list_fzip_backups_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """
-    List user's FZIP backup jobs
+    List user's FZIP  backup packages
     GET /fzip/backup
     """
     try:
@@ -246,14 +251,23 @@ def list_fzip_backups_handler(event: Dict[str, Any], user_id: str) -> Dict[str, 
         # Retrieve backup jobs from database
         backup_jobs, pagination_key = list_user_fzip_jobs(user_id, FZIPType.BACKUP.value, limit)
         
-        # Convert to response format
+        # Convert to response format, filtering out completed backups with missing S3 files
         backups_data = []
+        fzip_bucket = fzip_service_instance.fzip_bucket
+        
         for job in backup_jobs:
+            # For completed backups, verify the S3 file exists before including in response
+            if job.status == FZIPStatus.BACKUP_COMPLETED and job.s3_key:
+                metadata = get_object_metadata(job.s3_key, fzip_bucket)
+                if not metadata:
+                    logger.warning(f"Skipping completed backup {job.job_id} - S3 file not found: {job.s3_key}")
+                    continue  # Skip this backup from the response
+            
             backups_data.append({
                 "jobId": str(job.job_id),
                 "jobType": job.job_type.value,
                 "status": job.status.value,
-                "backupType": job.backup_type.value if job.backup_type else None,
+                "backupType": job.backup_type if job.backup_type else None,
                 "createdAt": job.created_at,
                 "completedAt": job.completed_at,
                 "progress": job.progress,
@@ -317,7 +331,7 @@ def process_fzip_backup_job(fzip_job: FZIPJob) -> FZIPJob:
     Process an FZIP backup job (simplified for Phase 1)
     In production, this would be handled by a separate Lambda or async process
     """
-    backup_type = fzip_job.backup_type.value if fzip_job.backup_type else "complete"
+    backup_type = fzip_job.backup_type if fzip_job.backup_type else "complete"
     
     with fzip_metrics.measure_backup_duration(backup_type, fzip_job.user_id):
         try:
@@ -419,7 +433,7 @@ def create_fzip_restore_handler(event: Dict[str, Any], user_id: str) -> Dict[str
             key=f"packages/{fzip_job.job_id}.fzip",  # Use .fzip extension
             expires_in=3600,
             conditions=[
-                {'content-length-range': [1, 1024 * 1024 * 100]}  # 1 byte to 100MB
+                {'content-length-range': [1, 1024 * 1024 * 500]}  # 1 byte to 500MB (match UI)
             ]
         )
         
@@ -482,16 +496,7 @@ def list_fzip_restores_handler(event: Dict[str, Any], user_id: str) -> Dict[str,
             'packageFormat': 'fzip'
         }
         
-        return {
-            'statusCode': 200,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-                'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
-            },
-            'body': json.dumps(response_data)
-        }
+        return create_response(200, response_data)
         
     except Exception as e:
         logger.error(f"Error listing FZIP restore jobs: {str(e)}")
@@ -532,17 +537,8 @@ def get_fzip_restore_status_handler(event: Dict[str, Any], user_id: str, job_id:
             completedAt=datetime.fromtimestamp(restore_job.completed_at / 1000, timezone.utc).isoformat() if restore_job.completed_at else None,
             packageFormat=restore_job.package_format
         )
-        
-        return {
-            'statusCode': 200,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-                'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
-            },
-            'body': json.dumps(response.model_dump(by_alias=True))
-        }
+        # Use standard response helper to ensure UUIDs and Decimals serialize
+        return create_response(200, response.model_dump(mode='json', by_alias=True))
         
     except Exception as e:
         logger.error(f"Error getting FZIP restore status: {str(e)}")
@@ -639,11 +635,156 @@ def upload_fzip_package_handler(event: Dict[str, Any], user_id: str, job_id: str
         
     except Exception as e:
         logger.error(f"Error uploading FZIP package: {str(e)}")
+        logger.error(f"Stacktrace: {traceback.format_exc()}")
         return {
             'statusCode': 500,
             'body': json.dumps({'error': f'Failed to upload FZIP package: {str(e)}'})
         }
 
+
+def start_fzip_restore_handler(event: Dict[str, Any], user_id: str, job_id: str) -> Dict[str, Any]:
+    """Handle POST /fzip/restore/{jobId}/start - Start FZIP restore processing for validated jobs."""
+    try:
+        if not job_id:
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'error': INVALID_JOB_ID_FORMAT_MESSAGE})
+            }
+        
+        # Get restore job
+        restore_job = get_fzip_job(job_id, user_id)
+        if not restore_job:
+            return {
+                'statusCode': 404,
+                'body': json.dumps({'error': INVALID_RESTORE_JOB_NOT_FOUND_MESSAGE})
+            }
+        
+        # Accept both awaiting confirmation (new flow) and validation passed (existing jobs during transition)
+        if restore_job.status not in [FZIPStatus.RESTORE_AWAITING_CONFIRMATION, FZIPStatus.RESTORE_VALIDATION_PASSED]:
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'error': f'FZIP restore job is not ready to start. Current status: {restore_job.status.value}'})
+            }
+        
+        # Ensure we have the package location
+        if not restore_job.s3_key:
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'error': 'FZIP restore job has no package location'})
+            }
+        
+        # Start restore processing from validation passed state
+        fzip_service_instance.resume_restore(restore_job)
+        
+        return {
+            'statusCode': 200,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+                'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
+            },
+            'body': json.dumps({
+                'message': 'FZIP restore processing started',
+                'jobId': str(restore_job.job_id),
+                'status': restore_job.status.value,
+                'packageFormat': 'fzip'
+            })
+        }
+        
+    except Exception as e:
+        logger.error(f"Error starting FZIP restore: {str(e)}")
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': f'Failed to start FZIP restore: {str(e)}'})
+        }
+
+
+# New simplified restore flow endpoints
+def post_fzip_restore_upload_url_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """Generate a presigned URL for direct S3 upload of FZIP restore package."""
+    try:
+        # Generate restore ID (equivalent to file_id in file operations)
+        restore_id = str(uuid.uuid4())
+        bucket = os.environ.get('FZIP_RESTORE_PACKAGES_BUCKET', os.environ.get('FZIP_PACKAGES_BUCKET', 'housef3-dev-fzip-packages'))
+        key = f"restore_packages/{user_id}/{restore_id}.fzip"
+        content_type = 'application/zip'  # FZIP files are ZIP files
+        
+        # Prepare fields for presigned URL (copying file operations pattern)
+        fields = {
+            'Content-Type': content_type,
+            'key': key,
+            'x-amz-meta-userid': user_id,
+            'x-amz-meta-restoreid': restore_id
+        }
+        
+        # Define policy conditions using AWS-documented format (copying file operations pattern)
+        conditions = [
+            ['starts-with', '$Content-Type', ''],
+            ['starts-with', '$key', f"restore_packages/{user_id}/"],  # Ensure key starts with correct prefix
+            ['eq', '$x-amz-meta-userid', user_id],
+            ['eq', '$x-amz-meta-restoreid', restore_id],
+            ['content-length-range', 1, 1024 * 1024 * 500]  # 500MB limit
+        ]
+            
+        # Log the complete conditions and fields for debugging (copying file operations pattern)
+        logger.info(f"S3 policy conditions: {json.dumps(conditions)}")
+        logger.info(f"S3 policy fields: {json.dumps(fields)}")
+            
+        # Get presigned post data with all fields pre-populated (copying file operations pattern)
+        presigned_data = get_presigned_post_url(
+            bucket, 
+            key, 
+            3600,
+            conditions=conditions,
+            fields=fields
+        )
+        
+        logger.info(f"Generated presigned URL data: {json.dumps(presigned_data)}")
+        
+        return create_response(200, {
+            'url': presigned_data['url'],
+            'fields': presigned_data['fields'],
+            'restoreId': restore_id,  # Use the generated restore_id
+            'expires': 3600  # URL expires in 1 hour
+        })
+    except ValueError as ve:
+        return handle_error(400, str(ve))
+    except Exception as e:
+        logger.error(f"Error generating S3 upload URL: {str(e)}")
+        return handle_error(500, "Error generating S3 upload URL")
+
+
+def cancel_fzip_restore_handler(event: Dict[str, Any], user_id: str, job_id: str) -> Dict[str, Any]:
+    """
+    Handle POST /fzip/restore/{jobId}/cancel
+    Sets job status to restore_canceled and records error message.
+    """
+    try:
+        if not job_id:
+            return create_response(400, {"error": INVALID_JOB_ID_FORMAT_MESSAGE})
+
+        restore_job = get_fzip_job(job_id, user_id)
+        if not restore_job:
+            return create_response(404, {"error": INVALID_RESTORE_JOB_NOT_FOUND_MESSAGE})
+
+        # Only allow cancel if not terminal
+        if restore_job.is_completed() or restore_job.is_failed():
+            return create_response(400, {"error": f"Job already terminal with status {restore_job.status.value}"})
+
+        restore_job.status = FZIPStatus.RESTORE_CANCELED
+        restore_job.error = "Canceled by user"
+        restore_job.completed_at = int(datetime.now(timezone.utc).timestamp() * 1000)
+        update_fzip_job(restore_job)
+
+        return create_response(200, {
+            'jobId': str(restore_job.job_id),
+            'status': restore_job.status.value,
+            'message': 'Restore job canceled',
+        })
+    except Exception as e:
+        logger.error(f"Error canceling FZIP restore job {job_id}: {str(e)}")
+        return create_response(500, {"error": "Failed to cancel restore job", "message": str(e)})
 
 # ============================================================================
 # MAIN HANDLER
@@ -693,6 +834,14 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         elif route == "POST /fzip/restore/{jobId}/upload":
             job_id = event.get('pathParameters', {}).get('jobId')
             return upload_fzip_package_handler(event, user_id, job_id)
+        elif route == "POST /fzip/restore/{jobId}/start":
+            job_id = event.get('pathParameters', {}).get('jobId')
+            return start_fzip_restore_handler(event, user_id, job_id)
+        elif route == "POST /fzip/restore/upload-url":
+            return post_fzip_restore_upload_url_handler(event, user_id)
+        elif route == "POST /fzip/restore/{jobId}/cancel":
+            job_id = event.get('pathParameters', {}).get('jobId')
+            return cancel_fzip_restore_handler(event, user_id, job_id)
         else:
             return create_response(400, {"message": f"Unsupported FZIP route: {route}"})
             
