@@ -58,6 +58,11 @@ class CanceledException(Exception):
     pass
 
 
+class ValidationException(Exception):
+    """Custom exception for validation errors"""
+    pass
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -446,8 +451,8 @@ class FZIPService:
             if not empty_check['valid']:
                 error_message = "Validation failed: " + " ".join(empty_check['errors'])
                 self._fail_job(restore_job, error_message)
-                # Note: Consider raising an exception here to notify the caller immediately
-                return restore_job  # Or handle as per API contract for immediate failure
+                # Raise exception to notify caller immediately
+                raise ValidationException(error_message)
             
             # Save to database
             create_fzip_job(restore_job)
@@ -714,7 +719,7 @@ class FZIPService:
                 'valid': False,
                 'errors': [f"Business validation failed: {str(e)}"]
             }
-    
+  
     def _generate_summary_data(self, package_data: Dict[str, Any]) -> Dict[str, Any]:
         """Generate detailed summary for user review"""
         try:
@@ -898,7 +903,6 @@ class FZIPService:
             i += 1
         
         return f"{size:.1f}{size_names[i]}"
-    
     def _validate_empty_profile(self, user_id: str) -> Dict[str, Any]:
         """Validate that user profile is completely empty for restore."""
         try:
@@ -924,8 +928,10 @@ class FZIPService:
             if transaction_files:
                 artifacts.append(f"{len(transaction_files)} transaction file(s)")
             
-            # Check for existing transactions (if we have a method for this)
-            # Note: We could add transaction check here if needed
+            # Check for existing transactions
+            _, _, transaction_count = list_user_transactions(user_id, limit=1)
+            if transaction_count > 0:
+                artifacts.append(f"{transaction_count} transaction(s)")
             
             if artifacts:
                 return {
@@ -1400,7 +1406,6 @@ class FZIPService:
         # For now, just log the operation
         logger.info(f"Cleanup operation for user {user_id} backups")
         return 0
-
 
 # Global service instance
 fzip_service = FZIPService()
