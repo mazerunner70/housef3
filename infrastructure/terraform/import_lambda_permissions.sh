@@ -1,0 +1,25 @@
+#!/bin/bash
+set -e
+
+echo "Importing remaining Lambda permissions..."
+
+# More API Gateway permissions
+terraform import aws_lambda_permission.api_gateway_transactions housef3-dev-transaction-operations/AllowAPIGatewayInvokeTransactions
+terraform import aws_lambda_permission.api_gateway_upload housef3-dev-file-operations/AllowAPIGatewayInvokeUpload
+terraform import aws_lambda_permission.api_gateway_colors housef3-getcolors/AllowAPIGatewayInvokeColors
+terraform import aws_lambda_permission.api_gateway_export housef3-dev-export-operations/AllowExecutionFromAPIGateway
+terraform import aws_lambda_permission.api_gateway_file_maps housef3-dev-file-map-operations/AllowAPIGatewayInvokeFileMaps
+terraform import aws_lambda_permission.api_gateway_field_maps housef3-dev-file-map-operations/AllowAPIGatewayInvokeFieldMapsLambda
+terraform import aws_lambda_permission.api_gateway_fzip housef3-dev-fzip-operations/AllowAPIGatewayInvokeFZIPLambda
+terraform import aws_lambda_permission.getcolors housef3-getcolors/AllowAPIGatewayInvoke
+
+# EventBridge permissions
+terraform import aws_lambda_permission.allow_eventbridge_analytics dev-analytics-consumer/AllowExecutionFromEventBridge
+terraform import aws_lambda_permission.allow_eventbridge_audit housef3-dev-audit-consumer/AllowExecutionFromEventBridge
+terraform import aws_lambda_permission.allow_eventbridge_categorization dev-categorization-consumer/AllowExecutionFromEventBridge
+
+# CloudWatch/S3 permissions
+terraform import aws_lambda_permission.allow_cloudwatch_to_call_analytics_processor housef3-dev-analytics-processor/AllowExecutionFromCloudWatch
+terraform import aws_lambda_permission.allow_s3 housef3-dev-file-processor/AllowExecutionFromS3
+
+echo "All Lambda permissions imported successfully!"

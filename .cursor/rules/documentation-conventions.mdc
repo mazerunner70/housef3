@@ -1,0 +1,33 @@
+---
+description: Documentation standards
+globs: docs/**
+alwaysApply: false
+---
+
+# Documentation Conventions
+
+## Documentation Standards
+- Design documents for major features
+- API documentation for endpoints
+- Architecture decision records (ADRs)
+- Implementation guides with examples
+- Keep docs updated with code changes
+
+## Document Types
+- *-design.md - Design documents for features
+- *-implementation*.md - Implementation guides
+- api_documentation.md - API endpoint documentation
+- *.md - General documentation
+
+## Writing Standards
+- Clear, concise explanations
+- Include code examples where relevant
+- Document assumptions and constraints
+- Provide step-by-step guides for complex processes
+- Reference related documents and dependencies
+
+## Maintenance
+- Update docs when making architectural changes
+- Review documentation during code reviews
+- Ensure examples remain current and functional
+- Archive outdated documentation appropriately

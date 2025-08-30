@@ -7,7 +7,7 @@
 # Custom EventBridge Bus
 resource "aws_cloudwatch_event_bus" "app_events" {
   name = "${var.project_name}-${var.environment}-events"
-  
+
   tags = {
     Environment = var.environment
     Project     = var.project_name
@@ -18,10 +18,10 @@ resource "aws_cloudwatch_event_bus" "app_events" {
 
 # Event store DynamoDB table for auditing and event replay
 resource "aws_dynamodb_table" "event_store" {
-  name           = "${var.project_name}-${var.environment}-event-store"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "eventId"
-  range_key      = "timestamp"
+  name         = "${var.project_name}-${var.environment}-event-store"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "eventId"
+  range_key    = "timestamp"
 
   attribute {
     name = "eventId"
@@ -50,26 +50,26 @@ resource "aws_dynamodb_table" "event_store" {
 
   # GSI for querying events by user and timestamp
   global_secondary_index {
-    name               = "UserIdTimestampIndex"
-    hash_key           = "userId"
-    range_key          = "timestamp"
-    projection_type    = "ALL"
+    name            = "UserIdTimestampIndex"
+    hash_key        = "userId"
+    range_key       = "timestamp"
+    projection_type = "ALL"
   }
 
   # GSI for querying by event type and timestamp
   global_secondary_index {
-    name               = "EventTypeTimestampIndex"
-    hash_key           = "eventType"
-    range_key          = "timestamp"
-    projection_type    = "ALL"
+    name            = "EventTypeTimestampIndex"
+    hash_key        = "eventType"
+    range_key       = "timestamp"
+    projection_type = "ALL"
   }
 
   # GSI for querying by source system and timestamp
   global_secondary_index {
-    name               = "SourceTimestampIndex"
-    hash_key           = "source"
-    range_key          = "timestamp"
-    projection_type    = "ALL"
+    name            = "SourceTimestampIndex"
+    hash_key        = "source"
+    range_key       = "timestamp"
+    projection_type = "ALL"
   }
 
   # Enable TTL for automatic cleanup of old events (1 year retention)
@@ -94,13 +94,13 @@ resource "aws_dynamodb_table" "event_store" {
 # Dead letter queue for failed event processing
 resource "aws_sqs_queue" "event_dlq" {
   name = "${var.project_name}-${var.environment}-event-dlq"
-  
+
   # Retain messages for 14 days for investigation
-  message_retention_seconds = 1209600  # 14 days
-  
+  message_retention_seconds = 1209600 # 14 days
+
   # Enable server-side encryption
   sqs_managed_sse_enabled = true
-  
+
   tags = {
     Environment = var.environment
     Project     = var.project_name
@@ -112,13 +112,13 @@ resource "aws_sqs_queue" "event_dlq" {
 # DLQ for the DLQ (for catastrophic failures)
 resource "aws_sqs_queue" "event_dlq_dlq" {
   name = "${var.project_name}-${var.environment}-event-dlq-dlq"
-  
+
   # Retain messages for 14 days for deep investigation (max allowed)
-  message_retention_seconds = 1209600  # 14 days
-  
+  message_retention_seconds = 1209600 # 14 days
+
   # Enable server-side encryption
   sqs_managed_sse_enabled = true
-  
+
   tags = {
     Environment = var.environment
     Project     = var.project_name

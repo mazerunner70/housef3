@@ -1,0 +1,327 @@
+---
+description: Backend handler patterns and conventions
+globs: backend/src/handlers/**
+alwaysApply: false
+---
+
+# Backend Handler Conventions
+
+## Handler Patterns & Code Reduction
+
+### Modern Handler Structure (PREFERRED)
+**NEW STANDARD**: Use decorator-based handlers for maximum code reduction:
+```python
+from utils.handler_decorators import api_handler
+
+@api_handler()
+def create_item_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """Clean handler - decorators handle auth, errors, logging automatically."""
+    # 1. Parse and validate input
+    item_data, error = parse_and_validate_json(event, ItemCreate)
+    if error:
+        raise ValueError(error["message"])
+    
+    # 2. Business logic only
+    item = service.create_item(user_id, item_data)
+    
+    # 3. Return data - decorator wraps in proper response
+    return {
+        "message": "Item created successfully",
+        "item": item.model_dump(by_alias=True, mode='json')
+    }
+
+@api_handler(require_ownership=("id", "item"))
+def get_item_handler(event: Dict[str, Any], user_id: str, item: Item) -> Dict[str, Any]:
+    """Ownership pre-verified by decorator - item guaranteed to belong to user."""
+    return {"item": item.model_dump(by_alias=True, mode='json')}
+```
+
+### Legacy Handler Structure (DEPRECATED)
+**OLD PATTERN**: Manual error handling (avoid for new handlers):
+```python
+def operation_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    try:
+        # Manual error handling, authentication, etc.
+    except SpecificError as e:
+        return create_response(400, {"message": str(e)})
+    except Exception as e:
+        logger.error(f"Error in operation: {str(e)}")
+        return create_response(500, {"message": "Error performing operation"})
+```
+
+### Parameter Extraction Utilities
+Use utility functions from `lambda_utils` for consistent parameter handling:
+- `mandatory_path_parameter(event, "id")` - Required path params
+- `optional_path_parameter(event, "id")` - Optional path params  
+- `mandatory_body_parameter(event, "field")` - Required JSON body fields
+- `optional_body_parameter(event, "field")` - Optional JSON body fields
+- `mandatory_query_parameter(event, "limit")` - Required query params
+- `optional_query_parameter(event, "filter")` - Optional query params
+
+### Response Standardization
+- **ALWAYS** use `create_response(status_code, body)` from `utils.lambda_utils` for all responses
+- Consistent CORS headers automatically applied
+- DecimalEncoder handles Decimal/UUID serialization automatically
+- Status codes: 200 (success), 201 (created), 400 (validation), 404 (not found), 500 (server error)
+- **NEVER** create local DecimalEncoder classes or response functions - use the centralized ones
+
+### JSON Serialization Standards
+**CRITICAL**: All JSON responses must be consistent across handlers. Follow these rules:
+
+#### Model Serialization
+**ALWAYS** use `mode='json'` and `by_alias=True` for consistent serialization:
+```python
+# ✅ CORRECT - Consistent serialization
+model.model_dump(by_alias=True, mode='json')
+
+# ❌ WRONG - Inconsistent, may not handle all types properly
+model.model_dump(by_alias=True)
+```
+
+#### Data Type Consistency
+The centralized `DecimalEncoder` in `lambda_utils.py` handles all special types automatically:
+
+**Decimal Objects**:
+- **NEVER** manually convert decimals to strings in handlers
+- Decimals are **ALWAYS** serialized as strings to preserve precision
+- Let DecimalEncoder handle conversion automatically
+
+**UUID Objects**:
+- **NEVER** manually convert UUIDs to strings
+- UUIDs are **ALWAYS** serialized as strings
+
+**DateRange Objects**:
+- Automatically serialized using `model_dump()`
+
+```python
+# ✅ CORRECT - Let DecimalEncoder handle all types
+return create_response(200, {
+    "amount": decimal_value,      # → "123.45" (string)
+    "id": uuid_value,            # → "550e8400-e29b-41d4-a716-446655440000" (string)
+    "dateRange": date_range_obj  # → {"start": "2024-01-01", "end": "2024-01-31"}
+})
+
+# ❌ WRONG - Manual conversion not needed
+return create_response(200, {
+    "amount": str(decimal_value),
+    "id": str(uuid_value)
+})
+```
+
+#### Standard Utility Functions
+From category_operations.py, use these utility functions:
+- `serialize_model(model, success_message)` - Single model with optional message
+- `serialize_model_list(models, metadata)` - List of models with metadata
+- `parse_and_validate_json(event, ModelClass)` - Parse & validate JSON body
+
+#### Response Format Consistency
+All successful responses should follow these patterns:
+```python
+# Single item
+return create_response(200, {"item": model.model_dump(by_alias=True, mode='json')})
+
+# List of items
+return create_response(200, {
+    "items": [item.model_dump(by_alias=True, mode='json') for item in items],
+    "metadata": {"totalItems": len(items)}
+})
+
+# With success message
+return create_response(201, {
+    "message": "Created successfully",
+    "item": model.model_dump(by_alias=True, mode='json')
+})
+```
+
+#### Common Anti-Patterns to Avoid
+**DO NOT** do any of these - they create inconsistencies:
+
+```python
+# ❌ WRONG - Local DecimalEncoder classes
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return str(obj)
+        return super().default(obj)
+
+# ❌ WRONG - Local create_response functions
+def create_response(status_code, body):
+    return {"statusCode": status_code, "body": json.dumps(body, cls=DecimalEncoder)}
+
+# ❌ WRONG - Manual decimal conversion after model_dump
+tx_data = transaction.model_dump(by_alias=True, mode='json')
+if tx_data.get("amount") is not None:
+    tx_data["amount"] = str(tx_data["amount"])
+
+# ❌ WRONG - Inconsistent model serialization
+model.model_dump()  # Missing by_alias and mode
+model.model_dump(by_alias=True)  # Missing mode='json'
+```
+
+### Authentication & Authorization
+- Extract user from event: `get_user_from_event(event)`
+- Check ownership: `checked_mandatory_account(account_id, user_id)`
+- Always verify resources belong to authenticated user
+- `@require_auth` decorator in `utils.auth` for automatic authentication checks
+
+### Batch Operations Pattern
+For bulk operations (like `bulk_mark_transfers_handler`):
+```python
+successful_items = []
+failed_items = []
+for item in items:
+    try:
+        # Process item
+        successful_items.append(result)
+    except Exception as e:
+        failed_items.append({"item": item, "error": str(e)})
+return create_response(200, {
+    "successful": successful_items,
+    "failed": failed_items,
+    "successCount": len(successful_items),
+    "failureCount": len(failed_items)
+})
+```
+
+### Event Publishing Pattern
+For domain events (account_operations.py):
+```python
+try:
+    event = DomainEvent(...)
+    event_service.publish_event(event)
+    logger.info(f"Event published: {event}")
+except Exception as e:
+    logger.warning(f"Failed to publish event: {str(e)}")
+    # Continue - don't fail the main operation
+```
+
+### Pagination Pattern
+For paginated responses:
+```python
+# Extract pagination params
+limit = int(mandatory_query_parameter(event, "limit"))
+last_evaluated_key = optional_query_parameter(event, "lastEvaluatedKey")
+
+# Use db_utils pagination
+results = list_items(user_id, limit, last_evaluated_key)
+return create_response(200, {
+    "items": [item.model_dump(by_alias=True) for item in results],
+    "metadata": {"totalItems": len(results)}
+})
+```
+
+### Modern Decorator Usage
+
+#### Available Decorators
+From `utils.handler_decorators`:
+
+1. **@api_handler()** - Complete handler solution:
+   ```python
+   @api_handler()  # Auth + error handling + logging
+   @api_handler(require_ownership=("id", "account"))  # + ownership verification
+   @api_handler(log_requests=False)  # Disable request logging
+   ```
+
+2. **@standard_error_handling** - Automatic error mapping:
+   - ValidationError/ValueError/KeyError → 400
+   - NotFound → 404  
+   - NotAuthorized → 403
+   - Exception → 500
+
+3. **@require_authenticated_user** - Extract user from event
+4. **@require_resource_ownership("param", "type")** - Verify ownership
+5. **@log_request_response** - Request/response logging
+
+#### Main Handler Pattern
+**REQUIRED**: All handlers must use this clean routing pattern:
+```python
+from utils.handler_decorators import require_authenticated_user, standard_error_handling
+
+@require_authenticated_user
+@standard_error_handling  
+def handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """Main handler with clean route mapping."""
+    route = event.get("routeKey")
+    if not route:
+        raise ValueError("Route not specified")
+    
+    route_map = {
+        "GET /items": list_items_handler,
+        "POST /items": create_item_handler,
+        "GET /items/{id}": get_item_handler,
+        "PUT /items/{id}": update_item_handler,
+        "DELETE /items/{id}": delete_item_handler,
+    }
+    
+    handler_func = route_map.get(route)
+    if not handler_func:
+        raise ValueError(f"Unsupported route: {route}")
+    
+    return handler_func(event, user_id)
+```
+
+### Code Reduction Recommendations
+
+1. **Common Response Decorators**: Create decorators for standard response patterns:
+   ```python
+   @handle_validation_errors
+   @handle_not_found_errors  
+   @handle_server_errors
+   def operation_handler(event, user_id):
+       # Business logic only - errors handled by decorators
+       return {"data": result}
+   ```
+   
+   Or create a unified decorator:
+   ```python
+   @standard_error_handling
+   def operation_handler(event, user_id):
+       # Automatically wraps exceptions in appropriate HTTP responses
+       # ValidationError -> 400, NotFound -> 404, Exception -> 500
+   ```
+
+2. **Use Existing Auth Decorator**: The `@require_auth` decorator in `utils.auth` replaces manual authentication checks:
+   ```python
+   from utils.auth import require_auth
+   
+   @require_auth
+   async def handler(event, context):
+       # User is guaranteed to be authenticated
+       user = get_user_from_event(event)  # Will not be None
+   ```
+
+3. **Resource Ownership Decorator**: Create decorator to automatically verify resource ownership:
+   ```python
+   @require_resource_ownership("account_id")
+   def handler(event, user_id, account): ...
+   ```
+   
+   **Combined Decorator Pattern**: Stack decorators for maximum code reduction:
+   ```python
+   @require_auth
+   @standard_error_handling
+   @require_resource_ownership("account_id")
+   @log_request_response
+   async def update_account_handler(event, context, account):
+       # Handler receives pre-validated account object
+       # All auth, error handling, and logging automatic
+       update_data = parse_and_validate_json(event, AccountUpdate)
+       return account_service.update(account, update_data)
+   ```
+
+4. **Validation Middleware**: Pre-validate common patterns:
+   - UUID format validation for IDs
+   - Required field presence checking
+   - Enum value validation
+
+5. **Error Context Enhancement**: Add request tracing to all error logs:
+   ```python
+   request_id = event.get("requestContext", {}).get("requestId", "unknown")
+   logger.error(f"[{request_id}] Error: {str(e)}")
+   ```
+
+6. **Transaction Wrapper**: For operations requiring database transactions:
+   ```python
+   @with_db_transaction
+   def multi_step_operation(event, user_id, tx): ...
+   ```

@@ -421,9 +421,12 @@ class S3FileStreamer:
 class ExportPackageBuilder:
     """Enhanced package builder with streaming and compression capabilities"""
     
-    def __init__(self, bucket_name: str, streaming_options: Optional[FileStreamingOptions] = None):
-        self.bucket_name = bucket_name
+    def __init__(self, bucket_name: str, streaming_options: Optional[FileStreamingOptions] = None, file_storage_bucket: Optional[str] = None):
+        self.bucket_name = bucket_name  # For storing the final FZIP package
+        self.file_storage_bucket = file_storage_bucket or bucket_name  # For accessing transaction files
         self.file_streamer = S3FileStreamer(bucket_name, streaming_options)
+        # Create separate streamer for accessing transaction files from file storage bucket
+        self.file_access_streamer = S3FileStreamer(self.file_storage_bucket, streaming_options)
         self.compression_enabled = streaming_options.enable_compression if streaming_options else True
         
     def build_package_with_streaming(self, export_data: Dict[str, Any], 
@@ -527,7 +530,7 @@ class ExportPackageBuilder:
             if not file_info.get('s3Key'):
                 continue
                 
-            file_id = file_info['fileId']
+            file_id = str(file_info['fileId'])  # Convert UUID to string for path operations
             filename = file_info.get('fileName', f'file_{file_id}')
             
             # Create subdirectory for each file
@@ -539,9 +542,9 @@ class ExportPackageBuilder:
                 'local_filename': os.path.join(file_id, filename)
             })
         
-        # Process files in batches
+        # Process files in batches using file access streamer (for file storage bucket)
         if file_list:
-            return self.file_streamer.batch_download_files(file_list, files_dir, max_workers=4)
+            return self.file_access_streamer.batch_download_files(file_list, files_dir, max_workers=4)
         else:
             return []
 

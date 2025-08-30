@@ -1,0 +1,39 @@
+---
+description: Build and utility script rules
+globs: scripts/**
+alwaysApply: false
+---
+
+# Scripts Conventions
+
+## Script Organization
+- build_backend.sh - Backend builds with venv activation
+- build_frontend.sh - Frontend builds and deployment
+- test_*.sh - Various testing scripts
+- Keep scripts executable and well-documented
+- Use absolute paths and error handling
+
+## Script Standards
+- Include proper error handling and exit codes
+- Use absolute paths where possible
+- Document script purpose and usage
+- Make scripts idempotent when possible
+- Include verbose output for debugging
+
+## Testing Scripts
+- test_*.sh - Component-specific tests
+- run_all_tests.sh - Comprehensive test runner
+- Follow consistent naming patterns
+- Include setup and teardown procedures
+
+## Build Scripts
+- Backend: Activate venv, install deps, package for Lambda
+- Frontend: Build, test, deploy to S3/CloudFront
+- Use consistent build environments
+- Handle build artifacts properly
+
+## Utility Scripts
+- Keep utility scripts well-organized
+- Document dependencies and requirements
+- Include usage examples
+- Handle different environments (dev, staging, prod)

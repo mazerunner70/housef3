@@ -1,0 +1,205 @@
+.fzip-restore-results {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 32px;
+  background: var(--card-background, #ffffff);
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.results-header {
+  margin-bottom: 32px;
+}
+
+.results-header h3 {
+  margin: 0 0 12px 0;
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--text-primary, #1f2937);
+}
+
+.results-header p {
+  margin: 0;
+  color: var(--text-secondary, #6b7280);
+  font-size: 1.1rem;
+}
+
+.results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.result-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 16px;
+  background: var(--background-light, #f9fafb);
+  border: 1px solid var(--border-light, #f3f4f6);
+  border-radius: 12px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.result-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.result-count {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--accent-primary, #3b82f6);
+  margin-bottom: 8px;
+}
+
+.result-label {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text-primary, #1f2937);
+  margin-bottom: 4px;
+}
+
+.result-icon {
+  font-size: 1.5rem;
+  opacity: 0.7;
+}
+
+.processing-time {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: var(--success-background-light, #f0fdf4);
+  border: 1px solid var(--success-border-light, #bbf7d0);
+  border-radius: 8px;
+}
+
+.processing-time p {
+  margin: 0;
+  color: var(--success-text, #166534);
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.time-icon {
+  font-size: 1.2rem;
+}
+
+.warnings-section {
+  margin-bottom: 24px;
+  padding: 20px;
+  background: var(--warning-background-light, #fffbeb);
+  border: 1px solid var(--warning-border-light, #fed7aa);
+  border-radius: 8px;
+  text-align: left;
+}
+
+.warnings-section h4 {
+  margin: 0 0 12px 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--warning-text-dark, #92400e);
+}
+
+.warnings-description {
+  margin: 0 0 16px 0;
+  color: var(--warning-text, #d97706);
+  font-size: 0.95rem;
+}
+
+.warnings-list {
+  margin: 0;
+  padding: 0 0 0 20px;
+  list-style-type: disc;
+}
+
+.warning-item {
+  color: var(--warning-text, #d97706);
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.warning-item:last-child {
+  margin-bottom: 0;
+}
+
+.success-message {
+  margin-bottom: 32px;
+  padding: 20px;
+  background: var(--success-background, #ecfdf5);
+  border: 1px solid var(--success-border, #a7f3d0);
+  border-radius: 8px;
+}
+
+.success-message p {
+  margin: 0;
+  color: var(--success-text, #065f46);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.results-actions {
+  display: flex;
+  justify-content: center;
+}
+
+.btn-primary {
+  padding: 14px 28px;
+  background: var(--button-primary-bg, #3b82f6);
+  border: 1px solid var(--button-primary-border, #3b82f6);
+  border-radius: 8px;
+  color: var(--button-primary-text, #ffffff);
+  font-weight: 600;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 180px;
+}
+
+.btn-primary:hover {
+  background: var(--button-primary-hover, #2563eb);
+  border-color: var(--button-primary-border-hover, #2563eb);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .fzip-restore-results {
+    padding: 24px 16px;
+    margin: 16px;
+  }
+  
+  .results-grid {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 16px;
+  }
+  
+  .result-item {
+    padding: 16px 12px;
+  }
+  
+  .result-count {
+    font-size: 1.5rem;
+  }
+  
+  .results-header h3 {
+    font-size: 1.5rem;
+  }
+  
+  .warnings-section,
+  .success-message,
+  .processing-time {
+    padding: 16px;
+  }
+}

@@ -6,7 +6,7 @@ resource "aws_apigatewayv2_api" "main" {
     allow_origins = ["http://localhost:5173"]
     allow_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"]
     allow_headers = ["Authorization", "Content-Type", "Origin", "Accept", "Access-Control-Request-Headers", "Access-Control-Request-Method"]
-    max_age      = 600
+    max_age       = 600
   }
 
   tags = {
@@ -20,7 +20,7 @@ resource "aws_apigatewayv2_authorizer" "cognito" {
   api_id           = aws_apigatewayv2_api.main.id
   authorizer_type  = "JWT"
   identity_sources = ["$request.header.Authorization"]
-  name            = "${var.project_name}-${var.environment}-cognito"
+  name             = "${var.project_name}-${var.environment}-cognito"
 
   jwt_configuration {
     audience = [aws_cognito_user_pool_client.main.id]
@@ -33,7 +33,7 @@ resource "aws_apigatewayv2_integration" "getcolors" {
   integration_type       = "AWS_PROXY"
   integration_uri        = aws_lambda_function.getcolors.invoke_arn
   payload_format_version = "2.0"
-  description           = "Lambda integration for getcolors endpoint"
+  description            = "Lambda integration for getcolors endpoint"
 }
 
 resource "aws_apigatewayv2_route" "getcolors" {
@@ -50,7 +50,7 @@ resource "aws_apigatewayv2_integration" "file_operations" {
   integration_type       = "AWS_PROXY"
   integration_uri        = aws_lambda_function.file_operations.invoke_arn
   payload_format_version = "2.0"
-  description           = "Lambda integration for file operations endpoints"
+  description            = "Lambda integration for file operations endpoints"
 }
 
 # File Transaction Routes
@@ -193,7 +193,7 @@ resource "aws_apigatewayv2_integration" "account_operations" {
   integration_type       = "AWS_PROXY"
   integration_uri        = aws_lambda_function.account_operations.invoke_arn
   payload_format_version = "2.0"
-  description           = "Lambda integration for account operations endpoints"
+  description            = "Lambda integration for account operations endpoints"
 }
 
 
@@ -302,7 +302,16 @@ resource "aws_apigatewayv2_integration" "transaction_operations" {
   integration_type       = "AWS_PROXY"
   integration_uri        = aws_lambda_function.transaction_operations.invoke_arn
   payload_format_version = "2.0"
-  description           = "Lambda integration for transaction operations"
+  description            = "Lambda integration for transaction operations"
+}
+
+# Transfer Operations Integration
+resource "aws_apigatewayv2_integration" "transfer_operations" {
+  api_id                 = aws_apigatewayv2_api.main.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.transfer_operations.invoke_arn
+  payload_format_version = "2.0"
+  description            = "Lambda integration for transfer operations"
 }
 
 # Transaction Routes
@@ -318,6 +327,39 @@ resource "aws_apigatewayv2_route" "delete_transaction" {
   api_id             = aws_apigatewayv2_api.main.id
   route_key          = "DELETE /transactions/{id}"
   target             = "integrations/${aws_apigatewayv2_integration.transaction_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Transfer Routes
+resource "aws_apigatewayv2_route" "detect_transfers" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /transfers/detect"
+  target             = "integrations/${aws_apigatewayv2_integration.transfer_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "get_paired_transfers" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /transfers/paired"
+  target             = "integrations/${aws_apigatewayv2_integration.transfer_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "mark_transfer_pair" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /transfers/mark-pair"
+  target             = "integrations/${aws_apigatewayv2_integration.transfer_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "bulk_mark_transfers" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /transfers/bulk-mark"
+  target             = "integrations/${aws_apigatewayv2_integration.transfer_operations.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
@@ -567,7 +609,7 @@ resource "aws_apigatewayv2_integration" "analytics_operations" {
   integration_type       = "AWS_PROXY"
   integration_uri        = aws_lambda_function.analytics_operations.invoke_arn
   payload_format_version = "2.0"
-  description           = "Lambda integration for analytics operations endpoints"
+  description            = "Lambda integration for analytics operations endpoints"
 }
 
 # Analytics routes
@@ -601,7 +643,7 @@ resource "aws_apigatewayv2_integration" "export_operations" {
   integration_type       = "AWS_PROXY"
   integration_uri        = aws_lambda_function.export_operations.invoke_arn
   payload_format_version = "2.0"
-  description           = "Lambda integration for export operations endpoints"
+  description            = "Lambda integration for export operations endpoints"
 }
 
 # Export routes
@@ -649,9 +691,9 @@ resource "aws_apigatewayv2_route" "delete_export" {
 resource "aws_apigatewayv2_integration" "fzip_operations" {
   api_id                 = aws_apigatewayv2_api.main.id
   integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.fzip_operations.invoke_arn
+  integration_uri        = aws_lambda_alias.fzip_operations_version.invoke_arn
   payload_format_version = "2.0"
-  description           = "Lambda integration for unified FZIP backup/restore operations"
+  description            = "Lambda integration for unified FZIP backup/restore operations (versioned)"
 }
 
 
@@ -740,6 +782,31 @@ resource "aws_apigatewayv2_route" "fzip_upload_restore_package" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+resource "aws_apigatewayv2_route" "fzip_start_restore_processing" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /fzip/restore/{jobId}/start"
+  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# New simplified flow endpoints
+resource "aws_apigatewayv2_route" "fzip_restore_upload_url" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /fzip/restore/upload-url"
+  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "fzip_cancel_restore" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /fzip/restore/{jobId}/cancel"
+  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 resource "aws_apigatewayv2_stage" "main" {
   api_id      = aws_apigatewayv2_api.main.id
   name        = var.environment
@@ -749,14 +816,14 @@ resource "aws_apigatewayv2_stage" "main" {
     destination_arn = aws_cloudwatch_log_group.api_gateway.arn
     format = jsonencode({
       requestId      = "$context.requestId"
-      ip            = "$context.identity.sourceIp"
-      requestTime   = "$context.requestTime"
-      httpMethod    = "$context.httpMethod"
-      routeKey      = "$context.routeKey"
-      status        = "$context.status"
-      protocol      = "$context.protocol"
+      ip             = "$context.identity.sourceIp"
+      requestTime    = "$context.requestTime"
+      httpMethod     = "$context.httpMethod"
+      routeKey       = "$context.routeKey"
+      status         = "$context.status"
+      protocol       = "$context.protocol"
       responseLength = "$context.responseLength"
-      errorMessage  = "$context.error.message"
+      errorMessage   = "$context.error.message"
     })
   }
 }
@@ -817,6 +884,15 @@ resource "aws_lambda_permission" "api_gateway_transactions" {
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/transactions*"
 }
 
+# Lambda permission for transfer operations
+resource "aws_lambda_permission" "api_gateway_transfers" {
+  statement_id  = "AllowAPIGatewayInvokeTransfers"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.transfer_operations.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/transfers*"
+}
+
 # Lambda permission for getcolors
 resource "aws_lambda_permission" "getcolors" {
   statement_id  = "AllowAPIGatewayInvoke"
@@ -861,13 +937,67 @@ resource "aws_lambda_permission" "api_gateway_export" {
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
 }
 
-# Lambda permission for FZIP operations (unified backup/restore)
+# Lambda permission for FZIP operations (unified backup/restore) - via alias
 resource "aws_lambda_permission" "api_gateway_fzip" {
   statement_id  = "AllowAPIGatewayInvokeFZIPLambda"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.fzip_operations.function_name
+  function_name = aws_lambda_alias.fzip_operations_version.arn
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/fzip*"
+}
+
+# =========================================
+# USER PREFERENCES API INTEGRATION
+# =========================================
+
+# Integration for user preferences operations
+resource "aws_apigatewayv2_integration" "user_preferences_operations" {
+  api_id             = aws_apigatewayv2_api.main.id
+  integration_type   = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri    = aws_lambda_function.user_preferences_operations.invoke_arn
+}
+
+# Routes for user preferences operations
+resource "aws_apigatewayv2_route" "get_user_preferences" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /user-preferences"
+  target             = "integrations/${aws_apigatewayv2_integration.user_preferences_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "update_user_preferences" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "PUT /user-preferences"
+  target             = "integrations/${aws_apigatewayv2_integration.user_preferences_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "get_transfer_preferences" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /user-preferences/transfers"
+  target             = "integrations/${aws_apigatewayv2_integration.user_preferences_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "update_transfer_preferences" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "PUT /user-preferences/transfers"
+  target             = "integrations/${aws_apigatewayv2_integration.user_preferences_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Lambda permission for user preferences
+resource "aws_lambda_permission" "api_gateway_user_preferences_ops" {
+  statement_id  = "AllowAPIGatewayInvokeUserPreferencesLambda"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.user_preferences_operations.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
 }
 
 # Outputs

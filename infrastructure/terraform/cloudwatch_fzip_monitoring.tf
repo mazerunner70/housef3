@@ -149,10 +149,10 @@ resource "aws_cloudwatch_dashboard" "fzip_operations" {
         height = 6
 
         properties = {
-          query   = "SOURCE '${data.aws_cloudwatch_log_group.fzip_operations.name}'\n| fields @timestamp, @message\n| filter @message like /ERROR/\n| sort @timestamp desc\n| limit 100"
-          region  = "us-east-1"
-          title   = "Recent FZIP Operations Errors"
-          view    = "table"
+          query  = "SOURCE '${data.aws_cloudwatch_log_group.fzip_operations.name}'\n| fields @timestamp, @message\n| filter @message like /ERROR/\n| sort @timestamp desc\n| limit 100"
+          region = "us-east-1"
+          title  = "Recent FZIP Operations Errors"
+          view   = "table"
         }
       },
       {
@@ -196,7 +196,7 @@ resource "aws_cloudwatch_dashboard" "fzip_operations" {
           stat    = "Average"
         }
       },
-            {
+      {
         type   = "metric"
         x      = 0
         y      = 24
@@ -274,7 +274,7 @@ resource "aws_cloudwatch_metric_alarm" "fzip_backup_long_duration" {
   namespace           = "HouseF3/FZIP"
   period              = "300"
   statistic           = "Average"
-  threshold           = "300"  # 5 minutes
+  threshold           = "300" # 5 minutes
   alarm_description   = "This metric monitors FZIP backup processing time"
   alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
 
@@ -297,9 +297,9 @@ resource "aws_cloudwatch_metric_alarm" "fzip_backup_low_success_rate" {
   evaluation_periods  = "3"
   metric_name         = "BackupSuccessRate"
   namespace           = "HouseF3/FZIP"
-  period              = "900"  # 15 minutes
+  period              = "900" # 15 minutes
   statistic           = "Average"
-  threshold           = "90"   # 90% success rate
+  threshold           = "90" # 90% success rate
   alarm_description   = "This metric monitors FZIP backup success rate"
   alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
   treat_missing_data  = "notBreaching"
@@ -346,7 +346,7 @@ resource "aws_cloudwatch_metric_alarm" "fzip_lambda_duration" {
   namespace           = "AWS/Lambda"
   period              = "300"
   statistic           = "Average"
-  threshold           = "600000"  # 10 minutes in milliseconds
+  threshold           = "600000" # 10 minutes in milliseconds
   alarm_description   = "This metric monitors FZIP Lambda function duration"
   alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
 
@@ -392,7 +392,7 @@ resource "aws_cloudwatch_metric_alarm" "fzip_restore_long_duration" {
   namespace           = "HouseF3/FZIP"
   period              = "300"
   statistic           = "Average"
-  threshold           = "600"  # 10 minutes
+  threshold           = "600" # 10 minutes
   alarm_description   = "This metric monitors FZIP restore processing time"
   alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
 
@@ -414,7 +414,7 @@ resource "aws_cloudwatch_metric_alarm" "fzip_restore_long_duration" {
 
 resource "aws_sns_topic" "fzip_alerts" {
   name              = "${var.project_name}-${var.environment}-fzip-alerts"
-  kms_master_key_id = "alias/aws/sns"  # Use AWS managed key for SNS encryption
+  kms_master_key_id = "alias/aws/sns" # Use AWS managed key for SNS encryption
 
   tags = {
     Environment = var.environment

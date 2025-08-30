@@ -2,12 +2,14 @@
 Authentication utility functions.
 """
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
+from functools import wraps
 
 from models.file_map import FieldMapping, FileMap
 from models.transaction_file import TransactionFile
 from models.account import Account
 from utils.db_utils import get_account, get_file_map, get_transaction_file
+from utils.lambda_utils import create_response
 
 # Configure logging
 logger = logging.getLogger()
@@ -63,4 +65,32 @@ def get_user_from_event(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Error extracting user from event: {str(e)}")
         return None
+
+
+def require_auth(func: Callable) -> Callable:
+    """
+    Decorator that requires authentication for a Lambda handler function.
+    
+    This decorator checks for a valid user in the event and returns a 401 
+    response if no authenticated user is found. If authentication is successful,
+    the original handler function is called.
+    
+    Args:
+        func: The handler function to wrap
+        
+    Returns:
+        The wrapped function that includes authentication checks
+    """
+    @wraps(func)
+    async def wrapper(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+        # Check for authenticated user
+        user = get_user_from_event(event)
+        if not user:
+            logger.warning("Authentication required but no user found in event")
+            return create_response(401, {"error": "Unauthorized"})
+        
+        # User is authenticated, proceed with original function
+        return await func(event, context)
+    
+    return wrapper
 
