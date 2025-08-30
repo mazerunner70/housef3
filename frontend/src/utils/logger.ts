@@ -100,7 +100,17 @@ const getCurrentUserId = (): string | undefined => {
 };
 
 const generateRequestId = (): string => {
-    return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Use crypto.getRandomValues for cryptographically secure random generation
+    const array = new Uint8Array(6); // 6 bytes = 48 bits of entropy
+    crypto.getRandomValues(array);
+
+    // Convert to base36 string for readability
+    const randomPart = Array.from(array)
+        .map(byte => byte.toString(36))
+        .join('')
+        .substring(0, 9);
+
+    return `req_${Date.now()}_${randomPart}`;
 };
 
 export interface Logger {
