@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 
 from models.fzip import FZIPStatus, FZIPType, FZIPJob
-from src.handlers import fzip_operations as ops
+from handlers import fzip_operations as ops
 
 
 def _auth_headers():

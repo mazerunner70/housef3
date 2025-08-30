@@ -50,6 +50,8 @@ def _ensure_job(user_id: str, restore_id: str, s3_key: str, package_size: Option
         existing.package_size = package_size
         existing.package_format = FZIPFormat.FZIP
         existing.error = None
+        # Ensure validation_results is properly initialized
+        existing.validation_results = existing.validation_results or {}
         update_fzip_job(existing)
         return existing
 
@@ -120,7 +122,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             # Perform initial validation only
             try:
                 # Parse package
+                logger.info(f"Starting package parsing for restore job {restore_id} from S3 key: {s3_key}")
                 package_data = fzip_service._parse_package(s3_key)
+                logger.info(f"Successfully parsed package for restore job {restore_id}")
+                logger.debug(f"Package manifest for job {restore_id}: {package_data.get('manifest', {})}")
+
+                # Ensure validation_results is initialized before assigning nested keys
+                job.validation_results = job.validation_results or {}
 
                 # Schema validation
                 job.current_phase = "validating_schema"
@@ -129,8 +137,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 schema_results = fzip_service._validate_schema(package_data)
                 job.validation_results['schema'] = schema_results
                 if not schema_results.get('valid'):
+                    detailed_errors = schema_results.get('errors', ['Unknown schema validation error'])
+                    error_message = f"Schema validation failed: {'; '.join(detailed_errors)}"
+                    logger.error(f"Schema validation failed for restore job {restore_id}: {detailed_errors}")
                     job.status = FZIPStatus.RESTORE_VALIDATION_FAILED
-                    job.error = "Schema validation failed"
+                    job.error = error_message
                     update_fzip_job(job)
                     continue
 
@@ -141,8 +152,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 business_results = fzip_service._validate_business_rules(package_data, user_id)
                 job.validation_results['business'] = business_results
                 if not business_results.get('valid'):
+                    detailed_errors = business_results.get('errors', ['Unknown business validation error'])
+                    error_message = f"Business validation failed: {'; '.join(detailed_errors)}"
+                    logger.error(f"Business validation failed for restore job {restore_id}: {detailed_errors}")
                     job.status = FZIPStatus.RESTORE_VALIDATION_FAILED
-                    job.error = "Business validation failed"
+                    job.error = error_message
                     update_fzip_job(job)
                     continue
 
@@ -150,15 +164,26 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 empty_profile_results = fzip_service._validate_empty_profile(user_id)
                 job.validation_results['profile'] = empty_profile_results
                 if not empty_profile_results.get('valid'):
+                    detailed_errors = empty_profile_results.get('errors', ['Unknown profile validation error'])
+                    error_message = f"Profile validation failed: {'; '.join(detailed_errors)}"
+                    logger.error(f"Profile validation failed for restore job {restore_id}: {detailed_errors}")
                     job.status = FZIPStatus.RESTORE_VALIDATION_FAILED
-                    job.error = "Profile not empty"
+                    job.error = error_message
                     update_fzip_job(job)
                     continue
 
-                # Passed all validations
-                job.status = FZIPStatus.RESTORE_VALIDATION_PASSED
+                # Passed all validations - ready for user confirmation to start restore
+                job.status = FZIPStatus.RESTORE_AWAITING_CONFIRMATION
                 job.progress = 40
-                job.current_phase = "validated_waiting_to_start"
+                job.current_phase = "awaiting_user_confirmation"
+                
+                # Add simplified validation results for frontend display
+                job.validation_results.update({
+                    'profileEmpty': empty_profile_results.get('valid', False),
+                    'schemaValid': schema_results.get('valid', False),
+                    'ready': True  # All validations passed, so ready for restore
+                })
+                
                 update_fzip_job(job)
 
             except Exception as e:

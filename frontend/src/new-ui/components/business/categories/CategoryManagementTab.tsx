@@ -1,11 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Category, CategorySuggestionStrategy, CategoryRule, MatchCondition, CategoryHierarchy, RuleTestResponse, CategoryCreate, CategoryType } from '../../types/Category';
-import { useCategories, useCategoryRules } from '../hooks/useCategories';
-import { useRealTimeRuleTesting } from '../hooks/useRealTimeRuleTesting';
-import { CategoryService } from '../../services/CategoryService';
-import CategoryHierarchyTree from '../components/CategoryHierarchyTree';
-import RuleBuilder from '../components/RuleBuilder';
-import ConfirmationModal from '../components/ConfirmationModal';
+import { Category, CategorySuggestionStrategy, CategoryRule, MatchCondition, CategoryHierarchy, RuleTestResponse, CategoryCreate, CategoryType } from '@/types/Category';
+import { useCategories, useCategoryRules } from '@/new-ui/hooks/useCategories';
+import { useRealTimeRuleTesting } from '@/new-ui/hooks/useRealTimeRuleTesting';
+import { CategoryService } from '@/services/CategoryService';
+import CategoryHierarchyTree from '@/new-ui/components/CategoryHierarchyTree';
+import RuleBuilder from '@/new-ui/components/RuleBuilder';
+import ConfirmationModal from '@/new-ui/components/ConfirmationModal';
 import './CategoryManagementTab.css';
 
 interface CategoryManagementTabProps {
@@ -20,7 +20,7 @@ interface CategoryManagementTabProps {
   onCategoryCreated?: (category: Category) => void;
 }
 
-const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({ 
+const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
   initialCategoryData,
   onCategoryCreated
 }) => {
@@ -41,7 +41,7 @@ const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
   const [suggestionStrategy, setSuggestionStrategy] = useState<CategorySuggestionStrategy>(CategorySuggestionStrategy.ALL_MATCHES);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createParentId, setCreateParentId] = useState<string | undefined>();
-  
+
   // Deep-linking state
   const [prePopulatedData, setPrePopulatedData] = useState<{
     categoryName?: string;
@@ -61,28 +61,28 @@ const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
     testResults,
     error: testError
   } = useRealTimeRuleTesting();
-  
+
   // Reset categories state
   const [showResetModal, setShowResetModal] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [resetResults, setResetResults] = useState<any>(null);
-  
+
   // Handle initial category data from deep-linking
   useEffect(() => {
     if (initialCategoryData) {
       handleInitialCategoryData(initialCategoryData);
     }
   }, [initialCategoryData]);
-  
+
   const handleInitialCategoryData = useCallback(async (data: typeof initialCategoryData) => {
     if (!data) return;
-    
+
     // Load suggestions if we have a transaction description
     if (data.transactionDescription) {
       setIsLoadingSuggestions(true);
       try {
         const suggestions = await CategoryService.getQuickCategorySuggestions(data.transactionDescription);
-        
+
         setPrePopulatedData({
           categoryName: data.suggestedName || suggestions.suggestedCategory.name,
           categoryType: data.suggestedType || (suggestions.suggestedCategory.type === 'INCOME' ? CategoryType.INCOME : CategoryType.EXPENSE),
@@ -118,7 +118,7 @@ const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
         transactionDescription: data.transactionDescription
       });
     }
-    
+
     // Auto-open create modal if requested
     if (data.autoOpenCreateModal !== false) {
       setShowCreateModal(true);
@@ -150,10 +150,10 @@ const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
       const results = await CategoryService.resetAndReapplyCategories();
       setResetResults(results);
       setShowResetModal(false);
-      
+
       // Show success message and reload categories
       alert(`Categories reset successfully! ${results.results.totalApplicationsApplied} category assignments were applied to ${results.results.totalTransactionsProcessed} transactions.`);
-      
+
       // Refresh the categories list
       window.location.reload();
     } catch (error) {
@@ -185,11 +185,11 @@ const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
           <h2>Category Management</h2>
           <p>Organize transactions with intelligent category rules and hierarchies.</p>
         </div>
-        
+
         <div className="category-management-controls">
           <div className="control-group">
             <label htmlFor="suggestion-strategy">Suggestion Strategy:</label>
-            <select 
+            <select
               id="suggestion-strategy"
               value={suggestionStrategy}
               onChange={(e) => setSuggestionStrategy(e.target.value as CategorySuggestionStrategy)}
@@ -201,15 +201,15 @@ const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
               <option value="priority_filtered">Priority Filtered</option>
             </select>
           </div>
-          
-          <button 
+
+          <button
             className={`suggestion-toggle ${showSuggestions ? 'active' : ''}`}
             onClick={() => setShowSuggestions(!showSuggestions)}
           >
             {showSuggestions ? '👁️ Hide' : '👁️‍🗨️ Show'} Suggestions
           </button>
-          
-          <button 
+
+          <button
             className="reset-categories-btn"
             onClick={() => setShowResetModal(true)}
             disabled={isResetting}
@@ -219,10 +219,10 @@ const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
           </button>
         </div>
       </div>
-      
+
       <div className="category-main-content">
         <div className="category-list-section">
-          <CategoryHierarchyTree 
+          <CategoryHierarchyTree
             hierarchy={hierarchy}
             selectedCategory={selectedCategory}
             onSelectCategory={handleSelectCategory}
@@ -232,10 +232,10 @@ const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
             isLoading={isLoading}
           />
         </div>
-        
+
         <div className="category-details-section">
           {selectedCategory ? (
-            <CategoryEditor 
+            <CategoryEditor
               category={selectedCategory}
               hierarchy={hierarchy}
               suggestionStrategy={suggestionStrategy}
@@ -265,7 +265,7 @@ const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
               setCreateParentId(undefined);
               setPrePopulatedData(null);
               selectCategory(newCategory);
-              
+
               // Call callback if provided
               if (onCategoryCreated) {
                 onCategoryCreated(newCategory);
@@ -279,7 +279,7 @@ const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
           }}
         />
       )}
-      
+
       {/* Reset Categories Confirmation Modal */}
       <ConfirmationModal
         isOpen={showResetModal}
@@ -308,8 +308,8 @@ interface CategoryEditorProps {
   onDeleteCategory: (id: string) => Promise<boolean>;
 }
 
-const CategoryEditor: React.FC<CategoryEditorProps> = ({ 
-  category, 
+const CategoryEditor: React.FC<CategoryEditorProps> = ({
+  category,
   onUpdateCategory,
   onDeleteCategory
 }) => {
@@ -413,13 +413,13 @@ const CategoryEditor: React.FC<CategoryEditorProps> = ({
           {category.type}
         </span>
       </div>
-      
+
       <div className="editor-content">
         {/* Basic Category Information */}
         <div className="category-basic-info">
           <div className="section-header">
             <h4>📋 Basic Information</h4>
-            <button 
+            <button
               className="edit-btn"
               onClick={() => setIsEditingBasicInfo(!isEditingBasicInfo)}
             >
@@ -457,13 +457,13 @@ const CategoryEditor: React.FC<CategoryEditorProps> = ({
                   />
                 </div>
               </div>
-              
+
               <div className="form-actions">
                 <button className="save-btn" onClick={handleSaveBasicInfo}>
                   Save Changes
                 </button>
-                <button 
-                  className="cancel-btn" 
+                <button
+                  className="cancel-btn"
                   onClick={() => setIsEditingBasicInfo(false)}
                 >
                   Cancel
@@ -484,7 +484,7 @@ const CategoryEditor: React.FC<CategoryEditorProps> = ({
         <div className="category-rules-section">
           <div className="section-header">
             <h4>⚡ Automation Rules ({rules.length})</h4>
-            <button 
+            <button
               className="add-rule-btn"
               onClick={() => {
                 setIsCreatingRule(true);
@@ -573,7 +573,7 @@ const CategoryEditor: React.FC<CategoryEditorProps> = ({
               <div className="empty-icon">⚡</div>
               <h4>No automation rules yet</h4>
               <p>Create rules to automatically categorize your transactions based on patterns.</p>
-              <button 
+              <button
                 className="create-first-rule-btn"
                 onClick={() => {
                   setIsCreatingRule(true);
@@ -592,7 +592,7 @@ const CategoryEditor: React.FC<CategoryEditorProps> = ({
             <h4>🛠️ Category Actions</h4>
           </div>
           <div className="action-buttons">
-            <button 
+            <button
               className="danger-btn"
               onClick={() => {
                 if (window.confirm(`Are you sure you want to delete the category "${category.name}"? This action cannot be undone.`)) {
@@ -669,13 +669,13 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Rule creation state for pre-populated patterns
   const [showRuleCreation, setShowRuleCreation] = useState(!!prePopulatedData?.suggestedPatterns?.length);
   const [selectedPattern, setSelectedPattern] = useState(
     prePopulatedData?.suggestedPatterns?.[0]?.pattern || ''
   );
-  
+
   // Update form when pre-populated data changes
   useEffect(() => {
     if (prePopulatedData) {
@@ -684,7 +684,7 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
         name: prePopulatedData.categoryName || prev.name,
         type: prePopulatedData.categoryType === 'INCOME' ? CategoryType.INCOME : CategoryType.EXPENSE
       }));
-      
+
       if (prePopulatedData.suggestedPatterns?.length) {
         setShowRuleCreation(true);
         setSelectedPattern(prePopulatedData.suggestedPatterns[0].pattern);
@@ -706,7 +706,7 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.name.trim()) {
       setError('Category name is required');
       return;
@@ -722,7 +722,7 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
         const selectedPatternData = prePopulatedData?.suggestedPatterns?.find(
           p => p.pattern === selectedPattern
         );
-        
+
         const response = await CategoryService.createWithRule(
           formData.name,
           formData.type,
@@ -730,7 +730,7 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
           selectedPatternData?.field || 'description', // Default to 'description' field
           selectedPatternData?.condition || 'contains' // Default to 'contains' condition
         );
-        
+
         // Call the onCreate callback with the created category
         await onCreate({
           ...response.category,
@@ -750,7 +750,7 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
     }
   };
 
-  const parentCategory = parentCategoryId 
+  const parentCategory = parentCategoryId
     ? availableCategories.find(cat => cat.categoryId === parentCategoryId)
     : null;
 
@@ -767,16 +767,16 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
   };
 
   return (
-    <div 
-      className="modal-overlay" 
+    <div
+      className="modal-overlay"
       onClick={onCancel}
       onKeyDown={handleOverlayKeyDown}
       tabIndex={0}
       role="button"
       aria-label="Close modal"
     >
-      <div 
-        className="create-category-modal" 
+      <div
+        className="create-category-modal"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleModalKeyDown}
       >
@@ -792,7 +792,7 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
                 <strong>Parent Category:</strong> {parentCategory.name}
               </div>
             )}
-            
+
             {/* Deep-linking context */}
             {prePopulatedData?.transactionDescription && (
               <div className="deep-link-context">
@@ -802,18 +802,18 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
                 <div className="transaction-description">
                   "{prePopulatedData.transactionDescription}"
                 </div>
-                
+
                 {isLoadingSuggestions && (
                   <div className="loading-suggestions">
                     <span className="loading-spinner">⏳</span> Analyzing transaction...
                   </div>
                 )}
-                
+
                 {prePopulatedData.suggestedPatterns && prePopulatedData.suggestedPatterns.length > 0 && (
                   <div className="suggested-patterns">
                     <h5>Suggested patterns for auto-categorization:</h5>
                     {prePopulatedData.suggestedPatterns.map((pattern, index) => (
-                      <div 
+                      <div
                         key={index}
                         className={`pattern-suggestion ${selectedPattern === pattern.pattern ? 'selected' : ''}`}
                         onClick={() => setSelectedPattern(pattern.pattern)}
@@ -843,7 +843,7 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
                         <div className="pattern-explanation">{pattern.explanation}</div>
                       </div>
                     ))}
-                    
+
                     <div className="rule-creation-toggle">
                       <label>
                         <input

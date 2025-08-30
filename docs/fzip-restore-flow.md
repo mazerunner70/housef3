@@ -2,6 +2,14 @@
 
 This document explains how a restore package upload is handled end-to-end. Each step has a DID (step id) for easy reference.
 
+#### High level Stages
+1. **Upload & Validation**: Create upload url, upload file through frontend, store file in bucket, validate file (schema + business rules), notify frontend of validation status
+2. **Summary & User Decision**: Frontend presents validation status and shows summary of file contents (each object type and number of items), user can select "Start Restore" or "Delete"
+3. **Restore Processing**: If user selects start, begin unmarshalling data from file into DynamoDB, update job status with progress after each object type, user sees real-time status updates through polling
+4. **Terminal State Handling**: 
+   - **Success**: Show final status of objects created with counts, provide "Close" button
+   - **Failure**: Show user the specific error reason, provide "Retry" and "Abort" options
+
 #### Step IDs
 
 - DID-RST-01: Create restore job (returns S3 presigned POST)
@@ -11,10 +19,12 @@ This document explains how a restore package upload is handled end-to-end. Each 
 - DID-RST-05: Parse uploaded ZIP from restore bucket
 - DID-RST-06: Schema validation
 - DID-RST-07: Business rules validation
-- DID-RST-08: Restore data in phases (accounts → categories → file maps → transaction files → transactions)
-- DID-RST-09: Complete job, emit events
-- DID-RST-10: Optional manual resume from validation passed
-- DID-RST-11: API Gateway routes and infra wiring
+- DID-RST-08: Generate and return summary data for user review
+- DID-RST-09: User confirms restore start (manual trigger required)
+- DID-RST-10: Restore data in phases (accounts → categories → file maps → transaction files → transactions)
+- DID-RST-11: Complete job, emit events
+- DID-RST-12: Handle retry/abort operations for failed restores
+- DID-RST-13: API Gateway routes and infra wiring
 
 ### High-level sequence
 
@@ -59,19 +69,24 @@ else valid
   alt invalid
     S->>DB: update(status=restore_validation_failed)
   else valid
-    S->>DB: update(status=restore_processing, progress)
-    S->>DB: restore entities (phased)
-    S->>S3: write restored file contents
-    S->>DB: update(status=restore_completed)
-    S-->>UI: (via polling) status=completed
-    Note over S,DB: DID-RST-08, DID-RST-09
+    S->>S: generate summary data
+    S->>DB: update(status=restore_awaiting_confirmation, summary)
+    S-->>UI: (via polling) status=awaiting_confirmation + summary
+    Note over S,DB: DID-RST-08
   end
 end
 
-UI->>API: (optional) POST /fzip/restore/{jobId}/start
+UI->>API: POST /fzip/restore/{jobId}/start (user confirms)
 API->>H: Invoke start handler
 H->>S: resume_restore(job)
-Note over UI,S: DID-RST-10
+Note over UI,S: DID-RST-09
+
+S->>DB: update(status=restore_processing, progress)
+S->>DB: restore entities (phased)
+S->>S3: write restored file contents
+S->>DB: update(status=restore_completed, results)
+S-->>UI: (via polling) status=completed + results
+Note over S,DB: DID-RST-10, DID-RST-11
 ```
 
 
@@ -116,19 +131,24 @@ sequenceDiagram
     alt invalid
       S->>DB: update(status=restore_validation_failed)
     else valid
-      S->>DB: update(status=restore_processing, progress)
-      S->>DB: restore entities (phased)
-      S->>S3: write restored file contents
-      S->>DB: update(status=restore_completed)
-      S-->>UI: (via polling) status=completed
-      Note over S,DB: DID-RST-08, DID-RST-09
+      S->>S: generate summary data
+      S->>DB: update(status=restore_awaiting_confirmation, summary)
+      S-->>UI: (via polling) status=awaiting_confirmation + summary
+      Note over S,DB: DID-RST-08
     end
   end
 
-  UI->>API: (optional) POST /fzip/restore/{jobId}/start
+  UI->>API: POST /fzip/restore/{jobId}/start (user confirms)
   API->>H: Invoke start handler
   H->>S: resume_restore(job)
-  Note over UI,S: DID-RST-10
+  Note over UI,S: DID-RST-09
+
+  S->>DB: update(status=restore_processing, progress)
+  S->>DB: restore entities (phased)
+  S->>S3: write restored file contents
+  S->>DB: update(status=restore_completed, results)
+  S-->>UI: (via polling) status=completed + results
+  Note over S,DB: DID-RST-10, DID-RST-11
 ```
 
 ### State flow
@@ -139,9 +159,14 @@ stateDiagram-v2
   restore_uploaded --> restore_validating: DID-RST-04
   restore_validating --> restore_validation_failed: DID-RST-06/DID-RST-07 (invalid)
   restore_validating --> restore_validation_passed: DID-RST-06/DID-RST-07 (valid)
-  restore_validation_passed --> restore_processing: DID-RST-08 (begin restore)
-  restore_processing --> restore_completed: DID-RST-09
+  restore_validation_passed --> restore_awaiting_confirmation: DID-RST-08 (generate summary)
+  restore_awaiting_confirmation --> restore_processing: DID-RST-09 (user confirms)
+  restore_awaiting_confirmation --> restore_cancelled: user deletes/cancels
+  restore_processing --> restore_completed: DID-RST-11 (success)
   restore_processing --> restore_failed: error
+  restore_failed --> restore_processing: DID-RST-12 (retry)
+  restore_failed --> restore_cancelled: DID-RST-12 (abort)
+  restore_validation_failed --> restore_cancelled: user abandons
 ```
 
 ### Step details
@@ -232,7 +257,54 @@ if not business_results['valid']:
     return
 ```
 
-- DID-RST-08: Restore data in phases
+- DID-RST-08: Generate and return summary data for user review
+  - After successful validation, create summary of restore contents for user review.
+  - Summary includes counts and details for each object type.
+
+**Summary Data Structure:**
+```json
+{
+  "summary": {
+    "accounts": {
+      "count": 5,
+      "items": [
+        {"name": "Checking Account", "type": "checking"},
+        {"name": "Savings Account", "type": "savings"}
+      ]
+    },
+    "categories": {
+      "count": 25,
+      "hierarchyDepth": 3,
+      "items": [
+        {"name": "Food & Dining", "level": 1, "children": 8},
+        {"name": "Transportation", "level": 1, "children": 4}
+      ]
+    },
+    "file_maps": {
+      "count": 12,
+      "totalSize": "2.4MB"
+    },
+    "transaction_files": {
+      "count": 8,
+      "totalSize": "15.2MB",
+      "fileTypes": ["csv", "ofx", "qif"]
+    },
+    "transactions": {
+      "count": 1247,
+      "dateRange": {
+        "earliest": "2023-01-01",
+        "latest": "2024-12-31"
+      }
+    }
+  }
+}
+```
+
+- DID-RST-09: User confirms restore start (manual trigger required)
+  - API: POST `/fzip/restore/{jobId}/start`
+  - Only allowed when status is `restore_awaiting_confirmation`
+
+- DID-RST-10: Restore data in phases
   - Phases: accounts → categories → file maps → transaction files (including writing bytes to S3) → transactions.
 
 ```736:804:backend/src/services/fzip_service.py
@@ -249,7 +321,7 @@ def _restore_data(self, restore_job: FZIPJob, package_data: Dict[str, Any]):
     self._restore_transactions(...)
 ```
 
-- DID-RST-09: Complete job and emit events
+- DID-RST-11: Complete job and emit events
 
 ```796:811:backend/src/services/fzip_service.py
 restore_job.status = FZIPStatus.RESTORE_COMPLETED
@@ -260,26 +332,83 @@ update_fzip_job(restore_job)
 event_service.publish_event(RestoreCompletedEvent(...))
 ```
 
-- DID-RST-10: Optional manual resume after validation passed
-
-```643:675:backend/src/handlers/fzip_operations.py
-def start_fzip_restore_handler(...):
-    if restore_job.status != FZIPStatus.RESTORE_VALIDATION_PASSED: return 400
-    fzip_service_instance.resume_restore(restore_job)
+**Completion Results Structure:**
+```json
+{
+  "restore_results": {
+    "accounts_created": 5,
+    "categories_created": 25,
+    "file_maps_created": 12,
+    "transaction_files_created": 8,
+    "transactions_created": 1247,
+    "total_processing_time": "45.2s",
+    "warnings": []
+  }
+}
 ```
 
-- DID-RST-11: API routes and Lambda wiring
+- DID-RST-12: Handle retry/abort operations for failed restores
+  - **Retry**: POST `/fzip/restore/{jobId}/retry` - Resets job to validation and re-runs
+  - **Abort**: DELETE `/fzip/restore/{jobId}` - Cancels job and cleans up resources
+  - Only available when status is `restore_failed`
+
+- DID-RST-13: API routes and Lambda wiring
   - All restore routes mapped to the versioned `fzip_operations` Lambda via API Gateway.
 
 ```702:749:infrastructure/terraform/api_gateway.tf
 # FZIP Restore routes
-route_key = "POST /fzip/restore"
-route_key = "GET /fzip/restore"
-route_key = "GET /fzip/restore/{jobId}/status"
-route_key = "DELETE /fzip/restore/{jobId}"
-route_key = "POST /fzip/restore/{jobId}/upload"
-route_key = "POST /fzip/restore/{jobId}/start"
+route_key = "POST /fzip/restore"              # Create new restore job
+route_key = "GET /fzip/restore"               # List user's restore jobs
+route_key = "GET /fzip/restore/{jobId}/status" # Get job status + progress
+route_key = "DELETE /fzip/restore/{jobId}"    # Cancel/abort job
+route_key = "POST /fzip/restore/{jobId}/upload" # Notify upload complete
+route_key = "POST /fzip/restore/{jobId}/start"  # Confirm restore start
+route_key = "POST /fzip/restore/{jobId}/retry"  # Retry failed restore
 target = integrations/${aws_apigatewayv2_integration.fzip_operations.id}
+```
+
+### Frontend Polling Strategy
+
+The frontend should implement progressive polling to provide real-time updates:
+
+```typescript
+// Polling intervals based on job status
+const POLLING_INTERVALS = {
+  restore_uploaded: 2000,           // Fast while validating
+  restore_validating: 1000,         // Fastest during validation
+  restore_awaiting_confirmation: 0, // No polling - user action required
+  restore_processing: 500,          // Very fast during restore
+  restore_completed: 0,             // Stop polling
+  restore_failed: 0,                // Stop polling
+  restore_cancelled: 0              // Stop polling
+};
+
+// Progressive backoff for long-running operations
+function getPollingInterval(status: string, elapsedTime: number): number {
+  const baseInterval = POLLING_INTERVALS[status] || 5000;
+  
+  if (status === 'restore_processing' && elapsedTime > 60000) {
+    // Slow down after 1 minute of processing
+    return Math.min(baseInterval * 2, 2000);
+  }
+  
+  return baseInterval;
+}
+```
+
+**Status Response Structure:**
+```json
+{
+  "jobId": "job-123",
+  "status": "restore_processing",
+  "progress": 65,
+  "current_phase": "restoring_transactions",
+  "summary": { /* Only present when status=restore_awaiting_confirmation */ },
+  "restore_results": { /* Only present when status=restore_completed */ },
+  "error": "Error message", /* Only present when status=restore_failed */
+  "created_at": "2024-01-15T10:30:00Z",
+  "updated_at": "2024-01-15T10:35:22Z"
+}
 ```
 
 ### Buckets and environment

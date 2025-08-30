@@ -5,7 +5,8 @@ import { Decimal } from 'decimal.js';
 
 export enum CategoryType {
   INCOME = 'INCOME',
-  EXPENSE = 'EXPENSE'
+  EXPENSE = 'EXPENSE',
+  TRANSFER = 'TRANSFER'
 }
 
 export enum MatchCondition {
@@ -42,11 +43,11 @@ export interface CategoryRule {
   priority: number; // Higher priority rules checked first (0-100)
   enabled: boolean;
   confidence: number; // 0-100 confidence score
-  
+
   // For amount-based rules
   amountMin?: Decimal;
   amountMax?: Decimal;
-  
+
   // Suggestion behavior
   allowMultipleMatches: boolean;
   autoSuggest: boolean; // If false, rule won't create automatic suggestions
@@ -64,11 +65,11 @@ export interface Category {
   rules: CategoryRule[];
   createdAt: number;
   updatedAt: number;
-  
+
   // Enhanced hierarchical support
   inheritParentRules: boolean;
   ruleInheritanceMode: 'additive' | 'override' | 'disabled';
-  
+
   // Computed properties
   isRootCategory?: boolean;
 }

@@ -92,11 +92,11 @@ const AccountsView: React.FC = () => {
             // If not successful, error is set by the hook and will be displayed
         }
     };
-    
+
     // Prepare initialData for AccountForm, mapping from Account to AccountInputData if editingAccount exists
     const getFormInitialData = (): UIAccountInputData | undefined => {
         if (!editingAccount) return undefined; // For new account, no initial data for form (defaults are in AccountForm)
-        
+
         // For editing existing account:
         return {
             name: editingAccount.name,
@@ -126,8 +126,14 @@ const AccountsView: React.FC = () => {
             {isLoading && <p className="accounts-loading">Loading accounts...</p>}
             {error && (
                 <div className="accounts-error-container">
-                    <span className="error-message">Error: {error}</span>
-                    <button onClick={clearError} className="clear-error-button">Clear</button>
+                    <div className="error-content">
+                        <div className="error-icon">⚠️</div>
+                        <div className="error-details">
+                            <h4>Unable to Load Accounts</h4>
+                            <p>{error}</p>
+                        </div>
+                    </div>
+                    <button onClick={clearError} className="clear-error-button">Dismiss</button>
                 </div>
             )}
 
@@ -159,7 +165,7 @@ const AccountsView: React.FC = () => {
                 <ConfirmationModal
                     isOpen={showDeleteModal}
                     title="Delete Account"
-                    message={`Are you sure you want to delete account: ${accounts.find(acc=>acc.id === deletingAccountId)?.name || deletingAccountId}? This action cannot be undone.`}
+                    message={`Are you sure you want to delete account: ${accounts.find(acc => acc.id === deletingAccountId)?.name || deletingAccountId}? This action cannot be undone.`}
                     onConfirm={handleDeleteConfirm}
                     onCancel={() => {
                         setShowDeleteModal(false);

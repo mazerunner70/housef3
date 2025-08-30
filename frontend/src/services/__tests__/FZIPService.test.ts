@@ -98,7 +98,7 @@ describe('FZIPService - Restore flow (services)', () => {
 
   test('formatRestoreStatus produces user-friendly labels', () => {
     expect(formatRestoreStatus(FZIPRestoreStatus.UPLOADED)).toBe('Uploaded');
-    expect(formatRestoreStatus(FZIPRestoreStatus.VALIDATION_PASSED)).toBe('Validation Passed');
+    expect(formatRestoreStatus(FZIPRestoreStatus.VALIDATION_PASSED)).toBe('Ready to Start');
     expect(formatRestoreStatus(FZIPRestoreStatus.CANCELED)).toBe('Canceled');
   });
 });

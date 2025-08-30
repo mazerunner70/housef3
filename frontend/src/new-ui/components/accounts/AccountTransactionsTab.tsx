@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import useAccountTransactions from '../../hooks/useAccountTransactions';
-import TransactionTable from '../TransactionTable';
-import { Account } from '../../../services/AccountService';
+import useAccountTransactions from '@/new-ui/hooks/useAccountTransactions';
+import TransactionTable from '@/new-ui/components/business/transactions/TransactionTable';
 
 interface AccountTransactionsTabProps {
   accountId: string;
@@ -46,20 +45,18 @@ const AccountTransactionsTab: React.FC<AccountTransactionsTabProps> = ({ account
       <h3>Account Transactions</h3>
       <p>Showing {transactions.length} transactions for this account</p>
       <TransactionTable
-        transactions={paginatedTransactions}
+        transactions={transactions}
         isLoading={loading}
         error={error}
         categories={categories}
         accountsData={[]} // Empty array since we're not showing account column
         onEditTransaction={handleEditTransaction}
         onQuickCategoryChange={handleQuickCategoryChange}
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={handlePageChange}
-        itemsPerPage={pageSize}
-        totalItems={totalItems}
+        hasMore={false}
+        onLoadMore={() => { }}
+        itemsLoaded={transactions.length}
+        pageSize={pageSize}
         onPageSizeChange={handlePageSizeChange}
-        showAccountColumn={false} // Hide the account column since we're already in account context
       />
     </div>
   );

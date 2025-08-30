@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './AccountForm.css'; // Import the CSS file
 import { UIAccountInputData } from '../../hooks/useAccounts'; // Import updated type
-// Import enums using a namespace import to potentially resolve linter issues
-import * as AccountService from '../../../services/AccountService';
+import { AccountType, Currency } from '../../../schemas/Account';
 
 // This interface should exactly match AccountInputData from useAccounts.ts
 export interface AccountFormData {
@@ -28,8 +27,8 @@ const getEnumKeys = (e: any) => Object.keys(e).filter(k => typeof e[k as any] ==
 const AccountForm: React.FC<AccountFormProps> = ({ initialData, onSubmit, onCancel, formTitle }) => {
     const [formData, setFormData] = useState<UIAccountInputData>({
         name: '',
-        type: AccountService.AccountType.CHECKING, // Default using namespace import
-        currency: AccountService.Currency.USD,   // Default using namespace import
+        type: AccountType.CHECKING,
+        currency: Currency.USD,
         balance: undefined, // Balance is optional, and not set for new accounts via this form
         bankName: undefined, // Use undefined instead of empty string for optional field
         ...(initialData || {}),
@@ -37,18 +36,18 @@ const AccountForm: React.FC<AccountFormProps> = ({ initialData, onSubmit, onCanc
 
     useEffect(() => {
         if (initialData) {
-            setFormData(prev => ({ 
+            setFormData(prev => ({
                 ...prev, // Keep defaults if not in initialData
                 ...initialData,
                 // Ensure balance is string if present, or undefined if field is removed/not for new
-                balance: initialData.balance !== undefined ? initialData.balance : undefined 
+                balance: initialData.balance !== undefined ? initialData.balance : undefined
             }));
         } else {
             // For new account
             setFormData({
                 name: '',
-                type: AccountService.AccountType.CHECKING,
-                currency: AccountService.Currency.USD,
+                type: AccountType.CHECKING,
+                currency: Currency.USD,
                 balance: undefined, // No balance field for new accounts
                 bankName: undefined,
             });
@@ -71,9 +70,9 @@ const AccountForm: React.FC<AccountFormProps> = ({ initialData, onSubmit, onCanc
         onSubmit(dataToSubmit);
     };
 
-    // Use AccountService.AccountType and AccountService.Currency for options
-    const accountTypeOptions = getEnumKeys(AccountService.AccountType);
-    const currencyOptions = getEnumKeys(AccountService.Currency);
+    // Use AccountType and Currency for options
+    const accountTypeOptions = getEnumKeys(AccountType);
+    const currencyOptions = getEnumKeys(Currency);
 
     return (
         <div className="account-form-modal">
@@ -88,7 +87,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ initialData, onSubmit, onCanc
                         <label htmlFor="type">Account Type</label>
                         <select id="type" name="type" value={formData.type} onChange={handleChange} required>
                             {accountTypeOptions.map(key => (
-                                <option key={key} value={AccountService.AccountType[key as keyof typeof AccountService.AccountType]}>
+                                <option key={key} value={AccountType[key as keyof typeof AccountType]}>
                                     {key.charAt(0).toUpperCase() + key.slice(1).replace('_', ' ')}
                                 </option>
                             ))}
@@ -98,8 +97,8 @@ const AccountForm: React.FC<AccountFormProps> = ({ initialData, onSubmit, onCanc
                         <label htmlFor="currency">Currency</label>
                         <select id="currency" name="currency" value={formData.currency} onChange={handleChange} required>
                             {currencyOptions.map(key => (
-                                <option key={key} value={AccountService.Currency[key as keyof typeof AccountService.Currency]}>
-                                    {key} 
+                                <option key={key} value={Currency[key as keyof typeof Currency]}>
+                                    {key}
                                 </option>
                             ))}
                         </select>

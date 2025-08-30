@@ -1,59 +1,23 @@
-import Decimal from 'decimal.js';
-import { getCurrentUser, refreshToken, isAuthenticated } from './AuthService';
 import { FileMetadata } from './FileService';
+import {
+  Account,
+  AccountListResponse,
+  AccountSchema,
+  AccountListResponseSchema
+} from '@/schemas/Account';
+import { ApiClient } from '@/utils/apiClient';
+import { validateApiResponse } from '@/utils/zodErrorHandler';
+import { z } from 'zod';
+
+// Import efficient logging utilities
+import {
+  withApiLogging,
+  withServiceLogging,
+  createLogger
+} from '@/utils/logger';
 
 
-// Define enums to match backend
-export enum AccountType {
-  CHECKING = "checking",
-  SAVINGS = "savings",
-  CREDIT_CARD = "credit_card",
-  INVESTMENT = "investment",
-  LOAN = "loan",
-  OTHER = "other"
-}
-
-export enum Currency {
-  USD = "USD",
-  EUR = "EUR",
-  GBP = "GBP",
-  CAD = "CAD",
-  JPY = "JPY",
-  AUD = "AUD",
-  CHF = "CHF",
-  CNY = "CNY",
-  OTHER = "other"
-}
-
-// Define interfaces
-export interface Account {
-  accountId: string;
-  userId: string;
-  accountName: string;
-  accountType: AccountType;
-  institution: string;
-  balance: Decimal;
-  currency: Currency;
-  notes?: string;
-  isActive: boolean;
-  defaultFileMapId?: string;
-  lastTransactionDate?: number;  // milliseconds since epoch
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface AccountListResponse {
-  accounts: Account[];
-  user: {
-    id: string;
-    email: string;
-    auth_time: string;
-  };
-  metadata: {
-    totalAccounts: number;
-  };
-}
-
+// Account-specific response interfaces (not moved to types as they're service-specific)
 export interface AccountFilesResponse {
   files: FileMetadata[];
   user: {
@@ -68,6 +32,21 @@ export interface AccountFilesResponse {
   };
 }
 
+// Zod schema for AccountFilesResponse validation
+const AccountFilesResponseSchema = z.object({
+  files: z.array(z.any()), // FileMetadata schema would need to be imported from FileService
+  user: z.object({
+    id: z.string(),
+    email: z.string(),
+    auth_time: z.string()
+  }),
+  metadata: z.object({
+    totalFiles: z.number(),
+    accountId: z.string(),
+    accountName: z.string()
+  })
+});
+
 export interface UploadFileToAccountResponse {
   fileId: string;
   uploadUrl: string;
@@ -79,197 +58,247 @@ export interface UploadFileToAccountResponse {
   accountId: string;
 }
 
-// Get API endpoint from environment variables
-const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/api/accounts`;
+// Zod schema for UploadFileToAccountResponse validation
+const UploadFileToAccountResponseSchema = z.object({
+  fileId: z.string(),
+  uploadUrl: z.string(),
+  fileName: z.string(),
+  contentType: z.string(),
+  expires: z.number(),
+  processingStatus: z.string(),
+  fileFormat: z.string(),
+  accountId: z.string()
+});
 
-// Helper function to handle API requests with authentication
-const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
-  const currentUser = getCurrentUser();
-  
-  if (!currentUser || !currentUser.token) {
-    throw new Error('User not authenticated');
-  }
-  
-  try {
-    // Check if token is valid
-    if (!isAuthenticated()) {
-      // Try to refresh token
-      await refreshToken(currentUser.refreshToken);
-    }
-    
-    // Get the user again after potential refresh
-    const user = getCurrentUser();
-    if (!user || !user.token) {
-      throw new Error('Authentication failed');
-    }
-    
-    // Set up headers with authentication
-    const headers = {
-      'Authorization': user.token,
-      'Content-Type': 'application/json',
-      ...options.headers
-    };
-    
-    const requestOptions = {
-      ...options,
-      headers
-    };
-    
-    const response = await fetch(url, requestOptions);
-    
-    // Handle 401 error specifically - try to refresh token
-    if (response.status === 401) {
-      try {
-        const refreshedUser = await refreshToken(user.refreshToken);
-        
-        // Update headers with new token
-        const retryHeaders = {
-          'Authorization': refreshedUser.token,
-          'Content-Type': 'application/json',
-          ...options.headers
-        };
-        
-        // Retry the request with the new token
-        const retryResponse = await fetch(url, {
-          ...options,
-          headers: retryHeaders
-        });
-        
-        if (!retryResponse.ok) {
-          throw new Error(`Request failed after token refresh: ${retryResponse.status} ${retryResponse.statusText}`);
+// API endpoint path - ApiClient will handle the full URL construction
+const API_ENDPOINT = '/accounts';
+
+// Logger for simple operations that don't need API wrapper
+const logger = createLogger('AccountService');
+
+// ============ EFFICIENT LOGGING IMPLEMENTATIONS ============
+
+// Get list of accounts - with automatic API logging
+export const listAccounts = withApiLogging(
+  'AccountService',
+  API_ENDPOINT,
+  'GET',
+  async () => {
+    return validateApiResponse(
+      () => ApiClient.getJson<any>(API_ENDPOINT),
+      (rawData) => {
+        // Only log business-specific data - everything else is automatic
+        if (process.env.NODE_ENV === 'development') {
+          logger.info('Account list processed', {
+            accountCount: rawData.accounts?.length || 0,
+            hasMetadata: !!rawData.metadata
+          });
         }
-        
-        return retryResponse;
-      } catch (refreshError) {
-        console.error('Error refreshing token:', refreshError);
-        throw new Error('Session expired. Please log in again.');
-      }
-    }
-    
-    if (!response.ok) {
-      throw new Error(`Request failed: ${response.status} ${response.statusText}`);
-    }
-    
-    return response;
-  } catch (error) {
-    console.error('Error with authenticated request:', error);
-    throw error;
+        return AccountListResponseSchema.parse(rawData);
+      },
+      'account list data'
+    );
+  },
+  {
+    successData: (result) => ({ accountCount: result.accounts.length })
   }
-};
+);
 
-// Get list of accounts
-export const listAccounts = async (): Promise<AccountListResponse> => {
-  try {
-    const response = await authenticatedRequest(API_ENDPOINT);
-    const data: AccountListResponse = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Error listing accounts:', error);
-    throw error;
+// Get single account by ID - with automatic API logging
+export const getAccount = (accountId: string) => withApiLogging(
+  'AccountService',
+  `${API_ENDPOINT}/${accountId}`,
+  'GET',
+  async () => {
+    return validateApiResponse(
+      () => ApiClient.getJson<any>(`${API_ENDPOINT}/${accountId}`),
+      (rawData) => {
+        const validatedAccount = AccountSchema.parse(rawData.account);
+        return { account: validatedAccount };
+      },
+      'account data',
+      `Failed to load account ${accountId}. The account data format is invalid.`
+    );
+  },
+  {
+    operationName: `getAccount:${accountId}`,
+    successData: (result) => ({
+      accountId,
+      accountName: result.account.accountName,
+      accountType: result.account.accountType,
+      balance: result.account.balance.toString()
+    })
   }
-};
+);
 
-// Get single account by ID
-export const getAccount = async (accountId: string): Promise<{ account: Account }> => {
-  try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/${accountId}`);
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error(`Error getting account ${accountId}:`, error);
-    throw error;
+// List files associated with an account - with automatic API logging
+export const listAccountFiles = (accountId: string) => withApiLogging(
+  'AccountService',
+  `${API_ENDPOINT}/${accountId}/files`,
+  'GET',
+  async () => {
+    return validateApiResponse(
+      () => ApiClient.getJson<any>(`${API_ENDPOINT}/${accountId}/files`),
+      (rawData) => {
+        // Log business-specific data for large file sets
+        if (rawData.files?.length > 50) {
+          logger.info('Large file set detected', {
+            accountId,
+            fileCount: rawData.files.length,
+            totalSize: rawData.files.reduce((sum: number, f: any) => sum + (f.fileSize || 0), 0)
+          });
+        }
+        return AccountFilesResponseSchema.parse(rawData);
+      },
+      'account files data',
+      `Failed to load files for account ${accountId}. The file data format is invalid.`
+    );
+  },
+  {
+    operationName: `listAccountFiles:${accountId}`,
+    successData: (result) => ({
+      accountId,
+      fileCount: result.files.length,
+      totalFiles: result.metadata.totalFiles
+    })
   }
-};
+);
 
-// List files associated with an account
-export const listAccountFiles = async (accountId: string): Promise<AccountFilesResponse> => {
-  try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/${accountId}/files`);
-    const data: AccountFilesResponse = await response.json();
-    return data;
-  } catch (error) {
-    console.error(`Error listing files for account ${accountId}:`, error);
-    throw error;
-  }
-};
-
-// Get upload URL for a file associated with an account
-export const getAccountFileUploadUrl = async (
+// Get upload URL for a file associated with an account - with automatic API logging
+export const getAccountFileUploadUrl = (
   accountId: string,
   fileName: string,
   contentType: string,
   fileSize: number
-): Promise<UploadFileToAccountResponse> => {
-  try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/${accountId}/files`, {
-      method: 'POST',
-      body: JSON.stringify({
+) => withApiLogging(
+  'AccountService',
+  `${API_ENDPOINT}/${accountId}/files`,
+  'POST',
+  async () => {
+    return validateApiResponse(
+      () => ApiClient.postJson<any>(`${API_ENDPOINT}/${accountId}/files`, {
         fileName,
         contentType,
         fileSize
-      })
-    });
-    
-    const data: UploadFileToAccountResponse = await response.json();
-    return data;
-  } catch (error) {
-    console.error(`Error getting upload URL for account ${accountId}:`, error);
-    throw error;
+      }),
+      (rawData) => UploadFileToAccountResponseSchema.parse(rawData),
+      'file upload URL data',
+      `Failed to get upload URL for account ${accountId}. The server response format is invalid.`
+    );
+  },
+  {
+    operationName: `getUploadUrl:${accountId}:${fileName}`,
+    successData: (result) => ({
+      accountId,
+      fileId: result.fileId,
+      fileName: result.fileName,
+      fileFormat: result.fileFormat,
+      fileSizeMB: Math.round(fileSize / 1024 / 1024 * 100) / 100
+    })
   }
-};
+);
 
+// Delete account - simple operation with basic logging
 export const deleteAccount = async (accountId: string): Promise<void> => {
-  await authenticatedRequest(`${API_ENDPOINT}/${accountId}`, {
-    method: 'DELETE'
-  });
-};
+  logger.info('Deleting account', { accountId });
 
-// Create a new account
-export const createAccount = async (accountData: Partial<Account>): Promise<{ account: Account }> => {
   try {
-    const response = await authenticatedRequest(API_ENDPOINT, {
-      method: 'POST',
-      body: JSON.stringify(accountData)
-    });
-    const data: { account: Account } = await response.json();
-    return data;
+    await ApiClient.delete(`${API_ENDPOINT}/${accountId}`);
+    logger.info('Account deleted successfully', { accountId });
   } catch (error) {
-    console.error('Error creating account:', error);
+    logger.error('Account deletion failed', { accountId });
     throw error;
   }
 };
 
-// Update an existing account
-export const updateAccount = async (accountId: string, accountData: Partial<Account>): Promise<{ account: Account }> => {
-  try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/${accountId}`, {
-      method: 'PUT',
-      body: JSON.stringify(accountData)
-    });
-    const data: { account: Account } = await response.json();
-    return data;
-  } catch (error) {
-    console.error(`Error updating account ${accountId}:`, error);
-    throw error;
+// Create a new account - with service-level logging
+export const createAccount = withServiceLogging(
+  'AccountService',
+  'createAccount',
+  async (accountData: Partial<Account>) => {
+    return validateApiResponse(
+      () => ApiClient.postJson<any>(API_ENDPOINT, accountData),
+      (rawData) => {
+        const validatedAccount = AccountSchema.parse(rawData.account);
+        return { account: validatedAccount };
+      },
+      'created account data',
+      'Failed to create account. The server response format is invalid.'
+    );
+  },
+  {
+    logArgs: ([accountData]) => ({
+      accountName: accountData.accountName,
+      accountType: accountData.accountType,
+      fieldsProvided: Object.keys(accountData)
+    }),
+    logResult: (result) => ({
+      accountId: result.account.accountId,
+      accountName: result.account.accountName,
+      accountType: result.account.accountType
+    })
   }
-};
+);
 
-interface TimelineResponse {
+// Update an existing account - with automatic API logging
+export const updateAccount = (accountId: string, accountData: Partial<Account>) => withApiLogging(
+  'AccountService',
+  `${API_ENDPOINT}/${accountId}`,
+  'PUT',
+  async () => {
+    return validateApiResponse(
+      () => ApiClient.putJson<any>(`${API_ENDPOINT}/${accountId}`, accountData),
+      (rawData) => {
+        const validatedAccount = AccountSchema.parse(rawData.account);
+        return { account: validatedAccount };
+      },
+      'updated account data',
+      `Failed to update account ${accountId}. The server response format is invalid.`
+    );
+  },
+  {
+    operationName: `updateAccount:${accountId}`,
+    successData: (result) => ({
+      accountId,
+      accountName: result.account.accountName,
+      accountType: result.account.accountType,
+      updatedFields: Object.keys(accountData)
+    })
+  }
+);
+
+export interface TimelineResponse {
   timeline: FileMetadata[];
   accountId: string;
 }
 
-// Get file timeline (overlaps) for an account
-export const getFileTimeline = async (accountId: string): Promise<TimelineResponse> => {
-  try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/${accountId}/timeline`);
-    const data: TimelineResponse = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Error fetching file timeline:', error);
-    throw error;
+// Zod schema for TimelineResponse validation
+const TimelineResponseSchema = z.object({
+  timeline: z.array(z.any()), // FileMetadata schema would need to be imported from FileService
+  accountId: z.string()
+});
+
+// Get file timeline (overlaps) for an account - with automatic API logging
+export const getFileTimeline = (accountId: string) => withApiLogging(
+  'AccountService',
+  `${API_ENDPOINT}/${accountId}/timeline`,
+  'GET',
+  async () => {
+    return validateApiResponse(
+      () => ApiClient.getJson<any>(`${API_ENDPOINT}/${accountId}/timeline`),
+      (rawData) => TimelineResponseSchema.parse(rawData),
+      'file timeline data',
+      `Failed to load file timeline for account ${accountId}. The timeline data format is invalid.`
+    );
+  },
+  {
+    operationName: `getFileTimeline:${accountId}`,
+    successData: (result) => ({
+      accountId,
+      timelineEntries: result.timeline.length
+    })
   }
-};
+);
 
 export default {
   listAccounts,
@@ -278,5 +307,6 @@ export default {
   getAccountFileUploadUrl,
   deleteAccount,
   createAccount,
-  updateAccount
+  updateAccount,
+  getFileTimeline
 }; 

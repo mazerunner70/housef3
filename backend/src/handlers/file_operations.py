@@ -620,7 +620,7 @@ def get_file_transactions_handler(event: Dict[str, Any], user_id: str) -> Dict[s
             
             return create_response(200, {
                 'fileId': file_id,
-                'transactions': [transaction.model_dump(by_alias=True) for transaction in transactions],
+                'transactions': [transaction.model_dump(by_alias=True, mode='json') for transaction in transactions],
                 'metadata': {
                     'totalTransactions': len(transactions),
                     'timestamp': datetime.utcnow().isoformat()

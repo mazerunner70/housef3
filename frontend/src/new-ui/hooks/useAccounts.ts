@@ -1,12 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
+import { z } from 'zod';
+import {
+    Account as ServiceAccount,
+    AccountTypeSchema,
+    CurrencySchema,
+} from '../../schemas/Account';
+
 import {
     listAccounts as serviceListAccounts,
     createAccount as serviceCreateAccount,
     updateAccount as serviceUpdateAccount,
-    deleteAccount as serviceDeleteAccount,
-    Account as ServiceAccount,
-    AccountType as ServiceAccountTypeEnum,
-    Currency as ServiceCurrencyEnum,
+    deleteAccount as serviceDeleteAccount
 } from '../../services/AccountService';
 import Decimal from 'decimal.js';
 
@@ -41,7 +45,7 @@ export interface UIAccount {
     name: string;
     type: string;
     currency: string;
-    balance?: Decimal;    // Changed from Decimal to number temporarily
+    balance?: Decimal;
     bankName?: string;
     lastTransactionDate?: number; // milliseconds since epoch
 }
@@ -56,25 +60,25 @@ export interface UIAccountInputData {
 }
 
 // --- Robust Enum Mapping ---
-const uiToServiceAccountTypeMap: { [key: string]: ServiceAccountTypeEnum } = {
-    "checking": ServiceAccountTypeEnum.CHECKING,
-    "savings": ServiceAccountTypeEnum.SAVINGS,
-    "credit_card": ServiceAccountTypeEnum.CREDIT_CARD,
-    "investment": ServiceAccountTypeEnum.INVESTMENT,
-    "loan": ServiceAccountTypeEnum.LOAN,
-    "other": ServiceAccountTypeEnum.OTHER,
+const uiToServiceAccountTypeMap: { [key: string]: z.infer<typeof AccountTypeSchema> } = {
+    "checking": "checking",
+    "savings": "savings",
+    "credit_card": "credit_card",
+    "investment": "investment",
+    "loan": "loan",
+    "other": "other",
 };
 
-const uiToServiceCurrencyMap: { [key: string]: ServiceCurrencyEnum } = {
-    "usd": ServiceCurrencyEnum.USD,
-    "eur": ServiceCurrencyEnum.EUR,
-    "gbp": ServiceCurrencyEnum.GBP,
-    "cad": ServiceCurrencyEnum.CAD,
-    "jpy": ServiceCurrencyEnum.JPY,
-    "aud": ServiceCurrencyEnum.AUD,
-    "chf": ServiceCurrencyEnum.CHF,
-    "cny": ServiceCurrencyEnum.CNY,
-    // "other": ServiceCurrencyEnum.OTHER, // Removed for now, add if UI supports it
+const uiToServiceCurrencyMap: { [key: string]: z.infer<typeof CurrencySchema> } = {
+    "usd": "USD",
+    "eur": "EUR",
+    "gbp": "GBP",
+    "cad": "CAD",
+    "jpy": "JPY",
+    "aud": "AUD",
+    "chf": "CHF",
+    "cny": "CNY",
+    // "other": "other", // Removed for now, add if UI supports it
 };
 
 // --- MAPPING FUNCTIONS ---
@@ -100,7 +104,7 @@ const mapUiInputToServiceInput = (uiInput: UIAccountInputData, isNewAccount: boo
     if (!serviceCurrency) {
         throw new Error(`Invalid currency: "${uiInput.currency}". Supported: ${Object.keys(uiToServiceCurrencyMap).map(c => c.toUpperCase()).join(', ')}`);
     }
-    
+
     const balanceString = uiInput.balance === undefined && isNewAccount ? '0' : uiInput.balance;
     let finalBalanceForService: Decimal | undefined = undefined;
 
@@ -125,7 +129,7 @@ const mapUiInputToServiceInput = (uiInput: UIAccountInputData, isNewAccount: boo
     if (finalBalanceForService !== undefined) {
         serviceInput.balance = finalBalanceForService;
     }
-    
+
     if (serviceInput.institution === undefined) delete serviceInput.institution;
     return serviceInput;
 };
@@ -136,7 +140,7 @@ interface UseAccountsReturn {
     error: string | null;
     fetchAccounts: () => Promise<void>;
     createAccount: (accountData: UIAccountInputData) => Promise<UIAccount | null>;
-    updateAccount: (accountId: string, accountData: UIAccountInputData) => Promise<UIAccount | null>; 
+    updateAccount: (accountId: string, accountData: UIAccountInputData) => Promise<UIAccount | null>;
     deleteAccount: (accountId: string) => Promise<boolean>;
     clearError: () => void;
 }
@@ -152,7 +156,7 @@ const useAccounts = (): UseAccountsReturn => {
         setIsLoading(true);
         setError(null);
         try {
-            const response = await serviceListAccounts(); 
+            const response = await serviceListAccounts();
             setAccounts(response.accounts.map(mapServiceAccountToUiAccount));
         } catch (err: any) {
             console.error("Error in fetchAccounts:", err);
@@ -166,7 +170,7 @@ const useAccounts = (): UseAccountsReturn => {
         setError(null);
         try {
             const serviceInput = mapUiInputToServiceInput(accountData, true);
-            const response = await serviceCreateAccount(serviceInput); 
+            const response = await serviceCreateAccount(serviceInput);
             const newUiAccount = mapServiceAccountToUiAccount(response.account);
             setAccounts(prev => [...prev, newUiAccount]);
             setIsLoading(false);
@@ -184,7 +188,7 @@ const useAccounts = (): UseAccountsReturn => {
         setError(null);
         try {
             const serviceInput = mapUiInputToServiceInput(accountData, false);
-            const response = await serviceUpdateAccount(accountId, serviceInput); 
+            const response = await serviceUpdateAccount(accountId, serviceInput);
             const updatedUiAccount = mapServiceAccountToUiAccount(response.account);
             setAccounts(prev => prev.map(acc => acc.id === accountId ? updatedUiAccount : acc));
             setIsLoading(false);
@@ -201,7 +205,7 @@ const useAccounts = (): UseAccountsReturn => {
         setIsLoading(true);
         setError(null);
         try {
-            await serviceDeleteAccount(accountId); 
+            await serviceDeleteAccount(accountId);
             setAccounts(prev => prev.filter(acc => acc.id !== accountId));
             setIsLoading(false);
             return true;
