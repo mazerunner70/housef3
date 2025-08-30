@@ -216,6 +216,56 @@ def checked_optional_file_map(file_map_id: Optional[uuid.UUID], user_id: str) ->
     check_user_owns_resource(file_map.user_id, user_id)
     return file_map
 
+def checked_mandatory_transaction(transaction_id: uuid.UUID, user_id: str) -> 'Transaction':
+    """Check if transaction exists and user has access to it."""
+    from models.transaction import Transaction
+    
+    # Get transaction using the existing function from handlers
+    try:
+        table = get_transactions_table()
+        if not table:
+            raise NotFound("Transaction database not available")
+        
+        response = table.get_item(Key={'transactionId': str(transaction_id)})
+        item = response.get('Item')
+        
+        if not item:
+            raise NotFound("Transaction not found")
+        
+        transaction = Transaction.from_dynamodb_item(item)
+        check_user_owns_resource(transaction.user_id, user_id)
+        return transaction
+    except Exception as e:
+        logger.error(f"Error getting transaction {transaction_id}: {str(e)}")
+        raise NotFound("Transaction not found")
+
+def checked_optional_transaction(transaction_id: Optional[uuid.UUID], user_id: str) -> Optional['Transaction']:
+    """Check if transaction exists and user has access to it, allowing None."""
+    if not transaction_id:
+        return None
+    try:
+        return checked_mandatory_transaction(transaction_id, user_id)
+    except NotFound:
+        return None
+
+def checked_mandatory_category(category_id: uuid.UUID, user_id: str) -> 'Category':
+    """Check if category exists and user has access to it."""
+    from models.category import Category
+    
+    category = get_category_by_id_from_db(category_id, user_id)
+    if not category:
+        raise NotFound("Category not found")
+    return category
+
+def checked_optional_category(category_id: Optional[uuid.UUID], user_id: str) -> Optional['Category']:
+    """Check if category exists and user has access to it, allowing None."""
+    if not category_id:
+        return None
+    try:
+        return checked_mandatory_category(category_id, user_id)
+    except NotFound:
+        return None
+
 def get_account(account_id: uuid.UUID) -> Optional[Account]:
     """
     Retrieve an account by ID.

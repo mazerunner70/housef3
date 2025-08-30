@@ -1,0 +1,165 @@
+.date-range-picker {
+    background: white;
+    border: 1px solid #e1e5e9;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.date-range-picker-header {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #e1e5e9;
+    padding-bottom: 12px;
+}
+
+.mode-toggle {
+    padding: 8px 16px;
+    border: 1px solid #e1e5e9;
+    border-radius: 6px;
+    background: white;
+    color: #64748b;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.mode-toggle:hover {
+    border-color: #3b82f6;
+    color: #3b82f6;
+}
+
+.mode-toggle.active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: white;
+}
+
+.quick-ranges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.quick-range-btn {
+    padding: 8px 16px;
+    border: 1px solid #e1e5e9;
+    border-radius: 6px;
+    background: white;
+    color: #64748b;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.quick-range-btn:hover {
+    border-color: #3b82f6;
+    color: #3b82f6;
+    background: #f8fafc;
+}
+
+.quick-range-btn.active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: white;
+}
+
+.custom-range {
+    margin-bottom: 16px;
+}
+
+.date-inputs {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.date-input-group {
+    flex: 1;
+}
+
+.date-input-group label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.date-input-group input[type="date"] {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e1e5e9;
+    border-radius: 6px;
+    font-size: 14px;
+    background: white;
+    transition: border-color 0.2s ease;
+}
+
+.date-input-group input[type="date"]:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.apply-custom-btn {
+    padding: 8px 16px;
+    background: #3b82f6;
+    border: 1px solid #3b82f6;
+    border-radius: 6px;
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.apply-custom-btn:hover {
+    background: #2563eb;
+    border-color: #2563eb;
+}
+
+.current-range-display {
+    padding: 12px;
+    background: #f8fafc;
+    border-radius: 6px;
+    border: 1px solid #e1e5e9;
+    font-size: 14px;
+}
+
+.range-label {
+    color: #64748b;
+    font-weight: 500;
+    margin-right: 8px;
+}
+
+.range-dates {
+    color: #374151;
+    font-weight: 600;
+}
+
+/* Responsive design */
+@media (max-width: 640px) {
+    .date-inputs {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .quick-ranges {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .mode-toggle,
+    .quick-range-btn {
+        font-size: 13px;
+        padding: 6px 12px;
+    }
+}

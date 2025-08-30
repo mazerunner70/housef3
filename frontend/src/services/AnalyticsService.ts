@@ -15,129 +15,11 @@ import {
   fromDecimal,
   formatDecimalCurrency,
   formatDecimalPercentage
-} from '../types/Analytics';
-import { getCurrentUser, refreshToken, isAuthenticated } from './AuthService';
+} from '@/types/Analytics';
+import { ApiClient } from '@/utils/apiClient';
 import { Decimal } from 'decimal.js';
 
 class AnalyticsService {
-  private baseUrl: string;
-
-  constructor() {
-    this.baseUrl = import.meta.env.VITE_API_ENDPOINT || 'https://api.housef3.com';
-  }
-
-  private async makeRequest<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
-    const currentUser = getCurrentUser();
-    
-    if (!currentUser || !currentUser.token) {
-      throw new AnalyticsError(
-        'AUTH_ERROR',
-        'User not authenticated',
-        null,
-        false
-      );
-    }
-    
-    try {
-      // Check if token is valid
-      if (!isAuthenticated()) {
-        // Try to refresh token
-        await refreshToken(currentUser.refreshToken);
-      }
-      
-      // Get the user again after potential refresh
-      const user = getCurrentUser();
-      if (!user || !user.token) {
-        throw new AnalyticsError(
-          'AUTH_ERROR',
-          'Authentication failed',
-          null,
-          false
-        );
-      }
-      
-      // Set up headers with authentication
-      const headers = {
-        'Authorization': user.token,
-        'Content-Type': 'application/json',
-        ...options.headers
-      };
-      
-      const requestOptions = {
-        ...options,
-        headers
-      };
-      
-      const response = await fetch(`${this.baseUrl}${endpoint}`, requestOptions);
-      
-      // Handle 401 error specifically - try to refresh token
-      if (response.status === 401) {
-        try {
-          const refreshedUser = await refreshToken(user.refreshToken);
-          
-          // Update headers with new token
-          const retryHeaders = {
-            'Authorization': refreshedUser.token,
-            'Content-Type': 'application/json',
-            ...options.headers
-          };
-          
-          // Retry the request with the new token
-          const retryResponse = await fetch(`${this.baseUrl}${endpoint}`, {
-            ...options,
-            headers: retryHeaders
-          });
-          
-          if (!retryResponse.ok) {
-            const errorData = await retryResponse.json().catch(() => ({}));
-            throw new AnalyticsError(
-              `HTTP_${retryResponse.status}`,
-              errorData.message || `Request failed after token refresh: ${retryResponse.status} ${retryResponse.statusText}`,
-              errorData,
-              retryResponse.status >= 500
-            );
-          }
-          
-          return await retryResponse.json();
-        } catch (refreshError) {
-          console.error('Error refreshing token:', refreshError);
-          throw new AnalyticsError(
-            'AUTH_ERROR',
-            'Session expired. Please log in again.',
-            refreshError,
-            false
-          );
-        }
-      }
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new AnalyticsError(
-          `HTTP_${response.status}`,
-          errorData.message || `Request failed with status ${response.status}`,
-          errorData,
-          response.status >= 500 // Retry for server errors
-        );
-      }
-
-      return await response.json();
-    } catch (error) {
-      if (error instanceof AnalyticsError) {
-        throw error;
-      }
-      
-      // Network or parsing error
-      throw new AnalyticsError(
-        'NETWORK_ERROR',
-        'Failed to connect to analytics service',
-        error,
-        true
-      );
-    }
-  }
 
   // Core Analytics Data Retrieval
 
@@ -151,13 +33,13 @@ class AnalyticsService {
     const params = new URLSearchParams({
       time_period: this.timeRangeToString(timeRange)
     });
-    
+
     if (accountId) {
       params.append('account_id', accountId);
     }
 
-    const response = await this.makeRequest<AnalyticsResponse>(
-      `/api/analytics/cash_flow?${params.toString()}`
+    const response = await ApiClient.getJson<AnalyticsResponse>(
+      `/analytics/cash_flow?${params.toString()}`
     );
 
     if (response.status !== 'success') {
@@ -183,13 +65,13 @@ class AnalyticsService {
     const params = new URLSearchParams({
       time_period: this.timeRangeToString(timeRange)
     });
-    
+
     if (accountId) {
       params.append('account_id', accountId);
     }
 
-    const response = await this.makeRequest<AnalyticsResponse>(
-      `/api/analytics/category_trends?${params.toString()}`
+    const response = await ApiClient.getJson<AnalyticsResponse>(
+      `/analytics/category_trends?${params.toString()}`
     );
 
     if (response.status !== 'success') {
@@ -215,8 +97,8 @@ class AnalyticsService {
       time_period: this.timeRangeToString(timeRange)
     });
 
-    const response = await this.makeRequest<AnalyticsResponse>(
-      `/api/analytics/account_efficiency?${params.toString()}`
+    const response = await ApiClient.getJson<AnalyticsResponse>(
+      `/analytics/account_efficiency?${params.toString()}`
     );
 
     if (response.status !== 'success') {
@@ -242,8 +124,8 @@ class AnalyticsService {
       time_period: this.timeRangeToString(timeRange)
     });
 
-    const response = await this.makeRequest<AnalyticsResponse>(
-      `/api/analytics/financial_health?${params.toString()}`
+    const response = await ApiClient.getJson<AnalyticsResponse>(
+      `/analytics/financial_health?${params.toString()}`
     );
 
     if (response.status !== 'success') {
@@ -270,13 +152,13 @@ class AnalyticsService {
     const params = new URLSearchParams({
       time_period: this.timeRangeToString(timeRange)
     });
-    
+
     if (accountId) {
       params.append('account_id', accountId);
     }
 
-    const response = await this.makeRequest<AnalyticsResponse>(
-      `/api/analytics/${analyticType.toLowerCase()}?${params.toString()}`
+    const response = await ApiClient.getJson<AnalyticsResponse>(
+      `/analytics/${analyticType.toLowerCase()}?${params.toString()}`
     );
 
     if (response.status !== 'success') {
@@ -373,8 +255,8 @@ class AnalyticsService {
    * Get analytics computation status
    */
   async getAnalyticsStatus(): Promise<AnalyticsStatusResponse> {
-    const response = await this.makeRequest<AnalyticsStatusResponse>(
-      '/api/analytics/status'
+    const response = await ApiClient.getJson<AnalyticsStatusResponse>(
+      '/analytics/status'
     );
 
     if (response.status !== 'success') {
@@ -403,12 +285,9 @@ class AnalyticsService {
       body.analytic_types = analyticTypes.map(type => type.toLowerCase());
     }
 
-    const response = await this.makeRequest<RefreshResponse>(
-      '/api/analytics/refresh',
-      {
-        method: 'POST',
-        body: JSON.stringify(body)
-      }
+    const response = await ApiClient.postJson<RefreshResponse>(
+      '/analytics/refresh',
+      body
     );
 
     if (response.status !== 'refresh_initiated') {
@@ -433,7 +312,7 @@ class AnalyticsService {
   }> {
     try {
       const status = await this.getAnalyticsStatus();
-      
+
       const pendingCount = status.summary.pending_computation;
       const totalCount = status.summary.total_analytics;
       const stalePercentage = (pendingCount / totalCount) * 100;
@@ -442,8 +321,8 @@ class AnalyticsService {
         isStale: pendingCount > 0,
         staleDays: 0, // TODO: Calculate from status data
         needsRefresh: stalePercentage > 20, // Arbitrary threshold
-        recommendations: pendingCount > 0 ? 
-          ['Some analytics are out of date. Consider refreshing for latest insights.'] : 
+        recommendations: pendingCount > 0 ?
+          ['Some analytics are out of date. Consider refreshing for latest insights.'] :
           []
       };
     } catch (error) {
@@ -492,7 +371,7 @@ class AnalyticsService {
   formatPercentage(value: number | Decimal, total: number | Decimal): string {
     const valueDecimal = value instanceof Decimal ? value : toDecimal(value);
     const totalDecimal = total instanceof Decimal ? total : toDecimal(total);
-    
+
     if (totalDecimal.isZero()) return '0.0%';
     const percentage = valueDecimal.div(totalDecimal).mul(100);
     return formatDecimalPercentage(percentage);
@@ -520,7 +399,7 @@ class AnalyticsService {
   } {
     const currentDecimal = current instanceof Decimal ? current : toDecimal(current);
     const previousDecimal = previous instanceof Decimal ? previous : toDecimal(previous);
-    
+
     if (previousDecimal.isZero()) {
       return { direction: 'stable', percentage: 0, display: 'N/A' };
     }
@@ -528,7 +407,7 @@ class AnalyticsService {
     const change = currentDecimal.sub(previousDecimal).div(previousDecimal).mul(100);
     const changeNumber = change.toNumber();
     const direction = changeNumber > 5 ? 'up' : changeNumber < -5 ? 'down' : 'stable';
-    
+
     return {
       direction,
       percentage: Math.abs(changeNumber),
@@ -553,7 +432,7 @@ class AnalyticsService {
     const cacheTime = new Date(cacheTimestamp);
     const now = new Date();
     const ageMinutes = (now.getTime() - cacheTime.getTime()) / (1000 * 60);
-    
+
     return ageMinutes < maxAgeMinutes;
   }
 
@@ -578,19 +457,19 @@ class AnalyticsService {
       'rewardsEarned', 'feesPaid', 'interestPaid', 'netBenefit', 'efficiencyScore',
       'emergencyFundMonths', 'debtToIncomeRatio', 'savingsRate', 'expenseVolatility'
     ];
-    return monetaryFields.includes(fieldName) || 
-           fieldName.includes('amount') || 
-           fieldName.includes('balance') ||
-           fieldName.includes('score') ||
-           fieldName.includes('percentage') ||
-           fieldName.includes('rate') ||
-           fieldName.includes('income') ||
-           fieldName.includes('expense') ||
-           fieldName.includes('total') ||
-           fieldName.includes('avg') ||
-           fieldName.includes('fees') ||
-           fieldName.includes('interest') ||
-           fieldName.includes('utilization');
+    return monetaryFields.includes(fieldName) ||
+      fieldName.includes('amount') ||
+      fieldName.includes('balance') ||
+      fieldName.includes('score') ||
+      fieldName.includes('percentage') ||
+      fieldName.includes('rate') ||
+      fieldName.includes('income') ||
+      fieldName.includes('expense') ||
+      fieldName.includes('total') ||
+      fieldName.includes('avg') ||
+      fieldName.includes('fees') ||
+      fieldName.includes('interest') ||
+      fieldName.includes('utilization');
   }
 
   /**
@@ -636,51 +515,51 @@ class AnalyticsService {
               const sign = decimalLike.s === 1 ? 1 : -1;
               const digits = decimalLike.d;
               const exponent = decimalLike.e;
-            
-            // Convert digits array to number string
-            const digitString = digits.join('');
-            const decimalPlaces = digits.length - 1 - exponent;
-            
-            if (decimalPlaces <= 0) {
-              // No decimal places needed
-              converted[key] = new Decimal(sign * parseInt(digitString) * Math.pow(10, -decimalPlaces));
-            } else {
-              // Insert decimal point
-              const beforeDecimal = digitString.slice(0, -decimalPlaces) || '0';
-              const afterDecimal = digitString.slice(-decimalPlaces);
-              const fullString = `${sign < 0 ? '-' : ''}${beforeDecimal}.${afterDecimal}`;
-              converted[key] = new Decimal(fullString);
+
+              // Convert digits array to number string
+              const digitString = digits.join('');
+              const decimalPlaces = digits.length - 1 - exponent;
+
+              if (decimalPlaces <= 0) {
+                // No decimal places needed
+                converted[key] = new Decimal(sign * parseInt(digitString) * Math.pow(10, -decimalPlaces));
+              } else {
+                // Insert decimal point
+                const beforeDecimal = digitString.slice(0, -decimalPlaces) || '0';
+                const afterDecimal = digitString.slice(-decimalPlaces);
+                const fullString = `${sign < 0 ? '-' : ''}${beforeDecimal}.${afterDecimal}`;
+                converted[key] = new Decimal(fullString);
+              }
+            } catch (error) {
+              console.warn('Failed to reconstruct Decimal for key', key, ':', value, error);
+              converted[key] = toDecimal(0);
             }
-          } catch (error) {
-            console.warn('Failed to reconstruct Decimal for key', key, ':', value, error);
-            converted[key] = toDecimal(0);
           }
-        }
-        // Convert string numbers to Decimal objects for monetary fields
-        else if (typeof value === 'string' && this.isMonetaryField(key) && this.isNumericString(value)) {
-          converted[key] = toDecimal(value);
-        } 
-        // Convert regular numbers to Decimal objects for monetary fields
-        else if (typeof value === 'number' && this.isMonetaryField(key)) {
-          converted[key] = toDecimal(value);
-        } 
-        // Recursively process nested objects
-        else if (typeof value === 'object') {
-          converted[key] = this.convertMonetaryStringsToDecimals(value);
-        } 
-        // Keep other values as-is
-        else {
+          // Convert string numbers to Decimal objects for monetary fields
+          else if (typeof value === 'string' && this.isMonetaryField(key) && this.isNumericString(value)) {
+            converted[key] = toDecimal(value);
+          }
+          // Convert regular numbers to Decimal objects for monetary fields
+          else if (typeof value === 'number' && this.isMonetaryField(key)) {
+            converted[key] = toDecimal(value);
+          }
+          // Recursively process nested objects
+          else if (typeof value === 'object') {
+            converted[key] = this.convertMonetaryStringsToDecimals(value);
+          }
+          // Keep other values as-is
+          else {
+            converted[key] = value;
+          }
+        } else {
           converted[key] = value;
         }
-      } else {
-        converted[key] = value;
       }
+      return converted;
     }
-    return converted;
-  }
 
-  return data;
-}
+    return data;
+  }
 }
 
 // Create and export a singleton instance

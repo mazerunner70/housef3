@@ -12,9 +12,9 @@ import {
   AccountInfoSchema,
   TransactionListResponseSchema,
   QuickUpdateResponseSchema
-} from '../schemas/Transaction';
-import { ApiClient } from '../utils/apiClient';
-import { validateApiResponse } from '../utils/zodErrorHandler';
+} from '@/schemas/Transaction';
+import { ApiClient } from '@/utils/apiClient';
+import { validateApiResponse } from '@/utils/zodErrorHandler';
 import { z } from 'zod';
 
 // Service-specific response interfaces
@@ -25,8 +25,8 @@ export interface QuickUpdateCategoryResponse {
 
 // Schemas are now imported from ../schemas/Transaction.ts
 
-// Get API endpoint from environment variables
-const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/api`;
+// API base path - ApiClient will handle the full URL construction
+const API_ENDPOINT = '';
 
 // Function to fetch transactions for the main transaction view - Simple LoadMore approach
 export const getUserTransactions = async (params: TransactionRequestParams): Promise<TransactionsViewResponse> => {

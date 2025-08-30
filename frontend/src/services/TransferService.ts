@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { ApiClient } from '../utils/apiClient';
-import { validateApiResponse } from '../utils/zodErrorHandler';
-import { TransactionViewItem } from '../schemas/Transaction';
+import { ApiClient } from '@/utils/apiClient';
+import { validateApiResponse } from '@/utils/zodErrorHandler';
+import { TransactionViewItem } from '@/schemas/Transaction';
 
 // Transfer pair interfaces
 export interface TransferPair {
@@ -51,16 +51,22 @@ const BulkMarkResponseSchema = z.object({
 
 
 
-// Get API endpoint from environment variables
-const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/api`;
+// API base path - ApiClient will handle the full URL construction
+const API_ENDPOINT = '';
 
 /**
- * Get existing paired transfer transactions
+ * Get existing paired transfer transactions within a date range
  */
-export const getPairedTransfers = async (dateRangeDays?: number): Promise<TransferPair[]> => {
+export const getPairedTransfers = async (
+    startDate?: Date,
+    endDate?: Date
+): Promise<TransferPair[]> => {
     const query = new URLSearchParams();
-    if (dateRangeDays) {
-        query.append('dateRange', dateRangeDays.toString());
+
+    if (startDate && endDate) {
+        // Use specific start and end dates (ISO 8601)
+        query.append('startDate', startDate.toISOString());
+        query.append('endDate', endDate.toISOString());
     }
 
     const url = query.toString()
@@ -79,11 +85,17 @@ export const getPairedTransfers = async (dateRangeDays?: number): Promise<Transf
 };
 
 /**
- * Detect potential transfer transactions
+ * Detect potential transfer transactions within a date range
  */
-export const detectTransfers = async (dateRangeDays: number = 7): Promise<TransferPair[]> => {
+export const detectTransfers = async (
+    startDate: Date,
+    endDate: Date
+): Promise<TransferPair[]> => {
     const query = new URLSearchParams();
-    query.append('dateRange', dateRangeDays.toString());
+
+    // Use specific start and end dates (ISO 8601)
+    query.append('startDate', startDate.toISOString());
+    query.append('endDate', endDate.toISOString());
 
     return validateApiResponse(
         () => ApiClient.getJson<any>(`${API_ENDPOINT}/transfers/detect?${query.toString()}`),
@@ -142,10 +154,28 @@ export const bulkMarkTransfers = async (transferPairs: DetectedTransfer[]): Prom
 
 
 
+// Additional utility functions for date range handling
+export const convertDaysToDateRange = (days: number): { startDate: Date; endDate: Date } => {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - days);
+    return { startDate, endDate };
+};
+
+export const formatDateForDisplay = (date: Date): string => {
+    return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+    });
+};
+
 // Default export
 export default {
     getPairedTransfers,
     detectTransfers,
     markTransferPair,
-    bulkMarkTransfers
+    bulkMarkTransfers,
+    convertDaysToDateRange,
+    formatDateForDisplay
 };

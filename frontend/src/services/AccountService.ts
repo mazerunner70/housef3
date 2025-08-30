@@ -4,9 +4,9 @@ import {
   AccountListResponse,
   AccountSchema,
   AccountListResponseSchema
-} from '../schemas/Account';
-import { ApiClient } from '../utils/apiClient';
-import { validateApiResponse } from '../utils/zodErrorHandler';
+} from '@/schemas/Account';
+import { ApiClient } from '@/utils/apiClient';
+import { validateApiResponse } from '@/utils/zodErrorHandler';
 import { z } from 'zod';
 
 
@@ -63,8 +63,8 @@ const UploadFileToAccountResponseSchema = z.object({
   accountId: z.string()
 });
 
-// Get API endpoint from environment variables
-const API_ENDPOINT = `${import.meta.env.VITE_API_ENDPOINT}/api/accounts`;
+// API endpoint path - ApiClient will handle the full URL construction
+const API_ENDPOINT = '/accounts';
 
 
 

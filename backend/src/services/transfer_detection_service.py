@@ -60,6 +60,33 @@ class TransferDetectionService:
         except Exception as e:
             logger.error(f"Error detecting transfers for user {user_id}: {str(e)}")
             return []
+
+    def detect_transfers_for_user_in_range(self, user_id: str, start_date_ts: int, end_date_ts: int) -> List[Tuple[Transaction, Transaction]]:
+        """
+        Detect potential transfer transactions for a user within a specific date range.
+        
+        Args:
+            user_id: The user ID to analyze
+            start_date_ts: Start date timestamp in milliseconds
+            end_date_ts: End date timestamp in milliseconds
+            
+        Returns:
+            List of tuples containing matched transfer transactions (outgoing, incoming)
+        """
+        try:
+            # Process transfer detection in batches using timestamps
+            all_transfer_pairs = self._detect_transfers_in_date_range(
+                user_id=user_id,
+                start_date_ts=start_date_ts,
+                end_date_ts=end_date_ts
+            )
+            
+            logger.info(f"Detected {len(all_transfer_pairs)} potential transfer pairs for user {user_id} in date range")
+            return all_transfer_pairs
+            
+        except Exception as e:
+            logger.error(f"Error detecting transfers for user {user_id} in date range: {str(e)}")
+            return []
     
     def _detect_transfers_in_batches(
         self, 
@@ -131,6 +158,113 @@ class TransferDetectionService:
         
         logger.info(f"Total transfer pairs found across all batches: {len(all_transfer_pairs)}")
         return all_transfer_pairs
+
+    def _detect_transfers_in_date_range(
+        self, 
+        user_id: str, 
+        start_date_ts: int,
+        end_date_ts: int
+    ) -> List[Tuple[Transaction, Transaction]]:
+        """
+        Detect transfers within a specific date range using timestamps.
+        
+        Args:
+            user_id: The user ID
+            start_date_ts: Start date timestamp in milliseconds
+            end_date_ts: End date timestamp in milliseconds
+            
+        Returns:
+            List of all transfer pairs found in the date range
+        """
+        from datetime import datetime, timedelta
+        
+        # Convert timestamps to datetime for calculations
+        start_date = datetime.fromtimestamp(start_date_ts / 1000)
+        end_date = datetime.fromtimestamp(end_date_ts / 1000)
+        
+        # Calculate total range in days for batch sizing
+        total_days = (end_date - start_date).days + 1
+        
+        # Calculate batch size - each batch should be large enough to capture transfer pairs
+        # Since transfers are usually within a few days, 14-day batches with overlap should work well
+        batch_days = min(14, total_days)
+        overlap_days = min(total_days, 3)  # 3-day overlap to ensure cross-batch transfers are caught
+        
+        all_transfer_pairs = []
+        processed_global_ids = set()  # Track globally to avoid duplicates across batches
+        
+        # Process in overlapping batches from most recent to oldest
+        current_end = end_date
+        
+        while current_end > start_date:
+            # Calculate batch start (but don't go before the overall start)
+            batch_start = max(start_date, current_end - timedelta(days=batch_days))
+            
+            # Convert to timestamps for the API
+            batch_start_ts = int(batch_start.timestamp() * 1000)
+            batch_end_ts = int(current_end.timestamp() * 1000)
+            
+            logger.debug(f"Processing batch: {batch_start.isoformat()} to {current_end.isoformat()}")
+            
+            # Get transactions for this batch from all accounts
+            batch_transactions = self._get_user_transactions_in_range(
+                user_id, 
+                batch_start_ts,
+                batch_end_ts
+            )
+            
+            if not batch_transactions:
+                logger.debug(f"No transactions found in batch {batch_start.isoformat()} to {current_end.isoformat()}")
+                # Move to next batch (subtract batch_days minus overlap)
+                current_end = batch_start + timedelta(days=overlap_days)
+                continue
+            
+            logger.debug(f"Found {len(batch_transactions)} transactions in batch")
+            
+            # Detect transfers within this batch
+            batch_pairs = self._detect_transfers_in_transaction_set(
+                batch_transactions, 
+                total_days,
+                processed_global_ids
+            )
+            
+            # Add to global results
+            all_transfer_pairs.extend(batch_pairs)
+            
+            # Move to next batch (subtract batch_days minus overlap to create overlap)
+            current_end = batch_start + timedelta(days=overlap_days)
+            
+            # Break if we've reached the start
+            if batch_start <= start_date:
+                break
+        
+        logger.info(f"Detected {len(all_transfer_pairs)} transfer pairs across all batches")
+        return all_transfer_pairs
+
+    def _get_user_transactions_in_range(self, user_id: str, start_date_ts: int, end_date_ts: int) -> List[Transaction]:
+        """Get all user transactions within a specific date range."""
+        from utils.db_utils import list_user_transactions
+        
+        # Get all transactions within the date range with pagination
+        all_transactions = []
+        last_evaluated_key = None
+        
+        while True:
+            batch_result, last_evaluated_key, _ = list_user_transactions(
+                user_id=user_id,
+                start_date_ts=start_date_ts,
+                end_date_ts=end_date_ts,
+                last_evaluated_key=last_evaluated_key,
+                limit=1000
+            )
+            
+            all_transactions.extend(batch_result)
+            
+            if not last_evaluated_key:
+                break
+        
+        logger.debug(f"Retrieved {len(all_transactions)} transactions for user {user_id} in range")
+        return all_transactions
 
     def _get_batch_transactions(
         self,

@@ -40,5 +40,10 @@ alwaysApply: false
 
 ## Error Handling
 - Diagnose and fix root causes instead of adding defensive checks
-- When encountering enum errors, create comprehensive unit tests
+- When encountering errors, create comprehensive unit tests
 - Test that .value attribute access works without AttributeError
+- always add a stack trace to exception handling code
+
+## Handler Conventions
+- Handler-specific patterns and conventions are documented in backend-handler-conventions.mdc
+- All handlers should follow the standard patterns defined there
