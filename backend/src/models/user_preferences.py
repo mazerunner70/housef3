@@ -83,6 +83,9 @@ class TransferPreferences(BaseModel):
     default_date_range_days: Optional[int] = Field(default=7, alias="defaultDateRangeDays")
     last_used_date_ranges: Optional[list[int]] = Field(default_factory=lambda: [7, 14, 30], alias="lastUsedDateRanges")
     auto_expand_suggestion: Optional[bool] = Field(default=True, alias="autoExpandSuggestion")
+    # Date range checked so far for transfer pairs (milliseconds since epoch)
+    checked_date_range_start: Optional[int] = Field(default=None, alias="checkedDateRangeStart")
+    checked_date_range_end: Optional[int] = Field(default=None, alias="checkedDateRangeEnd")
 
     model_config = ConfigDict(populate_by_name=True)
 

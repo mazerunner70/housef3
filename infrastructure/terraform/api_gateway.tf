@@ -952,10 +952,11 @@ resource "aws_lambda_permission" "api_gateway_fzip" {
 
 # Integration for user preferences operations
 resource "aws_apigatewayv2_integration" "user_preferences_operations" {
-  api_id             = aws_apigatewayv2_api.main.id
-  integration_type   = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri    = aws_lambda_function.user_preferences_operations.invoke_arn
+  api_id                 = aws_apigatewayv2_api.main.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.user_preferences_operations.invoke_arn
+  payload_format_version = "2.0"
+  description            = "Lambda integration for user preferences operations endpoints"
 }
 
 # Routes for user preferences operations
@@ -986,6 +987,14 @@ resource "aws_apigatewayv2_route" "get_transfer_preferences" {
 resource "aws_apigatewayv2_route" "update_transfer_preferences" {
   api_id             = aws_apigatewayv2_api.main.id
   route_key          = "PUT /user-preferences/transfers"
+  target             = "integrations/${aws_apigatewayv2_integration.user_preferences_operations.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "get_account_date_range" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /user-preferences/account-date-range"
   target             = "integrations/${aws_apigatewayv2_integration.user_preferences_operations.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id

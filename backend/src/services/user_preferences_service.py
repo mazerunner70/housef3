@@ -5,9 +5,10 @@ import os
 import logging
 from typing import Optional
 from datetime import datetime, timezone
+from functools import reduce
 
-from ..models.user_preferences import UserPreferences, UserPreferencesCreate, UserPreferencesUpdate
-from ..utils.db_utils import get_dynamodb_resource
+from models.user_preferences import UserPreferences, UserPreferencesCreate, UserPreferencesUpdate
+from utils.db_utils import get_user_preferences_table, list_user_accounts, update_account_derived_values
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -18,12 +19,10 @@ class UserPreferencesService:
     
     def __init__(self):
         """Initialize the service with DynamoDB connection."""
-        self.dynamodb = get_dynamodb_resource()
-        table_name = os.environ.get('USER_PREFERENCES_TABLE')
-        if not table_name:
-            raise ValueError("USER_PREFERENCES_TABLE environment variable is not set")
-        self.table = self.dynamodb.Table(table_name)
-        logger.info(f"UserPreferencesService initialized with table: {table_name}")
+        self.table = get_user_preferences_table()
+        if not self.table:
+            raise ValueError("USER_PREFERENCES_TABLE environment variable is not set or table not available")
+        logger.info("UserPreferencesService initialized")
 
     async def get_user_preferences(self, user_id: str) -> Optional[UserPreferences]:
         """
@@ -77,7 +76,7 @@ class UserPreferencesService:
             
             # Create new preferences
             preferences = UserPreferences(
-                user_id=create_data.user_id,
+                userId=create_data.user_id,
                 preferences=create_data.preferences
             )
             
@@ -119,7 +118,7 @@ class UserPreferencesService:
             else:
                 # Create new preferences if none exist
                 preferences = UserPreferences(
-                    user_id=user_id,
+                    userId=user_id,
                     preferences=update_data.preferences or {}
                 )
                 logger.debug(f"Created new preferences for user: {user_id}")
@@ -186,7 +185,9 @@ class UserPreferencesService:
             return {
                 'defaultDateRangeDays': 7,
                 'lastUsedDateRanges': [7, 14, 30],
-                'autoExpandSuggestion': True
+                'autoExpandSuggestion': True,
+                'checkedDateRangeStart': None,
+                'checkedDateRangeEnd': None
             }
             
         except Exception as e:
@@ -195,7 +196,9 @@ class UserPreferencesService:
             return {
                 'defaultDateRangeDays': 7,
                 'lastUsedDateRanges': [7, 14, 30],
-                'autoExpandSuggestion': True
+                'autoExpandSuggestion': True,
+                'checkedDateRangeStart': None,
+                'checkedDateRangeEnd': None
             }
 
     async def update_transfer_preferences(self, user_id: str, transfer_prefs: dict) -> UserPreferences:
@@ -213,3 +216,51 @@ class UserPreferencesService:
             preferences={'transfers': transfer_prefs}
         )
         return await self.update_user_preferences(user_id, update_data)
+
+    async def get_account_date_range_for_transfers(self, user_id: str) -> tuple[Optional[int], Optional[int]]:
+        """
+        Get the overall date range for transfer checking based on all user accounts.
+        Returns the earliest first transaction date and latest last transaction date in milliseconds.
+        
+        Args:
+            user_id: The user's ID
+            
+        Returns:
+            Tuple of (earliest_ms, latest_ms) as milliseconds since epoch, or (None, None) if no accounts found
+        """
+        try:
+            # Get all accounts for the user using the existing utility function
+            accounts = list_user_accounts(user_id)
+            
+            if not accounts:
+                logger.debug(f"No accounts found for user: {user_id}")
+                return (None, None)
+            
+            # Single pass with reduce to find min/max dates
+            def accumulate_dates(acc, account):
+                earliest, latest = acc
+                
+                # Ensure derived values are present - this is required for data consistency
+                if account.first_transaction_date is None or account.last_transaction_date is None:
+                    logger.error(f"Account {account.account_id} missing derived transaction dates")
+                    raise ValueError(f"Account {account.account_id} has missing transaction date ranges. Run update_account_derived_values first.")
+                
+                if account.first_transaction_date:
+                    earliest = min(earliest, account.first_transaction_date) if earliest is not None else account.first_transaction_date
+                
+                if account.last_transaction_date:
+                    latest = max(latest, account.last_transaction_date) if latest is not None else account.last_transaction_date
+                
+                return (earliest, latest)
+            
+            earliest_ms, latest_ms = reduce(accumulate_dates, accounts, (None, None))
+            
+            if earliest_ms is None or latest_ms is None:
+                logger.debug(f"No transaction dates found for user accounts: {user_id}")
+                return (None, None)
+            
+            return (earliest_ms, latest_ms)
+            
+        except Exception as e:
+            logger.error(f"Error getting account date range for transfers for {user_id}: {str(e)}", exc_info=True)
+            return (None, None)

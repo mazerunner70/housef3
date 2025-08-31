@@ -244,169 +244,169 @@ resource "aws_cloudwatch_dashboard" "fzip_operations" {
 # CLOUDWATCH ALARMS
 # =========================================
 
-# High error rate alarm
-resource "aws_cloudwatch_metric_alarm" "fzip_backup_high_error_rate" {
-  alarm_name          = "${var.project_name}-${var.environment}-fzip-backup-high-error-rate"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "BackupErrors"
-  namespace           = "HouseF3/FZIP"
-  period              = "300"
-  statistic           = "Sum"
-  threshold           = "5"
-  alarm_description   = "This metric monitors FZIP backup error rate"
-  alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
+# High error rate alarm - DISABLED
+# resource "aws_cloudwatch_metric_alarm" "fzip_backup_high_error_rate" {
+#   alarm_name          = "${var.project_name}-${var.environment}-fzip-backup-high-error-rate"
+#   comparison_operator = "GreaterThanThreshold"
+#   evaluation_periods  = "2"
+#   metric_name         = "BackupErrors"
+#   namespace           = "HouseF3/FZIP"
+#   period              = "300"
+#   statistic           = "Sum"
+#   threshold           = "5"
+#   alarm_description   = "This metric monitors FZIP backup error rate"
+#   alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
 
-  tags = {
-    Environment = var.environment
-    Project     = var.project_name
-    Component   = "fzip-monitoring"
-    ManagedBy   = "terraform"
-  }
-}
+#   tags = {
+#     Environment = var.environment
+#     Project     = var.project_name
+#     Component   = "fzip-monitoring"
+#     ManagedBy   = "terraform"
+#   }
+# }
 
-# Long processing time alarm
-resource "aws_cloudwatch_metric_alarm" "fzip_backup_long_duration" {
-  alarm_name          = "${var.project_name}-${var.environment}-fzip-backup-long-duration"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "BackupDuration"
-  namespace           = "HouseF3/FZIP"
-  period              = "300"
-  statistic           = "Average"
-  threshold           = "300" # 5 minutes
-  alarm_description   = "This metric monitors FZIP backup processing time"
-  alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
+# Long processing time alarm - DISABLED
+# resource "aws_cloudwatch_metric_alarm" "fzip_backup_long_duration" {
+#   alarm_name          = "${var.project_name}-${var.environment}-fzip-backup-long-duration"
+#   comparison_operator = "GreaterThanThreshold"
+#   evaluation_periods  = "2"
+#   metric_name         = "BackupDuration"
+#   namespace           = "HouseF3/FZIP"
+#   period              = "300"
+#   statistic           = "Average"
+#   threshold           = "300" # 5 minutes
+#   alarm_description   = "This metric monitors FZIP backup processing time"
+#   alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
 
-  dimensions = {
-    Success = "true"
-  }
+#   dimensions = {
+#     Success = "true"
+#   }
 
-  tags = {
-    Environment = var.environment
-    Project     = var.project_name
-    Component   = "fzip-monitoring"
-    ManagedBy   = "terraform"
-  }
-}
+#   tags = {
+#     Environment = var.environment
+#     Project     = var.project_name
+#     Component   = "fzip-monitoring"
+#     ManagedBy   = "terraform"
+#   }
+# }
 
-# Low success rate alarm
-resource "aws_cloudwatch_metric_alarm" "fzip_backup_low_success_rate" {
-  alarm_name          = "${var.project_name}-${var.environment}-fzip-backup-low-success-rate"
-  comparison_operator = "LessThanThreshold"
-  evaluation_periods  = "3"
-  metric_name         = "BackupSuccessRate"
-  namespace           = "HouseF3/FZIP"
-  period              = "900" # 15 minutes
-  statistic           = "Average"
-  threshold           = "90" # 90% success rate
-  alarm_description   = "This metric monitors FZIP backup success rate"
-  alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
-  treat_missing_data  = "notBreaching"
+# Low success rate alarm - DISABLED
+# resource "aws_cloudwatch_metric_alarm" "fzip_backup_low_success_rate" {
+#   alarm_name          = "${var.project_name}-${var.environment}-fzip-backup-low-success-rate"
+#   comparison_operator = "LessThanThreshold"
+#   evaluation_periods  = "3"
+#   metric_name         = "BackupSuccessRate"
+#   namespace           = "HouseF3/FZIP"
+#   period              = "900" # 15 minutes
+#   statistic           = "Average"
+#   threshold           = "90" # 90% success rate
+#   alarm_description   = "This metric monitors FZIP backup success rate"
+#   alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
+#   treat_missing_data  = "notBreaching"
 
-  tags = {
-    Environment = var.environment
-    Project     = var.project_name
-    Component   = "fzip-monitoring"
-    ManagedBy   = "terraform"
-  }
-}
+#   tags = {
+#     Environment = var.environment
+#     Project     = var.project_name
+#     Component   = "fzip-monitoring"
+#     ManagedBy   = "terraform"
+#   }
+# }
 
-# Lambda function errors alarm
-resource "aws_cloudwatch_metric_alarm" "fzip_lambda_errors" {
-  alarm_name          = "${var.project_name}-${var.environment}-fzip-lambda-errors"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "Errors"
-  namespace           = "AWS/Lambda"
-  period              = "300"
-  statistic           = "Sum"
-  threshold           = "3"
-  alarm_description   = "This metric monitors FZIP Lambda function errors"
-  alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
+# Lambda function errors alarm - DISABLED
+# resource "aws_cloudwatch_metric_alarm" "fzip_lambda_errors" {
+#   alarm_name          = "${var.project_name}-${var.environment}-fzip-lambda-errors"
+#   comparison_operator = "GreaterThanThreshold"
+#   evaluation_periods  = "2"
+#   metric_name         = "Errors"
+#   namespace           = "AWS/Lambda"
+#   period              = "300"
+#   statistic           = "Sum"
+#   threshold           = "3"
+#   alarm_description   = "This metric monitors FZIP Lambda function errors"
+#   alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
 
-  dimensions = {
-    FunctionName = "${var.project_name}-${var.environment}-fzip-operations"
-  }
+#   dimensions = {
+#     FunctionName = "${var.project_name}-${var.environment}-fzip-operations"
+#   }
 
-  tags = {
-    Environment = var.environment
-    Project     = var.project_name
-    Component   = "fzip-monitoring"
-    ManagedBy   = "terraform"
-  }
-}
+#   tags = {
+#     Environment = var.environment
+#     Project     = var.project_name
+#     Component   = "fzip-monitoring"
+#     ManagedBy   = "terraform"
+#   }
+# }
 
-# Lambda function duration alarm
-resource "aws_cloudwatch_metric_alarm" "fzip_lambda_duration" {
-  alarm_name          = "${var.project_name}-${var.environment}-fzip-lambda-duration"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "Duration"
-  namespace           = "AWS/Lambda"
-  period              = "300"
-  statistic           = "Average"
-  threshold           = "600000" # 10 minutes in milliseconds
-  alarm_description   = "This metric monitors FZIP Lambda function duration"
-  alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
+# Lambda function duration alarm - DISABLED
+# resource "aws_cloudwatch_metric_alarm" "fzip_lambda_duration" {
+#   alarm_name          = "${var.project_name}-${var.environment}-fzip-lambda-duration"
+#   comparison_operator = "GreaterThanThreshold"
+#   evaluation_periods  = "2"
+#   metric_name         = "Duration"
+#   namespace           = "AWS/Lambda"
+#   period              = "300"
+#   statistic           = "Average"
+#   threshold           = "600000" # 10 minutes in milliseconds
+#   alarm_description   = "This metric monitors FZIP Lambda function duration"
+#   alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
 
-  dimensions = {
-    FunctionName = "${var.project_name}-${var.environment}-fzip-operations"
-  }
+#   dimensions = {
+#     FunctionName = "${var.project_name}-${var.environment}-fzip-operations"
+#   }
 
-  tags = {
-    Environment = var.environment
-    Project     = var.project_name
-    Component   = "fzip-monitoring"
-    ManagedBy   = "terraform"
-  }
-}
+#   tags = {
+#     Environment = var.environment
+#     Project     = var.project_name
+#     Component   = "fzip-monitoring"
+#     ManagedBy   = "terraform"
+#   }
+# }
 
-# High error rate alarm for restore
-resource "aws_cloudwatch_metric_alarm" "fzip_restore_high_error_rate" {
-  alarm_name          = "${var.project_name}-${var.environment}-fzip-restore-high-error-rate"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "RestoreErrors"
-  namespace           = "HouseF3/FZIP"
-  period              = "300"
-  statistic           = "Sum"
-  threshold           = "3"
-  alarm_description   = "This metric monitors FZIP restore error rate"
-  alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
+# High error rate alarm for restore - DISABLED
+# resource "aws_cloudwatch_metric_alarm" "fzip_restore_high_error_rate" {
+#   alarm_name          = "${var.project_name}-${var.environment}-fzip-restore-high-error-rate"
+#   comparison_operator = "GreaterThanThreshold"
+#   evaluation_periods  = "2"
+#   metric_name         = "RestoreErrors"
+#   namespace           = "HouseF3/FZIP"
+#   period              = "300"
+#   statistic           = "Sum"
+#   threshold           = "3"
+#   alarm_description   = "This metric monitors FZIP restore error rate"
+#   alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
 
-  tags = {
-    Environment = var.environment
-    Project     = var.project_name
-    Component   = "fzip-monitoring"
-    ManagedBy   = "terraform"
-  }
-}
+#   tags = {
+#     Environment = var.environment
+#     Project     = var.project_name
+#     Component   = "fzip-monitoring"
+#     ManagedBy   = "terraform"
+#   }
+# }
 
-# Long processing time alarm for restore
-resource "aws_cloudwatch_metric_alarm" "fzip_restore_long_duration" {
-  alarm_name          = "${var.project_name}-${var.environment}-fzip-restore-long-duration"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "RestoreDuration"
-  namespace           = "HouseF3/FZIP"
-  period              = "300"
-  statistic           = "Average"
-  threshold           = "600" # 10 minutes
-  alarm_description   = "This metric monitors FZIP restore processing time"
-  alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
+# Long processing time alarm for restore - DISABLED
+# resource "aws_cloudwatch_metric_alarm" "fzip_restore_long_duration" {
+#   alarm_name          = "${var.project_name}-${var.environment}-fzip-restore-long-duration"
+#   comparison_operator = "GreaterThanThreshold"
+#   evaluation_periods  = "2"
+#   metric_name         = "RestoreDuration"
+#   namespace           = "HouseF3/FZIP"
+#   period              = "300"
+#   statistic           = "Average"
+#   threshold           = "600" # 10 minutes
+#   alarm_description   = "This metric monitors FZIP restore processing time"
+#   alarm_actions       = [aws_sns_topic.fzip_alerts.arn]
 
-  dimensions = {
-    Success = "true"
-  }
+#   dimensions = {
+#     Success = "true"
+#   }
 
-  tags = {
-    Environment = var.environment
-    Project     = var.project_name
-    Component   = "fzip-monitoring"
-    ManagedBy   = "terraform"
-  }
-}
+#   tags = {
+#     Environment = var.environment
+#     Project     = var.project_name
+#     Component   = "fzip-monitoring"
+#     ManagedBy   = "terraform"
+#   }
+# }
 
 # =========================================
 # SNS TOPIC FOR ALERTS

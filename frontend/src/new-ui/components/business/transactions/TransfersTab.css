@@ -386,6 +386,119 @@
     cursor: not-allowed;
 }
 
+/* Date Range Information Panel Styles */
+.date-range-info-panel {
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 24px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+}
+
+.date-range-loading {
+    text-align: center;
+    color: #6b7280;
+    font-size: 14px;
+    padding: 20px;
+}
+
+.date-range-info-section {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 16px;
+}
+
+.date-range-info-section.recommended {
+    border-color: #3b82f6;
+    background-color: #eff6ff;
+}
+
+.date-range-info-section h4 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+}
+
+.date-range-info-section.recommended h4 {
+    color: #1e40af;
+}
+
+.date-range-display {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.date-range-text {
+    font-size: 14px;
+    font-weight: 500;
+    color: #1f2937;
+}
+
+.date-range-text.no-data {
+    color: #6b7280;
+    font-style: italic;
+}
+
+.date-range-text.recommended-text {
+    color: #1e40af;
+    font-weight: 600;
+}
+
+.progress-indicator {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background-color: #e5e7eb;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background-color: #10b981;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    font-size: 12px;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+.use-suggested-range-button {
+    background-color: #3b82f6;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    align-self: flex-start;
+}
+
+.use-suggested-range-button:hover:not(:disabled) {
+    background-color: #2563eb;
+}
+
+.use-suggested-range-button:disabled {
+    background-color: #9ca3af;
+    cursor: not-allowed;
+}
+
 /* Responsive adjustments for date range section */
 @media (max-width: 768px) {
     .date-range-section {
@@ -394,5 +507,15 @@
 
     .quick-range-buttons {
         justify-content: flex-start;
+    }
+
+    .date-range-info-panel {
+        grid-template-columns: 1fr;
+        gap: 16px;
+        padding: 16px;
+    }
+
+    .date-range-info-section {
+        padding: 12px;
     }
 }

@@ -44,7 +44,9 @@ def get_user_preferences_handler(event: Dict[str, Any], user_id: str) -> Dict[st
                 "transfers": {
                     "defaultDateRangeDays": 7,
                     "lastUsedDateRanges": [7, 14, 30],
-                    "autoExpandSuggestion": True
+                    "autoExpandSuggestion": True,
+                    "checkedDateRangeStart": None,
+                    "checkedDateRangeEnd": None
                 }
             },
             "createdAt": None,
@@ -143,6 +145,31 @@ def update_transfer_preferences_handler(event: Dict[str, Any], user_id: str) -> 
     }
 
 
+@api_handler()
+def get_account_date_range_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """
+    Get the overall account date range for transfer checking.
+    
+    Args:
+        event: Lambda event containing the request
+        user_id: Authenticated user ID (provided by decorator)
+        
+    Returns:
+        Account date range information
+    """
+    # Get account date range for transfers (in milliseconds)
+    service = UserPreferencesService()
+    earliest_ms, latest_ms = asyncio.run(service.get_account_date_range_for_transfers(user_id))
+    
+    logger.info(f"Retrieved account date range for user: {user_id}")
+    return {
+        "item": {
+            "startDate": earliest_ms,
+            "endDate": latest_ms
+        }
+    }
+
+
 @require_authenticated_user
 @standard_error_handling
 def handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
@@ -157,6 +184,7 @@ def handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
         "PUT /user-preferences": update_user_preferences_handler,
         "GET /user-preferences/transfers": get_transfer_preferences_handler,
         "PUT /user-preferences/transfers": update_transfer_preferences_handler,
+        "GET /user-preferences/account-date-range": get_account_date_range_handler,
     }
     
     handler_func = route_map.get(route)

@@ -955,7 +955,7 @@ resource "aws_lambda_function" "user_preferences_operations" {
   filename         = "../../backend/lambda_deploy.zip"
   function_name    = "${var.project_name}-${var.environment}-user-preferences-operations"
   role            = aws_iam_role.lambda_exec.arn
-  handler         = "handlers.user_preferences_operations.user_preferences_handler"
+  handler         = "handlers/user_preferences_operations.handler"
   source_code_hash = base64encode(local.source_code_hash)
   runtime         = "python3.12"
   timeout         = 30

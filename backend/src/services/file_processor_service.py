@@ -9,9 +9,10 @@ import traceback
 import uuid
 from typing import Dict, Any, List, Optional, Tuple, Union
 from decimal import Decimal
-from dataclasses import dataclass
-
+from functools import reduce
 from datetime import datetime
+
+from pydantic import BaseModel, Field, ConfigDict
 
 from handlers.account_operations import create_response
 from models import account
@@ -32,6 +33,7 @@ from utils.db_utils import (
     update_transaction,
     update_transaction_file,
     create_transaction,
+    update_account_derived_values,
     delete_transactions_for_file,
     get_file_map,
     list_file_transactions,
@@ -54,97 +56,56 @@ from services.auth_checks import (
 )
 
 # Configure logging
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger = logging.getLogger(__name__)
 
-@dataclass
-class FileProcessorResponse:
+class FileProcessorResponse(BaseModel):
     """Response object for file processor operations"""
     message: str
     transactions: Optional[List[Transaction]] = None
-    transaction_count: int = 0
-    duplicate_count: int = 0
-    updated_count: int = 0
-    deleted_count: int = 0
+    transaction_count: int = Field(default=0, alias="transactionCount")
+    duplicate_count: int = Field(default=0, alias="duplicateCount")
+    updated_count: int = Field(default=0, alias="updatedCount")
+    deleted_count: int = Field(default=0, alias="deletedCount")
 
-    def to_dict(self) -> Dict[str, Any]:
-        # Serialize transactions using to_dynamodb_item() which properly handles Decimal -> str conversion
-        serialized_transactions = []
-        if self.transactions:
-            for tx in self.transactions:
-                serialized_tx = tx.to_dynamodb_item()
-                serialized_transactions.append(serialized_tx)
-        
-        return {
-            "message": self.message,
-            "transactions": serialized_transactions,
-            "transaction_count": self.transaction_count,
-            "duplicate_count": self.duplicate_count,
-            "updated_count": self.updated_count,
-            "deleted_count": self.deleted_count
-        }
+    model_config = ConfigDict(
+        populate_by_name=True,
+        use_enum_values=True,
+        arbitrary_types_allowed=True
+    )
 
 
-# Common utility functions
-
-def prepare_file_processing(file_id: uuid.UUID, user_id: str) -> TransactionFile:
-    """
-    Retrieve file record and validate it exists and belongs to the specified user.
+class FileProcessorService:
+    """Service for processing transaction files and managing file operations."""
     
-    Args:
-        file_id: ID of the file to process
-        user_id: User ID to validate authorization
-        
-    Returns:
-        TransactionFile if found and authorized
-        
-    Raises:
-        NotAuthorized: If user doesn't match the file's user_id
-        NotFound: If file doesn't exist
-        ValueError: If file_id or user_id is None or empty
-    """
-    try:
-        if not user_id:
-            raise ValueError("User ID is required for integrity checking")
-            
-        # Use auth utility for authentication and existence check
-        return checked_mandatory_transaction_file(file_id, user_id)
-        
-    except NotAuthorized as e:
-        logger.error(f"User {user_id} not authorized to access file {file_id}")
-        raise
-    except NotFound as e:
-        logger.error(f"File {file_id} not found")
-        raise
-    except Exception as e:
-        logger.error(f"Error retrieving file {file_id}: {str(e)}")
-        raise
+    def __init__(self):
+        """Initialize the file processor service."""
+        logger.info("FileProcessorService initialized")
+
+    # File preparation and validation methods
 
 
-def determine_file_format(transaction_file: TransactionFile, content_bytes: bytes)->TransactionFile:
-    """
-    Determine or validate the file format.
-    
-    Args:
-        file_record: The file record to check
-        content_bytes: The file content as bytes
-    """
-    try:
-
-        if transaction_file.file_format:
-            file_format = transaction_file.file_format
-            logger.info(f"Using stored file format: {file_format}")            
-        else:
-            file_format = file_type_selector(content_bytes)
-            logger.info(f"Detected file format: {file_format}")
-            # Update file record with detected format
-            update_transaction_file(transaction_file.file_id, transaction_file.user_id, {'file_format': file_format})
-            transaction_file.file_format = file_format
+    def update_file_format(self, transaction_file: TransactionFile, content_bytes: bytes) -> None:
+        """
+        Update the file format by detecting it from content or using stored format.
+        Modifies the transaction_file object in place.
         
-        return transaction_file
-    except Exception as e:
-        logger.error(f"Error determining file format: {str(e)}")
-        return transaction_file
+        Args:
+            transaction_file: The file record to update
+            content_bytes: The file content as bytes for format detection
+        """
+        try:
+            if transaction_file.file_format:
+                logger.info(f"Using stored file format: {transaction_file.file_format}")            
+            else:
+                file_format = file_type_selector(content_bytes)
+                logger.info(f"Detected file format: {file_format}")
+                # Update file record with detected format
+                update_transaction_file(transaction_file.file_id, transaction_file.user_id, {'fileFormat': file_format})
+                transaction_file.file_format = file_format
+        except Exception as e:
+            logger.error(f"Error updating file format: {str(e)}")
+            logger.error(traceback.format_exc())
+            # Don't re-raise - allow processing to continue with existing format
 
 
 def determine_file_map(transaction_file: TransactionFile) -> Optional[FileMap]:
@@ -183,50 +144,11 @@ def determine_file_map(transaction_file: TransactionFile) -> Optional[FileMap]:
             
     except Exception as e:
         logger.error(f"Error determining file map: {str(e)}")
+        logger.error(traceback.format_exc())
         raise  # Re-raise the exception to be handled by the caller
 
 
-# def parse_file_transactions(
-#     transaction_file: TransactionFile,
-#     content_bytes: bytes, 
-# ) -> Optional[List[Transaction]]:
-#     """
-#     Parse transactions from file content.
-    
-#     Args:
-#         account_id: The account ID to use
-#         content_bytes: The file content as bytes
-#         file_format: The format of the file
-#         opening_balance: The opening balance to use
-#         file_map: Optional field mapping configuration
-        
-#     Returns:
-#         List of transactions
-        
-#     Raises:
-#         ValueError: If parsing fails or no transactions could be parsed
-#     """
-#     try:
-#         # Validate required parameters
-#         if not checked_optional_file_map(transaction_file.file_map_id, transaction_file.user_id):
-#             return None
-        
-            
-#         # Parse transactions using the utility
-#         transactions = parse_transactions(
-#             transaction_file,
-#             content_bytes
-#         )
-        
-#         if not transactions:
-#             logger.warning(f"No transactions could be parsed from file {transaction_file.file_id}")
-#             return None
-            
-#         logger.info(f"Successfully parsed {len(transactions)} transactions")
-#         return transactions
-#     except Exception as e:
-#         logger.error(f"Error parsing transactions: {str(e)}")
-#         raise
+
 
 
 def calculate_running_balances(transactions: List[Transaction], opening_balance: Optional[Decimal]) -> None:
@@ -249,6 +171,7 @@ def calculate_running_balances(transactions: List[Transaction], opening_balance:
         logger.info(f"Calculated running balances starting from {opening_balance}")
     except Exception as e:
         logger.error(f"Error calculating running balances: {str(e)}")
+        logger.error(traceback.format_exc())
         raise
 
 
@@ -279,19 +202,53 @@ def create_transactions(
             update_transaction_file(transaction_file.file_id, transaction_file.user_id, {'duplicate_count': duplicate_count})
             logger.info(f"Late duplicate detection! Updated duplicate count for file {transaction_file.file_id} to {duplicate_count}")
         
-        # Find the latest transaction date and its balance
-        latest_transaction = max(transactions, key=lambda t: t.date)
-        latest_transaction_date = latest_transaction.date
-        latest_balance = latest_transaction.balance
+        # Single pass to find earliest/latest dates and latest balance using reduce
         
-        # Update account's last transaction date and balance if this is more recent
-        if not account.last_transaction_date or latest_transaction_date > account.last_transaction_date:
-            update_data = {
-                'last_transaction_date': latest_transaction_date,
-                'balance': latest_balance
-            }
+        def find_date_range_and_balance(acc, transaction):
+            earliest, latest, latest_balance = acc
+            date = transaction.date
+            
+            # Update earliest
+            if earliest is None or date < earliest:
+                earliest = date
+            
+            # Update latest and balance
+            if latest is None or date > latest:
+                latest = date
+                latest_balance = transaction.balance
+            
+            return (earliest, latest, latest_balance)
+        
+        earliest_transaction_date, latest_transaction_date, latest_balance = reduce(
+            find_date_range_and_balance, 
+            transactions, 
+            (None, None, None)
+        )
+        
+        # Prepare account updates
+        update_data = {}
+        
+        # Update balance if this is the most recent transaction
+        if (account.last_transaction_date is None or 
+            (latest_transaction_date is not None and latest_transaction_date > account.last_transaction_date)):
+            update_data['balance'] = latest_balance
+            logger.info(f"Updated balance to {latest_balance} for account {account.account_id}")
+        
+        # Update first transaction date if this is earlier or not set
+        if (account.first_transaction_date is None or 
+            (earliest_transaction_date is not None and earliest_transaction_date < account.first_transaction_date)):
+            update_data['first_transaction_date'] = earliest_transaction_date
+            logger.info(f"Updated first transaction date to {earliest_transaction_date} for account {account.account_id}")
+        
+        # Update last transaction date if this is more recent or not set
+        if (account.last_transaction_date is None or 
+            (latest_transaction_date is not None and latest_transaction_date > account.last_transaction_date)):
+            update_data['last_transaction_date'] = latest_transaction_date
+            logger.info(f"Updated last transaction date to {latest_transaction_date} for account {account.account_id}")
+        
+        # Apply all updates in one call if any changes needed
+        if update_data:
             update_account(account.account_id, account.user_id, update_data)
-            logger.info(f"Updated last transaction date to {latest_transaction_date} and balance to {latest_balance} for account {account.account_id}")
         
         for transaction in transactions:
             try:
@@ -305,10 +262,12 @@ def create_transactions(
             except Exception as tx_error:
                 logger.error(f"Error creating transaction: {str(tx_error)}")
                 logger.error(f"Transaction data that caused error: {transaction}")
+                logger.error(traceback.format_exc())
                 
         return transaction_count, duplicate_count
     except Exception as e:
         logger.error(f"Error creating transactions: {str(e)}")
+        logger.error(traceback.format_exc())
         raise
 
 
@@ -346,6 +305,7 @@ def update_file_status(
         return transaction_file
     except Exception as e:
         logger.error(f"Error updating file status: {str(e)}")
+        logger.error(traceback.format_exc())
         raise
 
 
@@ -378,6 +338,7 @@ def update_transaction_duplicates(
         return duplicate_count
     except Exception as e:
         logger.error(f"Error in duplicate detection: {str(e)}")
+        logger.error(traceback.format_exc())
         return 0
     
 def  determine_opening_balance_from_transaction_overlap(transactions: List[Transaction]) -> Optional[Decimal]:
@@ -473,13 +434,11 @@ def  determine_opening_balance_from_transaction_overlap(transactions: List[Trans
         return None
     except Exception as e:
         logger.error(f"Error determining opening balance: {str(e)}")
+        logger.error(traceback.format_exc())
         return None
 
 
-# def process_new_file(transaction_file: TransactionFile, content_bytes: bytes) -> FileProcessorResponse:
-#     """Process a newly uploaded file."""
-#     # For new files, there's no old transaction file, so pass None
-#     return process_file(transaction_file)
+
 
 def update_opening_balance(transaction_file: TransactionFile) -> FileProcessorResponse:
     """Update a file's opening balance without reprocessing transactions."""
@@ -520,7 +479,7 @@ def change_file_account(transaction_file: TransactionFile) -> FileProcessorRespo
     return FileProcessorResponse(
         message="File account updated successfully",
         transactions=transactions,
-        transaction_count=len(transactions) if transactions else 0
+        transactionCount=len(transactions) if transactions else 0
     )
         
 def set_defaults_from_account(transaction_file: TransactionFile)->TransactionFile:
@@ -608,12 +567,13 @@ def update_file(old_transaction_file: Optional[TransactionFile], transaction_fil
         update_transaction_file_object(transaction_file)
         return FileProcessorResponse(
             message="File updated successfully",
-            transaction_count=transaction_file.transaction_count,
-            duplicate_count=transaction_file.duplicate_count if transaction_file.duplicate_count else 0,
+            transactionCount=transaction_file.transaction_count,
+            duplicateCount=transaction_file.duplicate_count if transaction_file.duplicate_count else 0,
             transactions=transactions
         )
     except Exception as e:
         logger.error(f"Error updating file: {str(e)}")
+        logger.error(traceback.format_exc())
         raise
 
 def reparse_file(transaction_file: TransactionFile) -> Optional[List[Transaction]]:
@@ -631,7 +591,6 @@ def reparse_file(transaction_file: TransactionFile) -> Optional[List[Transaction
         return parse_transactions(transaction_file, content_bytes)
     except Exception as e:
         logger.error(f"Error reparsing file: {str(e)}")
-        #show stack trace
         logger.error(traceback.format_exc())
         raise
 

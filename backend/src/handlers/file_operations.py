@@ -1,13 +1,26 @@
+# Standard library imports
+import csv
+import io
 import json
 import logging
 import os
 import traceback
 import uuid
-import csv
-import io
 import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta
+from decimal import Decimal
+from typing import Dict, Any, List, Optional, Union
+
+# Local model imports
 from models.money import Currency, Money
+from models.transaction_file import FileFormat, ProcessingStatus, DateRange
+from models.transaction import Transaction
+
+# Service imports
 from services.file_processor_service import FileProcessorResponse, process_file
+from services.file_service import get_files_for_user, format_file_metadata, get_files_for_account
+
+# Utility imports
 from utils.db_utils import (
     get_file_map, 
     get_transaction_file, 
@@ -22,17 +35,13 @@ from utils.db_utils import (
     list_file_transactions, 
     delete_transactions_for_file, 
     get_file_maps_table,
+    update_account_derived_values,
     checked_mandatory_account,
     checked_mandatory_transaction_file,
     checked_optional_account,
     NotFound,
     update_transaction_file_object
 )
-from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, Union
-from decimal import Decimal
-from models.transaction_file import FileFormat, ProcessingStatus, DateRange
-from models.transaction import Transaction
 from utils.transaction_parser_new import file_type_selector, parse_transactions, preprocess_csv_text, parse_ofx_headers, get_ofx_encoding
 from utils.s3_dao import (
     get_presigned_post_url,
@@ -41,9 +50,8 @@ from utils.s3_dao import (
     get_presigned_url_simple,
     put_object
 )
-from handlers.file_processor import process_file
-from services.file_service import get_files_for_user, format_file_metadata, get_files_for_account
 from utils.lambda_utils import create_response, mandatory_body_parameter, mandatory_path_parameter, handle_error, mandatory_query_parameter, optional_body_parameter, optional_query_parameter 
+from utils.handler_decorators import api_handler, require_authenticated_user, standard_error_handling
 
 # Event-driven architecture imports
 from services.event_service import event_service
@@ -57,38 +65,45 @@ ENABLE_DIRECT_TRIGGERS = os.environ.get('ENABLE_DIRECT_TRIGGERS', 'false').lower
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Fix imports for Lambda environment
-try:
-    # Try direct imports for Lambda environment
-    import sys
-    # Add the /var/task (Lambda root) to the path if not already there
-    if '/var/task' not in sys.path:
-        sys.path.insert(0, '/var/task')
+
+def sanitize_presigned_data(presigned_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Sanitize presigned S3 data by redacting sensitive fields before logging.
     
-    # Add the parent directory to allow direct imports
-    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
+    Args:
+        presigned_data: The presigned data dictionary from AWS S3
+        
+    Returns:
+        A sanitized copy with sensitive fields redacted
+    """
+    # List of sensitive keys to redact
+    sensitive_keys = [
+        "signature", "x-amz-signature", "credentials", "x-amz-credential",
+        "policy", "x-amz-security-token", "accessKeyId", "x-amz-date",
+        "x-amz-algorithm"
+    ]
     
-    # Now try the imports
-    from models.transaction_file import TransactionFile, FileFormat, ProcessingStatus, DateRange
-    from utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_file_metadata
-    from utils.db_utils import get_account
+    # Create a deep copy to avoid modifying the original
+    sanitized_data = {}
     
-    logger.info("Successfully imported modules using adjusted path")
-except ImportError as e:
-    logger.error(f"Import error: {str(e)}")
-    # Log the current sys.path to debug import issues
-    logger.error(f"Current sys.path: {sys.path}")
-    # Last resort, try relative import
-    try:
-        from ..models.transaction_file import TransactionFile, FileFormat, ProcessingStatus, DateRange
-        from ..utils.db_utils import get_transaction_file, list_user_files, list_account_files, create_transaction_file, update_transaction_file, delete_file_metadata
-        from ..utils.db_utils import get_account
-        logger.info("Successfully imported modules using relative imports")
-    except ImportError as e2:
-        logger.error(f"Final import attempt failed: {str(e2)}")
-        raise
+    for key, value in presigned_data.items():
+        if key == 'fields' and isinstance(value, dict):
+            # Sanitize the fields dictionary
+            sanitized_fields = {}
+            for field_key, field_value in value.items():
+                if field_key.lower() in [sk.lower() for sk in sensitive_keys]:
+                    sanitized_fields[field_key] = "[REDACTED]"
+                else:
+                    sanitized_fields[field_key] = field_value
+            sanitized_data[key] = sanitized_fields
+        elif key.lower() in [sk.lower() for sk in sensitive_keys]:
+            sanitized_data[key] = "[REDACTED]"
+        else:
+            sanitized_data[key] = value
+    
+    return sanitized_data
+
+
 
 
 # Get environment variables
@@ -101,25 +116,7 @@ if not FILE_STORAGE_BUCKET:
     raise ValueError("FILE_STORAGE_BUCKET environment variable not set")
 
 
-def get_user_from_event(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Extract user information from the event."""
-    try:
-        request_context = event.get("requestContext", {})
-        authorizer = request_context.get("authorizer", {}).get("jwt", {})
-        claims = authorizer.get("claims", {})
-        
-        user_sub = claims.get("sub")
-        if not user_sub:
-            return None
-        
-        return {
-            "id": user_sub,
-            "email": claims.get("email", "unknown"),
-            "auth_time": claims.get("auth_time")
-        }
-    except Exception as e:
-        logger.error(f"Error extracting user from event: {str(e)}")
-        return None
+
 
 def generate_file_id() -> str:
     """Generate a unique file ID."""
@@ -127,152 +124,128 @@ def generate_file_id() -> str:
 
 
 
+@api_handler()
 def list_files_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """List files for the current user."""
-    try:
-        logger.info(f"Listing files for user: {user_id}")
-        account_id = optional_query_parameter(event, 'accountId')
-        if account_id:
-            account = checked_optional_account(uuid.UUID(account_id), user_id)
-        else:
-            account = None
-        files = get_files_for_user(user_id, account.account_id if account else None)
-        formatted_files = [format_file_metadata(file) for file in files]
-        return create_response(200, {
-            'files': formatted_files,
-            'user': user_id,
-            'metadata': {
-                'totalFiles': len(formatted_files),
-                'timestamp': datetime.utcnow().isoformat()
-            }
-        })
-    except Exception as e:
-        logger.error(f"Error listing files: {str(e)}, Exception type: {type(e).__name__}")
-        logger.error(traceback.format_exc())
-        return create_response(500, {"message": "Error listing files"})
+    logger.info(f"Listing files for user: {user_id}")
+    account_id = optional_query_parameter(event, 'accountId')
+    if account_id:
+        account = checked_optional_account(uuid.UUID(account_id), user_id)
+    else:
+        account = None
+    files = get_files_for_user(user_id, account.account_id if account else None)
+    formatted_files = [format_file_metadata(file) for file in files]
+    return {
+        'files': formatted_files,
+        'user': user_id,
+        'metadata': {
+            'totalFiles': len(formatted_files),
+            'timestamp': datetime.utcnow().isoformat()
+        }
+    }
 
+@api_handler()
 def get_files_by_account_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """List files for a specific account, with authorization and formatting."""
-    try:
-        account_id = uuid.UUID(mandatory_query_parameter(event, 'accountId'))
-        checked_mandatory_account(account_id, user_id)
-        files = get_files_for_account(account_id)
-        formatted_files = [format_file_metadata(file) for file in files]
-        return create_response(200, {
-            'files': formatted_files,
-            'user': user_id,
-            'metadata': {
-                'totalFiles': len(formatted_files),
-                'timestamp': datetime.utcnow().isoformat(),
-                'accountId': account_id
-            }
-        })
-    except PermissionError:
-        return create_response(403, {"message": "Access denied. You do not own this account"})
-    except ValueError as e:
-        return create_response(400, {"message": str(e)})
-    except Exception as e:
-        logger.error(f"Error listing files for account: {str(e)}, Exception type: {type(e).__name__}")
-        return create_response(500, {"message": "Error listing files for account"})
+    account_id = uuid.UUID(mandatory_path_parameter(event, 'accountId'))
+    checked_mandatory_account(account_id, user_id)
+    files = get_files_for_account(account_id)
+    formatted_files = [format_file_metadata(file) for file in files]
+    return {
+        'files': formatted_files,
+        'user': user_id,
+        'metadata': {
+            'totalFiles': len(formatted_files),
+            'timestamp': datetime.utcnow().isoformat(),
+            'accountId': str(account_id)
+        }
+    }
 
+@api_handler()
 def get_upload_url_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Generate a presigned URL for direct S3 upload without creating metadata."""
-    try:
-        # Parse request body
-        key = mandatory_body_parameter(event, 'key')
-        content_type = mandatory_body_parameter(event, 'contentType')
-        file_id = mandatory_body_parameter(event, 'fileId')  # Now required explicit parameter
-        account_id = optional_body_parameter(event, 'accountId')
+    # Parse request body
+    key = mandatory_body_parameter(event, 'key')
+    content_type = mandatory_body_parameter(event, 'contentType')
+    file_id = mandatory_body_parameter(event, 'fileId')  # Now required explicit parameter
+    account_id = optional_body_parameter(event, 'accountId')
+    
+    # Validate the key starts with the user's ID for security
+    if not key.startswith(f"{user_id}/"):
+        raise ValueError('Invalid key prefix')
         
-        # Validate the key starts with the user's ID for security
-        if not key.startswith(f"{user_id}/"):
-            return create_response(403, {'message': 'Invalid key prefix'})
-            
-        # Validate that the file_id in the key matches the explicit file_id parameter
-        key_parts = key.split('/')
-        if len(key_parts) != 3 or key_parts[1] != file_id:
-            return create_response(400, {'message': 'File ID in key does not match explicit fileId parameter'})
-            
-        # If account_id is provided, verify user has access to it
-        if account_id:
-            try:
-                checked_mandatory_account(uuid.UUID(account_id) if account_id else None, user_id)
-            except ValueError as e:
-                return create_response(403, {'message': str(e)})
-            
-        # Prepare fields for presigned URL
-        fields = {
-            'Content-Type': content_type,
-            'key': key,
-            'x-amz-meta-fileid': file_id  # Always store file_id in metadata
-        }
+    # Validate that the file_id in the key matches the explicit file_id parameter
+    key_parts = key.split('/')
+    if len(key_parts) != 3 or key_parts[1] != file_id:
+        raise ValueError('File ID in key does not match explicit fileId parameter')
         
-        # Define policy conditions using AWS-documented format
-        conditions = [
-            ['starts-with', '$Content-Type', ''],
-            ['starts-with', '$key', f"{user_id}/"],  # Ensure key starts with user ID
-            ['eq', '$x-amz-meta-fileid', file_id]  # Ensure file_id matches
-        ]
+    # If account_id is provided, verify user has access to it
+    if account_id:
+        checked_mandatory_account(uuid.UUID(account_id) if account_id else None, user_id)
         
-        # If account_id is provided, add metadata field and condition
-        if account_id:
-            account_id_str = str(account_id)  # Explicitly convert to string
-            fields['x-amz-meta-accountid'] = account_id_str
-            conditions.append(['eq', '$x-amz-meta-accountid', account_id_str])
-            
-        # Log the complete conditions and fields for debugging
-        logger.info(f"S3 policy conditions: {json.dumps(conditions)}")
-        logger.info(f"S3 policy fields: {json.dumps(fields)}")
-            
-        # Get presigned post data with all fields pre-populated
-        presigned_data = get_presigned_post_url(
-            FILE_STORAGE_BUCKET, 
-            key, 
-            3600,
-            conditions=conditions,
-            fields=fields
-        )
+    # Prepare fields for presigned URL
+    fields = {
+        'Content-Type': content_type,
+        'key': key,
+        'x-amz-meta-fileid': file_id  # Always store file_id in metadata
+    }
+    
+    # Define policy conditions using AWS-documented format
+    conditions = [
+        ['starts-with', '$Content-Type', ''],
+        ['starts-with', '$key', f"{user_id}/"],  # Ensure key starts with user ID
+        ['eq', '$x-amz-meta-fileid', file_id]  # Ensure file_id matches
+    ]
+    
+    # If account_id is provided, add metadata field and condition
+    if account_id:
+        account_id_str = str(account_id)  # Explicitly convert to string
+        fields['x-amz-meta-accountid'] = account_id_str
+        conditions.append(['eq', '$x-amz-meta-accountid', account_id_str])
         
-        logger.info(f"Generated presigned URL data: {json.dumps(presigned_data)}")
+    # Log the complete conditions and fields for debugging
+    logger.info(f"S3 policy conditions: {json.dumps(conditions)}")
+    logger.info(f"S3 policy fields: {json.dumps(fields)}")
         
-        return create_response(200, {
-            'url': presigned_data['url'],
-            'fields': presigned_data['fields'],
-            'fileId': file_id,  # Use the explicit file_id parameter
-            'expires': 3600  # URL expires in 1 hour
-        })
-    except ValueError as ve:
-        return handle_error(400, str(ve))
-    except Exception as e:
-        logger.error(f"Error generating S3 upload URL: {str(e)}")
-        return handle_error(500, "Error generating S3 upload URL")
+    # Get presigned post data with all fields pre-populated
+    presigned_data = get_presigned_post_url(
+        FILE_STORAGE_BUCKET, 
+        key, 
+        3600,
+        conditions=conditions,
+        fields=fields
+    )
+    
+    # Log sanitized presigned data (sensitive fields redacted)
+    sanitized_data = sanitize_presigned_data(presigned_data)
+    logger.info(f"Generated presigned URL data: {json.dumps(sanitized_data)}")
+    
+    return {
+        'url': presigned_data['url'],
+        'fields': presigned_data['fields'],
+        'fileId': file_id,  # Use the explicit file_id parameter
+        'expires': 3600  # URL expires in 1 hour
+    }
 
 
+@api_handler()
 def get_download_url_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Generate a presigned URL for file download."""
-    try:
-        # Get file ID from path parameters
-        file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
-            
-        # Get file metadata from DynamoDB
-        file = checked_mandatory_transaction_file(file_id, user_id)
-    
-        # Generate presigned URL for download
-        download_url = get_presigned_url_simple(FILE_STORAGE_BUCKET, file.s3_key, 'get')
+    # Get file ID from path parameters
+    file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
         
-        return create_response(200, {
-            'fileId': file.file_id,
-            'downloadUrl': download_url,
-            'fileName': file.file_name,
-            'expires': 3600  # URL expires in 1 hour
-        })
-    except ValueError as ve:        
-        return handle_error(400, str(ve))
-    except NotFound as e:
-        return handle_error(404, str(e))
-    except Exception as e:
-        logger.error(f"Error generating download URL: {str(e)}")
-        return handle_error(500, "Error generating download URL")
+    # Get file metadata from DynamoDB
+    file = checked_mandatory_transaction_file(file_id, user_id)
+
+    # Generate presigned URL for download
+    download_url = get_presigned_url_simple(FILE_STORAGE_BUCKET, file.s3_key, 'get')
+    
+    return {
+        'fileId': str(file.file_id),
+        'downloadUrl': download_url,
+        'fileName': file.file_name,
+        'expires': 3600  # URL expires in 1 hour
+    }
 
 def delete_file_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Delete a file and all its associated data.
@@ -332,6 +305,15 @@ def delete_file_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
             # Remove the file metadata from DynamoDB
             delete_file_metadata(file_id)
             logger.info(f"Successfully deleted file {file_id} from DynamoDB table")
+            
+            # Step 5.5: Update derived values for the affected account
+            if file.account_id:
+                try:
+                    update_account_derived_values(file.account_id, user_id)
+                    logger.info(f"Updated derived values for account {file.account_id} after file deletion")
+                except Exception as derived_error:
+                    logger.error(f"Error updating derived values for account {file.account_id}: {str(derived_error)}")
+                    # Don't fail the whole operation for this
             
             # Step 6: Verification checks
             # Verify the file metadata was actually deleted
@@ -433,172 +415,148 @@ def unassociate_file_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
         return handle_error(404, str(e))
     except Exception as e:
         logger.error(f"Error unassociating file: {str(e)}")
+        logger.error(traceback.format_exc())
         return create_response(500, {"message": "Error handling unassociate request"})
 
+@api_handler()
 def associate_file_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Associate a file with an account."""
-    try:
-        # Get file ID from path parameters
-        file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
-        
-        # Get account ID from request body
-        account_id = uuid.UUID(mandatory_body_parameter(event, 'accountId'))
-                
-        # Get the file to verify it exists and belongs to the user
-        file = checked_mandatory_transaction_file(file_id, user_id)
-                 
-        # Verify that the account exists and belongs to the user
-        account = checked_mandatory_account(account_id, user_id)
+    # Get file ID from path parameters
+    file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
+    
+    # Get account ID from request body
+    account_id = uuid.UUID(mandatory_body_parameter(event, 'accountId'))
             
-        # Store previous account ID for event (if any)
-        previous_account_id = file.account_id
+    # Get the file to verify it exists and belongs to the user
+    file = checked_mandatory_transaction_file(file_id, user_id)
+             
+    # Verify that the account exists and belongs to the user
+    account = checked_mandatory_account(account_id, user_id)
         
-        # Update the file to add account association
-        logger.info(f"Associating file {file_id} with account {account_id}")
-        file.account_id = account_id
-        response: FileProcessorResponse = process_file(file)
-        
-        # Handle file association with shadow mode support
-        # NEW: Event publishing (if enabled)
-        if ENABLE_EVENT_PUBLISHING:
-            try:
-                file_event = FileAssociatedEvent(
-                    user_id=user_id,
-                    file_id=str(file_id),
-                    account_id=str(account_id),
-                    previous_account_id=str(previous_account_id) if previous_account_id else None
-                )
-                event_service.publish_event(file_event)
-                logger.info(f"FileAssociatedEvent published for file {file_id} with account {account_id}")
-            except Exception as e:
-                logger.warning(f"Failed to publish file association event: {str(e)}")
-        
-        # OLD: Direct analytics triggering (if enabled for shadow mode)
-        if ENABLE_DIRECT_TRIGGERS:
-            try:
-                from utils.analytics_utils import trigger_analytics_for_account_change
-                trigger_analytics_for_account_change(user_id, 'associate')
-                logger.info(f"Direct analytics refresh triggered for file association: {file_id}")
-            except Exception as e:
-                logger.warning(f"Failed to trigger direct analytics for file association: {str(e)}")
-        
-        return create_response(200, response.to_dict())
-    except Exception as e:
-        logger.error(f"Error associating file: {str(e)}")
-        return create_response(500, {"message": "Error handling associate request"})
+    # Store previous account ID for event (if any)
+    previous_account_id = file.account_id
+    
+    # Update the file to add account association using DTO pattern
+    logger.info(f"Associating file {file_id} with account {account_id}")
+    from models.transaction_file import TransactionFileUpdate
+    update_dto = TransactionFileUpdate(accountId=account_id)
+    file.update_with_data(update_dto)
+    response: FileProcessorResponse = process_file(file)
+    
+    # Handle file association with shadow mode support
+    # NEW: Event publishing (if enabled)
+    if ENABLE_EVENT_PUBLISHING:
+        try:
+            file_event = FileAssociatedEvent(
+                user_id=user_id,
+                file_id=str(file_id),
+                account_id=str(account_id),
+                previous_account_id=str(previous_account_id) if previous_account_id else None
+            )
+            event_service.publish_event(file_event)
+            logger.info(f"FileAssociatedEvent published for file {file_id} with account {account_id}")
+        except Exception as e:
+            logger.warning(f"Failed to publish file association event: {str(e)}")
+    
+    # OLD: Direct analytics triggering (if enabled for shadow mode)
+    if ENABLE_DIRECT_TRIGGERS:
+        try:
+            from utils.analytics_utils import trigger_analytics_for_account_change
+            trigger_analytics_for_account_change(user_id, 'associate')
+            logger.info(f"Direct analytics refresh triggered for file association: {file_id}")
+        except Exception as e:
+            logger.warning(f"Failed to trigger direct analytics for file association: {str(e)}")
+    
+    return response.model_dump(by_alias=True, mode='json')
 
+@api_handler()
 def update_file_balance_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Update a file's opening balance."""
-    try:
-        # Get file ID from path parameters
-        file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
-            
-        # Get file metadata from DynamoDB
-        file = checked_mandatory_transaction_file(file_id, user_id)
+    # Get file ID from path parameters
+    file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
         
-        # Parse the request body to get the opening balance
-        amount = Decimal(mandatory_body_parameter(event, 'openingBalance'))
-        currency = optional_body_parameter(event, 'currency') 
-        currency = Currency(currency) if currency else file.currency
-        file.opening_balance = amount
-        response: FileProcessorResponse = process_file(file)
+    # Get file metadata from DynamoDB
+    file = checked_mandatory_transaction_file(file_id, user_id)
+    
+    # Parse the request body to get the opening balance
+    amount = Decimal(mandatory_body_parameter(event, 'openingBalance'))
+    currency = optional_body_parameter(event, 'currency') 
+    currency = Currency(currency) if currency else file.currency
+    
+    # Update the file using DTO pattern
+    from models.transaction_file import TransactionFileUpdate
+    update_dto = TransactionFileUpdate(openingBalance=amount, currency=currency)
+    file.update_with_data(update_dto)
+    response: FileProcessorResponse = process_file(file)
 
-        return create_response(200, response.to_dict())
+    return response.model_dump(by_alias=True, mode='json')
 
-    except ValueError as e: 
-        logger.error(f"Error updating file balance: {str(e)}")
-        logger.error(traceback.format_exc())
-        return handle_error(400, str(e))
-    except NotFound as e:
-        logger.error(f"File not found: {str(e)}")
-        logger.error(traceback.format_exc())
-        return handle_error(404, str(e))
-    except Exception as e:
-        logger.error(f"Error updating file balance: {str(e)}")
-        logger.error(traceback.format_exc())
-        return create_response(500, {"message": "Error handling update balance request"})
-
+@api_handler()
 def update_file_closing_balance_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Update a file's closing balance by calculating a new opening balance and return the updated file."""
-    try:
-        # Get file ID from path parameters
-        file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
-            
-        # Get file metadata from DynamoDB
-        file = checked_mandatory_transaction_file(file_id, user_id)
+    # Get file ID from path parameters
+    file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
         
-        # Parse the request body to get the closing balance
-        new_closing_balance = Decimal(mandatory_body_parameter(event, 'closingBalance'))
-        currency = optional_body_parameter(event, 'currency') 
-        currency = Currency(currency) if currency else file.currency
-        
-        # Calculate the difference between new and existing closing balance
-        existing_closing_balance = file.closing_balance or Decimal(0)
-        difference = new_closing_balance - existing_closing_balance
-        
-        # Adjust the existing opening balance by the difference
-        existing_opening_balance = file.opening_balance or Decimal(0)
-        new_opening_balance = existing_opening_balance + difference
-        
-        logger.info(f"Optimized closing balance update: existing_closing={existing_closing_balance}, new_closing={new_closing_balance}, difference={difference}, existing_opening={existing_opening_balance}, new_opening={new_opening_balance}")
-        
-        # Update the file with new balances
-        file.opening_balance = new_opening_balance
-        file.closing_balance = new_closing_balance
-        if currency:
-            file.currency = currency
+    # Get file metadata from DynamoDB
+    file = checked_mandatory_transaction_file(file_id, user_id)
+    
+    # Parse the request body to get the closing balance
+    new_closing_balance = Decimal(mandatory_body_parameter(event, 'closingBalance'))
+    currency = optional_body_parameter(event, 'currency') 
+    currency = Currency(currency) if currency else file.currency
+    
+    # Calculate the difference between new and existing closing balance
+    existing_closing_balance = file.closing_balance or Decimal(0)
+    difference = new_closing_balance - existing_closing_balance
+    
+    # Adjust the existing opening balance by the difference
+    existing_opening_balance = file.opening_balance or Decimal(0)
+    new_opening_balance = existing_opening_balance + difference
+    
+    logger.info(f"Optimized closing balance update: existing_closing={existing_closing_balance}, new_closing={new_closing_balance}, difference={difference}, existing_opening={existing_opening_balance}, new_opening={new_opening_balance}")
+    
+    # Update the file with new balances using DTO pattern
+    from models.transaction_file import TransactionFileUpdate
+    if currency:
+        update_dto = TransactionFileUpdate(
+            openingBalance=new_opening_balance,
+            closingBalance=new_closing_balance,
+            currency=currency
+        )
+    else:
+        update_dto = TransactionFileUpdate(
+            openingBalance=new_opening_balance,
+            closingBalance=new_closing_balance
+        )
+    file.update_with_data(update_dto)
+    new_file = process_file(file)
+    
+    # Return the entire transaction file object
+    return new_file.model_dump(by_alias=True, mode='json')
 
-        new_file = process_file(file)
-        
-        # Return the entire transaction file object
-        return create_response(200, new_file.to_dict())
-
-    except ValueError as e: 
-        logger.error(f"Error updating file closing balance: {str(e)}")
-        logger.error(traceback.format_exc())
-        return handle_error(400, str(e))
-    except NotFound as e:
-        logger.error(f"File not found: {str(e)}")
-        logger.error(traceback.format_exc())
-        return handle_error(404, str(e))
-    except Exception as e:
-        logger.error(f"Error updating file closing balance: {str(e)}")
-        logger.error(traceback.format_exc())
-        return create_response(500, {"message": "Error handling update closing balance request"})
-
+@api_handler()
 def get_file_metadata_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Get metadata for a single file by ID."""
-    try:
-        # Get file ID from path parameters
-        file_id = uuid.UUID(mandatory_path_parameter(event, 'id')) 
-        logger.info(f"Getting file metadata for file {file_id}")
-        # Get file metadata from DynamoDB
-        file = checked_mandatory_transaction_file(file_id, user_id)
-        
-        # Convert to JSON-friendly format with proper type handling
-        file_json = file.model_dump(by_alias=True)
-        
-        # Add field map information if it exists
-        if 'fieldMapId' in file_json:
-            field_map = get_file_map(file_json['fieldMapId'])
-            if field_map:
-                file_json['fieldMap'] = {
-                    'fieldMapId': field_map.file_map_id,
-                    'name': field_map.name,
-                    'description': field_map.description
-                }
-        
-        return create_response(200, file_json)
-    except NotFound as e:
-        logger.info(f"File {mandatory_path_parameter(event, 'id')} not found for user {user_id}")
-        return create_response(404, {"message": "File not found"})
-    except ValueError as e:
-        logger.error(f"Invalid file ID format: {str(e)}")
-        return create_response(400, {"message": "Invalid file ID format"})
-    except Exception as e:
-        logger.error(f"Error getting file metadata: {str(e)}")
-        logger.error(traceback.format_exc())
-        return create_response(500, {"message": "Error getting file metadata"})
+    # Get file ID from path parameters
+    file_id = uuid.UUID(mandatory_path_parameter(event, 'id')) 
+    logger.info(f"Getting file metadata for file {file_id}")
+    # Get file metadata from DynamoDB
+    file = checked_mandatory_transaction_file(file_id, user_id)
+    
+    # Convert to JSON-friendly format with proper type handling
+    file_json = file.model_dump(by_alias=True, mode='json')
+    
+    # Add field map information if it exists
+    if 'fieldMapId' in file_json:
+        field_map = get_file_map(file_json['fieldMapId'])
+        if field_map:
+            file_json['fieldMap'] = {
+                'fieldMapId': field_map.file_map_id,
+                'name': field_map.name,
+                'description': field_map.description
+            }
+    
+    return file_json
 
 def get_file_transactions_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Get all transactions for a specific file."""
@@ -628,6 +586,7 @@ def get_file_transactions_handler(event: Dict[str, Any], user_id: str) -> Dict[s
             })
         except Exception as e:
             logger.error(f"Error retrieving transactions for file {file_id}: {str(e)}")
+            logger.error(traceback.format_exc())
             return create_response(500, {"message": "Error retrieving transactions"})
     except NotFound as e:
         logger.info(f"File {mandatory_path_parameter(event, 'id')} not found for user {user_id}")
@@ -637,6 +596,7 @@ def get_file_transactions_handler(event: Dict[str, Any], user_id: str) -> Dict[s
         return create_response(400, {"message": "Invalid file ID format"})        
     except Exception as e:
         logger.error(f"Error in get_file_transactions_handler: {str(e)}")
+        logger.error(traceback.format_exc())
         return create_response(500, {"message": "Internal server error"})
 
 def delete_file_transactions_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
@@ -650,6 +610,15 @@ def delete_file_transactions_handler(event: Dict[str, Any], user_id: str) -> Dic
         
         # Delete all transactions for the file
         deleted_count = delete_transactions_for_file(file_id)
+        
+        # Update derived values for the affected account
+        if file.account_id:
+            try:
+                update_account_derived_values(file.account_id, user_id)
+                logger.info(f"Updated derived values for account {file.account_id} after transaction deletion")
+            except Exception as derived_error:
+                logger.error(f"Error updating derived values for account {file.account_id}: {str(derived_error)}")
+                # Don't fail the whole operation for this
         
         # Handle bulk transaction deletion with shadow mode support
         if deleted_count > 0:
@@ -692,37 +661,29 @@ def delete_file_transactions_handler(event: Dict[str, Any], user_id: str) -> Dic
         return create_response(400, {"message": "Invalid file ID format"})
     except Exception as e:
         logger.error(f"Error in delete_file_transactions_handler: {str(e)}")
+        logger.error(traceback.format_exc())
         return create_response(500, {"message": "Internal server error"})
 
+@api_handler()
 def get_file_content_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Get the content of a file by ID."""
-    try:
-        # Get file ID from path parameters
-        file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
-  
-        # Get file metadata from DynamoDB
-        file = checked_mandatory_transaction_file(file_id, user_id)
+    # Get file ID from path parameters
+    file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
+
+    # Get file metadata from DynamoDB
+    file = checked_mandatory_transaction_file(file_id, user_id)
+    
+    # Get the file content from S3 using S3 DAO
+    content = get_object_content(file.s3_key)
+    if content is None:
+        raise Exception("Error reading file content")
         
-        # Get the file content from S3 using S3 DAO
-        content = get_object_content(file.s3_key)
-        if content is None:
-            return create_response(500, {"message": "Error reading file content"})
-            
-        return create_response(200, {
-            'fileId': file_id,
-            'content': content.decode('utf-8'),
-            'contentType': file.file_format.value if file.file_format else 'unknown',
-            'fileName': file.file_name
-        })
-    except NotFound as e:
-        logger.info(f"File {mandatory_path_parameter(event, 'id')} not found for user {user_id}")
-        return create_response(404, {"message": "File not found"})
-    except ValueError as e:
-        logger.error(f"Invalid file ID format: {str(e)}")
-        return create_response(400, {"message": "Invalid file ID format"})        
-    except Exception as e:
-        logger.error(f"Error getting file content: {str(e)}")
-        return create_response(500, {"message": "Error getting file content"})
+    return {
+        'fileId': str(file_id),
+        'content': content.decode('utf-8'),
+        'contentType': file.file_format.value if file.file_format else 'unknown',
+        'fileName': file.file_name
+    }
 
 def update_file_field_map_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Update a file's field map.""" 
@@ -741,12 +702,14 @@ def update_file_field_map_handler(event: Dict[str, Any], user_id: str) -> Dict[s
         if not field_map:
             return create_response(404, {"message": "Field map not found"})
         
-        # Update file properties
-        file.file_map_id = field_map_id
+        # Update file properties using DTO pattern
+        from models.transaction_file import TransactionFileUpdate
+        update_dto = TransactionFileUpdate(fileMapId=field_map_id)
+        file.update_with_data(update_dto)
         logger.info(f"Updating file {file_id} with field map {field_map_id}")
         
         response: FileProcessorResponse = process_file(file)
-        return create_response(200, response.to_dict())
+        return create_response(200, response.model_dump(by_alias=True, mode='json'))
     except NotFound as e:
         logger.info(f"File {mandatory_path_parameter(event, 'id')} not found for user {user_id}")
         return create_response(404, {"message": "File not found"})                
@@ -813,6 +776,7 @@ def parse_ofx_preview(content: str, file_format: FileFormat) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Error parsing OFX/QFX preview: {str(e)}")
+        logger.error(traceback.format_exc())
         return {
             'columns': ['DTPOSTED', 'TRNAMT', 'NAME', 'TRNTYPE', 'Memo', 'FITID'],
             'data': [],
@@ -923,6 +887,7 @@ def parse_ofx_xml_preview(content: str) -> tuple[List[Dict[str, str]], int]:
                     
             except Exception as e:
                 logger.error(f"Error processing XML transaction for preview: {str(e)}")
+                logger.error(traceback.format_exc())
                 continue
         
         return transactions, total_count
@@ -960,6 +925,7 @@ def format_ofx_transaction_for_preview(data: Dict[str, str]) -> Dict[str, str]:
         }
     except Exception as e:
         logger.error(f"Error formatting OFX transaction for preview: {str(e)}")
+        logger.error(traceback.format_exc())
         return {}
 
 def parse_qif_preview(content: str) -> Dict[str, Any]:
@@ -1045,6 +1011,7 @@ def parse_qif_preview(content: str) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Error parsing QIF preview: {str(e)}")
+        logger.error(traceback.format_exc())
         return {
             'columns': [],
             'data': [],
@@ -1127,6 +1094,8 @@ def get_file_preview_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
                     content_str = content_bytes.decode('utf-8', errors='replace')
                 
                 logger.info(f"Parsing {file_id}(type {file.file_format}) for preview")
+                if not file.file_format:
+                    return handle_error(400, "File format not specified")
                 preview_data = parse_ofx_preview(content_str, file.file_format)
                 
                 return create_response(200, {
@@ -1141,7 +1110,8 @@ def get_file_preview_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
             except Exception as parse_e:
                 logger.error(f"Error parsing OFX/QFX file {file_id}: {str(parse_e)}")
                 logger.error(traceback.format_exc())
-                return handle_error(400, f"Error parsing {file.file_format.value.upper()} file: {str(parse_e)}")
+                file_format_str = file.file_format.value.upper() if file.file_format else "UNKNOWN"
+                return handle_error(400, f"Error parsing {file_format_str} file: {str(parse_e)}")
         elif file.file_format == FileFormat.QIF:
             content_bytes = get_object_content(file.s3_key)
             if content_bytes is None:
@@ -1195,55 +1165,34 @@ def try_decode_content(content_bytes: bytes) -> str:
     # If all encodings fail, use 'utf-8' with error handling as last resort
     return content_bytes.decode('utf-8', errors='replace')
 
-def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Main Lambda handler for file operations."""
-    try:
-        # Get route from event
-        route = event.get('routeKey')
-        if not route:
-            return create_response(400, {"message": "Missing route key"})
-            
-        # Get user from event
-        user = get_user_from_event(event)
-        if not user:
-            return create_response(401, {"message": "Unauthorized"})
-        user_id = user.get('id')
-        if not user_id:
-            return create_response(401, {"message": "Unauthorized"})
-        logger.info(f"Processing {route} request for user {user_id}")
-        
-        # Handle based on route
-        if route == "GET /files":
-            return list_files_handler(event, user_id)
-        if route == "GET /files/account/{accountId}":
-            return get_files_by_account_handler(event, user_id)
-        if route == "GET /files/{id}/metadata":
-            return get_file_metadata_handler(event, user_id)
-        if route == "GET /files/{id}/content":
-            return get_file_content_handler(event, user_id)
-        if route == "GET /files/{id}/download":
-            return get_download_url_handler(event, user_id)
-        if route == "GET /files/{id}/transactions":
-            return get_file_transactions_handler(event, user_id)
-        if route == "GET /files/{id}/preview":
-            return get_file_preview_handler(event, user_id)
-        if route == "DELETE /files/{id}/transactions":
-            return delete_file_transactions_handler(event, user_id)
-        if route == "DELETE /files/{id}":
-            return delete_file_handler(event, user_id)
-        if route == "PUT /files/{id}/unassociate":
-            return unassociate_file_handler(event, user_id)
-        if route == "PUT /files/{id}/associate":
-            return associate_file_handler(event, user_id)
-        if route == "PUT /files/{id}/file-map":
-            return update_file_field_map_handler(event, user_id)
-        if route == "POST /files/upload":
-            return get_upload_url_handler(event, user_id)
-        if route == "PUT /files/{id}/balance":
-            return update_file_balance_handler(event, user_id)
-        if route == "PUT /files/{id}/closing-balance":
-            return update_file_closing_balance_handler(event, user_id)
-        return create_response(400, {"message": f"Unsupported route: {route}"})
-    except Exception as e:
-        logger.error(f"Error in handler: {str(e)}")
-        return create_response(500, {"message": "Internal server error"}) 
+@require_authenticated_user
+@standard_error_handling  
+def handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """Main handler with clean route mapping."""
+    route = event.get("routeKey")
+    if not route:
+        raise ValueError("Route not specified")
+    
+    route_map = {
+        "GET /files": list_files_handler,
+        "GET /files/account/{accountId}": get_files_by_account_handler,
+        "GET /files/{id}/metadata": get_file_metadata_handler,
+        "GET /files/{id}/content": get_file_content_handler,
+        "GET /files/{id}/download": get_download_url_handler,
+        "GET /files/{id}/transactions": get_file_transactions_handler,
+        "GET /files/{id}/preview": get_file_preview_handler,
+        "DELETE /files/{id}/transactions": delete_file_transactions_handler,
+        "DELETE /files/{id}": delete_file_handler,
+        "PUT /files/{id}/unassociate": unassociate_file_handler,
+        "PUT /files/{id}/associate": associate_file_handler,
+        "PUT /files/{id}/file-map": update_file_field_map_handler,
+        "POST /files/upload": get_upload_url_handler,
+        "PUT /files/{id}/balance": update_file_balance_handler,
+        "PUT /files/{id}/closing-balance": update_file_closing_balance_handler,
+    }
+    
+    handler_func = route_map.get(route)
+    if not handler_func:
+        raise ValueError(f"Unsupported route: {route}")
+    
+    return handler_func(event, user_id) 

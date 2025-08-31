@@ -67,6 +67,7 @@ class Account(BaseModel):
     notes: Optional[str] = Field(default=None, max_length=1000)
     is_active: bool = Field(default=True, alias="isActive")
     default_file_map_id: Optional[uuid.UUID] = Field(default=None, alias="defaultFileMapId")
+    first_transaction_date: Optional[int] = Field(default=None, alias="firstTransactionDate")  # milliseconds since epoch
     last_transaction_date: Optional[int] = Field(default=None, alias="lastTransactionDate")  # milliseconds since epoch
     
     created_at: int = Field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000), alias="createdAt")
@@ -149,7 +150,9 @@ class Account(BaseModel):
         if 'currency' in item and item.get('currency') is not None:
             item['currency'] = item['currency'].value if hasattr(item['currency'], 'value') else str(item['currency'])
         
-        # Ensure lastTransactionDate is included if it exists
+        # Ensure transaction dates are included if they exist
+        if self.first_transaction_date is not None:
+            item['firstTransactionDate'] = self.first_transaction_date
         if self.last_transaction_date is not None:
             item['lastTransactionDate'] = self.last_transaction_date
         
