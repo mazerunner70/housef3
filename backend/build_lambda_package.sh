@@ -214,3 +214,11 @@ echo "🔍 Build contents preview:"
 ls -la build/ | head -10
 
 echo "=== Lambda Package Build Complete ==="
+
+# Play completion chime
+echo "🔔 Playing completion chime..."
+printf '\a'
+sleep 0.2
+printf '\a'
+sleep 0.2
+printf '\a'

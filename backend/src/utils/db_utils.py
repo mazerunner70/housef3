@@ -51,6 +51,7 @@ CATEGORIES_TABLE_NAME = os.environ.get('CATEGORIES_TABLE_NAME')
 ANALYTICS_DATA_TABLE = os.environ.get('ANALYTICS_DATA_TABLE', 'housef3-analytics-data')
 ANALYTICS_STATUS_TABLE = os.environ.get('ANALYTICS_STATUS_TABLE', 'housef3-analytics-status')
 FZIP_JOBS_TABLE = os.environ.get('FZIP_JOBS_TABLE')
+USER_PREFERENCES_TABLE = os.environ.get('USER_PREFERENCES_TABLE')
 
 # Initialize table resources lazily
 _accounts_table = None
@@ -61,11 +62,12 @@ _analytics_data_table = None
 _analytics_status_table = None
 _categories_table = None
 _fzip_jobs_table = None
+_user_preferences_table = None
 
 def initialize_tables():
     """Initialize all DynamoDB table resources."""
     global _transactions_table, _accounts_table, _files_table, _file_maps_table
-    global _analytics_data_table, _analytics_status_table, _categories_table, _fzip_jobs_table, dynamodb
+    global _analytics_data_table, _analytics_status_table, _categories_table, _fzip_jobs_table, _user_preferences_table, dynamodb
     
     # Re-initialize DynamoDB resource
     dynamodb = boto3.resource('dynamodb')
@@ -87,6 +89,8 @@ def initialize_tables():
         _categories_table = dynamodb.Table(CATEGORIES_TABLE_NAME)
     if FZIP_JOBS_TABLE:
         _fzip_jobs_table = dynamodb.Table(FZIP_JOBS_TABLE)
+    if USER_PREFERENCES_TABLE:
+        _user_preferences_table = dynamodb.Table(USER_PREFERENCES_TABLE)
 
 def get_transactions_table() -> Any:
     """Get the transactions table resource, initializing it if needed."""
@@ -143,6 +147,13 @@ def get_fzip_jobs_table() -> Any:
     if _fzip_jobs_table is None:
         initialize_tables()
     return _fzip_jobs_table
+
+def get_user_preferences_table() -> Any:
+    """Get the user preferences table resource, initializing it if needed."""
+    global _user_preferences_table
+    if _user_preferences_table is None:
+        initialize_tables()
+    return _user_preferences_table
 
 
 class NotAuthorized(Exception):
@@ -834,14 +845,26 @@ def list_user_transactions(
         # Count of items returned in this query response  
         items_in_current_response = len(transactions)
         
-        logger.info(f"Query for user {user_id} returned {items_in_current_response} items (requested: {limit}). ScannedCount: {response.get('ScannedCount', 0)}, Count: {response.get('Count', 0)}")
-        
-        # Log filtering efficiency to help debug sparse data issues
+        # Enhanced logging to diagnose DynamoDB pagination behavior
         scanned_count = response.get('ScannedCount', 0)
         returned_count = response.get('Count', 0)
+        has_last_key = new_last_evaluated_key is not None
+        
+        logger.info(f"DynamoDB Query Result for user {user_id}: returned {items_in_current_response} items (requested: {limit}). "
+                   f"ScannedCount: {scanned_count}, Count: {returned_count}, HasLastEvaluatedKey: {has_last_key}")
+        
+        # Special logging for the problematic case: 0 scanned but LastEvaluatedKey present
+        if scanned_count == 0 and has_last_key:
+            logger.warning(f"PAGINATION ANOMALY: DynamoDB returned LastEvaluatedKey with ScannedCount=0 for user {user_id}. "
+                          f"This is normal DynamoDB GSI behavior when no data exists in queried partitions. "
+                          f"LastEvaluatedKey: {new_last_evaluated_key}")
+        
+        # Log filtering efficiency to help debug sparse data issues
         if scanned_count > 0:
             filter_efficiency = (returned_count / scanned_count) * 100
             logger.info(f"Filter efficiency: {filter_efficiency:.1f}% ({returned_count}/{scanned_count} items passed filters)")
+        elif returned_count > 0:
+            logger.info(f"No filtering occurred - all {returned_count} items returned directly from GSI")
 
         return transactions, new_last_evaluated_key, items_in_current_response
             
@@ -1279,6 +1302,35 @@ def update_transaction(transaction: Transaction) -> None:
         logger.error(f"Error updating transaction {str(transaction.transaction_id)}: {str(e)}")
         raise e
 
+def get_first_transaction_date(account_id: Union[str, uuid.UUID]) -> Optional[int]:
+    """
+    Get the earliest transaction date for a specific account.
+    Only considers transactions with status starting with 'new' (non-duplicates).
+    
+    Args:
+        account_id: The account ID
+        
+    Returns:
+        Transaction date as milliseconds since epoch, or None if no transactions found
+    """
+    try:
+        # Query the earliest non-duplicate transaction for this account
+        # The statusDate field is a composite key of format "status#timestamp"
+        response = get_transactions_table().query(
+            IndexName='AccountStatusDateIndex',
+            KeyConditionExpression=Key('accountId').eq(str(account_id)) & Key('statusDate').begins_with('new#'),
+            Limit=1,
+            ScanIndexForward=True  # Sort in ascending order to get earliest first
+        )
+        
+        if response.get('Items'):
+            return response['Items'][0].get('date')
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error getting first transaction date for account {str(account_id)}: {str(e)}")
+        return None
+
 def get_last_transaction_date(account_id: Union[str, uuid.UUID]) -> Optional[int]:
     """
     Get the most recent transaction date for a specific account.
@@ -1307,6 +1359,75 @@ def get_last_transaction_date(account_id: Union[str, uuid.UUID]) -> Optional[int
     except Exception as e:
         logger.error(f"Error getting last transaction date for account {str(account_id)}: {str(e)}")
         return None
+
+def get_account_transaction_date_range(account_id: Union[str, uuid.UUID]) -> tuple[Optional[int], Optional[int]]:
+    """
+    Get both the earliest and latest transaction dates for a specific account.
+    Only considers transactions with status starting with 'new' (non-duplicates).
+    
+    Args:
+        account_id: The account ID
+        
+    Returns:
+        Tuple of (first_date, last_date) as milliseconds since epoch, or (None, None) if no transactions found
+    """
+    try:
+        first_date = get_first_transaction_date(account_id)
+        last_date = get_last_transaction_date(account_id)
+        return (first_date, last_date)
+        
+    except Exception as e:
+        logger.error(f"Error getting transaction date range for account {str(account_id)}: {str(e)}")
+        return (None, None)
+
+def update_account_derived_values(account_id: Union[str, uuid.UUID], user_id: str) -> bool:
+    """
+    Update the derived first_transaction_date and last_transaction_date fields for an account
+    by scanning all transactions for that account.
+    
+    Args:
+        account_id: The account ID
+        user_id: The user ID (for validation)
+        
+    Returns:
+        True if update was successful, False otherwise
+        
+    Raises:
+        ValueError: If account not found or doesn't belong to user
+        Exception: If there's an error updating the account
+    """
+    try:
+        # Get the account first to validate it exists and belongs to user
+        account_uuid = uuid.UUID(str(account_id)) if isinstance(account_id, str) else account_id
+        account = checked_mandatory_account(account_uuid, user_id)
+        
+        # Get transaction date range from actual transactions
+        first_date, last_date = get_account_transaction_date_range(account_id)
+        
+        # Update the account directly in DynamoDB using the correct field names
+        accounts_table = get_accounts_table()
+        
+        # Prepare update expression and values
+        update_expression = "SET firstTransactionDate = :first_date, lastTransactionDate = :last_date, updatedAt = :updated_at"
+        expression_attribute_values = {
+            ':first_date': first_date,
+            ':last_date': last_date,
+            ':updated_at': int(datetime.now(timezone.utc).timestamp() * 1000)
+        }
+        
+        # Update the item in DynamoDB
+        accounts_table.update_item(
+            Key={'accountId': str(account_uuid)},
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_attribute_values
+        )
+        
+        logger.info(f"Updated derived values for account {account_id}: first={first_date}, last={last_date}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error updating derived values for account {account_id}: {str(e)}", exc_info=True)
+        raise
 
 def get_latest_transaction(account_id: Union[str, uuid.UUID]) -> Optional[Transaction]:
     """

@@ -141,9 +141,8 @@ export const createLogger = (serviceName: string): Logger => {
         level: numericLevel,
         defaults: {
             tag: serviceName
-        },
-        // Disable console output in production if configured
-        reporters: config.enableConsoleOutput ? undefined : []
+        }
+        // Don't override reporters - let Consola use its default console reporter
     });
 
     // Create context collector

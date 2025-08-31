@@ -11,7 +11,7 @@ Follows backend conventions:
 """
 
 import logging
-from typing import List, Dict, Optional, Tuple, Set
+from typing import List, Dict, Optional, Tuple, Set, NamedTuple
 from decimal import Decimal
 from datetime import datetime, timedelta
 import uuid
@@ -27,6 +27,15 @@ from utils.db_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class MinimalTransaction(NamedTuple):
+    """Minimal transaction data for memory-efficient transfer detection."""
+    transaction_id: str
+    account_id: str
+    amount: Decimal
+    date: int  # timestamp in milliseconds
+    abs_amount: Decimal
 
 
 class TransferDetectionService:
@@ -166,7 +175,13 @@ class TransferDetectionService:
         end_date_ts: int
     ) -> List[Tuple[Transaction, Transaction]]:
         """
-        Detect transfers within a specific date range using timestamps.
+        Fast transfer detection using sliding window algorithm.
+        
+        Algorithm:
+        1. Sliding window moves back in time with 3-day overlap
+        2. Minimal memory usage - only essential transaction data
+        3. Sort by abs(amount) for efficient matching
+        4. Early termination when amount difference exceeds tolerance
         
         Args:
             user_id: The user ID
@@ -178,67 +193,60 @@ class TransferDetectionService:
         """
         from datetime import datetime, timedelta
         
-        # Convert timestamps to datetime for calculations
+        logger.info(f"Starting sliding window transfer detection for user {user_id}")
+        
+        # Convert to datetime for window calculations
         start_date = datetime.fromtimestamp(start_date_ts / 1000)
         end_date = datetime.fromtimestamp(end_date_ts / 1000)
         
-        # Calculate total range in days for batch sizing
-        total_days = (end_date - start_date).days + 1
-        
-        # Calculate batch size - each batch should be large enough to capture transfer pairs
-        # Since transfers are usually within a few days, 14-day batches with overlap should work well
-        batch_days = min(14, total_days)
-        overlap_days = min(total_days, 3)  # 3-day overlap to ensure cross-batch transfers are caught
+        # Window parameters
+        window_days = 14  # 2-week windows
+        overlap_days = 3  # 3-day overlap
         
         all_transfer_pairs = []
-        processed_global_ids = set()  # Track globally to avoid duplicates across batches
+        processed_tx_ids = set()
         
-        # Process in overlapping batches from most recent to oldest
-        current_end = end_date
+        # Calculate sliding window parameters
+        start_day_increment = window_days - overlap_days  # Days to move window start each iteration
+        total_days = (end_date - start_date).days
+        loop_size = max(1, (total_days // start_day_increment) + 1)  # Ensure at least 1 iteration
         
-        while current_end > start_date:
-            # Calculate batch start (but don't go before the overall start)
-            batch_start = max(start_date, current_end - timedelta(days=batch_days))
+        logger.info(f"Sliding window: {total_days} total days, {start_day_increment} day increments, {loop_size} windows to process")
+        
+        # Process windows with simple for loop
+        for i in range(loop_size):
+            # Calculate window boundaries
+            current_end = end_date - timedelta(days=i * start_day_increment)
+            window_start = max(start_date, current_end - timedelta(days=window_days))
             
-            # Convert to timestamps for the API
-            batch_start_ts = int(batch_start.timestamp() * 1000)
-            batch_end_ts = int(current_end.timestamp() * 1000)
+            # Convert to timestamps
+            window_start_ts = int(window_start.timestamp() * 1000)
+            window_end_ts = int(current_end.timestamp() * 1000)
             
-            logger.debug(f"Processing batch: {batch_start.isoformat()} to {current_end.isoformat()}")
+            logger.info(f"Processing window {i+1}/{loop_size}: {window_start.date()} to {current_end.date()}")
             
-            # Get transactions for this batch from all accounts
-            batch_transactions = self._get_user_transactions_in_range(
-                user_id, 
-                batch_start_ts,
-                batch_end_ts
+            # Get transactions for this window
+            window_transactions = self._get_user_transactions_in_range(
+                user_id, window_start_ts, window_end_ts
             )
             
-            if not batch_transactions:
-                logger.debug(f"No transactions found in batch {batch_start.isoformat()} to {current_end.isoformat()}")
-                # Move to next batch (subtract batch_days minus overlap)
-                current_end = batch_start + timedelta(days=overlap_days)
+            logger.info(f"Window returned {len(window_transactions)} transactions")
+            
+            if len(window_transactions) < 2:
+                logger.debug(f"Skipping window {i+1} - insufficient transactions for transfer detection")
                 continue
             
-            logger.debug(f"Found {len(batch_transactions)} transactions in batch")
-            
-            # Detect transfers within this batch
-            batch_pairs = self._detect_transfers_in_transaction_set(
-                batch_transactions, 
-                total_days,
-                processed_global_ids
+            # Find transfers in this window using amount-sorted algorithm
+            window_pairs = self._sliding_window_transfer_detection(
+                window_transactions, processed_tx_ids
             )
             
-            # Add to global results
-            all_transfer_pairs.extend(batch_pairs)
-            
-            # Move to next batch (subtract batch_days minus overlap to create overlap)
-            current_end = batch_start + timedelta(days=overlap_days)
-            
-            # Break if we've reached the start
-            if batch_start <= start_date:
-                break
+            all_transfer_pairs.extend(window_pairs)
+            logger.debug(f"Window {i+1} found {len(window_pairs)} transfer pairs")
         
-        logger.info(f"Detected {len(all_transfer_pairs)} transfer pairs across all batches")
+        logger.info(f"Sliding window completed: processed {loop_size} windows")
+        
+        logger.info(f"Sliding window algorithm found {len(all_transfer_pairs)} transfer pairs")
         return all_transfer_pairs
 
     def _get_user_transactions_in_range(self, user_id: str, start_date_ts: int, end_date_ts: int) -> List[Transaction]:
@@ -248,19 +256,81 @@ class TransferDetectionService:
         # Get all transactions within the date range with pagination
         all_transactions = []
         last_evaluated_key = None
+        consecutive_empty_batches = 0
+        max_consecutive_empty_batches = 3  # Prevent infinite loops
         
         while True:
+            # Test both with and without ignore_dup to diagnose the issue
+            logger.info(f"DIAGNOSTIC: Testing transfer detection query with ignore_dup=True")
             batch_result, last_evaluated_key, _ = list_user_transactions(
                 user_id=user_id,
                 start_date_ts=start_date_ts,
                 end_date_ts=end_date_ts,
                 last_evaluated_key=last_evaluated_key,
-                limit=1000
+                limit=1000,
+                ignore_dup=True  # Only consider non-duplicate transactions for transfer detection
             )
+            
+            # If we get 0 results with ignore_dup=True, also test without it
+            if len(batch_result) == 0 and consecutive_empty_batches == 0:
+                logger.warning(f"DIAGNOSTIC: Got 0 results with ignore_dup=True, testing without ignore_dup")
+                test_batch_result, _, _ = list_user_transactions(
+                    user_id=user_id,
+                    start_date_ts=start_date_ts,
+                    end_date_ts=end_date_ts,
+                    last_evaluated_key=None,  # Start fresh for test
+                    limit=1000,
+                    ignore_dup=False  # Test without ignore_dup
+                )
+                logger.warning(f"DIAGNOSTIC: Without ignore_dup, got {len(test_batch_result)} results")
+                
+                # Test without any date range (like the regular transactions endpoint)
+                logger.warning(f"DIAGNOSTIC: Testing without date range (like regular transactions endpoint)")
+                no_date_batch_result, _, _ = list_user_transactions(
+                    user_id=user_id,
+                    start_date_ts=None,  # No date filter
+                    end_date_ts=None,    # No date filter
+                    last_evaluated_key=None,
+                    limit=25,  # Same as regular endpoint
+                    ignore_dup=True
+                )
+                logger.warning(f"DIAGNOSTIC: Without date range, got {len(no_date_batch_result)} results")
+                if len(no_date_batch_result) > 0:
+                    # Log the date of the first transaction to see when transactions actually exist
+                    first_tx = no_date_batch_result[0]
+                    from datetime import datetime
+                    tx_date = datetime.fromtimestamp(first_tx.date / 1000)
+                    logger.warning(f"DIAGNOSTIC: First transaction date: {tx_date.isoformat()}")
+                
+                # For now, continue with ignore_dup=True results for consistency
+                # but this will help us understand the root cause
             
             all_transactions.extend(batch_result)
             
+            # Enhanced logging to diagnose DynamoDB pagination behavior
+            logger.info(f"Pagination batch for user {user_id}: returned {len(batch_result)} items, "
+                       f"has_last_evaluated_key={last_evaluated_key is not None}, "
+                       f"total_so_far={len(all_transactions)}")
+            
+            if last_evaluated_key:
+                logger.debug(f"LastEvaluatedKey present: {last_evaluated_key}")
+            
+            # Track consecutive empty batches to prevent infinite loops
+            if len(batch_result) == 0:
+                consecutive_empty_batches += 1
+                logger.warning(f"Empty batch {consecutive_empty_batches}/{max_consecutive_empty_batches} for user {user_id} - "
+                              f"DynamoDB returned LastEvaluatedKey={last_evaluated_key is not None} with 0 items")
+                if consecutive_empty_batches >= max_consecutive_empty_batches:
+                    logger.error(f"INFINITE LOOP PREVENTION: Breaking pagination after {consecutive_empty_batches} "
+                                f"consecutive empty batches for user {user_id}. This indicates DynamoDB GSI "
+                                f"pagination behavior where LastEvaluatedKey is returned with no data.")
+                    break
+            else:
+                consecutive_empty_batches = 0  # Reset counter when we get results
+            
+            # Normal termination condition
             if not last_evaluated_key:
+                logger.info(f"Pagination complete for user {user_id} - no more LastEvaluatedKey")
                 break
         
         logger.debug(f"Retrieved {len(all_transactions)} transactions for user {user_id} in range")
@@ -275,6 +345,8 @@ class TransferDetectionService:
         """Get all uncategorized transactions for a specific date range batch."""
         batch_transactions = []
         last_evaluated_key = None
+        consecutive_empty_batches = 0
+        max_consecutive_empty_batches = 3  # Prevent infinite loops
         
         while True:
             batch_result, last_evaluated_key, _ = list_user_transactions(
@@ -288,8 +360,27 @@ class TransferDetectionService:
             
             batch_transactions.extend(batch_result)
             
-            # Break if no more pages
+            # Enhanced logging for uncategorized transactions
+            logger.info(f"Uncategorized batch for user {user_id}: returned {len(batch_result)} items, "
+                       f"has_last_evaluated_key={last_evaluated_key is not None}, "
+                       f"total_so_far={len(batch_transactions)}")
+            
+            # Track consecutive empty batches to prevent infinite loops
+            if len(batch_result) == 0:
+                consecutive_empty_batches += 1
+                logger.warning(f"Empty uncategorized batch {consecutive_empty_batches}/{max_consecutive_empty_batches} for user {user_id} - "
+                              f"DynamoDB returned LastEvaluatedKey={last_evaluated_key is not None} with 0 items")
+                if consecutive_empty_batches >= max_consecutive_empty_batches:
+                    logger.error(f"INFINITE LOOP PREVENTION: Breaking uncategorized pagination after {consecutive_empty_batches} "
+                                f"consecutive empty batches for user {user_id}. This indicates DynamoDB GSI "
+                                f"pagination behavior where LastEvaluatedKey is returned with no data.")
+                    break
+            else:
+                consecutive_empty_batches = 0  # Reset counter when we get results
+            
+            # Normal termination condition
             if not last_evaluated_key:
+                logger.info(f"Uncategorized pagination complete for user {user_id} - no more LastEvaluatedKey")
                 break
         
         return batch_transactions
@@ -341,6 +432,117 @@ class TransferDetectionService:
                     processed_global_ids.add(matching_tx_id)
         
         return batch_transfer_pairs
+    
+    def _sliding_window_transfer_detection(
+        self, 
+        transactions: List[Transaction], 
+        processed_tx_ids: Set[str]
+    ) -> List[Tuple[Transaction, Transaction]]:
+        """
+        Simple sliding window transfer detection with minimal memory usage.
+        
+        Algorithm:
+        1. Convert to minimal transaction objects for memory efficiency
+        2. Sort by abs(amount) for efficient matching
+        3. For each transaction, look at earlier ones where amount + earlier.amount < tolerance
+        4. Early termination when amount difference is too large
+        
+        Args:
+            transactions: List of transactions in current window
+            processed_tx_ids: Set of already processed transaction IDs
+            
+        Returns:
+            List of transfer pairs (outgoing, incoming)
+        """
+        # Convert to minimal objects for memory efficiency
+        minimal_txs = []
+        tx_lookup = {}  # Map minimal tx back to full transaction
+        
+        for tx in transactions:
+            tx_id = str(tx.transaction_id)
+            if tx_id in processed_tx_ids:
+                continue
+                
+            minimal_tx = MinimalTransaction(
+                transaction_id=tx_id,
+                account_id=str(tx.account_id),
+                amount=tx.amount,
+                date=tx.date,
+                abs_amount=abs(tx.amount)
+            )
+            minimal_txs.append(minimal_tx)
+            tx_lookup[tx_id] = tx
+        
+        if len(minimal_txs) < 2:
+            return []
+        
+        # Sort by abs(amount) for efficient matching
+        minimal_txs.sort(key=lambda tx: tx.abs_amount)
+        
+        transfer_pairs = []
+        matched_ids = set()
+        tolerance = Decimal('0.01')
+        max_date_diff_ms = 7 * 24 * 60 * 60 * 1000  # 7 days
+        
+        logger.debug(f"Processing {len(minimal_txs)} transactions in window")
+        
+        # For each transaction, look at earlier ones in the sorted list
+        for i, tx in enumerate(minimal_txs):
+            if tx.transaction_id in matched_ids:
+                continue
+            
+            # Look at earlier transactions in reverse order (closest amounts first)
+            for j in range(i - 1, -1, -1):
+                earlier_tx = minimal_txs[j]
+                
+                if earlier_tx.transaction_id in matched_ids:
+                    continue
+                
+                # Early termination: if amount difference is too large, break
+                # Since list is sorted, all earlier transactions will have even larger differences
+                amount_diff = abs(tx.abs_amount - earlier_tx.abs_amount)
+                if amount_diff > tolerance:
+                    break  # No point checking further - all earlier amounts are smaller
+                
+                # Check if amounts sum to near zero (transfer condition)
+                amount_sum = abs(tx.amount + earlier_tx.amount)
+                if amount_sum > tolerance:
+                    continue
+                
+                # Must be different accounts
+                if tx.account_id == earlier_tx.account_id:
+                    continue
+                
+                # Must be within date window
+                date_diff = abs(tx.date - earlier_tx.date)
+                if date_diff > max_date_diff_ms:
+                    continue
+                
+                # Must have opposite signs
+                if (tx.amount > 0 and earlier_tx.amount > 0) or (tx.amount < 0 and earlier_tx.amount < 0):
+                    continue
+                
+                # Found a match!
+                tx_full = tx_lookup[tx.transaction_id]
+                earlier_tx_full = tx_lookup[earlier_tx.transaction_id]
+                
+                # Determine outgoing vs incoming
+                if tx.amount < 0:
+                    transfer_pairs.append((tx_full, earlier_tx_full))  # (outgoing, incoming)
+                else:
+                    transfer_pairs.append((earlier_tx_full, tx_full))  # (outgoing, incoming)
+                
+                # Mark both as matched
+                matched_ids.add(tx.transaction_id)
+                matched_ids.add(earlier_tx.transaction_id)
+                processed_tx_ids.add(tx.transaction_id)
+                processed_tx_ids.add(earlier_tx.transaction_id)
+                
+                logger.debug(f"Matched transfer: {tx.transaction_id} <-> {earlier_tx.transaction_id}")
+                break  # Found match for this transaction, move to next
+        
+        logger.debug(f"Window found {len(transfer_pairs)} transfer pairs")
+        return transfer_pairs
 
     def _group_by_account(self, transactions: List[Transaction]) -> Dict[str, List[Transaction]]:
         """Group transactions by account ID."""

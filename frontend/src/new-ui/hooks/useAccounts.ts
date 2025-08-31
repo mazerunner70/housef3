@@ -188,7 +188,7 @@ const useAccounts = (): UseAccountsReturn => {
         setError(null);
         try {
             const serviceInput = mapUiInputToServiceInput(accountData, false);
-            const response = await serviceUpdateAccount(accountId, serviceInput);
+            const response = await serviceUpdateAccount(accountId, serviceInput)();
             const updatedUiAccount = mapServiceAccountToUiAccount(response.account);
             setAccounts(prev => prev.map(acc => acc.id === accountId ? updatedUiAccount : acc));
             setIsLoading(false);

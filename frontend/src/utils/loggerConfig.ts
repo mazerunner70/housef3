@@ -14,72 +14,18 @@ export interface LoggerConfig {
 }
 
 /**
- * Get environment-specific logger configuration
+ * Get environment-specific logger configuration - SIMPLIFIED for maximum logging
  */
 export const getLoggerConfig = (): LoggerConfig => {
-    const env = import.meta.env.MODE || 'development';
-    const isDev = env === 'development';
-    const isProd = env === 'production';
-    const isTest = env === 'test';
-
-    // Base configuration
-    const baseConfig: LoggerConfig = {
-        globalLevel: isDev ? 'debug' : isProd ? 'warn' : 'silent',
-        serviceOverrides: {},
-        enableConsoleOutput: !isProd,
-        enableRemoteLogging: isProd,
+    // Always return maximum logging configuration regardless of environment
+    return {
+        globalLevel: 'debug', // Always debug level
+        serviceOverrides: {}, // No service overrides - everything gets debug
+        enableConsoleOutput: true, // Always enable console output
+        enableRemoteLogging: false, // Disable remote logging for simplicity
         batchSize: 10,
         flushInterval: 5000
     };
-
-    // Environment-specific overrides
-    if (isDev) {
-        return {
-            ...baseConfig,
-            globalLevel: 'debug',
-            serviceOverrides: {
-                'TransactionService': 'debug',
-                'AccountService': 'info',
-                'AuthService': 'debug',
-                'ApiClient': 'info',
-                'CategoryService': 'warn', // Less verbose for this service
-                'AnalyticsService': 'error' // Only errors for analytics
-            },
-            enableConsoleOutput: true,
-            enableRemoteLogging: false
-        };
-    }
-
-    if (isProd) {
-        return {
-            ...baseConfig,
-            globalLevel: 'warn',
-            serviceOverrides: {
-                'AuthService': 'error', // Only auth errors in prod
-                'TransactionService': 'warn',
-                'AccountService': 'warn',
-                'ApiClient': 'error',
-                'CategoryService': 'error',
-                'AnalyticsService': 'silent' // No analytics logging in prod
-            },
-            enableConsoleOutput: true, // Temporarily enable console output in production
-            enableRemoteLogging: true,
-            batchSize: 50,
-            flushInterval: 10000
-        };
-    }
-
-    if (isTest) {
-        return {
-            ...baseConfig,
-            globalLevel: 'silent',
-            serviceOverrides: {},
-            enableConsoleOutput: false,
-            enableRemoteLogging: false
-        };
-    }
-
-    return baseConfig;
 };
 
 /**

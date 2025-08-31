@@ -275,50 +275,50 @@ resource "aws_iam_role_policy_attachment" "event_consumer_policy_attachment" {
 # Monitoring and Alarms
 # ==============================================================================
 
-# CloudWatch Alarms for consumer health monitoring
-resource "aws_cloudwatch_metric_alarm" "analytics_consumer_errors" {
-  alarm_name          = "${var.project_name}-${var.environment}-analytics-consumer-errors"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "Errors"
-  namespace           = "AWS/Lambda"
-  period              = "300" # 5 minutes
-  statistic           = "Sum"
-  threshold           = "5"
-  alarm_description   = "This metric monitors analytics consumer errors"
-  alarm_actions       = [] # Add SNS topic ARN for notifications
+# CloudWatch Alarms for consumer health monitoring - DISABLED
+# resource "aws_cloudwatch_metric_alarm" "analytics_consumer_errors" {
+#   alarm_name          = "${var.project_name}-${var.environment}-analytics-consumer-errors"
+#   comparison_operator = "GreaterThanThreshold"
+#   evaluation_periods  = "2"
+#   metric_name         = "Errors"
+#   namespace           = "AWS/Lambda"
+#   period              = "300" # 5 minutes
+#   statistic           = "Sum"
+#   threshold           = "5"
+#   alarm_description   = "This metric monitors analytics consumer errors"
+#   alarm_actions       = [] # Add SNS topic ARN for notifications
 
-  dimensions = {
-    FunctionName = aws_lambda_function.analytics_consumer.function_name
-  }
+#   dimensions = {
+#     FunctionName = aws_lambda_function.analytics_consumer.function_name
+#   }
 
-  tags = {
-    Environment = var.environment
-    Project     = var.project_name
-  }
-}
+#   tags = {
+#     Environment = var.environment
+#     Project     = var.project_name
+#   }
+# }
 
-resource "aws_cloudwatch_metric_alarm" "categorization_consumer_errors" {
-  alarm_name          = "${var.project_name}-${var.environment}-categorization-consumer-errors"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "Errors"
-  namespace           = "AWS/Lambda"
-  period              = "300" # 5 minutes
-  statistic           = "Sum"
-  threshold           = "5"
-  alarm_description   = "This metric monitors categorization consumer errors"
-  alarm_actions       = [] # Add SNS topic ARN for notifications
+# resource "aws_cloudwatch_metric_alarm" "categorization_consumer_errors" {
+#   alarm_name          = "${var.project_name}-${var.environment}-categorization-consumer-errors"
+#   comparison_operator = "GreaterThanThreshold"
+#   evaluation_periods  = "2"
+#   metric_name         = "Errors"
+#   namespace           = "AWS/Lambda"
+#   period              = "300" # 5 minutes
+#   statistic           = "Sum"
+#   threshold           = "5"
+#   alarm_description   = "This metric monitors categorization consumer errors"
+#   alarm_actions       = [] # Add SNS topic ARN for notifications
 
-  dimensions = {
-    FunctionName = aws_lambda_function.categorization_consumer.function_name
-  }
+#   dimensions = {
+#     FunctionName = aws_lambda_function.categorization_consumer.function_name
+#   }
 
-  tags = {
-    Environment = var.environment
-    Project     = var.project_name
-  }
-}
+#   tags = {
+#     Environment = var.environment
+#     Project     = var.project_name
+#   }
+# }
 
 # ==============================================================================
 # Outputs

@@ -7,6 +7,20 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Function to handle script exit and notifications
+cleanup_and_notify() {
+    local exit_code=$?
+    if [ $exit_code -eq 0 ]; then
+        "$SCRIPT_DIR/notify_build.sh" success "Frontend build and deployment completed successfully!"
+    else
+        "$SCRIPT_DIR/notify_build.sh" fail "Frontend build or deployment failed"
+    fi
+    exit $exit_code
+}
+
+# Set up trap to catch script exit
+trap cleanup_and_notify EXIT
+
 # Navigate to project root
 cd "$PROJECT_ROOT"
 
@@ -47,4 +61,6 @@ echo "Invalidating CloudFront cache..."
 aws cloudfront create-invalidation --distribution-id $CLOUDFRONT_ID --paths "/*" --no-cli-pager
 
 echo "Frontend build and deployment complete!"
-echo "Your application is available at: https://$CLOUDFRONT_DOMAIN" 
+echo "Your application is available at: https://$CLOUDFRONT_DOMAIN"
+
+# Success notification will be handled by the EXIT trap 

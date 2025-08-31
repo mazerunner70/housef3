@@ -88,12 +88,10 @@ export const listAccounts = withApiLogging(
       () => ApiClient.getJson<any>(API_ENDPOINT),
       (rawData) => {
         // Only log business-specific data - everything else is automatic
-        if (process.env.NODE_ENV === 'development') {
-          logger.info('Account list processed', {
-            accountCount: rawData.accounts?.length || 0,
-            hasMetadata: !!rawData.metadata
-          });
-        }
+        logger.info('Account list processed', {
+          accountCount: rawData.accounts?.length || 0,
+          hasMetadata: !!rawData.metadata
+        });
         return AccountListResponseSchema.parse(rawData);
       },
       'account list data'

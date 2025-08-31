@@ -483,7 +483,7 @@ class AnalyticsService {
    * Convert string monetary values to Decimal objects
    * Backend only sends Decimal values as strings for accuracy
    */
-  private convertMonetaryStringsToDecimals(data: any): any {
+  private convertMonetaryStringsToDecimals(data: string | Decimal): any {
     if (data === null || data === undefined) {
       return data;
     }
