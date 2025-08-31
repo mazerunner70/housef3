@@ -4,7 +4,7 @@ import {
     withServiceLogging,
     createLogger
 } from '@/utils/logger';
-import { validateApiResponse } from "@/utils/zodErrorHandler";
+import { validateApiResponse, validateApiResponseSmart } from "@/utils/zodErrorHandler";
 import { z } from 'zod';
 
 // Logger for simple operations only
@@ -15,9 +15,9 @@ const TransferPreferencesSchema = z.object({
     defaultDateRangeDays: z.number().optional(),
     lastUsedDateRanges: z.array(z.number()).optional(),
     autoExpandSuggestion: z.boolean().optional(),
-    checkedDateRangeStart: z.number().optional(),
-    checkedDateRangeEnd: z.number().optional()
-});
+    checkedDateRangeStart: z.number().nullable().optional(),
+    checkedDateRangeEnd: z.number().nullable().optional()
+}).passthrough(); // Allow extra fields like numeric keys
 
 const UIPreferencesSchema = z.object({
     theme: z.string().optional(),
@@ -37,18 +37,18 @@ const UserPreferencesSchema = z.object({
         transfers: TransferPreferencesSchema.optional(),
         ui: UIPreferencesSchema.optional(),
         transactions: TransactionPreferencesSchema.optional()
-    }).optional(),
+    }).passthrough().optional(),
     createdAt: z.number().optional(),
     updatedAt: z.number().optional()
-});
+}).passthrough();
 
 // TypeScript Interfaces (following naming conventions)
 export interface TransferPreferences {
     defaultDateRangeDays?: number;
     lastUsedDateRanges?: number[];
     autoExpandSuggestion?: boolean;
-    checkedDateRangeStart?: number; // milliseconds since epoch
-    checkedDateRangeEnd?: number;   // milliseconds since epoch
+    checkedDateRangeStart?: number | null; // milliseconds since epoch
+    checkedDateRangeEnd?: number | null;   // milliseconds since epoch
 }
 
 export interface UIPreferences {
@@ -90,10 +90,13 @@ export const getUserPreferences = withApiLogging(
     '/user-preferences',
     'GET',
     async () => {
-        return validateApiResponse(
+        return validateApiResponseSmart(
             () => ApiClient.getJson<any>('/user-preferences'),
             (rawData) => UserPreferencesSchema.parse(rawData),
-            'user preferences data'
+            'user preferences data',
+
+            'Failed to load user preferences. The server response format is invalid.',
+            'UserPreferencesService'
         );
     },
     {
@@ -142,10 +145,12 @@ export const getTransferPreferences = async (): Promise<TransferPreferences> => 
     logger.info('Fetching transfer preferences');
 
     try {
-        const preferences = await validateApiResponse(
+        const preferences = await validateApiResponseSmart(
             () => ApiClient.getJson<any>('/user-preferences/transfers'),
             (rawData) => TransferPreferencesSchema.parse(rawData),
-            'transfer preferences data'
+            'transfer preferences data',
+            'Failed to load transfer preferences. The server response format is invalid.',
+            'UserPreferencesService'
         );
 
         logger.info('Transfer preferences fetched successfully', {
@@ -164,10 +169,10 @@ export const getTransferPreferences = async (): Promise<TransferPreferences> => 
         // Return sensible defaults for non-critical data
         return {
             defaultDateRangeDays: 7,
-            lastUsedDateRanges: [7, 14, 30],
+            lastUsedDateRanges: [7, 14, 30], // Keep as numbers for defaults
             autoExpandSuggestion: true,
-            checkedDateRangeStart: undefined,
-            checkedDateRangeEnd: undefined
+            checkedDateRangeStart: null,
+            checkedDateRangeEnd: null
         };
     }
 };
@@ -211,8 +216,8 @@ export const getTransferCheckedDateRange = withServiceLogging(
         const preferences = await getTransferPreferences();
 
         return {
-            startDate: preferences.checkedDateRangeStart || null,
-            endDate: preferences.checkedDateRangeEnd || null
+            startDate: preferences.checkedDateRangeStart ?? null,
+            endDate: preferences.checkedDateRangeEnd ?? null
         };
     },
     {
@@ -221,6 +226,45 @@ export const getTransferCheckedDateRange = withServiceLogging(
             hasEndDate: result.endDate !== null,
             startDate: result.startDate,
             endDate: result.endDate
+        })
+    }
+);
+
+/**
+ * Get both transfer preferences and account date range in a single optimized call
+ * This helps avoid duplicate API calls when both pieces of data are needed
+ */
+export const getTransferDataForProgress = withServiceLogging(
+    'UserPreferencesService',
+    'getTransferDataForProgress',
+    async (): Promise<{
+        checkedRange: { startDate: number | null; endDate: number | null };
+        accountRange: { startDate: number | null; endDate: number | null };
+        transferPreferences: TransferPreferences;
+    }> => {
+        // Fetch both pieces of data in parallel to avoid sequential calls
+        const [transferPreferences, accountRange] = await Promise.all([
+            getTransferPreferences(),
+            getAccountDateRangeForTransfers()
+        ]);
+
+        // Extract checked range from preferences to avoid additional API call
+        const checkedRange = {
+            startDate: transferPreferences.checkedDateRangeStart ?? null,
+            endDate: transferPreferences.checkedDateRangeEnd ?? null
+        };
+
+        return {
+            checkedRange,
+            accountRange,
+            transferPreferences
+        };
+    },
+    {
+        logResult: (result) => ({
+            hasCheckedRange: !!(result.checkedRange.startDate && result.checkedRange.endDate),
+            hasAccountRange: !!(result.accountRange.startDate && result.accountRange.endDate),
+            hasTransferPrefs: !!result.transferPreferences
         })
     }
 );

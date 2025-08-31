@@ -5,17 +5,19 @@ interface DateCellProps {
   className?: string;
   format?: 'short' | 'long' | 'iso' | 'relative';
   showTime?: boolean;
+  locale?: string; // Allow custom locale
 }
 
-const DateCell: React.FC<DateCellProps> = ({ 
-  date, 
+const DateCell: React.FC<DateCellProps> = ({
+  date,
   className = '',
   format = 'short',
-  showTime = false
+  showTime = false,
+  locale
 }) => {
   const formatDate = (inputDate: number | Date | string, formatType: string, includeTime: boolean): string => {
     let dateObj: Date;
-    
+
     if (typeof inputDate === 'number') {
       dateObj = new Date(inputDate);
     } else if (typeof inputDate === 'string') {
@@ -23,14 +25,17 @@ const DateCell: React.FC<DateCellProps> = ({
     } else {
       dateObj = inputDate;
     }
-    
+
     // Handle invalid dates
     if (isNaN(dateObj.getTime())) {
       return 'Invalid Date';
     }
-    
+
+    // Determine locale: use prop, browser locale, or fallback to 'en-US'
+    const userLocale = locale || navigator.language || 'en-US';
+
     const options: Intl.DateTimeFormatOptions = {};
-    
+
     switch (formatType) {
       case 'long':
         options.year = 'numeric';
@@ -48,20 +53,20 @@ const DateCell: React.FC<DateCellProps> = ({
         options.day = 'numeric';
         break;
     }
-    
+
     if (includeTime) {
       options.hour = '2-digit';
       options.minute = '2-digit';
     }
-    
-    return dateObj.toLocaleDateString('en-US', options);
+
+    return dateObj.toLocaleDateString(userLocale, options);
   };
 
   const getRelativeTime = (date: Date): string => {
     const now = new Date();
     const diffInMs = now.getTime() - date.getTime();
     const diffInDays = diffInMs / (1000 * 60 * 60 * 24);
-    
+
     if (diffInDays < 1) return 'Today';
     if (diffInDays < 2) return 'Yesterday';
     if (diffInDays < 7) return `${diffInDays.toFixed(1)} days ago`;
@@ -70,8 +75,10 @@ const DateCell: React.FC<DateCellProps> = ({
     return `${(diffInDays / 365).toFixed(1)} years ago`;
   };
 
+  const userLocale = locale || navigator.language || 'en-US';
+
   return (
-    <span className={`date-cell ${className}`} title={new Date(date).toLocaleString()}>
+    <span className={`date-cell ${className}`} title={new Date(date).toLocaleString(userLocale)}>
       {formatDate(date, format, showTime)}
     </span>
   );

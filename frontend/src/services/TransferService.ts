@@ -2,22 +2,50 @@
 import { z } from 'zod';
 import ApiClient from '@/utils/apiClient';
 import { validateApiResponse } from '@/utils/zodErrorHandler';
-import { TransactionViewItem } from '@/schemas/Transaction';
 import {
     withApiLogging,
     withServiceLogging,
     createLogger
 } from '@/utils/logger';
 import {
-    getTransferCheckedDateRange,
     updateTransferCheckedDateRange,
-    getAccountDateRangeForTransfers
+    getTransferDataForProgress
 } from './UserPreferencesService';
 
 // 2. Type Definitions - Domain interfaces
+// Simplified transaction type for transfer operations (matches backend output)
+export interface TransferTransaction {
+    transactionId: string;
+    fileId: string;
+    userId: string;
+    date: number;
+    description: string;
+    amount: number;
+    balance: number;
+    currency: string;
+    accountId?: string | null;
+    transactionType?: string | null;
+    category?: string | null;
+    payee?: string | null;
+    memo?: string | null;
+    checkNumber?: string | null;
+    reference?: string | null;
+    status?: string | null;
+    debitOrCredit?: string | null;
+    importOrder?: number | null;
+    id?: string | null;
+    primaryCategoryId?: string | null;
+    categories?: any[] | null;
+    account?: string | null;
+    type?: string | null;
+    notes?: string | null;
+    isSplit?: boolean | null;
+    [key: string]: any; // Allow additional fields
+}
+
 export interface TransferPair {
-    outgoingTransaction: TransactionViewItem;
-    incomingTransaction: TransactionViewItem;
+    outgoingTransaction: TransferTransaction;
+    incomingTransaction: TransferTransaction;
     amount: number;
     dateDifference: number; // Days between transactions
 }
@@ -31,13 +59,13 @@ export interface DetectedTransfer {
 
 // Request/Response interfaces following conventions
 export interface TransferDetectionRequest {
-    startDate: string; // ISO format YYYY-MM-DD
-    endDate: string;   // ISO format YYYY-MM-DD
+    startDate: number; // milliseconds since epoch
+    endDate: number;   // milliseconds since epoch
 }
 
 export interface TransferListParams {
-    startDate?: string; // ISO format YYYY-MM-DD
-    endDate?: string;   // ISO format YYYY-MM-DD
+    startDate?: number; // milliseconds since epoch
+    endDate?: number;   // milliseconds since epoch
     limit?: number;
     offset?: number;
 }
@@ -45,15 +73,19 @@ export interface TransferListParams {
 export interface PairedTransfersResponse {
     pairedTransfers: TransferPair[];
     count: number;
-    total?: number;
-    hasMore?: boolean;
+    dateRange?: {
+        startDate: number;
+        endDate: number;
+    };
 }
 
 export interface DetectedTransfersResponse {
     transfers: TransferPair[];
     count: number;
-    total?: number;
-    hasMore?: boolean;
+    dateRange: {
+        startDate: number;
+        endDate: number;
+    };
     progressTrackingWarning?: string; // Warning if progress tracking failed
 }
 
@@ -78,30 +110,63 @@ export interface BulkMarkTransfersResponse {
 
 // Date range utilities
 export interface DateRange {
-    startDate: string; // ISO format YYYY-MM-DD
-    endDate: string;   // ISO format YYYY-MM-DD
+    startDate: number; // milliseconds since epoch
+    endDate: number;   // milliseconds since epoch
 }
 
 // 3. Zod validation schemas
+// Simplified transaction schema for transfer operations (matches backend model_dump output)
+const TransferTransactionSchema = z.object({
+    transactionId: z.string(),
+    fileId: z.string(),
+    userId: z.string(),
+    date: z.number(),
+    description: z.string(),
+    amount: z.union([z.number(), z.string()]).transform(val => Number(val)), // Backend returns as number/string
+    balance: z.union([z.number(), z.string()]).transform(val => Number(val)), // Backend returns as number/string
+    currency: z.string(),
+    accountId: z.string().nullish(), // Handle null values from backend
+    transactionType: z.string().nullish(), // Handle null values from backend
+    category: z.string().nullish(), // Handle null values from backend
+    payee: z.string().nullish(), // Handle null values from backend
+    memo: z.string().nullish(), // Handle null values from backend
+    checkNumber: z.string().nullish(), // Handle null values from backend
+    reference: z.string().nullish(), // Handle null values from backend
+    status: z.string().nullish(), // Handle null values from backend
+    debitOrCredit: z.string().nullish(), // Handle null values from backend
+    importOrder: z.number().nullish(), // Handle null values from backend
+    id: z.string().nullish(), // Handle null values from backend
+    primaryCategoryId: z.string().nullish(), // Handle null values from backend
+    categories: z.array(z.any()).nullish(), // Handle null values from backend
+    account: z.string().nullish(), // Handle null values from backend
+    type: z.string().nullish(), // Handle null values from backend
+    notes: z.string().nullish(), // Handle null values from backend
+    isSplit: z.boolean().nullish() // Handle null values from backend
+}).passthrough(); // Allow additional fields from backend
+
 const TransferPairSchema = z.object({
-    outgoingTransaction: z.any(), // Will be validated as TransactionViewItem
-    incomingTransaction: z.any(), // Will be validated as TransactionViewItem
-    amount: z.number(),
+    outgoingTransaction: TransferTransactionSchema,
+    incomingTransaction: TransferTransactionSchema,
+    amount: z.union([z.number(), z.string()]).transform(val => Number(val)), // Backend may return as string
     dateDifference: z.number()
 });
 
 const PairedTransfersResponseSchema = z.object({
     pairedTransfers: z.array(TransferPairSchema),
     count: z.number(),
-    total: z.number().optional(),
-    hasMore: z.boolean().optional()
+    dateRange: z.object({
+        startDate: z.number(),
+        endDate: z.number()
+    }).optional()
 });
 
 const DetectedTransfersResponseSchema = z.object({
     transfers: z.array(TransferPairSchema),
     count: z.number(),
-    total: z.number().optional(),
-    hasMore: z.boolean().optional(),
+    dateRange: z.object({
+        startDate: z.number(),
+        endDate: z.number()
+    }),
     progressTrackingWarning: z.string().optional()
 });
 
@@ -176,9 +241,9 @@ export const listPairedTransfers = (params?: TransferListParams) => {
     const query = new URLSearchParams();
 
     if (params?.startDate && params?.endDate) {
-        // Use ISO format dates
-        query.append('startDate', params.startDate);
-        query.append('endDate', params.endDate);
+        // Use milliseconds since epoch
+        query.append('startDate', params.startDate.toString());
+        query.append('endDate', params.endDate.toString());
     }
 
     if (params?.limit) {
@@ -212,8 +277,7 @@ export const listPairedTransfers = (params?: TransferListParams) => {
             operationName: 'listPairedTransfers',
             successData: (result) => ({
                 transferCount: result.pairedTransfers.length,
-                total: result.total,
-                hasMore: result.hasMore
+                hasDateRange: !!result.dateRange
             })
         }
     );
@@ -221,16 +285,16 @@ export const listPairedTransfers = (params?: TransferListParams) => {
 
 /**
  * Detect potential transfer transactions within a date range
- * @param startDate Start date for detection period (ISO format YYYY-MM-DD)
- * @param endDate End date for detection period (ISO format YYYY-MM-DD)
+ * @param startDate Start date for detection period (milliseconds since epoch)
+ * @param endDate End date for detection period (milliseconds since epoch)
  * @returns Promise resolving to detected transfers response
  */
-export const detectPotentialTransfers = (startDate: string, endDate: string) => {
+export const detectPotentialTransfers = (startDate: number, endDate: number) => {
     const query = new URLSearchParams();
 
-    // Use ISO format dates
-    query.append('startDate', startDate);
-    query.append('endDate', endDate);
+    // Use milliseconds since epoch
+    query.append('startDate', startDate.toString());
+    query.append('endDate', endDate.toString());
 
     const url = `${API_ENDPOINT}/detect?${query.toString()}`;
 
@@ -252,12 +316,12 @@ export const detectPotentialTransfers = (startDate: string, endDate: string) => 
             // Update the checked date range in preferences after successful detection
             let progressTrackingWarning: string | undefined;
             try {
-                // Convert ISO dates to milliseconds for storage
-                const startMs = new Date(startDate).getTime();
-                const endMs = new Date(endDate).getTime();
+                // Use the millisecond timestamps directly
+                const startMs = startDate;
+                const endMs = endDate;
 
                 // Attempt to update with retry mechanism
-                await retryPreferenceUpdate(startMs, endMs, startDate, endDate);
+                await retryPreferenceUpdate(startMs, endMs, new Date(startDate).toISOString().split('T')[0], new Date(endDate).toISOString().split('T')[0]);
                 logger.info('Updated transfer checked date range', { startDate, endDate, startMs, endMs });
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -268,7 +332,7 @@ export const detectPotentialTransfers = (startDate: string, endDate: string) => 
                 });
 
                 // Set warning to be included in response
-                progressTrackingWarning = `Transfer detection completed successfully, but progress tracking failed to update. You may need to manually track this date range (${startDate} to ${endDate}) to avoid duplicate checking.`;
+                progressTrackingWarning = `Transfer detection completed successfully, but progress tracking failed to update. You may need to manually track this date range (${new Date(startDate).toISOString().split('T')[0]} to ${new Date(endDate).toISOString().split('T')[0]}) to avoid duplicate checking.`;
             }
 
             // Include progress tracking warning in response if it occurred
@@ -281,8 +345,7 @@ export const detectPotentialTransfers = (startDate: string, endDate: string) => 
             operationName: 'detectPotentialTransfers',
             successData: (result) => ({
                 detectedCount: result.transfers.length,
-                total: result.total,
-                hasMore: result.hasMore
+                hasDateRange: !!result.dateRange
             })
         }
     );
@@ -365,7 +428,7 @@ export const bulkMarkTransfers = withServiceLogging(
 /**
  * Convert number of days to a date range ending today
  * @param days Number of days to go back from today
- * @returns Object with startDate and endDate in ISO format
+ * @returns Object with startDate and endDate in milliseconds since epoch
  */
 export const convertDaysToDateRange = (days: number): DateRange => {
     logger.info('Converting days to date range', { days });
@@ -375,8 +438,8 @@ export const convertDaysToDateRange = (days: number): DateRange => {
     startDate.setDate(endDate.getDate() - days);
 
     return {
-        startDate: formatDateForAPI(startDate),
-        endDate: formatDateForAPI(endDate)
+        startDate: startDate.getTime(),
+        endDate: endDate.getTime()
     };
 };
 
@@ -424,19 +487,19 @@ export const parseDateFromAPI = (dateString: string): Date => {
  * Create a date range for transfer operations
  * @param startDate Start date
  * @param endDate End date
- * @returns Formatted date range for API requests (ISO format)
+ * @returns Formatted date range for API requests (milliseconds since epoch)
  */
 export const createTransferDateRange = (startDate: Date, endDate: Date): TransferDetectionRequest => {
     return {
-        startDate: formatDateForAPI(startDate),
-        endDate: formatDateForAPI(endDate)
+        startDate: startDate.getTime(),
+        endDate: endDate.getTime()
     };
 };
 
 /**
  * Create a date range from number of days
  * @param days Number of days to go back from today
- * @returns Formatted date range for API requests (ISO format)
+ * @returns Formatted date range for API requests (milliseconds since epoch)
  */
 export const createDateRangeFromDays = (days: number): DateRange => {
     const endDate = new Date();
@@ -444,10 +507,183 @@ export const createDateRangeFromDays = (days: number): DateRange => {
     startDate.setDate(endDate.getDate() - days);
 
     return {
-        startDate: formatDateForAPI(startDate),
-        endDate: formatDateForAPI(endDate)
+        startDate: startDate.getTime(),
+        endDate: endDate.getTime()
     };
 };
+
+/**
+ * Get both transfer progress and recommended date range in a single optimized call
+ * This avoids duplicate API calls when both pieces of data are needed
+ */
+export const getTransferProgressAndRecommendation = withServiceLogging(
+    'TransferService',
+    'getTransferProgressAndRecommendation',
+    async (): Promise<{
+        progress: any;
+        recommendedRange: DateRange | null;
+    }> => {
+        try {
+            // Get all transfer data in a single optimized call
+            const { checkedRange, accountRange } = await getTransferDataForProgress();
+
+            // Calculate progress
+            let progress;
+            if (!accountRange.startDate || !accountRange.endDate) {
+                progress = {
+                    hasData: false,
+                    totalDays: 0,
+                    checkedDays: 0,
+                    progressPercentage: 0,
+                    isComplete: false
+                };
+            } else {
+                const accountStart = new Date(accountRange.startDate);
+                const accountEnd = new Date(accountRange.endDate);
+                const totalDays = Math.ceil((accountEnd.getTime() - accountStart.getTime()) / (1000 * 60 * 60 * 24));
+
+                let checkedDays = 0;
+                if (checkedRange.startDate && checkedRange.endDate) {
+                    const checkedStart = new Date(Math.max(checkedRange.startDate, accountStart.getTime()));
+                    const checkedEnd = new Date(Math.min(checkedRange.endDate, accountEnd.getTime()));
+                    checkedDays = Math.max(0, Math.ceil((checkedEnd.getTime() - checkedStart.getTime()) / (1000 * 60 * 60 * 24)));
+                }
+
+                const progressPercentage = totalDays > 0 ? Math.round((checkedDays / totalDays) * 100) : 0;
+                const isComplete = progressPercentage >= 100;
+
+                progress = {
+                    hasData: true,
+                    totalDays,
+                    checkedDays,
+                    progressPercentage,
+                    isComplete,
+                    accountDateRange: accountRange,
+                    checkedDateRange: checkedRange
+                };
+            }
+
+            // Calculate recommended range with continuous coverage and proper boundaries
+            let recommendedRange: DateRange | null = null;
+            if (accountRange.startDate && accountRange.endDate) {
+                const OVERLAP_DAYS = 3; // Days of overlap needed for transfer pair detection
+                const CHUNK_DAYS = 30; // Suggest ~1 month chunks for manageable processing
+
+                const accountStartDate = new Date(accountRange.startDate);
+                const accountEndDate = new Date(accountRange.endDate); // Latest actual transaction date
+
+                // If nothing has been checked yet, start with recent data (last 30 days of actual data)
+                if (!checkedRange.startDate || !checkedRange.endDate) {
+                    logger.info('No previous checks found, suggesting recent chunk from actual transaction data');
+
+                    const suggestedEnd = accountEndDate;
+                    const suggestedStart = new Date(suggestedEnd);
+                    suggestedStart.setDate(suggestedStart.getDate() - CHUNK_DAYS);
+
+                    // Don't go before account start
+                    const effectiveStart = new Date(Math.max(suggestedStart.getTime(), accountStartDate.getTime()));
+
+                    recommendedRange = {
+                        startDate: effectiveStart.getTime(),
+                        endDate: suggestedEnd.getTime()
+                    };
+                } else {
+                    // Validate checked range against actual data boundaries
+                    const checkedStartDate = new Date(Math.max(checkedRange.startDate, accountStartDate.getTime()));
+                    const checkedEndDate = new Date(Math.min(checkedRange.endDate, accountEndDate.getTime()));
+
+                    // Determine if we can extend forward (toward present) or backward (toward past)
+                    const canExtendForward = checkedEndDate.getTime() < accountEndDate.getTime();
+                    const canExtendBackward = checkedStartDate.getTime() > accountStartDate.getTime();
+
+                    if (canExtendForward) {
+                        // Extend forward with overlap, capped at actual data boundary
+                        logger.info('Extending forward from checked range with overlap');
+
+                        const nextStart = new Date(checkedEndDate);
+                        nextStart.setDate(nextStart.getDate() - OVERLAP_DAYS);
+
+                        const nextEnd = new Date(nextStart);
+                        nextEnd.setDate(nextEnd.getDate() + CHUNK_DAYS);
+
+                        // Cap at actual account data boundary
+                        const effectiveEnd = new Date(Math.min(nextEnd.getTime(), accountEndDate.getTime()));
+
+                        recommendedRange = {
+                            startDate: nextStart.getTime(),
+                            endDate: effectiveEnd.getTime()
+                        };
+
+                        logger.info('Forward extension recommendation', {
+                            nextStart: nextStart.toISOString().split('T')[0],
+                            effectiveEnd: effectiveEnd.toISOString().split('T')[0],
+                            overlapDays: OVERLAP_DAYS
+                        });
+                    } else if (canExtendBackward) {
+                        // Extend backward with overlap into historical data
+                        logger.info('Extending backward from checked range with overlap');
+
+                        const nextEnd = new Date(checkedStartDate);
+                        nextEnd.setDate(nextEnd.getDate() + OVERLAP_DAYS);
+
+                        const nextStart = new Date(nextEnd);
+                        nextStart.setDate(nextStart.getDate() - CHUNK_DAYS);
+
+                        // Cap at actual account data boundary
+                        const effectiveStart = new Date(Math.max(nextStart.getTime(), accountStartDate.getTime()));
+
+                        recommendedRange = {
+                            startDate: effectiveStart.getTime(),
+                            endDate: nextEnd.getTime()
+                        };
+
+                        logger.info('Backward extension recommendation', {
+                            effectiveStart: effectiveStart.toISOString().split('T')[0],
+                            nextEnd: nextEnd.toISOString().split('T')[0],
+                            overlapDays: OVERLAP_DAYS
+                        });
+                    } else {
+                        // All actual transaction data has been covered
+                        logger.info('All actual transaction data has been checked, no recommendation needed');
+                        recommendedRange = null;
+                    }
+                }
+            } else {
+                logger.warn('No account date range available for transfer checking');
+            }
+
+            return {
+                progress,
+                recommendedRange
+            };
+
+        } catch (error) {
+            logger.error('Failed to get transfer progress and recommendation', {
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+
+            // Fallback values
+            return {
+                progress: {
+                    hasData: false,
+                    totalDays: 0,
+                    checkedDays: 0,
+                    progressPercentage: 0,
+                    isComplete: false,
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                },
+                recommendedRange: null // Don't suggest anything if we can't determine proper boundaries
+            };
+        }
+    },
+    {
+        logResult: (result) => ({
+            hasProgress: result.progress.hasData,
+            progressPercentage: result.progress.progressPercentage,
+            hasRecommendation: !!result.recommendedRange
+        })
+    }
+);
 
 /**
  * Get the recommended date range for transfer checking based on user preferences and account data
@@ -457,57 +693,8 @@ export const getRecommendedTransferDateRange = withServiceLogging(
     'TransferService',
     'getRecommendedTransferDateRange',
     async (): Promise<DateRange | null> => {
-        try {
-            // Get the checked date range from preferences
-            const checkedRange = await getTransferCheckedDateRange();
-
-            // Get the overall account date range
-            const accountRange = await getAccountDateRangeForTransfers();
-
-            if (!accountRange.startDate || !accountRange.endDate) {
-                logger.warn('No account date range available for transfer checking');
-                return null;
-            }
-
-            // If nothing has been checked yet, return the full account range
-            if (!checkedRange.startDate || !checkedRange.endDate) {
-                logger.info('No previous checks found, returning full account date range');
-                return {
-                    startDate: formatDateForAPI(new Date(accountRange.startDate)),
-                    endDate: formatDateForAPI(new Date(accountRange.endDate))
-                };
-            }
-
-            // If everything has been checked, suggest a recent range
-            const accountEndDate = new Date(accountRange.endDate);
-            const checkedEndDate = new Date(checkedRange.endDate);
-
-            if (checkedEndDate >= accountEndDate) {
-                logger.info('All data has been checked, suggesting recent 30-day range');
-                return createDateRangeFromDays(30);
-            }
-
-            // Return the unchecked portion
-            const nextStartDate = new Date(checkedEndDate);
-            nextStartDate.setDate(nextStartDate.getDate() + 1); // Start from day after last checked
-
-            const recommendedRange = {
-                startDate: formatDateForAPI(nextStartDate),
-                endDate: formatDateForAPI(new Date(accountRange.endDate))
-            };
-
-            logger.info('Returning unchecked date range', recommendedRange);
-            return recommendedRange;
-
-        } catch (error) {
-            logger.error('Failed to get recommended transfer date range', {
-                error: error instanceof Error ? error.message : 'Unknown error'
-            });
-
-            // Fallback to a reasonable default
-            logger.info('Using fallback 30-day range');
-            return createDateRangeFromDays(30);
-        }
+        const { recommendedRange } = await getTransferProgressAndRecommendation();
+        return recommendedRange;
     },
     {
         logResult: (result) => ({
@@ -526,58 +713,8 @@ export const getTransferCheckingProgress = withServiceLogging(
     'TransferService',
     'getTransferCheckingProgress',
     async () => {
-        try {
-            const checkedRange = await getTransferCheckedDateRange();
-            const accountRange = await getAccountDateRangeForTransfers();
-
-            if (!accountRange.startDate || !accountRange.endDate) {
-                return {
-                    hasData: false,
-                    totalDays: 0,
-                    checkedDays: 0,
-                    progressPercentage: 0,
-                    isComplete: false
-                };
-            }
-
-            const accountStart = new Date(accountRange.startDate);
-            const accountEnd = new Date(accountRange.endDate);
-            const totalDays = Math.ceil((accountEnd.getTime() - accountStart.getTime()) / (1000 * 60 * 60 * 24));
-
-            let checkedDays = 0;
-            if (checkedRange.startDate && checkedRange.endDate) {
-                const checkedStart = new Date(Math.max(checkedRange.startDate, accountStart.getTime()));
-                const checkedEnd = new Date(Math.min(checkedRange.endDate, accountEnd.getTime()));
-                checkedDays = Math.max(0, Math.ceil((checkedEnd.getTime() - checkedStart.getTime()) / (1000 * 60 * 60 * 24)));
-            }
-
-            const progressPercentage = totalDays > 0 ? Math.round((checkedDays / totalDays) * 100) : 0;
-            const isComplete = progressPercentage >= 100;
-
-            return {
-                hasData: true,
-                totalDays,
-                checkedDays,
-                progressPercentage,
-                isComplete,
-                accountDateRange: accountRange,
-                checkedDateRange: checkedRange
-            };
-
-        } catch (error) {
-            logger.error('Failed to get transfer checking progress', {
-                error: error instanceof Error ? error.message : 'Unknown error'
-            });
-
-            return {
-                hasData: false,
-                totalDays: 0,
-                checkedDays: 0,
-                progressPercentage: 0,
-                isComplete: false,
-                error: error instanceof Error ? error.message : 'Unknown error'
-            };
-        }
+        const { progress } = await getTransferProgressAndRecommendation();
+        return progress;
     },
     {
         logResult: (result) => ({
@@ -607,5 +744,6 @@ export default {
 
     // Transfer preferences and progress
     getRecommendedTransferDateRange,
-    getTransferCheckingProgress
+    getTransferCheckingProgress,
+    getTransferProgressAndRecommendation
 };

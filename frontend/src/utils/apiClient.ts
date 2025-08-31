@@ -178,6 +178,31 @@ export class ApiClient {
     }
 
     /**
+     * Enhanced GET request with automatic metadata capture for validation
+     * Returns both data and metadata for use with validateApiResponse
+     */
+    static async getJsonWithMetadata<T = any>(url: string, options: Omit<ApiRequestOptions, 'method' | 'body'> = {}): Promise<{
+        data: T;
+        metadata: {
+            endpoint: string;
+            method: string;
+            fullUrl: string;
+        };
+    }> {
+        const response = await this.get(url, options);
+        const data = await response.json();
+
+        return {
+            data,
+            metadata: {
+                endpoint: url,
+                method: 'GET',
+                fullUrl: this.resolveUrl(url)
+            }
+        };
+    }
+
+    /**
      * Makes a POST request and automatically parses JSON response
      */
     static async postJson<T = any>(url: string, body?: any, options: Omit<ApiRequestOptions, 'method' | 'body'> = {}): Promise<T> {

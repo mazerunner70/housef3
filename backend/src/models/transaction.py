@@ -460,6 +460,16 @@ class Transaction(BaseModel):
                 logger.warning(f"Invalid currency value from database: {converted_data['currency']}, setting to None")
                 converted_data['currency'] = None
 
+        # Manually convert UUID string fields to UUID objects
+        uuid_fields = ['fileId', 'transactionId', 'accountId', 'primaryCategoryId']
+        for field in uuid_fields:
+            if field in converted_data and isinstance(converted_data[field], str):
+                try:
+                    converted_data[field] = uuid.UUID(converted_data[field])
+                except ValueError:
+                    # If invalid UUID, let Pydantic handle the error
+                    pass
+
         # Handle category assignments reconstruction
         if 'categories' in converted_data and converted_data['categories']:
             processed_categories = []

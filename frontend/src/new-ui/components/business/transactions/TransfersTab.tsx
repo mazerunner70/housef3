@@ -4,18 +4,28 @@ import {
     detectPotentialTransfers,
     bulkMarkTransfers,
     TransferPair,
-    getTransferCheckingProgress,
-    getRecommendedTransferDateRange
+    getTransferProgressAndRecommendation
 } from '@/services/TransferService';
 import { getAccounts } from '@/services/TransactionService';
 import { AccountInfo } from '@/schemas/Transaction';
-import CurrencyDisplay from '@/new-ui/components/ui/CurrencyDisplay';
-import DateRangePicker, { DateRange } from '@/new-ui/components/ui/DateRangePicker';
+import {
+    CurrencyDisplay,
+    DateRangePicker,
+    DateCell,
+    ProgressBar,
+    Alert,
+    LoadingState
+} from '@/new-ui/components/ui';
+import Button from '@/new-ui/components/Button';
+import { DateRange } from '@/new-ui/components/ui/DateRangePicker';
+
+import { useLocale } from '@/new-ui/hooks/useLocale';
 import './TransfersTab.css';
 
 interface TransfersTabProps { }
 
 const TransfersTab: React.FC<TransfersTabProps> = () => {
+    const { localeConfig, formatDate } = useLocale();
     const [pairedTransfers, setPairedTransfers] = useState<TransferPair[]>([]);
     const [detectedTransfers, setDetectedTransfers] = useState<TransferPair[]>([]);
     const [accounts, setAccounts] = useState<AccountInfo[]>([]);
@@ -44,19 +54,42 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
 
     // Load initial data
     useEffect(() => {
-        loadInitialData();
-        loadTransferProgress();
+        loadAllInitialData();
     }, []);
+
+    const loadAllInitialData = async () => {
+        setLoading(true);
+        setProgressLoading(true);
+        setError(null);
+        try {
+            // Load all data in parallel with optimized progress/recommendation call
+            const [transfersData, accountsData, progressAndRecommendation] = await Promise.all([
+                listPairedTransfers({
+                    startDate: currentDateRange.startDate.getTime(),
+                    endDate: currentDateRange.endDate.getTime()
+                })(),
+                getAccounts(),
+                getTransferProgressAndRecommendation()
+            ]);
+
+            setPairedTransfers(transfersData.pairedTransfers);
+            setAccounts(accountsData);
+            setTransferProgress(progressAndRecommendation.progress);
+            setRecommendedRange(progressAndRecommendation.recommendedRange);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to load transfer data');
+        } finally {
+            setLoading(false);
+            setProgressLoading(false);
+        }
+    };
 
     const loadTransferProgress = async () => {
         setProgressLoading(true);
         try {
-            const [progress, recommended] = await Promise.all([
-                getTransferCheckingProgress(),
-                getRecommendedTransferDateRange()
-            ]);
-            setTransferProgress(progress);
-            setRecommendedRange(recommended);
+            const progressAndRecommendation = await getTransferProgressAndRecommendation();
+            setTransferProgress(progressAndRecommendation.progress);
+            setRecommendedRange(progressAndRecommendation.recommendedRange);
         } catch (err) {
             console.warn('Failed to load transfer progress:', err);
         } finally {
@@ -64,25 +97,7 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
         }
     };
 
-    const loadInitialData = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const [transfersData, accountsData] = await Promise.all([
-                listPairedTransfers({
-                    startDate: currentDateRange.startDate.getTime().toString(),
-                    endDate: currentDateRange.endDate.getTime().toString()
-                })(),
-                getAccounts()
-            ]);
-            setPairedTransfers(transfersData.pairedTransfers);
-            setAccounts(accountsData);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to load transfer data');
-        } finally {
-            setLoading(false);
-        }
-    };
+
 
     const handleDetectTransfers = async () => {
         setDetectLoading(true);
@@ -91,8 +106,8 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
         try {
             // Use date range API
             const detected = await detectPotentialTransfers(
-                currentDateRange.startDate.toISOString().split('T')[0],
-                currentDateRange.endDate.toISOString().split('T')[0]
+                currentDateRange.startDate.getTime(),
+                currentDateRange.endDate.getTime()
             )();
             setDetectedTransfers(detected.transfers);
             setSelectedDetectedTransfers(new Set());
@@ -134,8 +149,8 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
             if (result.successCount > 0) {
                 // Reload paired transfers to show the newly marked ones
                 const updatedTransfers = await listPairedTransfers({
-                    startDate: currentDateRange.startDate.getTime().toString(),
-                    endDate: currentDateRange.endDate.getTime().toString()
+                    startDate: currentDateRange.startDate.getTime(),
+                    endDate: currentDateRange.endDate.getTime()
                 })();
                 setPairedTransfers(updatedTransfers.pairedTransfers);
 
@@ -168,20 +183,24 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
         return account ? (account.name as string) : `Account ${accountId}`;
     };
 
-    const formatDate = (timestamp: number): string => {
-        return new Date(timestamp).toLocaleDateString();
-    };
+
 
     const formatDateRange = (startMs: number | null, endMs: number | null): string => {
         if (!startMs || !endMs) return 'No data available';
-        const start = new Date(startMs).toLocaleDateString();
-        const end = new Date(endMs).toLocaleDateString();
+        const start = formatDate(startMs, {
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric'
+        });
+        const end = formatDate(endMs, {
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric'
+        });
         return `${start} - ${end}`;
     };
 
-    const formatProgressPercentage = (percentage: number): string => {
-        return `${Math.round(percentage)}%`;
-    };
+
 
     const handleExpandDateRange = async (days: number) => {
         const endDate = new Date();
@@ -197,8 +216,8 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
         setError(null);
         try {
             const detected = await detectPotentialTransfers(
-                newRange.startDate.toISOString().split('T')[0],
-                newRange.endDate.toISOString().split('T')[0]
+                newRange.startDate.getTime(),
+                newRange.endDate.getTime()
             )();
             setDetectedTransfers(detected.transfers);
             setSelectedDetectedTransfers(new Set());
@@ -216,8 +235,8 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
         try {
             setLoading(true);
             const updatedTransfers = await listPairedTransfers({
-                startDate: newRange.startDate.getTime().toString(),
-                endDate: newRange.endDate.getTime().toString()
+                startDate: newRange.startDate.getTime(),
+                endDate: newRange.endDate.getTime()
             })();
             setPairedTransfers(updatedTransfers.pairedTransfers);
         } catch (err) {
@@ -246,7 +265,7 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
     };
 
     if (loading) {
-        return <div className="transfers-tab-loading">Loading transfer data...</div>;
+        return <LoadingState message="Loading transfer data..." />;
     }
 
     return (
@@ -257,9 +276,9 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
             </div>
 
             {error && (
-                <div className="transfers-tab-error">
+                <Alert variant="error" dismissible onDismiss={() => setError(null)}>
                     {error}
-                </div>
+                </Alert>
             )}
 
             {/* Existing Paired Transfers Section */}
@@ -286,8 +305,8 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
                             <tbody>
                                 {pairedTransfers.map((pair, index) => (
                                     <tr key={index}>
-                                        <td>{getAccountName(pair.outgoingTransaction.accountId)}</td>
-                                        <td>{formatDate(pair.outgoingTransaction.date)}</td>
+                                        <td>{getAccountName(pair.outgoingTransaction.accountId || undefined)}</td>
+                                        <td><DateCell date={pair.outgoingTransaction.date} format="short" locale={localeConfig.locale} /></td>
                                         <td>
                                             <CurrencyDisplay
                                                 amount={Math.abs(Number(pair.outgoingTransaction.amount))}
@@ -295,8 +314,8 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
                                                 className="currency-negative"
                                             />
                                         </td>
-                                        <td>{getAccountName(pair.incomingTransaction.accountId)}</td>
-                                        <td>{formatDate(pair.incomingTransaction.date)}</td>
+                                        <td>{getAccountName(pair.incomingTransaction.accountId || undefined)}</td>
+                                        <td><DateCell date={pair.incomingTransaction.date} format="short" locale={localeConfig.locale} /></td>
                                         <td>
                                             <CurrencyDisplay
                                                 amount={Number(pair.incomingTransaction.amount)}
@@ -321,7 +340,7 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
                     {/* Date Range Information Panel */}
                     <div className="date-range-info-panel">
                         {progressLoading ? (
-                            <div className="date-range-loading">Loading date range information...</div>
+                            <LoadingState message="Loading date range information..." size="small" />
                         ) : (
                             <>
                                 {/* Overall Account Date Range */}
@@ -353,17 +372,10 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
                                                         transferProgress.checkedDateRange.endDate
                                                     )}
                                                 </span>
-                                                <div className="progress-indicator">
-                                                    <div className="progress-bar">
-                                                        <div
-                                                            className="progress-fill"
-                                                            style={{ width: `${transferProgress.progressPercentage || 0}%` }}
-                                                        ></div>
-                                                    </div>
-                                                    <span className="progress-text">
-                                                        {formatProgressPercentage(transferProgress.progressPercentage || 0)} complete
-                                                    </span>
-                                                </div>
+                                                <ProgressBar
+                                                    percentage={transferProgress.progressPercentage || 0}
+                                                    size="small"
+                                                />
                                             </>
                                         ) : (
                                             <span className="date-range-text no-data">No transfers checked yet</span>
@@ -382,7 +394,9 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
                                                     new Date(recommendedRange.endDate).getTime()
                                                 )}
                                             </span>
-                                            <button
+                                            <Button
+                                                variant="secondary"
+                                                size="compact"
                                                 onClick={() => {
                                                     const newRange = {
                                                         startDate: new Date(recommendedRange.startDate),
@@ -391,11 +405,10 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
                                                     setCurrentDateRange(newRange);
                                                     handleDateRangePickerChange(newRange);
                                                 }}
-                                                className="use-suggested-range-button"
                                                 disabled={detectLoading}
                                             >
                                                 Use This Range
-                                            </button>
+                                            </Button>
                                         </div>
                                     </div>
                                 )}
@@ -417,13 +430,13 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
                                 className="transfers-date-picker"
                             />
                         </div>
-                        <button
+                        <Button
+                            variant="primary"
                             onClick={handleDetectTransfers}
                             disabled={detectLoading}
-                            className="detect-button"
                         >
                             {detectLoading ? 'Detecting...' : 'Scan for Transfers'}
-                        </button>
+                        </Button>
                     </div>
                 </div>
 
@@ -432,19 +445,20 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
                         <div className="detected-transfers-header">
                             <h4>Potential Transfer Matches ({detectedTransfers.length})</h4>
                             <div className="bulk-actions">
-                                <button
+                                <Button
+                                    variant="secondary"
+                                    size="compact"
                                     onClick={selectAllDetected}
-                                    className="select-all-button"
                                 >
                                     {selectedDetectedTransfers.size === detectedTransfers.length ? 'Deselect All' : 'Select All'}
-                                </button>
-                                <button
+                                </Button>
+                                <Button
+                                    variant="primary"
                                     onClick={handleBulkMarkTransfers}
                                     disabled={bulkMarkLoading || selectedDetectedTransfers.size === 0}
-                                    className="bulk-mark-button"
                                 >
                                     {bulkMarkLoading ? 'Marking...' : `Mark ${selectedDetectedTransfers.size} as Transfers`}
-                                </button>
+                                </Button>
                             </div>
                         </div>
 
@@ -478,8 +492,8 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
                                                     onChange={() => toggleDetectedTransfer(index.toString())}
                                                 />
                                             </td>
-                                            <td>{getAccountName(pair.outgoingTransaction.accountId)}</td>
-                                            <td>{formatDate(pair.outgoingTransaction.date)}</td>
+                                            <td>{getAccountName(pair.outgoingTransaction.accountId || undefined)}</td>
+                                            <td><DateCell date={pair.outgoingTransaction.date} format="short" locale={localeConfig.locale} /></td>
                                             <td>
                                                 <CurrencyDisplay
                                                     amount={Math.abs(Number(pair.outgoingTransaction.amount))}
@@ -487,8 +501,8 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
                                                     className="currency-negative"
                                                 />
                                             </td>
-                                            <td>{getAccountName(pair.incomingTransaction.accountId)}</td>
-                                            <td>{formatDate(pair.incomingTransaction.date)}</td>
+                                            <td>{getAccountName(pair.incomingTransaction.accountId || undefined)}</td>
+                                            <td><DateCell date={pair.incomingTransaction.date} format="short" locale={localeConfig.locale} /></td>
                                             <td>
                                                 <CurrencyDisplay
                                                     amount={Number(pair.incomingTransaction.amount)}
@@ -517,26 +531,26 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
                             <h4>No transfers found in current date range</h4>
                             <p>Try expanding the date range to find more potential matches:</p>
                             <div className="suggestion-buttons">
-                                <button
+                                <Button
+                                    variant="secondary"
                                     onClick={() => handleExpandDateRange(14)}
-                                    className="suggestion-button"
                                     disabled={detectLoading}
                                 >
                                     Scan Last 2 Weeks
-                                </button>
-                                <button
+                                </Button>
+                                <Button
+                                    variant="secondary"
                                     onClick={() => handleExpandDateRange(30)}
-                                    className="suggestion-button"
                                     disabled={detectLoading}
                                 >
                                     Scan Last Month
-                                </button>
-                                <button
+                                </Button>
+                                <Button
+                                    variant="tertiary"
                                     onClick={() => setShowDateRangeSuggestion(false)}
-                                    className="suggestion-button secondary"
                                 >
                                     Cancel
-                                </button>
+                                </Button>
                             </div>
                         </div>
                     </div>

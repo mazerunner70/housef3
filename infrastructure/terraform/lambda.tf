@@ -964,6 +964,7 @@ resource "aws_lambda_function" "user_preferences_operations" {
   environment {
     variables = {
       USER_PREFERENCES_TABLE = aws_dynamodb_table.user_preferences.name
+      ACCOUNTS_TABLE         = aws_dynamodb_table.accounts.name
       ENVIRONMENT           = var.environment
     }
   }

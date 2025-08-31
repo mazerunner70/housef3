@@ -33,9 +33,7 @@ def get_user_preferences_handler(event: Dict[str, Any], user_id: str) -> Dict[st
     
     if preferences:
         logger.info(f"Retrieved preferences for user: {user_id}")
-        return {
-            "item": preferences.model_dump(by_alias=True, mode='json')
-        }
+        return preferences.model_dump(by_alias=True, mode='json')
     else:
         # Return default preferences structure if none exist
         default_preferences = {
@@ -53,10 +51,7 @@ def get_user_preferences_handler(event: Dict[str, Any], user_id: str) -> Dict[st
             "updatedAt": None
         }
         logger.info(f"No preferences found for user: {user_id}, returning defaults")
-        return {
-            "item": default_preferences,
-            "message": "Using default preferences"
-        }
+        return default_preferences
 
 
 @api_handler()
@@ -85,10 +80,7 @@ def update_user_preferences_handler(event: Dict[str, Any], user_id: str) -> Dict
     updated_preferences = asyncio.run(service.update_user_preferences(user_id, update_data))
     
     logger.info(f"Updated preferences for user: {user_id}")
-    return {
-        "item": updated_preferences.model_dump(by_alias=True, mode='json'),
-        "message": "Preferences updated successfully"
-    }
+    return updated_preferences.model_dump(by_alias=True, mode='json')
 
 
 @api_handler()
@@ -106,11 +98,21 @@ def get_transfer_preferences_handler(event: Dict[str, Any], user_id: str) -> Dic
     # Get transfer preferences
     service = UserPreferencesService()
     transfer_prefs = asyncio.run(service.get_transfer_preferences(user_id))
+    logger.info(f"Transfer preferences: {transfer_prefs}")
+    # Ensure timestamp fields are returned as integers, not strings
+    for field in ['checkedDateRangeStart', 'checkedDateRangeEnd']:
+        if transfer_prefs[field] is not None:
+            try:
+                transfer_prefs[field] = int(transfer_prefs[field])
+                logger.warning(f"Converted string timestamp {field} to int for user {user_id}")
+            except (ValueError, TypeError):
+                logger.error(f"Invalid timestamp string for {field}: {transfer_prefs[field]} (user: {user_id})")
+                transfer_prefs[field] = None
+        else:
+            logger.warning(f"No timestamp {field} found for user {user_id}")
     
     logger.info(f"Retrieved transfer preferences for user: {user_id}")
-    return {
-        "item": transfer_prefs
-    }
+    return transfer_prefs
 
 
 @api_handler()
@@ -134,15 +136,23 @@ def update_transfer_preferences_handler(event: Dict[str, Any], user_id: str) -> 
     except json.JSONDecodeError:
         raise ValueError("Invalid JSON in request body")
 
+    # Ensure timestamp fields are integers, not strings
+    for field in ['checkedDateRangeStart', 'checkedDateRangeEnd']:
+        if field in body and body[field] is not None:
+            if isinstance(body[field], str):
+                try:
+                    body[field] = int(body[field])
+                except (ValueError, TypeError):
+                    raise ValueError(f"Invalid timestamp value for {field}: {body[field]}")
+            elif not isinstance(body[field], int):
+                raise ValueError(f"Timestamp field {field} must be an integer, got {type(body[field])}")
+
     # Update transfer preferences
     service = UserPreferencesService()
     updated_preferences = asyncio.run(service.update_transfer_preferences(user_id, body))
     
     logger.info(f"Updated transfer preferences for user: {user_id}")
-    return {
-        "item": updated_preferences.model_dump(by_alias=True, mode='json'),
-        "message": "Transfer preferences updated successfully"
-    }
+    return updated_preferences.model_dump(by_alias=True, mode='json')
 
 
 @api_handler()
@@ -163,10 +173,8 @@ def get_account_date_range_handler(event: Dict[str, Any], user_id: str) -> Dict[
     
     logger.info(f"Retrieved account date range for user: {user_id}")
     return {
-        "item": {
-            "startDate": earliest_ms,
-            "endDate": latest_ms
-        }
+        "startDate": earliest_ms,
+        "endDate": latest_ms
     }
 
 

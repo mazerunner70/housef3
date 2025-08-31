@@ -652,4 +652,93 @@ class TestTransactionSerialization:
         # These should be int types now, not Decimal
         assert type(serialized['date']).__name__ == 'int'
         assert type(serialized['createdAt']).__name__ == 'int'
-        assert type(serialized['updatedAt']).__name__ == 'int' 
+        assert type(serialized['updatedAt']).__name__ == 'int'
+
+    def test_from_dynamodb_item_uuid_conversion(self):
+        """Test that UUID string fields from DynamoDB are properly converted to UUID objects."""
+        # Mock DynamoDB data with string UUID values (as they come from DynamoDB)
+        file_id_str = '12345678-1234-1234-1234-123456789012'
+        transaction_id_str = '87654321-4321-4321-4321-210987654321'
+        account_id_str = '11111111-2222-3333-4444-555555555555'
+        primary_category_id_str = '99999999-8888-7777-6666-555555555555'
+        
+        dynamodb_data = {
+            'userId': 'test-user',
+            'fileId': file_id_str,  # String UUID from DynamoDB
+            'transactionId': transaction_id_str,  # String UUID from DynamoDB
+            'accountId': account_id_str,  # String UUID from DynamoDB
+            'date': 1640995200000,
+            'description': 'Test transaction',
+            'amount': Decimal('100.50'),
+            'currency': 'USD',
+            'primaryCategoryId': primary_category_id_str,  # String UUID from DynamoDB
+            'categories': [{
+                'categoryId': '77777777-6666-5555-4444-333333333333',  # String UUID from DynamoDB
+                'confidence': 100,
+                'status': 'confirmed',
+                'isManual': True,
+                'assignedAt': 1640995200000,
+                'confirmedAt': 1640995200001
+            }]
+        }
+        
+        # This should not raise any Pydantic serialization warnings about UUID types
+        transaction = Transaction.from_dynamodb_item(dynamodb_data)
+        
+        # Verify the UUID fields are actual UUID objects, not strings
+        assert isinstance(transaction.file_id, uuid.UUID)
+        assert isinstance(transaction.transaction_id, uuid.UUID)
+        assert isinstance(transaction.account_id, uuid.UUID)
+        assert isinstance(transaction.primary_category_id, uuid.UUID)
+        
+        # Verify the UUID values are correct
+        assert transaction.file_id == uuid.UUID(file_id_str)
+        assert transaction.transaction_id == uuid.UUID(transaction_id_str)
+        assert transaction.account_id == uuid.UUID(account_id_str)
+        assert transaction.primary_category_id == uuid.UUID(primary_category_id_str)
+        
+        # Verify category assignment UUID is also converted
+        assert len(transaction.categories) == 1
+        category = transaction.categories[0]
+        assert isinstance(category.category_id, uuid.UUID)
+        assert category.category_id == uuid.UUID('77777777-6666-5555-4444-333333333333')
+        
+        # Verify the serialization doesn't produce warnings about UUID types
+        # This was the original issue - Pydantic expected UUID objects but got strings
+        serialized = transaction.model_dump(by_alias=True, mode='json')
+        
+        # These should serialize to strings without warnings
+        assert serialized['fileId'] == file_id_str
+        assert serialized['transactionId'] == transaction_id_str
+        assert serialized['accountId'] == account_id_str
+        assert serialized['primaryCategoryId'] == primary_category_id_str
+        assert serialized['categories'][0]['categoryId'] == '77777777-6666-5555-4444-333333333333'
+        
+        # Test that the transaction can be used in operations that trigger serialization
+        # (like the update_transaction call in mark_as_transfer_pair)
+        try:
+            # This should not raise PydanticSerializationUnexpectedValue warnings
+            json_output = transaction.model_dump_json(by_alias=True)
+            parsed = json.loads(json_output)
+            assert parsed['fileId'] == file_id_str
+            assert parsed['transactionId'] == transaction_id_str
+            assert parsed['accountId'] == account_id_str
+        except Exception as e:
+            pytest.fail(f"Transaction serialization failed: {e}")
+
+    def test_from_dynamodb_item_invalid_uuid_handling(self):
+        """Test that invalid UUID strings are handled gracefully."""
+        dynamodb_data = {
+            'userId': 'test-user',
+            'fileId': 'invalid-uuid-string',  # Invalid UUID
+            'transactionId': '87654321-4321-4321-4321-210987654321',  # Valid UUID
+            'accountId': '11111111-2222-3333-4444-555555555555',  # Valid UUID
+            'date': 1640995200000,
+            'description': 'Test transaction',
+            'amount': Decimal('100.50'),
+            'currency': 'USD'
+        }
+        
+        # Should let Pydantic handle the invalid UUID and raise appropriate error
+        with pytest.raises(ValueError, match="badly formed hexadecimal UUID string"):
+            Transaction.from_dynamodb_item(dynamodb_data) 

@@ -1,4 +1,17 @@
 import { ZodError } from 'zod';
+import { createLogger, collectErrorData } from './logger';
+
+/**
+ * Enhanced Zod Error Handler with Consola Logging
+ * 
+ * Features:
+ * - Uses consola for structured, colorized logging
+ * - Includes full stack traces for debugging
+ * - Detailed validation error breakdown
+ * - Raw data sampling for development debugging
+ * - Consistent error context tracking
+ * - Performance-aware logging (respects log levels)
+ */
 
 /**
  * Configuration for Zod error handling
@@ -12,7 +25,16 @@ export interface ZodErrorHandlerConfig {
     includeDebugInfo?: boolean;
     /** Custom user-friendly error message */
     userMessage?: string;
+    /** API metadata for better error tracking */
+    apiMetadata?: {
+        endpoint?: string;
+        method?: string;
+        service?: string;
+    };
 }
+
+// Create a dedicated logger for Zod validation errors
+const logger = createLogger('ZodErrorHandler');
 
 /**
  * Standardized Zod error handler for consistent error reporting across services
@@ -33,24 +55,47 @@ export const handleZodValidationError = (error: any, config: ZodErrorHandlerConf
     if (error?.name === 'ZodError' || error instanceof ZodError) {
         const zodError = error as ZodError;
 
-        // Log detailed error information for debugging
-        console.error(`${context} validation failed:`, {
-            issues: zodError.issues || [],
-            message: zodError.message,
+        // Prepare structured error data for logging
+        const errorLogData = {
+            context,
+            validationErrors: zodError.issues?.map(issue => ({
+                path: issue.path.join('.'),
+                code: issue.code,
+                message: issue.message,
+                expected: (issue as any).expected || 'N/A',
+                received: (issue as any).received || 'N/A'
+            })) || [],
+            totalIssues: zodError.issues?.length || 0,
+            zodMessage: zodError.message,
+            ...collectErrorData(zodError), // Includes stack trace
+            // Include API metadata if provided
+            ...(config.apiMetadata && {
+                apiEndpoint: config.apiMetadata.endpoint,
+                apiMethod: config.apiMetadata.method,
+                apiService: config.apiMetadata.service
+            }),
             ...(includeDebugInfo && rawData && {
                 rawDataSample: JSON.stringify(rawData).substring(0, 1000) + (JSON.stringify(rawData).length > 1000 ? '...' : ''),
                 rawDataType: typeof rawData,
-                rawDataKeys: typeof rawData === 'object' && rawData !== null ? Object.keys(rawData) : 'N/A'
-            }),
-            fullError: zodError
-        });
+                rawDataKeys: typeof rawData === 'object' && rawData !== null ? Object.keys(rawData) : 'N/A',
+                rawDataSize: rawData ? JSON.stringify(rawData).length : 0
+            })
+        };
+
+        // Log with consola for better formatting and structure
+        logger.error(`Zod validation failed for ${context}`, errorLogData);
 
         // Throw user-friendly error
         const defaultMessage = `${context.charAt(0).toUpperCase() + context.slice(1)} format is invalid. Please refresh the page or contact support if the issue persists.`;
         throw new Error(userMessage || defaultMessage);
     }
 
-    // If it's not a Zod error, re-throw the original error
+    // If it's not a Zod error, log it and re-throw
+    logger.error(`Non-Zod error in ${context}`, {
+        context,
+        ...collectErrorData(error)
+    });
+
     throw error;
 };
 
@@ -91,14 +136,19 @@ export const validateAsyncWithErrorHandling = async <T>(
 };
 
 /**
- * Convenience function for API response validation
+ * Enhanced API response validation with automatic metadata detection
  * Combines API call + validation + error handling in one step
  */
 export const validateApiResponse = async <T>(
     apiCall: () => Promise<any>,
     validator: (data: any) => T,
     context: string,
-    userMessage?: string
+    userMessage?: string,
+    apiMetadata?: {
+        endpoint?: string;
+        method?: string;
+        service?: string;
+    }
 ): Promise<T> => {
     let rawData: any = null;
 
@@ -109,7 +159,8 @@ export const validateApiResponse = async <T>(
             {
                 context,
                 rawData,
-                userMessage
+                userMessage,
+                apiMetadata
             }
         );
     } catch (error) {
@@ -118,8 +169,69 @@ export const validateApiResponse = async <T>(
             throw error;
         }
 
-        // Handle other API errors
-        console.error(`Error in ${context}:`, error);
+        // Handle other API errors with structured logging
+        logger.error(`API error in ${context}`, {
+            context,
+            apiEndpoint: apiMetadata?.endpoint,
+            apiMethod: apiMetadata?.method,
+            apiService: apiMetadata?.service,
+            ...collectErrorData(error)
+        });
         throw error;
     }
+};
+
+/**
+ * Smart API response validation that automatically derives metadata from the API call
+ * This version inspects the apiCall function to extract endpoint and method information
+ */
+export const validateApiResponseSmart = async <T>(
+    apiCall: () => Promise<any>,
+    validator: (data: any) => T,
+    context: string,
+    userMessage?: string,
+    serviceName?: string
+): Promise<T> => {
+    // Try to derive metadata from the API call function
+    const apiCallString = apiCall.toString();
+
+    // Extract method and endpoint from common patterns
+    let endpoint: string | undefined;
+    let method: string | undefined;
+
+    // Pattern: ApiClient.getJson('/some-endpoint')
+    const getJsonMatch = apiCallString.match(/ApiClient\.getJson\(['"`]([^'"`]+)['"`]/);
+    if (getJsonMatch) {
+        endpoint = getJsonMatch[1];
+        method = 'GET';
+    }
+
+    // Pattern: ApiClient.postJson('/some-endpoint')
+    const postJsonMatch = apiCallString.match(/ApiClient\.postJson\(['"`]([^'"`]+)['"`]/);
+    if (postJsonMatch) {
+        endpoint = postJsonMatch[1];
+        method = 'POST';
+    }
+
+    // Pattern: ApiClient.putJson('/some-endpoint')
+    const putJsonMatch = apiCallString.match(/ApiClient\.putJson\(['"`]([^'"`]+)['"`]/);
+    if (putJsonMatch) {
+        endpoint = putJsonMatch[1];
+        method = 'PUT';
+    }
+
+    // Pattern: ApiClient.deleteJson('/some-endpoint')
+    const deleteJsonMatch = apiCallString.match(/ApiClient\.deleteJson\(['"`]([^'"`]+)['"`]/);
+    if (deleteJsonMatch) {
+        endpoint = deleteJsonMatch[1];
+        method = 'DELETE';
+    }
+
+    const derivedMetadata = {
+        endpoint,
+        method,
+        service: serviceName
+    };
+
+    return validateApiResponse(apiCall, validator, context, userMessage, derivedMetadata);
 };

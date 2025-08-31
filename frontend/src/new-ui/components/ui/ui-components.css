@@ -1,3 +1,8 @@
+/* Import new UI component styles */
+@import './ProgressBar.css';
+@import './Alert.css';
+@import './LoadingState.css';
+
 /* Currency Display Styles */
 .currency-display {
   font-family: 'SF Mono', 'Monaco', 'Consolas', 'Roboto Mono', monospace;
@@ -571,12 +576,12 @@
   .category-display {
     font-size: 0.75rem;
   }
-  
+
   .category-badge,
   .category-chip {
     padding: 2px 6px;
   }
-  
+
   .currency-display {
     font-size: 0.875rem;
   }
@@ -596,16 +601,16 @@
   .editable-cell-container {
     min-width: 80px;
   }
-  
+
   .editable-input {
     font-size: 0.75rem;
   }
-  
+
   .status-badge {
     font-size: 0.65rem;
   }
-  
+
   .file-format-display {
     font-size: 0.65rem;
   }
-} 
+}
