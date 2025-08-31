@@ -54,6 +54,7 @@ export interface DetectedTransfersResponse {
     count: number;
     total?: number;
     hasMore?: boolean;
+    progressTrackingWarning?: string; // Warning if progress tracking failed
 }
 
 export interface MarkTransferPairRequest {
@@ -100,7 +101,8 @@ const DetectedTransfersResponseSchema = z.object({
     transfers: z.array(TransferPairSchema),
     count: z.number(),
     total: z.number().optional(),
-    hasMore: z.boolean().optional()
+    hasMore: z.boolean().optional(),
+    progressTrackingWarning: z.string().optional()
 });
 
 const BulkMarkResponseSchema = z.object({
@@ -119,6 +121,49 @@ const BulkMarkResponseSchema = z.object({
 // 4. Constants and logger setup
 const API_ENDPOINT = '/transfers';
 const logger = createLogger('TransferService');
+
+// Helper function for retrying preference updates
+const retryPreferenceUpdate = async (
+    startMs: number,
+    endMs: number,
+    startDate: string,
+    endDate: string,
+    maxRetries: number = 3,
+    delayMs: number = 1000
+): Promise<void> => {
+    let lastError: Error | undefined;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            await updateTransferCheckedDateRange(startMs, endMs);
+            logger.info('Successfully updated transfer checked date range', {
+                startDate,
+                endDate,
+                attempt,
+                startMs,
+                endMs
+            });
+            return; // Success, exit retry loop
+        } catch (error) {
+            lastError = error instanceof Error ? error : new Error('Unknown error');
+            logger.warn('Preference update attempt failed', {
+                startDate,
+                endDate,
+                attempt,
+                maxRetries,
+                error: lastError.message
+            });
+
+            // Wait before retrying (except on last attempt)
+            if (attempt < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, delayMs * attempt));
+            }
+        }
+    }
+
+    // All retries failed, throw the last error
+    throw lastError || new Error('All preference update attempts failed');
+};
 
 // 5. Exported Functions - API operations with efficient logging
 
@@ -205,22 +250,32 @@ export const detectPotentialTransfers = (startDate: string, endDate: string) => 
             );
 
             // Update the checked date range in preferences after successful detection
+            let progressTrackingWarning: string | undefined;
             try {
                 // Convert ISO dates to milliseconds for storage
                 const startMs = new Date(startDate).getTime();
                 const endMs = new Date(endDate).getTime();
-                await updateTransferCheckedDateRange(startMs, endMs);
+
+                // Attempt to update with retry mechanism
+                await retryPreferenceUpdate(startMs, endMs, startDate, endDate);
                 logger.info('Updated transfer checked date range', { startDate, endDate, startMs, endMs });
             } catch (error) {
-                logger.warn('Failed to update transfer checked date range', {
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                logger.error('Failed to update transfer checked date range after retries', {
                     startDate,
                     endDate,
-                    error: error instanceof Error ? error.message : 'Unknown error'
+                    error: errorMessage
                 });
-                // Don't fail the main operation if preference update fails
+
+                // Set warning to be included in response
+                progressTrackingWarning = `Transfer detection completed successfully, but progress tracking failed to update. You may need to manually track this date range (${startDate} to ${endDate}) to avoid duplicate checking.`;
             }
 
-            return result;
+            // Include progress tracking warning in response if it occurred
+            return {
+                ...result,
+                ...(progressTrackingWarning && { progressTrackingWarning })
+            };
         },
         {
             operationName: 'detectPotentialTransfers',

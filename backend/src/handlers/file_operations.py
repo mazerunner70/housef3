@@ -66,6 +66,44 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+def sanitize_presigned_data(presigned_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Sanitize presigned S3 data by redacting sensitive fields before logging.
+    
+    Args:
+        presigned_data: The presigned data dictionary from AWS S3
+        
+    Returns:
+        A sanitized copy with sensitive fields redacted
+    """
+    # List of sensitive keys to redact
+    sensitive_keys = [
+        "signature", "x-amz-signature", "credentials", "x-amz-credential",
+        "policy", "x-amz-security-token", "accessKeyId", "x-amz-date",
+        "x-amz-algorithm"
+    ]
+    
+    # Create a deep copy to avoid modifying the original
+    sanitized_data = {}
+    
+    for key, value in presigned_data.items():
+        if key == 'fields' and isinstance(value, dict):
+            # Sanitize the fields dictionary
+            sanitized_fields = {}
+            for field_key, field_value in value.items():
+                if field_key.lower() in [sk.lower() for sk in sensitive_keys]:
+                    sanitized_fields[field_key] = "[REDACTED]"
+                else:
+                    sanitized_fields[field_key] = field_value
+            sanitized_data[key] = sanitized_fields
+        elif key.lower() in [sk.lower() for sk in sensitive_keys]:
+            sanitized_data[key] = "[REDACTED]"
+        else:
+            sanitized_data[key] = value
+    
+    return sanitized_data
+
+
 
 
 # Get environment variables
@@ -109,7 +147,7 @@ def list_files_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
 @api_handler()
 def get_files_by_account_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """List files for a specific account, with authorization and formatting."""
-    account_id = uuid.UUID(mandatory_query_parameter(event, 'accountId'))
+    account_id = uuid.UUID(mandatory_path_parameter(event, 'accountId'))
     checked_mandatory_account(account_id, user_id)
     files = get_files_for_account(account_id)
     formatted_files = [format_file_metadata(file) for file in files]
@@ -178,7 +216,9 @@ def get_upload_url_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any
         fields=fields
     )
     
-    logger.info(f"Generated presigned URL data: {json.dumps(presigned_data)}")
+    # Log sanitized presigned data (sensitive fields redacted)
+    sanitized_data = sanitize_presigned_data(presigned_data)
+    logger.info(f"Generated presigned URL data: {json.dumps(sanitized_data)}")
     
     return {
         'url': presigned_data['url'],
@@ -396,9 +436,11 @@ def associate_file_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any
     # Store previous account ID for event (if any)
     previous_account_id = file.account_id
     
-    # Update the file to add account association
+    # Update the file to add account association using DTO pattern
     logger.info(f"Associating file {file_id} with account {account_id}")
-    file.account_id = account_id
+    from models.transaction_file import TransactionFileUpdate
+    update_dto = TransactionFileUpdate(accountId=account_id)
+    file.update_with_data(update_dto)
     response: FileProcessorResponse = process_file(file)
     
     # Handle file association with shadow mode support
@@ -440,7 +482,11 @@ def update_file_balance_handler(event: Dict[str, Any], user_id: str) -> Dict[str
     amount = Decimal(mandatory_body_parameter(event, 'openingBalance'))
     currency = optional_body_parameter(event, 'currency') 
     currency = Currency(currency) if currency else file.currency
-    file.opening_balance = amount
+    
+    # Update the file using DTO pattern
+    from models.transaction_file import TransactionFileUpdate
+    update_dto = TransactionFileUpdate(openingBalance=amount, currency=currency)
+    file.update_with_data(update_dto)
     response: FileProcessorResponse = process_file(file)
 
     return response.model_dump(by_alias=True, mode='json')
@@ -469,12 +515,20 @@ def update_file_closing_balance_handler(event: Dict[str, Any], user_id: str) -> 
     
     logger.info(f"Optimized closing balance update: existing_closing={existing_closing_balance}, new_closing={new_closing_balance}, difference={difference}, existing_opening={existing_opening_balance}, new_opening={new_opening_balance}")
     
-    # Update the file with new balances
-    file.opening_balance = new_opening_balance
-    file.closing_balance = new_closing_balance
+    # Update the file with new balances using DTO pattern
+    from models.transaction_file import TransactionFileUpdate
     if currency:
-        file.currency = currency
-
+        update_dto = TransactionFileUpdate(
+            openingBalance=new_opening_balance,
+            closingBalance=new_closing_balance,
+            currency=currency
+        )
+    else:
+        update_dto = TransactionFileUpdate(
+            openingBalance=new_opening_balance,
+            closingBalance=new_closing_balance
+        )
+    file.update_with_data(update_dto)
     new_file = process_file(file)
     
     # Return the entire transaction file object
@@ -648,8 +702,10 @@ def update_file_field_map_handler(event: Dict[str, Any], user_id: str) -> Dict[s
         if not field_map:
             return create_response(404, {"message": "Field map not found"})
         
-        # Update file properties
-        file.file_map_id = field_map_id
+        # Update file properties using DTO pattern
+        from models.transaction_file import TransactionFileUpdate
+        update_dto = TransactionFileUpdate(fileMapId=field_map_id)
+        file.update_with_data(update_dto)
         logger.info(f"Updating file {file_id} with field map {field_map_id}")
         
         response: FileProcessorResponse = process_file(file)

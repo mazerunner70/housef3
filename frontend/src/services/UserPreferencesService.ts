@@ -109,10 +109,11 @@ export const getUserPreferences = withApiLogging(
 /**
  * Update user preferences
  */
-export const updateUserPreferences = withServiceLogging(
+export const updateUserPreferences = (preferences: Partial<UserPreferencesResponse['preferences']>) => withApiLogging(
     'UserPreferencesService',
-    'updateUserPreferences',
-    async (preferences: Partial<UserPreferencesResponse['preferences']>) => {
+    '/user-preferences',
+    'PUT',
+    async (): Promise<UserPreferencesResponse> => {
         return validateApiResponse(
             () => ApiClient.putJson<any>('/user-preferences', { preferences }),
             (rawData) => UserPreferencesSchema.parse(rawData),
@@ -121,16 +122,15 @@ export const updateUserPreferences = withServiceLogging(
         );
     },
     {
-        logArgs: ([preferences]) => ({
+        operationName: 'updateUserPreferences',
+        successData: (result) => ({
+            userId: result.userId,
+            hasPreferences: !!result.preferences,
+            updatedKeys: Object.keys(result.preferences || {}),
             updateKeys: Object.keys(preferences || {}),
             hasTransfers: !!preferences?.transfers,
             hasUI: !!preferences?.ui,
             hasTransactions: !!preferences?.transactions
-        }),
-        logResult: (result) => ({
-            userId: result.userId,
-            hasPreferences: !!result.preferences,
-            updatedKeys: Object.keys(result.preferences || {})
         })
     }
 );

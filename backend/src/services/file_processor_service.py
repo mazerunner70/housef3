@@ -100,7 +100,7 @@ class FileProcessorService:
                 file_format = file_type_selector(content_bytes)
                 logger.info(f"Detected file format: {file_format}")
                 # Update file record with detected format
-                update_transaction_file(transaction_file.file_id, transaction_file.user_id, {'file_format': file_format})
+                update_transaction_file(transaction_file.file_id, transaction_file.user_id, {'fileFormat': file_format})
                 transaction_file.file_format = file_format
         except Exception as e:
             logger.error(f"Error updating file format: {str(e)}")

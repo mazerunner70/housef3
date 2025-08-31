@@ -260,8 +260,6 @@ class TransferDetectionService:
         max_consecutive_empty_batches = 3  # Prevent infinite loops
         
         while True:
-            # Test both with and without ignore_dup to diagnose the issue
-            logger.info(f"DIAGNOSTIC: Testing transfer detection query with ignore_dup=True")
             batch_result, last_evaluated_key, _ = list_user_transactions(
                 user_id=user_id,
                 start_date_ts=start_date_ts,
@@ -271,46 +269,12 @@ class TransferDetectionService:
                 ignore_dup=True  # Only consider non-duplicate transactions for transfer detection
             )
             
-            # If we get 0 results with ignore_dup=True, also test without it
-            if len(batch_result) == 0 and consecutive_empty_batches == 0:
-                logger.warning(f"DIAGNOSTIC: Got 0 results with ignore_dup=True, testing without ignore_dup")
-                test_batch_result, _, _ = list_user_transactions(
-                    user_id=user_id,
-                    start_date_ts=start_date_ts,
-                    end_date_ts=end_date_ts,
-                    last_evaluated_key=None,  # Start fresh for test
-                    limit=1000,
-                    ignore_dup=False  # Test without ignore_dup
-                )
-                logger.warning(f"DIAGNOSTIC: Without ignore_dup, got {len(test_batch_result)} results")
-                
-                # Test without any date range (like the regular transactions endpoint)
-                logger.warning(f"DIAGNOSTIC: Testing without date range (like regular transactions endpoint)")
-                no_date_batch_result, _, _ = list_user_transactions(
-                    user_id=user_id,
-                    start_date_ts=None,  # No date filter
-                    end_date_ts=None,    # No date filter
-                    last_evaluated_key=None,
-                    limit=25,  # Same as regular endpoint
-                    ignore_dup=True
-                )
-                logger.warning(f"DIAGNOSTIC: Without date range, got {len(no_date_batch_result)} results")
-                if len(no_date_batch_result) > 0:
-                    # Log the date of the first transaction to see when transactions actually exist
-                    first_tx = no_date_batch_result[0]
-                    from datetime import datetime
-                    tx_date = datetime.fromtimestamp(first_tx.date / 1000)
-                    logger.warning(f"DIAGNOSTIC: First transaction date: {tx_date.isoformat()}")
-                
-                # For now, continue with ignore_dup=True results for consistency
-                # but this will help us understand the root cause
-            
             all_transactions.extend(batch_result)
             
-            # Enhanced logging to diagnose DynamoDB pagination behavior
-            logger.info(f"Pagination batch for user {user_id}: returned {len(batch_result)} items, "
-                       f"has_last_evaluated_key={last_evaluated_key is not None}, "
-                       f"total_so_far={len(all_transactions)}")
+            # Debug logging for pagination behavior
+            logger.debug(f"Pagination batch for user {user_id}: returned {len(batch_result)} items, "
+                        f"has_last_evaluated_key={last_evaluated_key is not None}, "
+                        f"total_so_far={len(all_transactions)}")
             
             if last_evaluated_key:
                 logger.debug(f"LastEvaluatedKey present: {last_evaluated_key}")
@@ -321,9 +285,8 @@ class TransferDetectionService:
                 logger.warning(f"Empty batch {consecutive_empty_batches}/{max_consecutive_empty_batches} for user {user_id} - "
                               f"DynamoDB returned LastEvaluatedKey={last_evaluated_key is not None} with 0 items")
                 if consecutive_empty_batches >= max_consecutive_empty_batches:
-                    logger.error(f"INFINITE LOOP PREVENTION: Breaking pagination after {consecutive_empty_batches} "
-                                f"consecutive empty batches for user {user_id}. This indicates DynamoDB GSI "
-                                f"pagination behavior where LastEvaluatedKey is returned with no data.")
+                    logger.warning(f"Breaking pagination after {consecutive_empty_batches} consecutive empty batches "
+                                  f"for user {user_id} - DynamoDB GSI pagination issue detected")
                     break
             else:
                 consecutive_empty_batches = 0  # Reset counter when we get results
@@ -360,10 +323,10 @@ class TransferDetectionService:
             
             batch_transactions.extend(batch_result)
             
-            # Enhanced logging for uncategorized transactions
-            logger.info(f"Uncategorized batch for user {user_id}: returned {len(batch_result)} items, "
-                       f"has_last_evaluated_key={last_evaluated_key is not None}, "
-                       f"total_so_far={len(batch_transactions)}")
+            # Debug logging for uncategorized transactions
+            logger.debug(f"Uncategorized batch for user {user_id}: returned {len(batch_result)} items, "
+                        f"has_last_evaluated_key={last_evaluated_key is not None}, "
+                        f"total_so_far={len(batch_transactions)}")
             
             # Track consecutive empty batches to prevent infinite loops
             if len(batch_result) == 0:
@@ -371,9 +334,8 @@ class TransferDetectionService:
                 logger.warning(f"Empty uncategorized batch {consecutive_empty_batches}/{max_consecutive_empty_batches} for user {user_id} - "
                               f"DynamoDB returned LastEvaluatedKey={last_evaluated_key is not None} with 0 items")
                 if consecutive_empty_batches >= max_consecutive_empty_batches:
-                    logger.error(f"INFINITE LOOP PREVENTION: Breaking uncategorized pagination after {consecutive_empty_batches} "
-                                f"consecutive empty batches for user {user_id}. This indicates DynamoDB GSI "
-                                f"pagination behavior where LastEvaluatedKey is returned with no data.")
+                    logger.warning(f"Breaking uncategorized pagination after {consecutive_empty_batches} consecutive empty batches "
+                                  f"for user {user_id} - DynamoDB GSI pagination issue detected")
                     break
             else:
                 consecutive_empty_batches = 0  # Reset counter when we get results

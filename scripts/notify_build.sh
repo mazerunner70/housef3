@@ -5,6 +5,25 @@
 
 set -e
 
+# Array to track background process PIDs for cleanup
+BACKGROUND_PIDS=()
+
+# Cleanup function to kill any remaining background processes
+cleanup() {
+    if [ ${#BACKGROUND_PIDS[@]} -gt 0 ]; then
+        echo -e "\n🧹 Cleaning up background processes..."
+        for pid in "${BACKGROUND_PIDS[@]}"; do
+            if kill -0 "$pid" 2>/dev/null; then
+                kill "$pid" 2>/dev/null || true
+            fi
+        done
+        BACKGROUND_PIDS=()
+    fi
+}
+
+# Set up trap to cleanup on script exit or interruption
+trap cleanup EXIT INT TERM
+
 # Colors for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -17,12 +36,16 @@ play_success_tones() {
     
     # Pleasant ascending chord progression
     speaker-test -t sine -f 523 -l 1 -s 1 >/dev/null 2>&1 &  # C5
+    BACKGROUND_PIDS+=($!)
     sleep 0.15
     speaker-test -t sine -f 659 -l 1 -s 1 >/dev/null 2>&1 &  # E5
+    BACKGROUND_PIDS+=($!)
     sleep 0.15
     speaker-test -t sine -f 784 -l 1 -s 1 >/dev/null 2>&1 &  # G5
+    BACKGROUND_PIDS+=($!)
     sleep 0.2
     speaker-test -t sine -f 1047 -l 1 -s 1 >/dev/null 2>&1 & # C6 (octave)
+    BACKGROUND_PIDS+=($!)
     sleep 0.3
 }
 
@@ -32,12 +55,16 @@ play_failure_tones() {
     
     # Descending minor progression to indicate failure
     speaker-test -t sine -f 440 -l 1 -s 1 >/dev/null 2>&1 &  # A4
+    BACKGROUND_PIDS+=($!)
     sleep 0.2
     speaker-test -t sine -f 392 -l 1 -s 1 >/dev/null 2>&1 &  # G4
+    BACKGROUND_PIDS+=($!)
     sleep 0.2
     speaker-test -t sine -f 349 -l 1 -s 1 >/dev/null 2>&1 &  # F4
+    BACKGROUND_PIDS+=($!)
     sleep 0.3
     speaker-test -t sine -f 294 -l 1 -s 1 >/dev/null 2>&1 &  # D4
+    BACKGROUND_PIDS+=($!)
     sleep 0.4
 }
 
@@ -91,6 +118,7 @@ notify_build() {
             echo -e "${BLUE}ℹ️  NOTIFICATION: $message${NC}"
             # Default neutral tone
             speaker-test -t sine -f 800 -l 1 -s 1 >/dev/null 2>&1 &
+            BACKGROUND_PIDS+=($!)
             sleep 0.3
             ;;
     esac
