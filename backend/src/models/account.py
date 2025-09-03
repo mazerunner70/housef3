@@ -69,6 +69,8 @@ class Account(BaseModel):
     default_file_map_id: Optional[uuid.UUID] = Field(default=None, alias="defaultFileMapId")
     first_transaction_date: Optional[int] = Field(default=None, alias="firstTransactionDate")  # milliseconds since epoch
     last_transaction_date: Optional[int] = Field(default=None, alias="lastTransactionDate")  # milliseconds since epoch
+    imports_start_date: Optional[int] = Field(default=None, alias="importsStartDate")  # milliseconds since epoch - first date covered by transaction files
+    imports_end_date: Optional[int] = Field(default=None, alias="importsEndDate")  # milliseconds since epoch - last date covered by transaction files
     
     created_at: int = Field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000), alias="createdAt")
     updated_at: int = Field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000), alias="updatedAt")
@@ -82,7 +84,7 @@ class Account(BaseModel):
         arbitrary_types_allowed=True
     )
 
-    @field_validator('created_at', 'updated_at')
+    @field_validator('created_at', 'updated_at', 'imports_start_date', 'imports_end_date')
     @classmethod
     def check_positive_timestamp(cls, v: int) -> int:
         if v < 0:
@@ -108,6 +110,14 @@ class Account(BaseModel):
     def check_currency_if_balance_exists(self) -> Self:
         if self.balance is not None and self.currency is None:
             raise ValueError("Account currency must be set if balance is provided.")
+        return self
+
+    @model_validator(mode='after') 
+    def check_imports_date_consistency(self) -> Self:
+        if (self.imports_start_date is not None and 
+            self.imports_end_date is not None and 
+            self.imports_start_date > self.imports_end_date):
+            raise ValueError("importsStartDate must be less than or equal to importsEndDate.")
         return self
 
     def update_account_details(self, update_data: 'AccountUpdate') -> bool:
@@ -155,6 +165,10 @@ class Account(BaseModel):
             item['firstTransactionDate'] = self.first_transaction_date
         if self.last_transaction_date is not None:
             item['lastTransactionDate'] = self.last_transaction_date
+        if self.imports_start_date is not None:
+            item['importsStartDate'] = self.imports_start_date
+        if self.imports_end_date is not None:
+            item['importsEndDate'] = self.imports_end_date
         
         # Timestamps (createdAt, updatedAt) are integers from Pydantic model.
         # Boto3 will handle Python int as DynamoDB Number (N).
@@ -200,6 +214,8 @@ class AccountCreate(BaseModel):
     notes: Optional[str] = Field(default=None, max_length=1000)
     is_active: bool = Field(default=True, alias="isActive")
     default_file_map_id: Optional[uuid.UUID] = Field(default=None, alias="defaultFileMapId")
+    imports_start_date: Optional[int] = Field(default=None, alias="importsStartDate")  # milliseconds since epoch
+    imports_end_date: Optional[int] = Field(default=None, alias="importsEndDate")  # milliseconds since epoch
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -227,6 +243,14 @@ class AccountCreate(BaseModel):
         if self.balance is not None and self.currency is None:
             raise ValueError("Currency must be provided with balance.")
         return self
+    
+    @model_validator(mode='after') 
+    def check_imports_date_consistency_create(self) -> Self:
+        if (self.imports_start_date is not None and 
+            self.imports_end_date is not None and 
+            self.imports_start_date > self.imports_end_date):
+            raise ValueError("importsStartDate must be less than or equal to importsEndDate.")
+        return self
 
 class AccountUpdate(BaseModel):
     """DTO for updating an existing Account. All fields are optional."""
@@ -238,6 +262,8 @@ class AccountUpdate(BaseModel):
     notes: Optional[str] = Field(default=None, max_length=1000)
     is_active: Optional[bool] = Field(default=None, alias="isActive")
     default_file_map_id: Optional[uuid.UUID] = Field(default=None, alias="defaultFileMapId")
+    imports_start_date: Optional[int] = Field(default=None, alias="importsStartDate")  # milliseconds since epoch
+    imports_end_date: Optional[int] = Field(default=None, alias="importsEndDate")  # milliseconds since epoch
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -282,6 +308,14 @@ class AccountUpdate(BaseModel):
             # For now, let's remove this validator as its logic is complex without context.
             # The service layer should handle this: if balance is updated, ensure currency is set.
             pass # Removing the previous raise ValueError for now. Service layer should handle this.
+        return self
+    
+    @model_validator(mode='after') 
+    def check_imports_date_consistency_update(self) -> Self:
+        if (self.imports_start_date is not None and 
+            self.imports_end_date is not None and 
+            self.imports_start_date > self.imports_end_date):
+            raise ValueError("importsStartDate must be less than or equal to importsEndDate.")
         return self
 
 # Removed validate_account_data function (validations moved into Pydantic models) 

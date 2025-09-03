@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import AccountList from '../components/accounts/AccountList';
+import React, { useState, useRef } from 'react';
+import AccountList, { AccountListRef } from '../components/accounts/AccountList';
 import AccountForm from '../components/accounts/AccountForm';
 import ConfirmationModal from '../components/accounts/ConfirmationModal';
+import AccountTimeline from '../components/accounts/AccountTimeline';
 import AccountDetailView from './AccountDetailView';
 import './AccountsView.css';
 import useAccounts, { UIAccount, UIAccountInputData } from '../hooks/useAccounts';
@@ -22,6 +23,7 @@ const AccountsView: React.FC = () => {
         clearError
     } = useAccounts();
 
+    const accountListRef = useRef<AccountListRef>(null);
     const [showAccountForm, setShowAccountForm] = useState(false);
     // editingAccount will store the full Account object for pre-filling form,
     // but we'll map it to AccountInputData before submitting for an update.
@@ -59,6 +61,10 @@ const AccountsView: React.FC = () => {
 
     const handleCloseDetailView = () => {
         setSelectedAccount(null);
+    };
+
+    const handleTimelineAccountClick = (accountId: string) => {
+        accountListRef.current?.scrollToAccount(accountId);
     };
 
     const handleFormSubmit = async (formDataFromForm: UIAccountInputData) => {
@@ -118,6 +124,8 @@ const AccountsView: React.FC = () => {
         );
     }
 
+
+
     return (
         <div className="accounts-view-container">
             <h1>My Accounts</h1>
@@ -139,7 +147,12 @@ const AccountsView: React.FC = () => {
 
             {!isLoading && !error && accounts && (
                 <div className="accounts-content">
+                    <AccountTimeline
+                        accounts={accounts}
+                        onAccountClick={handleTimelineAccountClick}
+                    />
                     <AccountList
+                        ref={accountListRef}
                         accounts={accounts}
                         onEdit={handleEditAccount}
                         onDelete={handleDeleteAccountRequest}

@@ -1,7 +1,7 @@
-import React from 'react';
+import { forwardRef } from 'react';
 import './AccountListItem.css';
 import { UIAccount } from '../../hooks/useAccounts';
-import { CurrencyDisplay, DateCell, TextWithSubtext } from '../ui';
+import { CurrencyDisplay, DateCell } from '../ui';
 
 // This interface should align with UIAccount from useAccounts.ts
 export interface AccountListItemData {
@@ -22,25 +22,23 @@ interface AccountListItemProps {
     onViewDetails: (accountId: string) => void; // Add onViewDetails prop
 }
 
-const AccountListItem: React.FC<AccountListItemProps> = ({ account, onEdit, onDelete, onViewDetails }) => {
+const AccountListItem = forwardRef<HTMLDivElement, AccountListItemProps>(({ account, onEdit, onDelete, onViewDetails }, ref) => {
     const { id, name, type, balance, currency, bankName } = account;
 
-    // Format balance for display
-    // const displayBalance = balance instanceof Decimal ? balance.toFixed(2) : (typeof balance === 'number' ? balance.toFixed(2) : 'N/A');
-    const displayBalance = balance ? balance.toString() : '0.00'; // Assuming balance is already a string or number from UIAccount
+    // Format balance for display - balance is handled by CurrencyDisplay component
 
     const handleViewDetailsClick = () => {
         onViewDetails(id);
     };
 
     return (
-        <div className="account-list-item">
-            <div className="account-card-header">
-                <div className="account-primary-info">
-                    <h3 
+        <div ref={ref} className="account-list-item">
+            <div className="account-info-section">
+                <div className="account-primary">
+                    <h3
                         onClick={handleViewDetailsClick}
                         onKeyDown={(e) => e.key === 'Enter' && handleViewDetailsClick()}
-                        className="account-name" 
+                        className="account-name"
                         title="Click to view details"
                         tabIndex={0}
                         role="button"
@@ -48,54 +46,64 @@ const AccountListItem: React.FC<AccountListItemProps> = ({ account, onEdit, onDe
                     >
                         {name}
                     </h3>
+                    <div className="account-type-bank">
+                        <span className="account-type">
+                            {type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}
+                        </span>
+                        {bankName && (
+                            <span className="account-bank">{bankName}</span>
+                        )}
+                    </div>
                 </div>
-                <div className="account-balance">
-                    <CurrencyDisplay 
-                        amount={Number(balance || 0)} 
-                        currency={currency}
-                        showSign={true}
-                    />
-                </div>
-            </div>
-            
-            <div className="account-card-body">
-                <div className="account-details">
-                    <div className="account-detail-item">
-                        <TextWithSubtext 
-                            primaryText={type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}
-                            variant="description"
-                            subtextPrefix=""
-                            subtextSuffix=""
+
+                <div className="account-financial">
+                    <div className="account-balance">
+                        <CurrencyDisplay
+                            amount={Number(balance || 0)}
+                            currency={currency}
+                            showSign={true}
                         />
                     </div>
-                    <div className="account-detail-item">
-                        <span className="detail-label">Last Transaction:</span>
-                        <span className="detail-value">
+                    <div className="account-dates">
+                        <div className="last-transaction">
+                            <span className="date-label">Last Transaction:</span>
                             {account.lastTransactionDate ? (
-                                <DateCell 
+                                <DateCell
                                     date={account.lastTransactionDate}
                                     format="iso"
                                 />
                             ) : (
                                 <span className="no-transactions">No transactions</span>
                             )}
-                        </span>
+                        </div>
+                        {(account.importsStartDate || account.importsEndDate) && (
+                            <div className="import-range">
+                                <span className="date-label">Import Range:</span>
+                                <span className="date-range">
+                                    {account.importsStartDate ? (
+                                        <DateCell date={account.importsStartDate} format="iso" />
+                                    ) : 'N/A'}
+                                    {' - '}
+                                    {account.importsEndDate ? (
+                                        <DateCell date={account.importsEndDate} format="iso" />
+                                    ) : 'N/A'}
+                                </span>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
-            
-            <div className="account-card-footer">
-                <div className="account-actions">
-                    <button onClick={() => onEdit(account)} className="edit-button">
-                        Edit
-                    </button>
-                    <button onClick={() => onDelete(id)} className="delete-button">
-                        Delete
-                    </button>
-                </div>
+
+            <div className="account-actions">
+                <button onClick={() => onEdit(account)} className="edit-button">
+                    Edit
+                </button>
+                <button onClick={() => onDelete(id)} className="delete-button">
+                    Delete
+                </button>
             </div>
         </div>
     );
-};
+});
 
 export default AccountListItem; 
