@@ -48,6 +48,8 @@ export interface UIAccount {
     balance?: Decimal;
     bankName?: string;
     lastTransactionDate?: number; // milliseconds since epoch
+    importsStartDate?: number; // milliseconds since epoch
+    importsEndDate?: number; // milliseconds since epoch
 }
 
 // Input data type for UI forms (as previously defined)
@@ -91,6 +93,8 @@ const mapServiceAccountToUiAccount = (serviceAcc: ServiceAccount): UIAccount => 
         balance: serviceAcc.balance !== undefined && serviceAcc.balance !== null ? new Decimal(serviceAcc.balance.toString()) : undefined,
         bankName: serviceAcc.institution,
         lastTransactionDate: (serviceAcc as any).lastTransactionDate || undefined,
+        importsStartDate: (serviceAcc as any).importsStartDate || undefined,
+        importsEndDate: (serviceAcc as any).importsEndDate || undefined,
     };
 };
 

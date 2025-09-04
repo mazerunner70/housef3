@@ -3,144 +3,126 @@
     border-radius: var(--border-radius-medium);
     background-color: var(--color-white);
     box-shadow: var(--shadow-subtle);
-    transition: box-shadow 0.3s ease, transform 0.2s ease;
+    transition: box-shadow 0.3s ease, transform 0.1s ease;
     overflow: hidden;
     display: flex;
-    flex-direction: column;
-    min-height: 180px;
+    align-items: center;
+    padding: var(--spacing-m);
+    gap: var(--spacing-m);
+    min-height: 80px;
 }
 
 .account-list-item:hover {
-    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
 }
 
-/* Header Section */
-.account-card-header {
-    padding: var(--spacing-l);
-    background: linear-gradient(135deg, 
-        var(--color-primary-brand) 0%, 
-        var(--color-secondary-brand) 60%, 
-        rgba(255, 255, 255, 0.9) 85%);
-    color: var(--color-white);
+/* Account Info Section */
+.account-info-section {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
+    flex: 1;
+    gap: var(--spacing-l);
+    align-items: center;
 }
 
-.account-primary-info {
+.account-primary {
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-s);
-    flex: 1;
+    gap: var(--spacing-xs);
+    min-width: 200px;
 }
 
 .account-name {
     margin: 0;
-    font-size: var(--font-size-h4);
+    font-size: var(--font-size-h5);
     font-weight: var(--font-weight-bold);
-    color: var(--color-white);
+    color: var(--color-text-primary);
     cursor: pointer;
-    transition: opacity 0.2s ease;
+    transition: color 0.2s ease;
     line-height: 1.2;
 }
 
 .account-name:hover {
-    opacity: 0.9;
+    color: var(--color-primary-brand);
     text-decoration: underline;
+}
+
+.account-type-bank {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.account-type {
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+    text-transform: capitalize;
+}
+
+.account-bank {
+    font-size: var(--font-size-tiny);
+    color: var(--color-text-tertiary);
+    font-style: italic;
+}
+
+.account-financial {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--spacing-xs);
+    flex: 1;
 }
 
 .account-balance {
     font-size: var(--font-size-h5);
     font-weight: var(--font-weight-semibold);
-    color: var(--color-white);
-    text-align: right;
-    min-width: fit-content;
-    margin-left: var(--spacing-l);
-    padding: var(--spacing-xs) var(--spacing-s);
-    background-color: rgba(255, 255, 255, 0.15);
-    border-radius: var(--border-radius-small);
-    opacity: 1;
+    color: var(--color-text-primary);
 }
 
-/* Body Section */
-.account-card-body {
-    padding: var(--spacing-l);
-    flex-grow: 1;
-    background-color: var(--color-white);
-}
-
-.account-details {
+.account-dates {
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-m);
-}
-
-.account-detail-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--spacing-s) 0;
-    border-bottom: 1px solid var(--color-background-subtle);
-}
-
-.account-detail-item:last-child {
-    border-bottom: none;
-}
-
-.detail-label {
-    font-size: var(--font-size-small);
-    font-weight: var(--font-weight-medium);
-    color: var(--color-text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.detail-value {
-    font-size: var(--font-size-body);
-    font-weight: var(--font-weight-medium);
-    color: var(--color-text-primary);
+    gap: 2px;
     text-align: right;
+}
+
+.last-transaction,
+.import-range {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    font-size: var(--font-size-tiny);
+}
+
+.date-label {
+    color: var(--color-text-secondary);
+    font-weight: var(--font-weight-medium);
+    min-width: fit-content;
+}
+
+.date-range {
+    color: var(--color-text-primary);
+    font-weight: var(--font-weight-medium);
 }
 
 .no-transactions {
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-small);
+    color: var(--color-text-tertiary);
     font-style: italic;
 }
 
-/* Adjust TextWithSubtext in account details */
-.account-detail-item .text-with-subtext {
-    width: 100%;
-    display: flex;
-    justify-content: space-between;
-}
-
-/* Override DateCell styles in account details */
-.account-detail-item .date-cell {
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-small);
-    font-style: italic;
-}
-
-/* Footer Section */
-.account-card-footer {
-    padding: var(--spacing-l);
-    background-color: var(--color-background-subtle);
-    border-top: 1px solid var(--color-borders-dividers);
-}
-
+/* Actions Section */
 .account-actions {
     display: flex;
-    gap: var(--spacing-m);
-    justify-content: flex-end;
+    gap: var(--spacing-s);
+    align-items: center;
 }
 
 /* Button Styles */
 .account-actions .edit-button,
 .account-actions .delete-button {
     font-family: var(--font-primary);
-    font-weight: var(--font-weight-semibold);
+    font-weight: var(--font-weight-medium);
     border-radius: var(--border-radius-small);
     cursor: pointer;
     display: inline-flex;
@@ -150,10 +132,10 @@
     border-style: solid;
     border-width: var(--border-width);
     transition: all 0.2s ease-in-out;
-    padding: var(--button-padding-compact-vertical) var(--button-padding-compact-horizontal);
-    font-size: var(--font-size-small);
-    min-height: var(--button-height-compact);
-    min-width: 80px;
+    padding: var(--spacing-xs) var(--spacing-s);
+    font-size: var(--font-size-tiny);
+    min-height: 32px;
+    min-width: 60px;
 }
 
 /* Edit Button */
@@ -197,33 +179,46 @@
 /* Responsive Design */
 @media (max-width: 768px) {
     .account-list-item {
-        min-height: auto;
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--spacing-s);
+        padding: var(--spacing-s);
     }
-    
-    .account-card-header,
-    .account-card-body,
-    .account-card-footer {
-        padding: var(--spacing-m);
-    }
-    
-    .account-actions {
+
+    .account-info-section {
         flex-direction: column;
         gap: var(--spacing-s);
+        align-items: stretch;
     }
-    
-    .account-actions .edit-button,
-    .account-actions .delete-button {
-        width: 100%;
+
+    .account-primary {
         min-width: auto;
     }
-    
-    .account-detail-item {
-        flex-direction: column;
+
+    .account-financial {
         align-items: flex-start;
-        gap: var(--spacing-xs);
     }
-    
-    .detail-value {
+
+    .account-dates {
         text-align: left;
     }
-} 
+
+    .account-actions {
+        justify-content: center;
+    }
+}
+
+@media (max-width: 480px) {
+
+    .last-transaction,
+    .import-range {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+    }
+
+    .account-actions .edit-button,
+    .account-actions .delete-button {
+        min-width: 80px;
+    }
+}

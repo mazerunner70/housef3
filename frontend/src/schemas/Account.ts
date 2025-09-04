@@ -50,8 +50,18 @@ export const AccountSchema = z.object({
     isActive: z.boolean(),
     defaultFileMapId: z.string().optional(),
     lastTransactionDate: z.number().nullable().optional(), // milliseconds since epoch, can be null
+    importsStartDate: z.number().nullable().optional(), // milliseconds since epoch - first date covered by transaction files
+    importsEndDate: z.number().nullable().optional(), // milliseconds since epoch - last date covered by transaction files  
     createdAt: z.number(),
     updatedAt: z.number(),
+}).refine((data) => {
+    if (data.importsStartDate != null && data.importsEndDate != null) {
+        return data.importsStartDate <= data.importsEndDate;
+    }
+    return true;
+}, {
+    message: "importsStartDate must be less than or equal to importsEndDate",
+    path: ["importsStartDate"]
 });
 
 // Account Creation Schema
@@ -63,6 +73,16 @@ export const AccountCreateSchema = z.object({
     currency: CurrencySchema,
     notes: z.string().optional(),
     defaultFileMapId: z.string().optional(),
+    importsStartDate: z.number().nullable().optional(),
+    importsEndDate: z.number().nullable().optional(),
+}).refine((data) => {
+    if (data.importsStartDate != null && data.importsEndDate != null) {
+        return data.importsStartDate <= data.importsEndDate;
+    }
+    return true;
+}, {
+    message: "importsStartDate must be less than or equal to importsEndDate",
+    path: ["importsStartDate"]
 });
 
 // Account Update Schema
@@ -75,6 +95,16 @@ export const AccountUpdateSchema = z.object({
     notes: z.string().optional(),
     isActive: z.boolean().optional(),
     defaultFileMapId: z.string().optional(),
+    importsStartDate: z.number().nullable().optional(),
+    importsEndDate: z.number().nullable().optional(),
+}).refine((data) => {
+    if (data.importsStartDate != null && data.importsEndDate != null) {
+        return data.importsStartDate <= data.importsEndDate;
+    }
+    return true;
+}, {
+    message: "importsStartDate must be less than or equal to importsEndDate",
+    path: ["importsStartDate"]
 });
 
 // API Response Schemas

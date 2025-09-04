@@ -15,19 +15,20 @@ This will be the primary page for managing accounts.
 **Layout:**
 - A clear title: "My Accounts".
 - An "Add New Account" button.
-- A list or grid of account cards/rows.
+- **Account Import Timeline:** A horizontal timeline visualization showing the date ranges of imported transactions for each account (see section 2.1).
+- A vertical list of compact account items (previously displayed as cards, now as list items for better space efficiency).
 
 **Each Account Item in the List will display:**
-- Account Name (e.g., "Chase Checking", "Amex Gold")
+- Account Name (e.g., "Chase Checking", "Amex Gold") - clickable to view details
 - Account Type (e.g., "Checking", "Credit Card", "Savings")
-- Account Number (masked, e.g., "****1234")
+- Bank Name (if available)
 - Current Balance (if applicable and available)
 - Currency
-- Number of associated Transaction Files (e.g., "5 files")
+- Last Transaction Date
+- Import Date Range (start and end dates of imported transaction data)
 - Actions:
     - "Edit" button/icon
     - "Delete" button/icon
-    - Clicking the account item itself (or a "View Details" button) will navigate to/open the Account Detail View.
 
 **Functionality:**
 - **List Accounts:** Fetch and display all accounts for the logged-in user.
@@ -40,6 +41,30 @@ This will be the primary page for managing accounts.
 - **Delete Account:**
     - Clicking "Delete" will prompt for confirmation.
     - Upon confirmation, the account and its associations (handle with care, backend should manage cascading deletes or disassociations) will be removed.
+
+### 2.1. Account Import Timeline (`AccountTimeline.tsx`)
+
+**Purpose:** Provides a visual representation of when each account has imported transaction data, making it easy to identify data gaps and overlaps across accounts.
+
+**Layout:**
+- Timeline header showing the overall date range (earliest import start date to today)
+- Horizontal timeline axis with start and end markers
+- One row per account with:
+  - Account name (color-coded for easy identification)
+  - Horizontal bar representing the import date range
+  - "No data" indication for accounts without import dates
+
+**Features:**
+- **Visual Date Range:** Each account displays as a colored bar positioned according to its `importsStartDate` and `importsEndDate`
+- **Tooltips:** Hovering over any timeline bar shows the exact start and end dates for that account
+- **Responsive Design:** Adapts to different screen sizes, stacking vertically on mobile
+- **Empty State Handling:** Gracefully handles accounts without import date information
+- **Color Coding:** Each account gets a unique color for easy visual distinction
+
+**Data Requirements:**
+- Utilizes `importsStartDate` and `importsEndDate` fields from the Account model
+- Falls back gracefully when these fields are null or undefined
+- Calculates relative positioning based on the earliest start date across all accounts
 
 ## 3. Account Detail View
 
@@ -96,8 +121,9 @@ This view will be accessed by selecting an account from the main `AccountsView`.
     - `views/AccountDetailView.tsx`: (If a separate page approach is chosen) Page for showing detailed information about a single account with tabs for files and transactions. Alternatively, this logic can be part of `AccountsView.tsx` using modals or an expanding section.
 
 - **Components (in `components/accounts/` or similar subdirectory):**
-    - `AccountList.tsx`: Renders the list of accounts in `AccountsView`.
-    - `AccountListItem.tsx`: Renders a single account item.
+    - `AccountTimeline.tsx`: **[NEW]** Timeline visualization component showing import date ranges for all accounts.
+    - `AccountList.tsx`: Renders the list of accounts in `AccountsView` (updated to vertical list layout).
+    - `AccountListItem.tsx`: Renders a single account item (refactored from card to compact list format).
     - `AccountForm.tsx`: Form for creating/editing accounts (could be a new component or an enhanced version of an existing one).
     - `AccountFilesTab.tsx`: Component for the "Files" tab in the detail view.
         - `AssociatedFilesList.tsx`
