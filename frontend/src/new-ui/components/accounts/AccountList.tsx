@@ -57,6 +57,8 @@ const AccountList = forwardRef<AccountListRef, AccountListProps>(({ accounts, on
                     ref={(el) => {
                         if (el) {
                             accountRefs.current[account.id] = el;
+                        } else {
+                            delete accountRefs.current[account.id];
                         }
                     }}
                     account={account} // Pass the entire account object

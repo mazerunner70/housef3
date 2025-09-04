@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, screen } from '@testing-library/react';
 import AccountTimeline from '../AccountTimeline';
 import { UIAccount } from '../../../hooks/useAccounts';
@@ -72,7 +71,9 @@ describe('AccountTimeline', () => {
 
         const timelineHeader = document.querySelector('.timeline-date-range');
         expect(timelineHeader).toBeInTheDocument();
-        expect(timelineHeader?.textContent).toMatch(/\w+ \d+, \d+/); // Date format check
+        // Check for two date formats safely - start date and end date (e.g., "Sep 4, 2024Sep 4, 2025")
+        const dateText = timelineHeader?.textContent || '';
+        expect(dateText).toMatch(/^[A-Za-z]{3} \d{1,2}, \d{4}[A-Za-z]{3} \d{1,2}, \d{4}$/);
     });
 
     it('includes tooltip information for timeline bars', () => {

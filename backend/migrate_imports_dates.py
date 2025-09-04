@@ -13,6 +13,7 @@ import logging
 import boto3
 from typing import List
 from botocore.exceptions import ClientError
+from pydantic import ValidationError
 
 # Add src directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
@@ -39,12 +40,19 @@ def scan_all_accounts() -> List[Account]:
         
         while True:
             for item in response.get('Items', []):
+                account_id = item.get('accountId', 'unknown')
                 try:
                     account = Account.from_dynamodb_item(item)
                     accounts.append(account)
-                except Exception as e:
-                    logger.error(f"Error deserializing account {item.get('accountId', 'unknown')}: {e}")
+                except (ValueError, ValidationError) as e:
+                    # Handle expected validation/conversion errors - these are data quality issues
+                    logger.exception(f"Validation error deserializing account {account_id}: {e}")
                     continue
+                except Exception as e:
+                    # Handle unexpected errors - these indicate potential code bugs or infrastructure issues
+                    logger.exception(f"Unexpected error deserializing account {account_id}: {e}")
+                    # Re-raise to surface fatal issues that need investigation
+                    raise
             
             # Check if there are more pages
             if 'LastEvaluatedKey' not in response:

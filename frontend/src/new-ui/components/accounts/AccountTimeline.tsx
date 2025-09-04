@@ -30,15 +30,16 @@ interface TimelineData {
     }>;
 }
 
+// Static zoom options - moved outside component to prevent unnecessary re-renders
+const zoomOptions: ZoomOption[] = [
+    { key: 'all', label: 'All Time', days: null },
+    { key: 'year', label: 'Last Year', days: 365 },
+    { key: 'sixMonths', label: 'Last 6 Months', days: 180 },
+    { key: 'month', label: 'Last 30 Days', days: 30 }
+];
+
 const AccountTimeline: React.FC<AccountTimelineProps> = ({ accounts, onAccountClick }) => {
     const [zoomLevel, setZoomLevel] = useState<ZoomLevel>('all');
-
-    const zoomOptions: ZoomOption[] = [
-        { key: 'all', label: 'All Time', days: null },
-        { key: 'year', label: 'Last Year', days: 365 },
-        { key: 'sixMonths', label: 'Last 6 Months', days: 180 },
-        { key: 'month', label: 'Last 30 Days', days: 30 }
-    ];
 
     const timelineData = useMemo((): TimelineData => {
         // Filter accounts that have import date data
@@ -115,7 +116,7 @@ const AccountTimeline: React.FC<AccountTimelineProps> = ({ accounts, onAccountCl
             totalDays,
             accounts: timelineAccounts,
         };
-    }, [accounts, zoomLevel, zoomOptions]);
+    }, [accounts, zoomLevel]);
 
     const formatDate = (timestamp: number) => {
         return new Date(timestamp).toLocaleDateString('en-US', {
