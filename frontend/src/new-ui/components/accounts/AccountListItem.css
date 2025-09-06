@@ -119,6 +119,7 @@
 }
 
 /* Button Styles */
+.account-actions .view-transactions-button,
 .account-actions .edit-button,
 .account-actions .delete-button {
     font-family: var(--font-primary);
@@ -136,6 +137,25 @@
     font-size: var(--font-size-tiny);
     min-height: 32px;
     min-width: 60px;
+}
+
+/* View Transactions Button */
+.view-transactions-button {
+    background-color: var(--color-primary-brand);
+    color: var(--color-white);
+    border-color: var(--color-primary-brand);
+}
+
+.view-transactions-button:hover {
+    background-color: #2C5F2D;
+    border-color: #2C5F2D;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.view-transactions-button:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.4);
 }
 
 /* Edit Button */
@@ -217,6 +237,7 @@
         gap: 2px;
     }
 
+    .account-actions .view-transactions-button,
     .account-actions .edit-button,
     .account-actions .delete-button {
         min-width: 80px;
