@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import AccountList, { AccountListRef } from '../components/accounts/AccountList';
 import AccountForm from '../components/accounts/AccountForm';
 import ConfirmationModal from '../components/accounts/ConfirmationModal';
 import AccountTimeline from '../components/accounts/AccountTimeline';
 import AccountDetailView from './AccountDetailView';
+import TransactionFilesDialog from '../components/accounts/TransactionFilesDialog';
 import './AccountsView.css';
 import useAccountsWithStore from '../../stores/useAccountsStore';
 import { Account, AccountCreate } from '../../schemas/Account';
@@ -32,6 +33,8 @@ const AccountsView: React.FC = () => {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null);
     const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
+    const [showTransactionFilesDialog, setShowTransactionFilesDialog] = useState(false);
+    const [transactionFilesAccountId, setTransactionFilesAccountId] = useState<string | null>(null);
 
     // Use ref to store fetchAccounts and prevent useEffect re-runs
     const fetchAccountsRef = useRef(fetchAccounts);
@@ -75,6 +78,16 @@ const AccountsView: React.FC = () => {
 
     const handleTimelineAccountClick = (accountId: string) => {
         accountListRef.current?.scrollToAccount(accountId);
+    };
+
+    const handleViewTransactions = (accountId: string) => {
+        setTransactionFilesAccountId(accountId);
+        setShowTransactionFilesDialog(true);
+    };
+
+    const handleCloseTransactionFilesDialog = () => {
+        setShowTransactionFilesDialog(false);
+        setTransactionFilesAccountId(null);
     };
 
     const handleFormSubmit = async (formDataFromForm: AccountCreate) => {
@@ -166,6 +179,7 @@ const AccountsView: React.FC = () => {
                         onEdit={handleEditAccount}
                         onDelete={handleDeleteAccountRequest}
                         onViewDetails={handleViewAccountDetails}
+                        onViewTransactions={handleViewTransactions}
                     />
                 </div>
             )}
@@ -193,6 +207,15 @@ const AccountsView: React.FC = () => {
                         setShowDeleteModal(false);
                         clearError();
                     }}
+                />
+            )}
+
+            {showTransactionFilesDialog && transactionFilesAccountId && (
+                <TransactionFilesDialog
+                    isOpen={showTransactionFilesDialog}
+                    onClose={handleCloseTransactionFilesDialog}
+                    accountId={transactionFilesAccountId}
+                    accountName={accounts.find(acc => acc.accountId === transactionFilesAccountId)?.accountName || 'Unknown Account'}
                 />
             )}
         </div>
