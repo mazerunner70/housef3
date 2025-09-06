@@ -1,7 +1,7 @@
-import React, { useRef, useImperativeHandle, forwardRef } from 'react';
+import { useRef, useImperativeHandle, forwardRef } from 'react';
 import AccountListItem from './AccountListItem'; // Import AccountListItem
 import './AccountList.css'; // Import the CSS file
-import { UIAccount } from '../../hooks/useAccounts'; // Import UIAccount type
+import { Account } from '../../../schemas/Account'; // Import Account type
 
 // REMOVE LOCAL ACCOUNT DEFINITION
 // interface Account {
@@ -14,8 +14,8 @@ import { UIAccount } from '../../hooks/useAccounts'; // Import UIAccount type
 // }
 
 interface AccountListProps {
-    accounts: UIAccount[];
-    onEdit: (account: UIAccount) => void;
+    accounts: Account[];
+    onEdit: (account: Account) => void;
     onDelete: (accountId: string) => void;
     onViewDetails: (accountId: string) => void; // Add onViewDetails to props
 }
@@ -53,18 +53,18 @@ const AccountList = forwardRef<AccountListRef, AccountListProps>(({ accounts, on
         <div className="account-list">
             {accounts.map(account => (
                 <AccountListItem
-                    key={account.id}
+                    key={account.accountId}
                     ref={(el) => {
                         if (el) {
-                            accountRefs.current[account.id] = el;
+                            accountRefs.current[account.accountId] = el;
                         } else {
-                            delete accountRefs.current[account.id];
+                            delete accountRefs.current[account.accountId];
                         }
                     }}
                     account={account} // Pass the entire account object
                     onEdit={() => onEdit(account)} // onEdit expects the full account object
-                    onDelete={() => onDelete(account.id)} // onDelete expects accountId
-                    onViewDetails={() => onViewDetails(account.id)} // onViewDetails expects accountId
+                    onDelete={() => onDelete(account.accountId)} // onDelete expects accountId
+                    onViewDetails={() => onViewDetails(account.accountId)} // onViewDetails expects accountId
                 />
             ))}
         </div>

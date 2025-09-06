@@ -1,0 +1,447 @@
+---
+description: Zustand Store Development Patterns and Conventions
+globs: frontend/src/stores/**
+alwaysApply: false
+---
+
+# Zustand Store Conventions
+
+## Architecture Principles
+
+### Store Organization
+- **One store per domain**: Create focused stores for specific business domains (accounts, transactions, categories, etc.)
+- **Single subscription pattern**: Use one store subscription per component to avoid React render conflicts
+- **Explicit TypeScript types**: Always provide explicit return types for selector hooks
+- **Persist critical data**: Use Zustand persist middleware for data that should survive page refreshes
+
+## Store Structure
+
+### File Organization
+```
+frontend/src/stores/
+├── accountsStore.ts          # Main store definition
+├── useAccountsStore.ts       # Custom hook wrapper
+├── transactionsStore.ts      # Domain-specific store
+├── useTransactionsStore.ts   # Custom hook wrapper
+└── README.md                 # Store documentation
+```
+
+### Store Interface Pattern
+```typescript
+interface DomainState {
+    // Data
+    items: DomainItem[];
+    
+    // Loading states
+    isLoading: boolean;
+    isCreating: boolean;
+    isUpdating: boolean;
+    isDeleting: boolean;
+    
+    // Error handling
+    error: string | null;
+    
+    // Cache management
+    lastFetched: number | null;
+    cacheExpiry: number;
+    
+    // Actions
+    fetchItems: (force?: boolean) => Promise<void>;
+    createItem: (data: ItemCreate) => Promise<DomainItem | null>;
+    updateItem: (id: string, data: ItemCreate) => Promise<DomainItem | null>;
+    deleteItem: (id: string) => Promise<boolean>;
+    
+    // Utility actions
+    clearError: () => void;
+    invalidateCache: () => void;
+    getItemById: (id: string) => DomainItem | undefined;
+}
+```
+
+## Store Implementation
+
+### Basic Store Pattern
+```typescript
+import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+
+export const useDomainStore = create<DomainState>()(
+    persist(
+        (set, get) => ({
+            // Initial state
+            items: [],
+            isLoading: false,
+            error: null,
+            lastFetched: null,
+            cacheExpiry: 5 * 60 * 1000, // 5 minutes
+            
+            // Actions with intelligent caching
+            fetchItems: async (force = false) => {
+                const state = get();
+                const now = Date.now();
+                
+                // Check cache validity
+                const shouldFetch = force ||
+                    !state.lastFetched ||
+                    (now - state.lastFetched) > state.cacheExpiry ||
+                    state.items.length === 0;
+                
+                if (!shouldFetch) {
+                    return; // Use cached data
+                }
+                
+                set({ isLoading: true, error: null });
+                
+                try {
+                    const response = await serviceFunction();
+                    set({
+                        items: response.items,
+                        isLoading: false,
+                        lastFetched: now,
+                        error: null
+                    });
+                } catch (err: any) {
+                    set({
+                        error: err.message || 'Failed to fetch items',
+                        isLoading: false
+                    });
+                }
+            },
+            
+            // Other actions...
+        }),
+        {
+            name: 'domain-storage',
+            storage: createJSONStorage(() => localStorage),
+            partialize: (state) => ({
+                items: state.items,
+                lastFetched: state.lastFetched,
+                cacheExpiry: state.cacheExpiry,
+            }),
+        }
+    )
+);
+```
+
+### Selector Hooks with Explicit Types
+```typescript
+// ✅ REQUIRED: Explicit return types for all selectors
+export const useDomainItems = (): DomainItem[] => 
+    useDomainStore(state => state.items);
+
+export const useDomainLoading = (): {
+    isLoading: boolean;
+    isCreating: boolean;
+    isUpdating: boolean;
+    isDeleting: boolean;
+} => useDomainStore(state => ({
+    isLoading: state.isLoading,
+    isCreating: state.isCreating,
+    isUpdating: state.isUpdating,
+    isDeleting: state.isDeleting,
+}));
+
+export const useDomainError = (): string | null => 
+    useDomainStore(state => state.error);
+
+// Action selectors with function signatures
+export const useFetchDomainItems = (): ((force?: boolean) => Promise<void>) => 
+    useDomainStore(state => state.fetchItems);
+```
+
+## Component Integration
+
+### ❌ AVOID: Multiple Subscriptions (Causes React Error #185)
+```typescript
+// DON'T DO THIS - Multiple subscriptions cause render conflicts
+const BadComponent = () => {
+    const items = useDomainItems();           // Subscription 1
+    const loading = useDomainLoading();       // Subscription 2  
+    const error = useDomainError();           // Subscription 3
+    const actions = useDomainActions();       // Subscription 4
+    
+    // This pattern can cause React error #185
+};
+```
+
+### ✅ PREFERRED: Single Subscription Pattern
+```typescript
+// Custom hook wrapper with single subscription
+const useDomainWithStore = () => {
+    // Single subscription to entire store
+    const storeState = useDomainStore();
+    
+    // Extract values from single subscription
+    const items = storeState.items;
+    const isLoading = storeState.isLoading;
+    const error = storeState.error;
+    const fetchItems = storeState.fetchItems;
+    
+    return {
+        items,
+        isLoading,
+        error,
+        fetchItems,
+        // ... other extracted values
+    };
+};
+
+// Component using single subscription
+const GoodComponent = () => {
+    const { items, isLoading, error, fetchItems } = useDomainWithStore();
+    
+    useEffect(() => {
+        fetchItems();
+    }, [fetchItems]);
+    
+    // Clean render cycle, no conflicts
+};
+```
+
+## Caching Strategy
+
+### Intelligent Cache Management
+```typescript
+// Cache configuration
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// Cache validation logic
+const shouldFetch = force ||
+    !state.lastFetched ||
+    (now - state.lastFetched) > state.cacheExpiry ||
+    state.items.length === 0;
+
+// Cache invalidation
+invalidateCache: () => set({ lastFetched: null }),
+
+// Force refresh
+forceRefresh: () => get().fetchItems(true),
+```
+
+### Persistence Configuration
+```typescript
+// Persist only essential data
+partialize: (state) => ({
+    items: state.items,
+    lastFetched: state.lastFetched,
+    cacheExpiry: state.cacheExpiry,
+    // Don't persist loading states or errors
+}),
+```
+
+## Error Handling
+
+### Consistent Error Patterns
+```typescript
+// Expected errors - log and continue
+try {
+    const result = await apiCall();
+} catch (err: any) {
+    if (err instanceof ValidationError) {
+        console.warn('Validation error:', err.message);
+        set({ error: err.message, isLoading: false });
+        return null;
+    }
+    
+    // Unexpected errors - log and re-raise
+    console.error('Unexpected error in store action:', err);
+    set({ error: 'An unexpected error occurred', isLoading: false });
+    throw err; // Re-raise for global error handling
+}
+```
+
+### Error State Management
+```typescript
+// Clear errors when starting new operations
+set({ isLoading: true, error: null });
+
+// Provide user-friendly error messages
+set({
+    error: err.message || 'Failed to perform operation',
+    isLoading: false
+});
+
+// Error clearing utility
+clearError: () => set({ error: null }),
+```
+
+## Optimistic Updates
+
+### Safe Optimistic Update Pattern
+```typescript
+updateItem: async (itemId: string, itemData: ItemUpdate) => {
+    const state = get();
+    const originalItem = state.items.find(item => item.id === itemId);
+    
+    if (!originalItem) {
+        set({ error: 'Item not found' });
+        return null;
+    }
+    
+    // Optimistic update
+    const optimisticItem = { ...originalItem, ...itemData };
+    set(state => ({
+        items: state.items.map(item =>
+            item.id === itemId ? optimisticItem : item
+        ),
+        isUpdating: true,
+        error: null
+    }));
+    
+    try {
+        const response = await serviceUpdateItem(itemId, itemData);
+        const updatedItem = response.item;
+        
+        // Replace optimistic with real data
+        set(state => ({
+            items: state.items.map(item =>
+                item.id === itemId ? updatedItem : item
+            ),
+            isUpdating: false,
+            error: null
+        }));
+        
+        return updatedItem;
+    } catch (err: any) {
+        // Revert optimistic update
+        set(state => ({
+            items: state.items.map(item =>
+                item.id === itemId ? originalItem : item
+            ),
+            error: err.message || 'Failed to update item',
+            isUpdating: false
+        }));
+        return null;
+    }
+},
+```
+
+## Testing Stores
+
+### Store Testing Pattern
+```typescript
+// Test store actions and state changes
+describe('DomainStore', () => {
+    beforeEach(() => {
+        // Reset store state
+        useDomainStore.getState().clearError();
+        useDomainStore.setState({ items: [], lastFetched: null });
+    });
+    
+    it('should fetch items successfully', async () => {
+        const mockItems = [{ id: '1', name: 'Test Item' }];
+        mockApiCall.mockResolvedValue({ items: mockItems });
+        
+        await useDomainStore.getState().fetchItems();
+        
+        const state = useDomainStore.getState();
+        expect(state.items).toEqual(mockItems);
+        expect(state.isLoading).toBe(false);
+        expect(state.error).toBeNull();
+    });
+    
+    it('should handle cache correctly', async () => {
+        // Set up cached data
+        useDomainStore.setState({
+            items: [{ id: '1', name: 'Cached' }],
+            lastFetched: Date.now() - 1000, // 1 second ago
+        });
+        
+        await useDomainStore.getState().fetchItems();
+        
+        // Should not call API due to cache
+        expect(mockApiCall).not.toHaveBeenCalled();
+    });
+});
+```
+
+## Performance Considerations
+
+### Subscription Optimization
+- **Use single subscription**: Prevents React render conflicts
+- **Selective updates**: Only update components when relevant state changes
+- **Memoization**: Use React.memo for expensive components
+- **Stable references**: Action functions should have stable references
+
+### Memory Management
+- **Cleanup on unmount**: Clear timers and subscriptions
+- **Selective persistence**: Only persist essential data
+- **Cache limits**: Implement cache size limits for large datasets
+
+## Common Patterns
+
+### Loading State Management
+```typescript
+// Combine all loading states
+const combinedLoading = isLoading || isCreating || isUpdating || isDeleting;
+
+// Specific loading states for different UI elements
+const isItemLoading = (itemId: string) => 
+    state.loadingItems?.includes(itemId) ?? false;
+```
+
+### Batch Operations
+```typescript
+batchUpdate: async (updates: Array<{id: string, data: ItemUpdate}>) => {
+    set({ isUpdating: true, error: null });
+    
+    const results = await Promise.allSettled(
+        updates.map(update => serviceUpdateItem(update.id, update.data))
+    );
+    
+    // Process results and update state accordingly
+    set({ isUpdating: false });
+},
+```
+
+### Store Composition
+```typescript
+// Compose stores for complex operations
+const useComposedData = () => {
+    const accounts = useAccountsStore();
+    const transactions = useTransactionsStore();
+    
+    return useMemo(() => ({
+        accountsWithTransactions: accounts.items.map(account => ({
+            ...account,
+            transactions: transactions.items.filter(t => t.accountId === account.id)
+        }))
+    }), [accounts.items, transactions.items]);
+};
+```
+
+## Migration Guidelines
+
+### From Multiple Selectors to Single Subscription
+1. **Identify components** using multiple store selectors
+2. **Create wrapper hook** with single subscription pattern
+3. **Extract values** from single store state
+4. **Update component** to use wrapper hook
+5. **Test thoroughly** for render behavior
+6. **Remove old selector usage** once confirmed working
+
+### Store Splitting
+- **Split by domain**: Keep related data together
+- **Avoid cross-store dependencies**: Use composition patterns instead
+- **Maintain consistent interfaces**: Similar stores should have similar APIs
+- **Document relationships**: Clear documentation of store interactions
+
+## Debugging
+
+### Store State Inspection
+```typescript
+// Add debug helpers in development
+if (process.env.NODE_ENV === 'development') {
+    (window as any).debugStores = {
+        domain: useDomainStore,
+        // Add other stores for debugging
+    };
+}
+```
+
+### Common Issues
+1. **React Error #185**: Use single subscription pattern
+2. **Stale closures**: Ensure action functions have stable references
+3. **Cache invalidation**: Implement proper cache clearing mechanisms
+4. **Memory leaks**: Clean up subscriptions and timers
+5. **Type errors**: Always provide explicit types for selectors
