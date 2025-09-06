@@ -1,8 +1,9 @@
-// Barrel export for all types
-// This allows clean imports like: import { Transaction, Account, Category } from '../types'
+// Barrel export for remaining types
+// Note: Account types are now in schemas/Account.ts for runtime validation
+// This allows imports like: import { Category, Analytics } from '../types'
 
 // Export all types from each module
-export * from './Account';
+// Note: Account types now exported from schemas/Account.ts
 export * from './Analytics';
 export * from './Category';
 export * from './Transaction';
