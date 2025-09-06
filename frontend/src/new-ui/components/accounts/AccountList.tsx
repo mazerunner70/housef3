@@ -18,13 +18,14 @@ interface AccountListProps {
     onEdit: (account: Account) => void;
     onDelete: (accountId: string) => void;
     onViewDetails: (accountId: string) => void; // Add onViewDetails to props
+    onViewTransactions: (accountId: string) => void; // Add onViewTransactions to props
 }
 
 export interface AccountListRef {
     scrollToAccount: (accountId: string) => void;
 }
 
-const AccountList = forwardRef<AccountListRef, AccountListProps>(({ accounts, onEdit, onDelete, onViewDetails }, ref) => {
+const AccountList = forwardRef<AccountListRef, AccountListProps>(({ accounts, onEdit, onDelete, onViewDetails, onViewTransactions }, ref) => {
     const accountRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
     useImperativeHandle(ref, () => ({
@@ -65,6 +66,7 @@ const AccountList = forwardRef<AccountListRef, AccountListProps>(({ accounts, on
                     onEdit={() => onEdit(account)} // onEdit expects the full account object
                     onDelete={() => onDelete(account.accountId)} // onDelete expects accountId
                     onViewDetails={() => onViewDetails(account.accountId)} // onViewDetails expects accountId
+                    onViewTransactions={() => onViewTransactions(account.accountId)} // onViewTransactions expects accountId
                 />
             ))}
         </div>
