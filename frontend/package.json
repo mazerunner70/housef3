@@ -14,7 +14,7 @@
     "test:coverage": "jest --coverage"
   },
   "dependencies": {
-    "@aws-sdk/client-cognito-identity-provider": "^3.844.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.865.0",
     "@tanstack/react-query": "^5.85.3",
     "@types/react-router-dom": "^5.3.3",
     "apexcharts": "^4.7.0",
