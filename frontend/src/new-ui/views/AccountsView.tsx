@@ -70,7 +70,7 @@ const AccountsView: React.FC = () => {
     const handleFormSubmit = async (formDataFromForm: UIAccountInputData) => {
         clearError();
         let success = false;
-        if (editingAccount && editingAccount.id) {
+        if (editingAccount?.id) {
             const result = await updateAccount(editingAccount.id, formDataFromForm);
             if (result) success = true;
         } else {
