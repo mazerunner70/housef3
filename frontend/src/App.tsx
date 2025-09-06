@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Login from './new-ui/components/Login';
 import NewUILayout from './new-ui/layouts/NewUILayout';
-import AccountsView from './new-ui/views/AccountsView';
+import AccountsPage from './new-ui/pages/AccountsPage';
 import TransactionsPage from '@/new-ui/pages/TransactionsPage';
 import AnalyticsView from './new-ui/views/AnalyticsView';
 import FZIPManagementView from './new-ui/views/FZIPManagementView';
@@ -83,7 +83,7 @@ function App() {
     <Routes>
       <Route path="/*" element={<NewUILayout onSignOut={handleSignOut} />}>
         <Route index element={<Navigate to="accounts" replace />} />
-        <Route path="accounts" element={<AccountsView />} />
+        <Route path="accounts" element={<AccountsPage />} />
         <Route path="transactions" element={<TransactionsPage />} />
         <Route path="analytics" element={<AnalyticsView />} />
         <Route path="backup" element={<FZIPManagementView />} />

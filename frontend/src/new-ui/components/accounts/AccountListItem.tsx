@@ -20,9 +20,10 @@ interface AccountListItemProps {
     onEdit: (account: Account) => void;
     onDelete: (accountId: string) => void;
     onViewDetails: (accountId: string) => void; // Add onViewDetails prop
+    onViewTransactions: (accountId: string) => void; // Add onViewTransactions prop
 }
 
-const AccountListItem = forwardRef<HTMLDivElement, AccountListItemProps>(({ account, onEdit, onDelete, onViewDetails }, ref) => {
+const AccountListItem = forwardRef<HTMLDivElement, AccountListItemProps>(({ account, onEdit, onDelete, onViewDetails, onViewTransactions }, ref) => {
     const { accountId, accountName, accountType, balance, currency, institution } = account;
 
     // Format balance for display - balance is handled by CurrencyDisplay component
@@ -95,6 +96,9 @@ const AccountListItem = forwardRef<HTMLDivElement, AccountListItemProps>(({ acco
             </div>
 
             <div className="account-actions">
+                <button onClick={() => onViewTransactions(accountId)} className="view-transactions-button">
+                    View Transactions
+                </button>
                 <button onClick={() => onEdit(account)} className="edit-button">
                     Edit
                 </button>
