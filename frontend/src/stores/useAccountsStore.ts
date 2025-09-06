@@ -1,14 +1,5 @@
-import React from 'react';
 import {
-    useAccountsStore,
-    useAccounts,
-    useAccountsLoading,
-    useAccountsError,
-    useFetchAccounts,
-    useCreateAccount,
-    useUpdateAccount,
-    useDeleteAccount,
-    useClearError
+    useAccountsStore
 } from './accountsStore';
 import { Account, AccountCreate } from '../schemas/Account';
 
@@ -37,15 +28,8 @@ interface UseAccountsReturn {
  * - Automatic fetch on first mount
  */
 const useAccountsWithStore = (): UseAccountsReturn => {
-    console.warn('🔄 useAccountsWithStore hook called - component mounting');
-
-    // DIAGNOSTIC: Test with minimal single selector to isolate the issue
-    console.warn('📊 DIAGNOSTIC: Testing with single store subscription');
-
     // Use only one subscription to the entire store to test if multiple selectors cause the issue
     const storeState = useAccountsStore();
-
-    console.warn('📊 DIAGNOSTIC: Single store subscription complete');
 
     // Extract values from the single subscription
     const accounts = storeState.accounts;

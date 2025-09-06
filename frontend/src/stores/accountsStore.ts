@@ -1,17 +1,16 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { Account, AccountCreate } from '../schemas/Account';
+import { Account, AccountCreate } from '@/schemas/Account';
 import {
     listAccounts as serviceListAccounts,
     createAccount as serviceCreateAccount,
     updateAccount as serviceUpdateAccount,
     deleteAccount as serviceDeleteAccount
-} from '../services/AccountService';
-import { Account as ServiceAccount } from '../schemas/Account';
+} from '@/services/AccountService';
 
 // --- MAPPING FUNCTIONS ---
 
-const mapAccountCreateToServiceInput = (accountData: AccountCreate): Partial<ServiceAccount> => {
+const mapAccountCreateToServiceInput = (accountData: AccountCreate): Partial<Account> => {
     // AccountCreate and ServiceAccount are compatible types from schemas
     return {
         accountName: accountData.accountName,
@@ -69,7 +68,6 @@ const CACHE_DURATION = 2 * 24 * 60 * 60 * 1000;
 export const useAccountsStore = create<AccountsState>()(
     persist(
         (set, get) => {
-            console.warn('🏪 DIAGNOSTIC: Zustand store factory function called');
             return {
                 // Initial state
                 accounts: [],
@@ -121,14 +119,10 @@ export const useAccountsStore = create<AccountsState>()(
                         state.accounts.length === 0;
 
                     if (!shouldFetch) {
-                        console.log('✅ Using cached accounts data - no API call needed');
                         return;
                     }
 
-                    console.log('🔄 Cache expired or invalid - fetching fresh accounts data');
-                    console.warn('🏪 DIAGNOSTIC: About to call set() - this may trigger React error');
                     set({ isLoading: true, error: null });
-                    console.warn('🏪 DIAGNOSTIC: set() call completed');
 
                     try {
                         const response = await serviceListAccounts();
