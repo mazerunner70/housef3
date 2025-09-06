@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { listAssociatedFiles, FileMetadata } from '../../../services/FileService';
+import { listAssociatedFiles } from '../../../services/FileService';
 import { DateCell } from '../ui';
 import './TransactionFilesDialog.css';
 
@@ -82,6 +82,11 @@ const TransactionFilesDialog: React.FC<TransactionFilesDialogProps> = ({
         if (e.key === 'Escape') {
             onClose();
         }
+        // Support Enter and Space for backdrop button role
+        if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            onClose();
+        }
     };
 
     if (!isOpen) {
@@ -93,7 +98,9 @@ const TransactionFilesDialog: React.FC<TransactionFilesDialogProps> = ({
             className="transaction-files-dialog-backdrop"
             onClick={handleBackdropClick}
             onKeyDown={handleKeyDown}
-            tabIndex={-1}
+            role="button"
+            tabIndex={0}
+            aria-label="Close dialog"
         >
             <div className="transaction-files-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
                 <div className="dialog-header">
