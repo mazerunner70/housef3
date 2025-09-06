@@ -1,36 +1,46 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import AccountList, { AccountListRef } from '../components/accounts/AccountList';
 import AccountForm from '../components/accounts/AccountForm';
 import ConfirmationModal from '../components/accounts/ConfirmationModal';
 import AccountTimeline from '../components/accounts/AccountTimeline';
 import AccountDetailView from './AccountDetailView';
 import './AccountsView.css';
-import useAccounts, { UIAccount, UIAccountInputData } from '../hooks/useAccounts';
+import useAccountsWithStore from '../../stores/useAccountsStore';
+import { Account, AccountCreate } from '../../schemas/Account';
 // import { Decimal } from 'decimal.js'; // Re-enable if using Decimal.js
 
-// AccountFormData in AccountsView should match AccountInputData from the hook for create/update operations
-// The main `Account` type from useAccounts will be used for the list display.
+// AccountFormData in AccountsView should match AccountCreate from the hook for create/update operations
+// The main `Account` type from schemas/Account.ts is used for the list display.
 
 const AccountsView: React.FC = () => {
     const {
         accounts,
         isLoading,
         error,
-        // fetchAccounts, // Fetched on mount by the hook
+        fetchAccounts, // Now we handle fetching at component level
         createAccount,
         updateAccount,
         deleteAccount,
         clearError
-    } = useAccounts();
+    } = useAccountsWithStore();
 
     const accountListRef = useRef<AccountListRef>(null);
     const [showAccountForm, setShowAccountForm] = useState(false);
     // editingAccount will store the full Account object for pre-filling form,
-    // but we'll map it to AccountInputData before submitting for an update.
-    const [editingAccount, setEditingAccount] = useState<UIAccount | null>(null);
+    // but we'll map it to AccountCreate before submitting for an update.
+    const [editingAccount, setEditingAccount] = useState<Account | null>(null);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null);
-    const [selectedAccount, setSelectedAccount] = useState<UIAccount | null>(null);
+    const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
+
+    // Use ref to store fetchAccounts and prevent useEffect re-runs
+    const fetchAccountsRef = useRef(fetchAccounts);
+    fetchAccountsRef.current = fetchAccounts;
+
+    // Fetch accounts on component mount with intelligent caching
+    useEffect(() => {
+        fetchAccountsRef.current();
+    }, []); // Empty deps - only run once on mount
 
     const handleAddAccount = () => {
         setEditingAccount(null);
@@ -38,7 +48,7 @@ const AccountsView: React.FC = () => {
         setSelectedAccount(null);
     };
 
-    const handleEditAccount = (accountToEdit: UIAccount) => {
+    const handleEditAccount = (accountToEdit: Account) => {
         setEditingAccount(accountToEdit);
         setShowAccountForm(true);
         setSelectedAccount(null);
@@ -51,7 +61,7 @@ const AccountsView: React.FC = () => {
     };
 
     const handleViewAccountDetails = (accountId: string) => {
-        const accountToView = accounts.find(acc => acc.id === accountId);
+        const accountToView = accounts.find(acc => acc.accountId === accountId);
         if (accountToView) {
             setSelectedAccount(accountToView);
             setShowAccountForm(false);
@@ -67,11 +77,11 @@ const AccountsView: React.FC = () => {
         accountListRef.current?.scrollToAccount(accountId);
     };
 
-    const handleFormSubmit = async (formDataFromForm: UIAccountInputData) => {
+    const handleFormSubmit = async (formDataFromForm: AccountCreate) => {
         clearError();
         let success = false;
-        if (editingAccount && editingAccount.id) {
-            const result = await updateAccount(editingAccount.id, formDataFromForm);
+        if (editingAccount && editingAccount.accountId) {
+            const result = await updateAccount(editingAccount.accountId, formDataFromForm);
             if (result) success = true;
         } else {
             const result = await createAccount(formDataFromForm);
@@ -99,19 +109,18 @@ const AccountsView: React.FC = () => {
         }
     };
 
-    // Prepare initialData for AccountForm, mapping from Account to AccountInputData if editingAccount exists
-    const getFormInitialData = (): UIAccountInputData | undefined => {
+    // Prepare initialData for AccountForm, mapping from Account to AccountCreate if editingAccount exists
+    const getFormInitialData = (): AccountCreate | undefined => {
         if (!editingAccount) return undefined; // For new account, no initial data for form (defaults are in AccountForm)
 
         // For editing existing account:
         return {
-            name: editingAccount.name,
-            type: editingAccount.type, // This will be the string value, e.g., "checking"
-            currency: editingAccount.currency, // This will be the string value, e.g., "USD"
-            // balance is not set here as the field is removed from the form.
-            // If editing allowed direct balance changes, it would be: 
-            // balance: editingAccount.balance ? editingAccount.balance.toString() : undefined,
-            bankName: editingAccount.bankName || '',
+            accountName: editingAccount.accountName,
+            accountType: editingAccount.accountType,
+            currency: editingAccount.currency,
+            balance: editingAccount.balance,
+            institution: editingAccount.institution,
+            notes: editingAccount.notes,
         };
     };
 
@@ -178,7 +187,7 @@ const AccountsView: React.FC = () => {
                 <ConfirmationModal
                     isOpen={showDeleteModal}
                     title="Delete Account"
-                    message={`Are you sure you want to delete account: ${accounts.find(acc => acc.id === deletingAccountId)?.name || deletingAccountId}? This action cannot be undone.`}
+                    message={`Are you sure you want to delete account: ${accounts.find(acc => acc.accountId === deletingAccountId)?.accountName || deletingAccountId}? This action cannot be undone.`}
                     onConfirm={handleDeleteConfirm}
                     onCancel={() => {
                         setShowDeleteModal(false);

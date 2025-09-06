@@ -37,6 +37,35 @@ App.tsx (Router Setup)
     - ui/ - Reusable, domain-agnostic components
   - new-ui/hooks/ - Custom React hooks
   - new-ui/styles/ - Global styles/themes
+  - new-ui/utils/ - UI-specific utility functions
+  - new-ui/views/ - Complex view components (higher-level than pages)
+- frontend/src/services/ - API clients and external service integrations
+  - Service classes for backend API communication
+  - Authentication service, account service, transaction service, etc.
+  - HTTP client configuration and error handling
+  - Service layer abstracts API details from components
+- frontend/src/types/ - TypeScript type definitions
+  - Domain model types (Account, Transaction, Category, etc.)
+  - API response/request types
+  - Component prop types
+  - Utility types and type guards
+- frontend/src/schemas/ - Zod validation schemas
+  - Input validation schemas for forms
+  - API response validation schemas
+  - Data transformation and parsing schemas
+  - Corresponds to backend models for consistency
+- frontend/src/stores/ - State management (Zustand stores)
+  - Global application state
+  - Domain-specific stores (transactionsStore, etc.)
+  - State persistence and hydration logic
+- frontend/src/utils/ - General utility functions
+  - Date formatting, currency formatting
+  - Data transformation helpers
+  - Common validation functions
+  - Pure functions with no side effects
+- frontend/src/hooks/ - Global custom React hooks (if any)
+  - Cross-domain hooks that don't fit in new-ui/hooks/
+  - Prefer domain-specific hooks in new-ui/hooks/ when possible
 
 ## Component Rules
 
@@ -69,11 +98,36 @@ App.tsx (Router Setup)
 - Test files in __tests__/ directories
 - Mock external dependencies appropriately
 
-## Services and Types
-- Keep services in frontend/src/services/
-- TypeScript types in frontend/src/types/
-- Zod schemas in frontend/src/schemas/
-- Use proper TypeScript patterns
+## Services and Data Layer
+
+### Services (frontend/src/services/)
+- Service classes handle all backend API communication
+- Each domain should have its own service (AccountService, TransactionService, etc.)
+- Services should abstract API details from components
+- Include proper error handling and HTTP client configuration
+- Services return typed data using types from frontend/src/types/
+
+### Types (frontend/src/types/)
+- Define TypeScript interfaces for all domain models
+- Include API request/response types
+- Component prop types for complex props
+- Use utility types and type guards for type safety
+- Keep types consistent with backend models
+
+### Schemas (frontend/src/schemas/)
+- Zod schemas for runtime validation
+- Validate form inputs and API responses
+- Transform and parse data consistently
+- Should correspond to backend Pydantic models
+- Use for type-safe data validation throughout the app
+
+### State Management (frontend/src/stores/)
+- Use Zustand for global state management
+- Create domain-specific stores (transactionsStore, accountsStore, etc.)
+- Handle state persistence and hydration
+- Keep stores focused on specific domains
+- Use TypeScript for store typing
+- **See frontend-store-conventions.mdc for detailed Zustand patterns and best practices**
 
 ## Error Handling
 

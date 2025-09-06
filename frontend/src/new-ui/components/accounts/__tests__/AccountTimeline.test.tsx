@@ -1,37 +1,49 @@
 import { render, screen } from '@testing-library/react';
 import AccountTimeline from '../AccountTimeline';
-import { UIAccount } from '../../../hooks/useAccounts';
+import { Account } from '../../../../schemas/Account';
 import Decimal from 'decimal.js';
 
 describe('AccountTimeline', () => {
-    const mockAccounts: UIAccount[] = [
+    const mockAccounts: Account[] = [
         {
-            id: '1',
-            name: 'Chase Checking',
-            type: 'checking',
+            accountId: '1',
+            userId: 'user1',
+            accountName: 'Chase Checking',
+            accountType: 'checking',
             currency: 'USD',
             balance: new Decimal(1000),
-            bankName: 'Chase',
+            institution: 'Chase',
+            isActive: true,
+            createdAt: Date.now() - 365 * 24 * 60 * 60 * 1000,
+            updatedAt: Date.now(),
             importsStartDate: Date.now() - 365 * 24 * 60 * 60 * 1000, // 1 year ago
             importsEndDate: Date.now() - 30 * 24 * 60 * 60 * 1000, // 1 month ago
         },
         {
-            id: '2',
-            name: 'Wells Fargo Savings',
-            type: 'savings',
+            accountId: '2',
+            userId: 'user1',
+            accountName: 'Wells Fargo Savings',
+            accountType: 'savings',
             currency: 'USD',
             balance: new Decimal(5000),
-            bankName: 'Wells Fargo',
+            institution: 'Wells Fargo',
+            isActive: true,
+            createdAt: Date.now() - 180 * 24 * 60 * 60 * 1000,
+            updatedAt: Date.now(),
             importsStartDate: Date.now() - 180 * 24 * 60 * 60 * 1000, // 6 months ago
             importsEndDate: Date.now() - 10 * 24 * 60 * 60 * 1000, // 10 days ago
         },
         {
-            id: '3',
-            name: 'Credit Card',
-            type: 'credit_card',
+            accountId: '3',
+            userId: 'user1',
+            accountName: 'Credit Card',
+            accountType: 'credit_card',
             currency: 'USD',
             balance: new Decimal(-500),
-            bankName: 'Citi',
+            institution: 'Citi',
+            isActive: true,
+            createdAt: Date.now() - 90 * 24 * 60 * 60 * 1000,
+            updatedAt: Date.now(),
             // No import dates
         },
     ];

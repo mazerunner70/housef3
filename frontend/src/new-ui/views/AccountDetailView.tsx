@@ -3,11 +3,11 @@ import React, { useState } from 'react';
 import AccountFilesTab from '../components/accounts/AccountFilesTab';
 import AccountTransactionsTab from '../components/accounts/AccountTransactionsTab'; // Import the new tab
 // import AccountTransactionsTab from '../components/accounts/AccountTransactionsTab'; // To be added later
-import { UIAccount } from '../hooks/useAccounts'; // Import UIAccount type
+import { Account } from '../../schemas/Account'; // Import Account type
 import './AccountDetailView.css'; // Import the CSS file
 
 interface AccountDetailViewProps {
-  account: UIAccount; // Changed from accountId: string to account: UIAccount
+  account: Account; // Changed from accountId: string to account: Account
 }
 
 const AccountDetailView: React.FC<AccountDetailViewProps> = ({ account }) => {
@@ -21,23 +21,23 @@ const AccountDetailView: React.FC<AccountDetailViewProps> = ({ account }) => {
 
   return (
     <div className="account-detail-view">
-      <h2>{account.name} ({account.type})</h2>
-      <p>Bank: {account.bankName || 'N/A'} - Balance: {account.balance?.toString() || 'N/A'} {account.currency}</p>
+      <h2>{account.accountName} ({account.accountType})</h2>
+      <p>Bank: {account.institution || 'N/A'} - Balance: {account.balance?.toString() || 'N/A'} {account.currency}</p>
       <div className="account-detail-tabs">
-        <button 
-          onClick={() => setActiveTab('files')} 
+        <button
+          onClick={() => setActiveTab('files')}
           className={`tab-selector-button ${activeTab === 'files' ? 'active' : ''}`}>
           Files
         </button>
-        <button 
-          onClick={() => setActiveTab('transactions')} 
+        <button
+          onClick={() => setActiveTab('transactions')}
           className={`tab-selector-button ${activeTab === 'transactions' ? 'active' : ''}`}>
           Transactions
         </button>
       </div>
       <div className="tab-content">
-        {activeTab === 'files' && <AccountFilesTab accountId={account.id} />}
-        {activeTab === 'transactions' && <AccountTransactionsTab accountId={account.id} />}
+        {activeTab === 'files' && <AccountFilesTab accountId={account.accountId} />}
+        {activeTab === 'transactions' && <AccountTransactionsTab accountId={account.accountId} />}
         {/* {activeTab === 'transactions' && <AccountTransactionsTab accountId={accountId} />} */}
       </div>
     </div>

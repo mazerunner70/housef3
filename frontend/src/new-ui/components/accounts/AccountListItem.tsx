@@ -1,9 +1,9 @@
 import { forwardRef } from 'react';
 import './AccountListItem.css';
-import { UIAccount } from '../../hooks/useAccounts';
+import { Account } from '../../../schemas/Account';
 import { CurrencyDisplay, DateCell } from '../ui';
 
-// This interface should align with UIAccount from useAccounts.ts
+// This interface should align with UIAccount from types/UIAccount.ts
 export interface AccountListItemData {
     id: string;
     name: string;
@@ -16,19 +16,19 @@ export interface AccountListItemData {
 }
 
 interface AccountListItemProps {
-    account: UIAccount;
-    onEdit: (account: UIAccount) => void;
+    account: Account;
+    onEdit: (account: Account) => void;
     onDelete: (accountId: string) => void;
     onViewDetails: (accountId: string) => void; // Add onViewDetails prop
 }
 
 const AccountListItem = forwardRef<HTMLDivElement, AccountListItemProps>(({ account, onEdit, onDelete, onViewDetails }, ref) => {
-    const { id, name, type, balance, currency, bankName } = account;
+    const { accountId, accountName, accountType, balance, currency, institution } = account;
 
     // Format balance for display - balance is handled by CurrencyDisplay component
 
     const handleViewDetailsClick = () => {
-        onViewDetails(id);
+        onViewDetails(accountId);
     };
 
     return (
@@ -42,16 +42,16 @@ const AccountListItem = forwardRef<HTMLDivElement, AccountListItemProps>(({ acco
                         title="Click to view details"
                         tabIndex={0}
                         role="button"
-                        aria-label={`View details for ${name} account`}
+                        aria-label={`View details for ${accountName} account`}
                     >
-                        {name}
+                        {accountName}
                     </h3>
                     <div className="account-type-bank">
                         <span className="account-type">
-                            {type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}
+                            {accountType.charAt(0).toUpperCase() + accountType.slice(1).replace('_', ' ')}
                         </span>
-                        {bankName && (
-                            <span className="account-bank">{bankName}</span>
+                        {institution && (
+                            <span className="account-bank">{institution}</span>
                         )}
                     </div>
                 </div>
@@ -98,7 +98,7 @@ const AccountListItem = forwardRef<HTMLDivElement, AccountListItemProps>(({ acco
                 <button onClick={() => onEdit(account)} className="edit-button">
                     Edit
                 </button>
-                <button onClick={() => onDelete(id)} className="delete-button">
+                <button onClick={() => onDelete(accountId)} className="delete-button">
                     Delete
                 </button>
             </div>

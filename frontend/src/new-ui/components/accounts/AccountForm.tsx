@@ -1,22 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import './AccountForm.css'; // Import the CSS file
-import { UIAccountInputData } from '../../hooks/useAccounts'; // Import updated type
+import { AccountCreate } from '../../../schemas/Account'; // Import updated type
 import { AccountType, Currency } from '../../../schemas/Account';
+import { Decimal } from 'decimal.js';
 
-// This interface should exactly match AccountInputData from useAccounts.ts
-export interface AccountFormData {
-    name: string;
-    type: string;
-    accountNumber: string;
-    openingBalance: number;
-    currency: string;
-    bankName?: string;
-    // id is not part of input data for create/update via hook, it's handled separately
-}
+// Form now uses AccountCreate directly from schemas/Account.ts
 
 interface AccountFormProps {
-    initialData?: UIAccountInputData | null;
-    onSubmit: (formData: UIAccountInputData) => void;
+    initialData?: AccountCreate | null;
+    onSubmit: (formData: AccountCreate) => void;
     onCancel: () => void;
     formTitle: string;
 }
@@ -25,47 +17,48 @@ interface AccountFormProps {
 const getEnumKeys = (e: any) => Object.keys(e).filter(k => typeof e[k as any] === 'string'); // Filter by string values to get keys
 
 const AccountForm: React.FC<AccountFormProps> = ({ initialData, onSubmit, onCancel, formTitle }) => {
-    const [formData, setFormData] = useState<UIAccountInputData>({
-        name: '',
-        type: AccountType.CHECKING,
+    const [formData, setFormData] = useState<AccountCreate>({
+        accountName: '',
+        accountType: AccountType.CHECKING,
         currency: Currency.USD,
-        balance: undefined, // Balance is optional, and not set for new accounts via this form
-        bankName: undefined, // Use undefined instead of empty string for optional field
+        balance: new Decimal('0'), // Required field in AccountCreate
+        institution: '', // Required field in AccountCreate
         ...(initialData || {}),
     });
 
     useEffect(() => {
         if (initialData) {
-            setFormData(prev => ({
+            setFormData((prev: AccountCreate) => ({
                 ...prev, // Keep defaults if not in initialData
                 ...initialData,
-                // Ensure balance is string if present, or undefined if field is removed/not for new
-                balance: initialData.balance !== undefined ? initialData.balance : undefined
             }));
         } else {
             // For new account
             setFormData({
-                name: '',
-                type: AccountType.CHECKING,
+                accountName: '',
+                accountType: AccountType.CHECKING,
                 currency: Currency.USD,
-                balance: undefined, // No balance field for new accounts
-                bankName: undefined,
+                balance: new Decimal('0'),
+                institution: '',
             });
         }
     }, [initialData]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        setFormData((prev: AccountCreate) => ({
+            ...prev,
+            [name]: name === 'balance' ? new Decimal(value || '0') : value
+        }));
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         // Create a copy of formData to pass, explicitly managing the optional fields
-        const dataToSubmit: UIAccountInputData = {
+        const dataToSubmit: AccountCreate = {
             ...formData,
-            // Convert empty string to undefined for optional bankName field
-            bankName: formData.bankName?.trim() === '' ? undefined : formData.bankName,
+            // Convert empty string to undefined for optional institution field
+            institution: formData.institution?.trim() === '' ? '' : formData.institution,
         };
         onSubmit(dataToSubmit);
     };
@@ -80,12 +73,12 @@ const AccountForm: React.FC<AccountFormProps> = ({ initialData, onSubmit, onCanc
                 <h2>{formTitle}</h2>
                 <form onSubmit={handleSubmit}>
                     <div className="form-group">
-                        <label htmlFor="name">Account Name</label>
-                        <input type="text" id="name" name="name" value={formData.name} onChange={handleChange} required />
+                        <label htmlFor="accountName">Account Name</label>
+                        <input type="text" id="accountName" name="accountName" value={formData.accountName} onChange={handleChange} required />
                     </div>
                     <div className="form-group">
-                        <label htmlFor="type">Account Type</label>
-                        <select id="type" name="type" value={formData.type} onChange={handleChange} required>
+                        <label htmlFor="accountType">Account Type</label>
+                        <select id="accountType" name="accountType" value={formData.accountType} onChange={handleChange} required>
                             {accountTypeOptions.map(key => (
                                 <option key={key} value={AccountType[key as keyof typeof AccountType]}>
                                     {key.charAt(0).toUpperCase() + key.slice(1).replace('_', ' ')}
@@ -103,15 +96,13 @@ const AccountForm: React.FC<AccountFormProps> = ({ initialData, onSubmit, onCanc
                             ))}
                         </select>
                     </div>
-                    {/* Balance field removed as per request */}
-                    {/* If balance needs to be editable for existing accounts, it would be added here */}
-                    {/* <div className="form-group">
-                        <label htmlFor="balance">Current Balance</label>
-                        <input type="text" id="balance" name="balance" value={formData.balance || ''} onChange={handleChange} />
-                    </div> */}
                     <div className="form-group">
-                        <label htmlFor="bankName">Bank Name (Optional)</label>
-                        <input type="text" id="bankName" name="bankName" value={formData.bankName || ''} onChange={handleChange} />
+                        <label htmlFor="balance">Opening Balance</label>
+                        <input type="number" id="balance" name="balance" value={formData.balance?.toString() || '0'} onChange={handleChange} step="0.01" required />
+                    </div>
+                    <div className="form-group">
+                        <label htmlFor="institution">Bank Name</label>
+                        <input type="text" id="institution" name="institution" value={formData.institution || ''} onChange={handleChange} required />
                     </div>
                     <div className="form-actions">
                         <button type="button" onClick={onCancel} className="cancel-button">Cancel</button>

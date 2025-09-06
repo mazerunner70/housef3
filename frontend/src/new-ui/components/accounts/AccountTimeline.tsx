@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { UIAccount } from '../../hooks/useAccounts';
+import { Account } from '../../../schemas/Account';
 import './AccountTimeline.css';
 
 interface AccountTimelineProps {
-    accounts: UIAccount[];
+    accounts: Account[];
     onAccountClick?: (accountId: string) => void;
 }
 
@@ -55,8 +55,8 @@ const AccountTimeline: React.FC<AccountTimelineProps> = ({ accounts, onAccountCl
                 endDate: today,
                 totalDays: 1,
                 accounts: accounts.map(acc => ({
-                    id: acc.id,
-                    name: acc.name,
+                    id: acc.accountId,
+                    name: acc.accountName,
                     leftPercent: 0,
                     widthPercent: 0,
                     hasData: false,
@@ -85,8 +85,8 @@ const AccountTimeline: React.FC<AccountTimelineProps> = ({ accounts, onAccountCl
         const timelineAccounts = accounts.map(acc => {
             if (acc.importsStartDate == null || acc.importsEndDate == null) {
                 return {
-                    id: acc.id,
-                    name: acc.name,
+                    id: acc.accountId,
+                    name: acc.accountName,
                     leftPercent: 0,
                     widthPercent: 0,
                     hasData: false,
@@ -100,8 +100,8 @@ const AccountTimeline: React.FC<AccountTimelineProps> = ({ accounts, onAccountCl
             const widthPercent = Math.max(0.5, (duration / totalDays) * 100); // Minimum 0.5% width for visibility
 
             return {
-                id: acc.id,
-                name: acc.name,
+                id: acc.accountId,
+                name: acc.accountName,
                 startDate: acc.importsStartDate,
                 endDate: acc.importsEndDate,
                 leftPercent,
