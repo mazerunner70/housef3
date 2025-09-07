@@ -65,12 +65,17 @@ export interface SessionUrlStore {
     };
 }
 
-// Generate a short, unique session ID
+// Generate a short, unique session ID using cryptographically secure random
 const generateSessionId = (): string => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     let result = '';
+
+    // Use crypto.getRandomValues for cryptographically secure random numbers
+    const randomBytes = new Uint8Array(8);
+    crypto.getRandomValues(randomBytes);
+
     for (let i = 0; i < 8; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
+        result += chars.charAt(randomBytes[i] % chars.length);
     }
     return result;
 };
@@ -275,14 +280,14 @@ export const useSessionUrlStore = create<SessionUrlStore>()(
                     };
                 }
 
-                const sortedByAge = sessions.sort((a, b) => a.created - b.created);
-                const sortedByUsage = sessions.sort((a, b) => b.accessCount - a.accessCount);
+                const sortedByAge = [...sessions].sort((a, b) => a.created - b.created);
+                const sortedByUsage = [...sessions].sort((a, b) => b.accessCount - a.accessCount);
 
                 return {
                     totalSessions: sessions.length,
-                    oldestSession: sortedByAge[0].created,
-                    newestSession: sortedByAge[sortedByAge.length - 1].created,
-                    mostUsedSession: sortedByUsage[0]
+                    oldestSession: sortedByAge.length > 0 ? sortedByAge[0].created : 0,
+                    newestSession: sortedByAge.length > 0 ? sortedByAge[sortedByAge.length - 1].created : 0,
+                    mostUsedSession: sortedByUsage.length > 0 ? sortedByUsage[0] : null
                 };
             }
         }),

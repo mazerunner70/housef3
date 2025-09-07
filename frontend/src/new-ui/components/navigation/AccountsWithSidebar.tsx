@@ -40,8 +40,19 @@ const AccountsWithSidebar: React.FC<AccountsWithSidebarProps> = ({ className = '
             {!sidebarCollapsed && (
                 <div
                     className="sidebar-overlay"
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Close sidebar overlay"
                     onClick={() => setSidebarCollapsed(true)}
-                    aria-hidden="true"
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSidebarCollapsed(true);
+                        } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            setSidebarCollapsed(true);
+                        }
+                    }}
                 />
             )}
         </div>

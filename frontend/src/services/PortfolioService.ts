@@ -35,23 +35,21 @@ export const getPortfolioInsights = async (): Promise<PortfolioInsights> => {
         const activeAccounts = accounts.filter(account => account.isActive).length;
 
         // Calculate date range from imports
-        const earliestDate = accounts
+        const earliestTimestamp = accounts
             .map(account => account.importsStartDate)
-            .filter((date): date is number => date != null)
-            .map(timestamp => new Date(timestamp))
-            .reduce((earliest, date) =>
-                !earliest || date < earliest ? date : earliest, null as Date | null);
+            .filter((timestamp): timestamp is number => timestamp != null)
+            .reduce((earliest, timestamp) =>
+                earliest === null || timestamp < earliest ? timestamp : earliest, null as number | null);
 
-        const latestDate = accounts
+        const latestTimestamp = accounts
             .map(account => account.importsEndDate)
-            .filter((date): date is number => date != null)
-            .map(timestamp => new Date(timestamp))
-            .reduce((latest, date) =>
-                !latest || date > latest ? date : latest, null as Date | null);
+            .filter((timestamp): timestamp is number => timestamp != null)
+            .reduce((latest, timestamp) =>
+                latest === null || timestamp > latest ? timestamp : latest, null as number | null);
 
         // Calculate total days covered
-        const totalDays = earliestDate && latestDate
-            ? Math.ceil((latestDate.getTime() - earliestDate.getTime()) / (1000 * 60 * 60 * 24))
+        const totalDays = earliestTimestamp && latestTimestamp
+            ? Math.ceil((latestTimestamp - earliestTimestamp) / (1000 * 60 * 60 * 24))
             : null;
 
         // Find accounts needing updates (last transaction > 7 days ago)
@@ -77,8 +75,8 @@ export const getPortfolioInsights = async (): Promise<PortfolioInsights> => {
             activeAccounts,
             staleAccounts,
             dateRange: {
-                earliest: earliestDate,
-                latest: latestDate,
+                earliest: earliestTimestamp,
+                latest: latestTimestamp,
                 totalDays
             },
             accountsNeedingUpdate,
