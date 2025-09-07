@@ -35,24 +35,19 @@ export const getPortfolioInsights = async (): Promise<PortfolioInsights> => {
         const activeAccounts = accounts.filter(account => account.isActive).length;
 
         // Calculate date range from imports
-        let earliestDate: Date | null = null;
-        let latestDate: Date | null = null;
+        const earliestDate = accounts
+            .map(account => account.importsStartDate)
+            .filter((date): date is number => date != null)
+            .map(timestamp => new Date(timestamp))
+            .reduce((earliest, date) =>
+                !earliest || date < earliest ? date : earliest, null as Date | null);
 
-        accounts.forEach(account => {
-            if (account.importsStartDate) {
-                const startDate = new Date(account.importsStartDate);
-                if (!earliestDate || startDate < earliestDate) {
-                    earliestDate = startDate;
-                }
-            }
-
-            if (account.importsEndDate) {
-                const endDate = new Date(account.importsEndDate);
-                if (!latestDate || endDate > latestDate) {
-                    latestDate = endDate;
-                }
-            }
-        });
+        const latestDate = accounts
+            .map(account => account.importsEndDate)
+            .filter((date): date is number => date != null)
+            .map(timestamp => new Date(timestamp))
+            .reduce((latest, date) =>
+                !latest || date > latest ? date : latest, null as Date | null);
 
         // Calculate total days covered
         const totalDays = earliestDate && latestDate
@@ -104,7 +99,7 @@ export const getPortfolioInsights = async (): Promise<PortfolioInsights> => {
         return insights;
 
     } catch (error) {
-        logger.error('Failed to calculate portfolio insights', { error });
+        logger.error('Failed to calculate portfolio insights', { error: error instanceof Error ? error.message : 'Unknown error' });
         throw error;
     }
 };
