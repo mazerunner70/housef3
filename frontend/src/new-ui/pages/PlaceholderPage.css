@@ -1,0 +1,185 @@
+/* Placeholder Page Styles */
+.placeholder-page {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 2rem;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+.placeholder-content {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    padding: 3rem;
+    max-width: 600px;
+    width: 100%;
+    text-align: center;
+}
+
+.placeholder-header {
+    margin-bottom: 2rem;
+}
+
+.placeholder-header h1 {
+    color: #2c3e50;
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.placeholder-description {
+    color: #7f8c8d;
+    font-size: 1.1rem;
+    line-height: 1.6;
+    margin: 0;
+}
+
+.placeholder-info {
+    text-align: left;
+    margin: 2rem 0;
+}
+
+.info-section {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.info-section h3 {
+    color: #2c3e50;
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 0.5rem;
+}
+
+.info-item {
+    margin-bottom: 0.75rem;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9rem;
+}
+
+.info-item strong {
+    color: #2c3e50;
+    font-weight: 600;
+    display: inline-block;
+    min-width: 80px;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.status-badge.pending {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.placeholder-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin-top: 2rem;
+}
+
+.back-button,
+.home-button {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.back-button {
+    background: #6c757d;
+    color: white;
+}
+
+.back-button:hover {
+    background: #5a6268;
+    transform: translateY(-2px);
+}
+
+.home-button {
+    background: #3498db;
+    color: white;
+}
+
+.home-button:hover {
+    background: #2980b9;
+    transform: translateY(-2px);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .placeholder-page {
+        padding: 1rem;
+    }
+
+    .placeholder-content {
+        padding: 2rem;
+    }
+
+    .placeholder-header h1 {
+        font-size: 2rem;
+    }
+
+    .placeholder-actions {
+        flex-direction: column;
+    }
+
+    .back-button,
+    .home-button {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .placeholder-page {
+        background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    }
+
+    .placeholder-content {
+        background: #34495e;
+        color: #ecf0f1;
+    }
+
+    .placeholder-header h1 {
+        color: #ecf0f1;
+    }
+
+    .placeholder-description {
+        color: #bdc3c7;
+    }
+
+    .info-section {
+        background: #2c3e50;
+    }
+
+    .info-section h3 {
+        color: #ecf0f1;
+        border-bottom-color: #3498db;
+    }
+
+    .info-item strong {
+        color: #ecf0f1;
+    }
+}

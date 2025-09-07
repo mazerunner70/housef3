@@ -1,5 +1,14 @@
 /* AccountsPage - Route-level page styles */
 .accounts-page {
-    /* Page-level container styles if needed */
-    /* Most styling should be handled by AccountsView */
+    /* Full viewport height for sidebar layout */
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+
+    /* Remove any default margins/padding */
+    margin: 0;
+    padding: 0;
+
+    /* Ensure proper positioning context */
+    position: relative;
 }
