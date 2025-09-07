@@ -1,0 +1,195 @@
+/* File Transactions View */
+.file-transactions-view {
+    width: 100%;
+}
+
+.file-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--spacing-xl);
+    padding: var(--spacing-xl);
+    background: var(--color-white);
+    border-radius: var(--border-radius-large);
+    box-shadow: var(--shadow-subtle);
+
+    .file-info {
+        flex: 1;
+
+        h1 {
+            margin: 0 0 var(--spacing-s) 0;
+            color: var(--color-text-primary);
+            font-size: var(--font-size-h1);
+            font-weight: var(--font-weight-bold);
+        }
+
+        .file-metadata {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--spacing-m);
+            color: var(--color-text-secondary);
+            font-size: var(--font-size-body);
+
+            .transaction-count {
+                font-weight: var(--font-weight-semibold);
+                color: var(--color-primary);
+            }
+
+            .date-range {
+                color: var(--color-text-secondary);
+            }
+
+            .upload-date {
+                color: var(--color-text-tertiary);
+                font-size: var(--font-size-small);
+            }
+        }
+    }
+
+    .file-actions {
+        display: flex;
+        gap: var(--spacing-m);
+    }
+}
+
+.file-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xl);
+}
+
+.transactions-section {
+    background: var(--color-white);
+    border-radius: var(--border-radius-medium);
+    box-shadow: var(--shadow-subtle);
+    padding: var(--spacing-l);
+
+    h2 {
+        margin: 0 0 var(--spacing-l) 0;
+        color: var(--color-text-primary);
+        font-size: var(--font-size-h2);
+        font-weight: var(--font-weight-semibold);
+        border-bottom: 2px solid var(--color-primary);
+        padding-bottom: var(--spacing-s);
+    }
+}
+
+.transactions-placeholder {
+    text-align: center;
+    padding: var(--spacing-xxl);
+    color: var(--color-text-secondary);
+    background: var(--color-background-subtle);
+    border-radius: var(--border-radius-medium);
+    border: 2px dashed var(--color-borders-dividers);
+
+    p {
+        margin: 0 0 var(--spacing-s) 0;
+
+        &:last-child {
+            margin: 0;
+            font-style: italic;
+            font-size: var(--font-size-small);
+            color: var(--color-text-tertiary);
+        }
+    }
+}
+
+.action-button {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-s);
+    padding: var(--spacing-m) var(--spacing-l);
+    border-radius: var(--border-radius-medium);
+    font-size: var(--font-size-button);
+    font-weight: var(--font-weight-semibold);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+
+    .button-icon {
+        font-size: 1.1em;
+    }
+
+    &.primary {
+        background: var(--color-primary);
+        color: var(--color-white);
+
+        &:hover {
+            background: var(--color-primary-dark);
+        }
+
+        &:focus {
+            outline: 2px solid var(--color-primary);
+            outline-offset: 2px;
+        }
+    }
+
+    &.secondary {
+        background: var(--color-background-subtle);
+        color: var(--color-text-primary);
+        border-color: var(--color-borders-dividers);
+
+        &:hover {
+            background: var(--color-background-light);
+            border-color: var(--color-primary);
+        }
+
+        &:focus {
+            outline: 2px solid var(--color-primary);
+            outline-offset: 2px;
+        }
+    }
+
+    &.danger {
+        background: var(--color-error);
+        color: var(--color-white);
+
+        &:hover {
+            background: var(--color-error-dark);
+        }
+
+        &:focus {
+            outline: 2px solid var(--color-error);
+            outline-offset: 2px;
+        }
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .file-header {
+        flex-direction: column;
+        gap: var(--spacing-l);
+        padding: var(--spacing-l);
+
+        .file-info {
+            h1 {
+                font-size: var(--font-size-h2);
+            }
+
+            .file-metadata {
+                flex-direction: column;
+                gap: var(--spacing-s);
+            }
+        }
+
+        .file-actions {
+            flex-direction: column;
+            width: 100%;
+
+            .action-button {
+                justify-content: center;
+            }
+        }
+    }
+
+    .transactions-section {
+        h2 {
+            font-size: var(--font-size-h3);
+        }
+    }
+
+    .transactions-placeholder {
+        padding: var(--spacing-l);
+    }
+}

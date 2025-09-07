@@ -15,8 +15,10 @@
 }
 
 .new-ui-logo {
-  height: 50px; /* Adjust as needed */
-  width: auto;   /* Maintain aspect ratio */
+  height: 50px;
+  /* Adjust as needed */
+  width: auto;
+  /* Maintain aspect ratio */
   margin-right: var(--spacing-l);
 }
 
@@ -25,7 +27,8 @@
   font-weight: var(--font-weight-semibold);
   color: var(--color-primary-brand);
   margin: 0;
-  margin-right: auto; /* Pushes navigation to the right */
+  margin-right: auto;
+  /* Pushes navigation to the right */
 }
 
 .new-ui-navigation a {
@@ -70,33 +73,47 @@
 }
 
 .new-ui-sidebar p,
-.new-ui-sidebar a { /* Target both p (for Sign Out) and a (for NavLinks) */
-    display: block; /* Make them block for full-width clickability and padding */
-    padding: var(--spacing-s) var(--spacing-l);
-    margin-bottom: var(--spacing-xs);
-    cursor: pointer;
-    text-decoration: none;
-    color: var(--color-text-primary);
-    border-radius: var(--border-radius-small);
+.new-ui-sidebar a {
+  /* Target both p (for Sign Out) and a (for NavLinks) */
+  display: block;
+  /* Make them block for full-width clickability and padding */
+  padding: var(--spacing-s) var(--spacing-l);
+  margin-bottom: var(--spacing-xs);
+  cursor: pointer;
+  text-decoration: none;
+  color: var(--color-text-primary);
+  border-radius: var(--border-radius-small);
 }
 
 .new-ui-sidebar p:hover,
 .new-ui-sidebar a:hover {
-    background-color: var(--color-background-subtle);
-    color: var(--color-primary-brand);
+  background-color: var(--color-background-subtle);
+  color: var(--color-primary-brand);
 }
 
-.new-ui-sidebar a.active { /* Style for active NavLink */
+.new-ui-sidebar a.active {
+  /* Style for active NavLink */
   color: var(--color-primary-brand);
   font-weight: var(--font-weight-semibold);
-  background-color: hsl(from var(--color-secondary-brand) h s 90%); /* Lighter shade of secondary brand */
+  background-color: hsl(from var(--color-secondary-brand) h s 90%);
+  /* Lighter shade of secondary brand */
   border-left: 3px solid var(--color-secondary-brand);
   /* Adjust padding to align text with border, considering existing padding */
-  padding-left: calc(var(--spacing-l) - 3px); 
+  padding-left: calc(var(--spacing-l) - 3px);
 }
 
-.sign-out-button {
-  margin-top: auto; /* Pushes to the bottom of the sidebar */
-  padding-top: var(--spacing-m);
-  border-top: var(--border-width) solid var(--color-borders-dividers);
-} 
+.header-sign-out-button {
+  margin-left: auto;
+  padding: var(--spacing-s) var(--spacing-m);
+  background-color: var(--color-background-subtle);
+  border: var(--border-width) solid var(--color-borders-dividers);
+  border-radius: var(--border-radius-small);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-size: var(--font-size-body);
+}
+
+.header-sign-out-button:hover {
+  background-color: var(--color-primary-brand);
+  color: var(--color-white);
+}
