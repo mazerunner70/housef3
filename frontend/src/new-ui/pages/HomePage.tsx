@@ -85,7 +85,19 @@ const HomePage: React.FC = () => {
 
             <div className="insights-grid">
                 {/* Total Accounts Card */}
-                <div className="insight-card accounts-summary" onClick={handleViewAccounts}>
+                <div
+                    className="insight-card accounts-summary"
+                    onClick={handleViewAccounts}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleViewAccounts();
+                        }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="View all accounts"
+                >
                     <div className="card-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
@@ -133,6 +145,15 @@ const HomePage: React.FC = () => {
                 <div
                     className={`insight-card updates-needed ${insights.staleAccounts > 0 ? 'warning' : 'success'}`}
                     onClick={insights.staleAccounts > 0 ? handleViewStaleAccounts : undefined}
+                    onKeyDown={insights.staleAccounts > 0 ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleViewStaleAccounts();
+                        }
+                    } : undefined}
+                    role={insights.staleAccounts > 0 ? "button" : undefined}
+                    tabIndex={insights.staleAccounts > 0 ? 0 : undefined}
+                    aria-label={insights.staleAccounts > 0 ? "View accounts needing updates" : undefined}
                     style={{ cursor: insights.staleAccounts > 0 ? 'pointer' : 'default' }}
                 >
                     <div className="card-icon">
