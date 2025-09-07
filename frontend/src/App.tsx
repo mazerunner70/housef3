@@ -1,11 +1,31 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import Login from './new-ui/components/Login';
 import NewUILayout from './new-ui/layouts/NewUILayout';
+import HomePage from './new-ui/pages/HomePage';
 import AccountsPage from './new-ui/pages/AccountsPage';
 import TransactionsPage from '@/new-ui/pages/TransactionsPage';
 import AnalyticsView from './new-ui/views/AnalyticsView';
 import FZIPManagementView from './new-ui/views/FZIPManagementView';
+import {
+  CategoriesPage,
+  CategoryDetailPage,
+  CategoryTransactionsPage,
+  CategoryAccountsPage,
+  CategoryAnalyticsPage,
+  CategoryComparePage,
+  TransactionDetailPage,
+  TransactionEditPage,
+  TransactionComparePage,
+  FilesPage,
+  FileDetailPage,
+  FileTransactionsPage,
+  FileAccountsPage,
+  FileCategoriesPage,
+  FileSummaryPage,
+  FileProcessingLogPage,
+  FileComparePage
+} from './new-ui/pages/PlaceholderPage';
 import { getCurrentUser, isAuthenticated, refreshToken } from './services/AuthService';
 import './App.css'
 
@@ -82,9 +102,44 @@ function App() {
   return (
     <Routes>
       <Route path="/*" element={<NewUILayout onSignOut={handleSignOut} />}>
-        <Route index element={<Navigate to="accounts" replace />} />
+        <Route index element={<HomePage />} />
+        <Route path="home" element={<HomePage />} />
+        {/* 
+          Session URL Strategy: All session URLs use /accounts?s=sessionId
+          React Router sees this as the base /accounts route with query parameters
+          No new routes needed - sessions are handled via query params!
+        */}
+        {/* Account-based routes (for account-centric navigation) */}
         <Route path="accounts" element={<AccountsPage />} />
+        <Route path="accounts/:accountId" element={<AccountsPage />} />
+
+        {/* Entity-based branching routes */}
+
+        {/* Categories */}
+        <Route path="categories" element={<CategoriesPage />} />
+        <Route path="categories/:categoryId" element={<CategoryDetailPage />} />
+        <Route path="categories/:categoryId/transactions" element={<CategoryTransactionsPage />} />
+        <Route path="categories/:categoryId/accounts" element={<CategoryAccountsPage />} />
+        <Route path="categories/:categoryId/analytics" element={<CategoryAnalyticsPage />} />
+        <Route path="categories/compare" element={<CategoryComparePage />} />
+
+        {/* Transactions */}
         <Route path="transactions" element={<TransactionsPage />} />
+        <Route path="transactions/:transactionId" element={<TransactionDetailPage />} />
+        <Route path="transactions/:transactionId/edit" element={<TransactionEditPage />} />
+        <Route path="transactions/compare" element={<TransactionComparePage />} />
+
+        {/* Files */}
+        <Route path="files" element={<FilesPage />} />
+        <Route path="files/:fileId" element={<FileDetailPage />} />
+        <Route path="files/:fileId/transactions" element={<FileTransactionsPage />} />
+        <Route path="files/:fileId/accounts" element={<FileAccountsPage />} />
+        <Route path="files/:fileId/categories" element={<FileCategoriesPage />} />
+        <Route path="files/:fileId/summary" element={<FileSummaryPage />} />
+        <Route path="files/:fileId/log" element={<FileProcessingLogPage />} />
+        <Route path="files/compare" element={<FileComparePage />} />
+
+        {/* Other routes */}
         <Route path="analytics" element={<AnalyticsView />} />
         <Route path="backup" element={<FZIPManagementView />} />
         <Route path="*" element={<div><p>Page Not Found</p></div>} />

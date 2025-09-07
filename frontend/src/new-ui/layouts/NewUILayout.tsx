@@ -15,20 +15,9 @@ const NewUILayout: React.FC<NewUILayoutProps> = ({ onSignOut }) => {
           <img src={logoImage} alt="App Logo" className="new-ui-logo" />
         </NavLink>
         <h1 className="new-ui-title">Modern Finance App</h1>
-        <nav className="new-ui-navigation">
-          <NavLink to="/dashboard">Dashboard</NavLink>
-          <NavLink to="/transactions-header">Transactions</NavLink>
-        </nav>
+        <button onClick={onSignOut} className="header-sign-out-button">Sign Out</button>
       </header>
       <div className="new-ui-layout-content">
-        <nav className="new-ui-sidebar">
-          <NavLink to="/dashboard" className={({ isActive }) => isActive ? "active" : ""}>Dashboard</NavLink>
-          <NavLink to="/transactions" className={({ isActive }) => isActive ? "active" : ""}>Transactions</NavLink>
-          <NavLink to="/accounts" className={({ isActive }) => isActive ? "active" : ""}>Accounts</NavLink>
-          <NavLink to="/analytics" className={({ isActive }) => isActive ? "active" : ""}>Analytics</NavLink>
-          <NavLink to="/backup" className={({ isActive }) => isActive ? "active" : ""}>💾 Backup & Restore</NavLink>
-          <button onClick={onSignOut} className="sign-out-button">Sign Out</button>
-        </nav>
         <main className="new-ui-main-content">
           <Outlet />
         </main>
