@@ -1,6 +1,13 @@
 import React from 'react';
-import AccountsWithSidebar from '@/new-ui/components/navigation/AccountsWithSidebar';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useSessionRouting } from '@/hooks/useSessionRouting';
+import { useNavigationStore } from '@/stores/navigationStore';
+import Breadcrumb from '@/new-ui/components/navigation/Breadcrumb';
+import AccountListView from '@/new-ui/components/navigation/views/AccountListView';
+import AccountDetailView from '@/new-ui/components/navigation/views/AccountDetailView';
+import FileTransactionsView from '@/new-ui/components/navigation/views/FileTransactionsView';
+import TransactionDetailView from '@/new-ui/components/navigation/views/TransactionDetailView';
+import useAccountsWithStore from '@/stores/useAccountsStore';
 import './AccountsPage.css';
 
 /**
@@ -9,19 +16,68 @@ import './AccountsPage.css';
  * This is a thin container that follows the frontend conventions:
  * - Pages are route-level containers referenced by React Router
  * - Pages should primarily compose business components/views
- * - Minimal direct UI logic - delegate to views and business components
+ * - Direct routing based on URL params, no central navigation controller
  * 
- * Updated to use the new contextual sidebar navigation pattern with route synchronization.
- * All nested account routes (/accounts, /accounts/:id, /accounts/:id/files/:fileId, etc.)
- * are handled by this single page component with contextual navigation.
+ * Updated to use the route-aware contextual sidebar navigation pattern.
+ * The sidebar automatically shows account-specific content when on /accounts routes.
+ * Route patterns:
+ * - /accounts -> AccountListView
+ * - /accounts/:accountId -> AccountDetailView
+ * - /accounts/:accountId/files/:fileId -> FileTransactionsView
+ * - /accounts/:accountId/transactions/:transactionId -> TransactionDetailView
  */
 const AccountsPage: React.FC = () => {
+    const params = useParams();
+    const [searchParams] = useSearchParams();
+    const { accounts } = useAccountsWithStore();
+    const { selectedAccount, selectedFile, selectedTransaction } = useNavigationStore();
+
     // Sync React Router with navigation store using session URL compression
     useSessionRouting();
 
+    // Determine which view to render based on URL params
+    const renderContent = () => {
+        const { accountId } = params;
+        const fileId = searchParams.get('fileId');
+        const transactionId = searchParams.get('transactionId');
+
+        // Transaction detail view
+        if (transactionId && selectedTransaction) {
+            return (
+                <TransactionDetailView
+                    transaction={selectedTransaction}
+                    account={selectedAccount}
+                    file={selectedFile}
+                />
+            );
+        }
+
+        // File transactions view
+        if (accountId && fileId && selectedAccount && selectedFile) {
+            return <FileTransactionsView account={selectedAccount} file={selectedFile} />;
+        }
+
+        // Account detail view
+        if (accountId) {
+            const account = selectedAccount || accounts.find(acc => acc.accountId === accountId);
+            if (!account) {
+                return <div className="error-state">Account not found</div>;
+            }
+            return <AccountDetailView account={account} />;
+        }
+
+        // Default: Account list view
+        return <AccountListView />;
+    };
+
     return (
         <div className="accounts-page">
-            <AccountsWithSidebar />
+            <main className="main-content">
+                <Breadcrumb />
+                <div className="main-content-inner">
+                    {renderContent()}
+                </div>
+            </main>
         </div>
     );
 };
