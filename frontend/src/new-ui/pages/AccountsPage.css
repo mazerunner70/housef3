@@ -1,9 +1,8 @@
 /* AccountsPage - Route-level page styles */
 .accounts-page {
-    /* Full viewport height for sidebar layout */
-    height: 100vh;
-    width: 100vw;
-    overflow: hidden;
+    /* Let the main layout handle sizing */
+    width: 100%;
+    height: 100%;
 
     /* Remove any default margins/padding */
     margin: 0;
@@ -11,4 +10,93 @@
 
     /* Ensure proper positioning context */
     position: relative;
+}
+
+/* Main Content Area (moved from MainContent.css) */
+.accounts-page .main-content {
+    flex: 1;
+    height: 100vh;
+    overflow: auto;
+    background: var(--color-background-light);
+    position: relative;
+}
+
+.accounts-page .main-content-inner {
+    padding: var(--spacing-l);
+    max-width: 1200px;
+    margin: 0 auto;
+    min-height: 100%;
+}
+
+/* Error states */
+.accounts-page .error-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 50vh;
+    text-align: center;
+    color: var(--color-text-secondary);
+}
+
+.accounts-page .error-state h3 {
+    margin: var(--spacing-m) 0 var(--spacing-s) 0;
+    color: var(--color-text-primary);
+}
+
+.accounts-page .error-state p {
+    margin: 0 0 var(--spacing-m) 0;
+    max-width: 400px;
+}
+
+/* Loading states */
+.accounts-page .loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 50vh;
+    text-align: center;
+    color: var(--color-text-secondary);
+}
+
+.accounts-page .loading-state p {
+    margin: var(--spacing-m) 0;
+    font-size: var(--font-size-body);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .accounts-page .main-content-inner {
+        padding: var(--spacing-m);
+    }
+}
+
+@media (max-width: 480px) {
+    .accounts-page .main-content-inner {
+        padding: var(--spacing-s);
+    }
+}
+
+/* Smooth scrolling */
+.accounts-page .main-content {
+    scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+.accounts-page .main-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.accounts-page .main-content::-webkit-scrollbar-track {
+    background: var(--color-background-subtle);
+}
+
+.accounts-page .main-content::-webkit-scrollbar-thumb {
+    background: var(--color-borders-dividers);
+    border-radius: 4px;
+}
+
+.accounts-page .main-content::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-tertiary);
 }
