@@ -13,10 +13,10 @@ import {
 } from './types';
 
 /**
- * Default navigation handler using window.location.href
+ * Default navigation handler using React Router navigate
  */
-const defaultNavigate = (href: string): void => {
-    window.location.href = href;
+const defaultNavigate = (href: string, navigate: (to: string) => void): void => {
+    navigate(href);
 };
 
 /**
@@ -37,7 +37,7 @@ const processItemConfig = (
     context: SidebarContext,
     level: number = 0
 ): SidebarItemData => {
-    const { pathname, searchParams } = context;
+    const { pathname, searchParams, navigate } = context;
 
     // Determine if item is active
     let isActive = false;
@@ -48,7 +48,31 @@ const processItemConfig = (
     }
 
     // Create click handler
-    const onClick = config.onClick || (config.href ? () => defaultNavigate(config.href!) : () => { });
+    let onClick: () => void;
+
+    if (config.onClick) {
+        onClick = config.onClick;
+    } else if (config.filterParams && config.href) {
+        // Handle filter navigation with React Router navigate
+        onClick = () => {
+            const newSearchParams = new URLSearchParams();
+
+            // Add filter params to search
+            Object.entries(config.filterParams!).forEach(([key, value]) => {
+                newSearchParams.set(key, value);
+            });
+
+            const search = newSearchParams.toString();
+            navigate({
+                pathname: config.href!,
+                search: search ? `?${search}` : ''
+            });
+        };
+    } else if (config.href) {
+        onClick = () => defaultNavigate(config.href!, navigate);
+    } else {
+        onClick = () => { };
+    }
 
     // Process children if they exist
     const children = config.children?.map(child =>
@@ -99,7 +123,7 @@ export const createSidebarSections = (
 
     // Process dynamic sections if they exist
     if (config.dynamicSections) {
-        const dynamicSections = config.dynamicSections(pathname, searchParams);
+        const dynamicSections = config.dynamicSections({ pathname, searchParams });
         for (const dynamicSection of dynamicSections) {
             sections.push(processSectionConfig(dynamicSection, context));
         }
@@ -142,6 +166,7 @@ export const createActionItem = (
 
 /**
  * Helper function to create a filter item that modifies URL search params
+ * Uses React Router navigate instead of full page reloads
  */
 export const createFilterItem = (
     id: string,
@@ -151,13 +176,9 @@ export const createFilterItem = (
     icon?: string,
     isActive?: (pathname: string, searchParams: URLSearchParams) => boolean
 ): SidebarItemConfig => {
-    const queryString = new URLSearchParams(filterParams).toString();
-    const href = queryString ? `${baseUrl}?${queryString}` : baseUrl;
-
     return {
         id,
         label,
-        href,
         icon,
         isActive: isActive || ((pathname, searchParams) => {
             if (pathname !== baseUrl.split('?')[0]) return false;
@@ -166,6 +187,13 @@ export const createFilterItem = (
             return Object.entries(filterParams).every(([key, value]) =>
                 searchParams.get(key) === value
             );
-        })
+        }),
+        onClick: () => {
+            // This will be replaced in processItemConfig with actual navigate function
+            // Storing the navigation data for the processor to handle
+        },
+        // Store navigation data for processing
+        href: baseUrl,
+        filterParams
     };
 };

@@ -4,7 +4,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import SidebarSection from '@/new-ui/components/navigation/SidebarSection';
 import { createSidebarSections } from './SidebarConfigFactory';
 import { SidebarContentConfig, SidebarContext } from './types';
@@ -23,6 +23,7 @@ const BaseSidebarContent: React.FC<BaseSidebarContentProps> = ({
     config
 }) => {
     const location = useLocation();
+    const navigate = useNavigate();
 
     // Generate sidebar sections from configuration
     const sections = useMemo(() => {
@@ -30,11 +31,12 @@ const BaseSidebarContent: React.FC<BaseSidebarContentProps> = ({
         const context: SidebarContext = {
             pathname: location.pathname,
             searchParams,
-            sidebarCollapsed
+            sidebarCollapsed,
+            navigate
         };
 
         return createSidebarSections(config, context);
-    }, [location, sidebarCollapsed, config]);
+    }, [location.search, sidebarCollapsed, config, navigate]);
 
     return (
         <>
