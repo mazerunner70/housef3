@@ -1,7 +1,8 @@
 /* Contextual Sidebar Styles */
 .contextual-sidebar {
     width: 300px;
-    height: 100vh;
+    height: 100%;
+    /* Use 100% instead of 100vh since it's now in a flex layout */
     background: var(--color-background-subtle);
     border-right: 1px solid var(--color-borders-dividers);
     display: flex;
@@ -11,7 +12,7 @@
     z-index: 10;
 
     &.collapsed {
-        width: 60px;
+        width: 80px;
     }
 }
 
@@ -84,21 +85,7 @@
     background: var(--color-text-tertiary);
 }
 
-/* Collapsed state adjustments */
-.contextual-sidebar.collapsed {
-    .sidebar-header {
-        justify-content: center;
-        padding: var(--spacing-m) var(--spacing-s);
-    }
-
-    .sidebar-title {
-        display: none;
-    }
-
-    .sidebar-content {
-        padding: var(--spacing-xs);
-    }
-}
+/* Collapsed state adjustments - SIMPLIFIED FOR DEBUGGING */
 
 /* Mobile responsive design */
 @media (max-width: 1199px) {
@@ -155,12 +142,33 @@
 }
 
 /* Animation for smooth transitions */
-.contextual-sidebar * {
+.contextual-sidebar *:not(.sidebar-toggle) {
     transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
-.contextual-sidebar.collapsed * {
-    &:not(.sidebar-toggle):not(.sidebar-item-icon) {
-        opacity: 0;
+/* Collapsed state styling - rebuilt safely */
+.contextual-sidebar.collapsed {
+    .sidebar-header {
+        justify-content: center;
+        padding: var(--spacing-xs);
     }
+
+    .sidebar-title {
+        display: none;
+    }
+
+    .sidebar-content {
+        padding: var(--spacing-xs);
+    }
+}
+
+/* Hide sidebar content icons/text when collapsed, but NEVER the toggle button */
+.contextual-sidebar.collapsed .sidebar-content * {
+    opacity: 0;
+}
+
+/* Ensure toggle button always stays visible and properly styled */
+.contextual-sidebar.collapsed .sidebar-toggle {
+    opacity: 1 !important;
+    /* Keep all other styling as normal - no forced overrides */
 }

@@ -75,8 +75,8 @@ export const getPortfolioInsights = async (): Promise<PortfolioInsights> => {
             activeAccounts,
             staleAccounts,
             dateRange: {
-                earliest: earliestTimestamp,
-                latest: latestTimestamp,
+                earliest: earliestTimestamp ? new Date(earliestTimestamp) : null,
+                latest: latestTimestamp ? new Date(latestTimestamp) : null,
                 totalDays
             },
             accountsNeedingUpdate,

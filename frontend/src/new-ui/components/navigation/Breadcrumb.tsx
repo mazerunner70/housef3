@@ -221,15 +221,16 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({
 
                 {/* Quick navigation buttons */}
                 <div className="breadcrumb-actions">
-                    <button
-                        className="breadcrumb-back"
-                        onClick={goBack}
-                        disabled={breadcrumb.length <= 1}
-                        title="Go back one level (Alt + ←)"
-                        aria-label="Go back one level"
-                    >
-                        ←
-                    </button>
+                    {breadcrumb.length > 1 && (
+                        <button
+                            className="breadcrumb-back"
+                            onClick={goBack}
+                            title="Go back one level (Alt + ←)"
+                            aria-label="Go back one level"
+                        >
+                            ←
+                        </button>
+                    )}
 
                     {breadcrumb.length > 2 && (
                         <button
