@@ -3,6 +3,7 @@ import './NewUILayout.css'; // We'll create this for basic styling
 import { Outlet, NavLink } from 'react-router-dom';
 import logoImage from '../assets/logo1.png'; // Import the logo
 import ContextualSidebar from '@/new-ui/components/navigation/ContextualSidebar';
+import Breadcrumb from '@/new-ui/components/navigation/Breadcrumb';
 import { useNavigationStore } from '@/stores/navigationStore';
 
 interface NewUILayoutProps {
@@ -12,6 +13,7 @@ interface NewUILayoutProps {
 const NewUILayout: React.FC<NewUILayoutProps> = ({ onSignOut }) => {
   const { sidebarCollapsed, setSidebarCollapsed } = useNavigationStore();
   const [isMobileView, setIsMobileView] = React.useState(false);
+
 
   // Handle responsive sidebar behavior
   React.useEffect(() => {
@@ -48,6 +50,7 @@ const NewUILayout: React.FC<NewUILayoutProps> = ({ onSignOut }) => {
       <div className="new-ui-layout-content">
         <ContextualSidebar />
         <main className="new-ui-main-content">
+          <Breadcrumb />
           <Outlet />
         </main>
 

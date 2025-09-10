@@ -1,22 +1,23 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useNavigationStore, BreadcrumbItem } from '@/stores/navigationStore';
 import './Breadcrumb.css';
 
 interface BreadcrumbProps {
     className?: string;
     maxItems?: number;
-    showDropdown?: boolean;
 }
 
 const Breadcrumb: React.FC<BreadcrumbProps> = ({
     className = '',
-    maxItems = 4,
-    showDropdown = true
+    maxItems = 4
 }) => {
+    const navigate = useNavigate();
     const { breadcrumb, goBack } = useNavigationStore();
     const [showFullPath, setShowFullPath] = useState(false);
     const [contextMenuOpen, setContextMenuOpen] = useState<number | null>(null);
     const contextMenuRef = useRef<HTMLDivElement>(null);
+
 
     // Close context menu when clicking outside
     useEffect(() => {
@@ -39,11 +40,15 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({
                 goBack();
             }
 
-            // Alt + Home = Go to root (Accounts)
+            // Alt + Home = Go to root (Home)
             if (event.altKey && event.key === 'Home') {
                 event.preventDefault();
                 if (breadcrumb.length > 0) {
-                    breadcrumb[0].action();
+                    if (breadcrumb[0].label === 'Home') {
+                        navigate('/home');
+                    } else {
+                        breadcrumb[0].action();
+                    }
                 }
             }
 
@@ -52,7 +57,11 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({
                 event.preventDefault();
                 const level = parseInt(event.key) - 1;
                 if (level < breadcrumb.length) {
-                    breadcrumb[level].action();
+                    if (breadcrumb[level].label === 'Home') {
+                        navigate('/home');
+                    } else {
+                        breadcrumb[level].action();
+                    }
                 }
             }
         };
@@ -88,7 +97,11 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({
         }
 
         // Regular click = navigate
-        item.action();
+        if (item.label === 'Home') {
+            navigate('/home');
+        } else {
+            item.action();
+        }
     };
 
     const handleContextMenu = (event: React.MouseEvent, index: number) => {
@@ -102,7 +115,7 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({
         setContextMenuOpen(null);
     };
 
-    const copyUrl = (upToIndex: number) => {
+    const copyUrl = () => {
         // This would copy the URL up to this breadcrumb level
         // Implementation depends on the routing system
         const url = window.location.origin + window.location.pathname;
@@ -184,7 +197,14 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({
                                         role="menu"
                                     >
                                         <button
-                                            onClick={() => item.action()}
+                                            onClick={() => {
+                                                if (item.label === 'Home') {
+                                                    navigate('/home');
+                                                } else {
+                                                    item.action();
+                                                }
+                                                setContextMenuOpen(null);
+                                            }}
                                             role="menuitem"
                                         >
                                             Navigate Here
@@ -196,7 +216,7 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({
                                             Copy Path
                                         </button>
                                         <button
-                                            onClick={() => copyUrl(actualIndex)}
+                                            onClick={() => copyUrl()}
                                             role="menuitem"
                                         >
                                             Copy URL
@@ -235,9 +255,15 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({
                     {breadcrumb.length > 2 && (
                         <button
                             className="breadcrumb-home"
-                            onClick={() => breadcrumb[0].action()}
+                            onClick={() => {
+                                if (breadcrumb[0].label === 'Home') {
+                                    navigate('/home');
+                                } else {
+                                    breadcrumb[0].action();
+                                }
+                            }}
                             title="Go to root (Alt + Home)"
-                            aria-label="Go to accounts root"
+                            aria-label="Go to home"
                         >
                             🏠
                         </button>
