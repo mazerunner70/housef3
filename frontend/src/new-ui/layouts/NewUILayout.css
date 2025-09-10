@@ -63,8 +63,14 @@
   flex: 1;
   min-width: 0;
   /* Prevent flex item from overflowing */
-  padding: var(--spacing-xl);
+  padding: 0;
+  /* Remove padding to allow breadcrumb to span full width */
   overflow-y: auto;
+}
+
+/* Content within main that needs padding */
+.new-ui-main-content> :not(.breadcrumb) {
+  padding: var(--spacing-xl);
 }
 
 /* Sidebar styling within main layout */

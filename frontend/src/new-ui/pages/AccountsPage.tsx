@@ -2,7 +2,6 @@ import React from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useSessionRouting } from '@/hooks/useSessionRouting';
 import { useNavigationStore } from '@/stores/navigationStore';
-import Breadcrumb from '@/new-ui/components/navigation/Breadcrumb';
 import AccountListView from '@/new-ui/components/navigation/views/AccountListView';
 import AccountDetailView from '@/new-ui/components/navigation/views/AccountDetailView';
 import FileTransactionsView from '@/new-ui/components/navigation/views/FileTransactionsView';
@@ -30,10 +29,22 @@ const AccountsPage: React.FC = () => {
     const params = useParams();
     const [searchParams] = useSearchParams();
     const { accounts } = useAccountsWithStore();
-    const { selectedAccount, selectedFile, selectedTransaction } = useNavigationStore();
+    const { selectedAccount, selectedFile, selectedTransaction, goToAccountList } = useNavigationStore();
 
     // Sync React Router with navigation store using session URL compression
     useSessionRouting();
+
+    // Set up correct breadcrumb when on accounts page
+    React.useEffect(() => {
+        const { accountId } = params;
+        const fileId = searchParams.get('fileId');
+        const transactionId = searchParams.get('transactionId');
+
+        // If we're on the base accounts page (no specific account selected)
+        if (!accountId && !fileId && !transactionId) {
+            goToAccountList();
+        }
+    }, [params, searchParams, goToAccountList]);
 
     // Determine which view to render based on URL params
     const renderContent = () => {
@@ -73,7 +84,6 @@ const AccountsPage: React.FC = () => {
     return (
         <div className="accounts-page">
             <main className="main-content">
-                <Breadcrumb />
                 <div className="main-content-inner">
                     {renderContent()}
                 </div>
