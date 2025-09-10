@@ -48,6 +48,7 @@ export interface NavigationActions {
     selectTransaction: (transaction: Transaction) => void;
     goBack: () => void;
     goToAccountList: () => void;
+    goToHome: () => void;
     toggleSidebar: () => void;
     setSidebarCollapsed: (collapsed: boolean) => void;
 }
@@ -57,10 +58,12 @@ export interface NavigationStore extends NavigationState, NavigationActions { }
 
 // Create the navigation store
 export const useNavigationStore = create<NavigationStore>((set, get) => ({
-    // Initial state
+    // Initial state - start with just Home, let pages set their own breadcrumb
     currentView: 'account-list',
     sidebarCollapsed: false,
-    breadcrumb: [{ label: 'Accounts', action: () => get().goToAccountList(), level: 0 }],
+    breadcrumb: [
+        { label: 'Home', action: () => get().goToHome(), level: 0 }
+    ],
 
     // Actions
     selectAccount: (account: Account) => {
@@ -70,8 +73,9 @@ export const useNavigationStore = create<NavigationStore>((set, get) => ({
             selectedFile: undefined,
             selectedTransaction: undefined,
             breadcrumb: [
-                { label: 'Accounts', action: () => get().goToAccountList(), level: 0 },
-                { label: account.accountName, action: () => get().selectAccount(account), level: 1 }
+                { label: 'Home', action: () => get().goToHome(), level: 0 },
+                { label: 'Accounts', action: () => get().goToAccountList(), level: 1 },
+                { label: account.accountName, action: () => get().selectAccount(account), level: 2 }
             ]
         });
     },
@@ -85,9 +89,10 @@ export const useNavigationStore = create<NavigationStore>((set, get) => ({
             selectedFile: file,
             selectedTransaction: undefined,
             breadcrumb: [
-                { label: 'Accounts', action: () => get().goToAccountList(), level: 0 },
-                { label: selectedAccount.accountName, action: () => get().selectAccount(selectedAccount), level: 1 },
-                { label: file.fileName, action: () => get().selectFile(file), level: 2 }
+                { label: 'Home', action: () => get().goToHome(), level: 0 },
+                { label: 'Accounts', action: () => get().goToAccountList(), level: 1 },
+                { label: selectedAccount.accountName, action: () => get().selectAccount(selectedAccount), level: 2 },
+                { label: file.fileName, action: () => get().selectFile(file), level: 3 }
             ]
         });
     },
@@ -97,18 +102,19 @@ export const useNavigationStore = create<NavigationStore>((set, get) => ({
         if (!selectedAccount) return;
 
         const breadcrumb: BreadcrumbItem[] = [
-            { label: 'Accounts', action: () => get().goToAccountList(), level: 0 },
-            { label: selectedAccount.accountName, action: () => get().selectAccount(selectedAccount), level: 1 }
+            { label: 'Home', action: () => get().goToHome(), level: 0 },
+            { label: 'Accounts', action: () => get().goToAccountList(), level: 1 },
+            { label: selectedAccount.accountName, action: () => get().selectAccount(selectedAccount), level: 2 }
         ];
 
         if (selectedFile) {
-            breadcrumb.push({ label: selectedFile.fileName, action: () => get().selectFile(selectedFile), level: 2 });
+            breadcrumb.push({ label: selectedFile.fileName, action: () => get().selectFile(selectedFile), level: 3 });
         }
 
         breadcrumb.push({
             label: `Transaction ${transaction.transactionId.slice(-6)}`,
             action: () => get().selectTransaction(transaction),
-            level: selectedFile ? 3 : 2
+            level: selectedFile ? 4 : 3
         });
 
         set({
@@ -119,7 +125,7 @@ export const useNavigationStore = create<NavigationStore>((set, get) => ({
     },
 
     goBack: () => {
-        const { currentView, selectedAccount, selectedFile, breadcrumb } = get();
+        const { currentView, selectedAccount, selectedFile } = get();
 
         switch (currentView) {
             case 'transaction-detail':
@@ -148,12 +154,26 @@ export const useNavigationStore = create<NavigationStore>((set, get) => ({
     },
 
     goToAccountList: () => {
+        const newBreadcrumb = [
+            { label: 'Home', action: () => get().goToHome(), level: 0 },
+            { label: 'Accounts', action: () => get().goToAccountList(), level: 1 }
+        ];
         set({
             currentView: 'account-list',
             selectedAccount: undefined,
             selectedFile: undefined,
             selectedTransaction: undefined,
-            breadcrumb: [{ label: 'Accounts', action: () => get().goToAccountList(), level: 0 }]
+            breadcrumb: newBreadcrumb
+        });
+    },
+
+    goToHome: () => {
+        set({
+            currentView: 'account-list', // This doesn't really matter for home
+            selectedAccount: undefined,
+            selectedFile: undefined,
+            selectedTransaction: undefined,
+            breadcrumb: [{ label: 'Home', action: () => get().goToHome(), level: 0 }]
         });
     },
 

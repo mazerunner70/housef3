@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getPortfolioInsights, formatDateRange, PortfolioInsights } from '@/services/PortfolioService';
+import { useNavigationStore } from '@/stores/navigationStore';
 import { Account } from '@/schemas/Account';
 import './HomePage.css';
 
@@ -9,6 +10,12 @@ const HomePage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const navigate = useNavigate();
+    const { goToHome } = useNavigationStore();
+
+    // Set up correct breadcrumb for home page
+    useEffect(() => {
+        goToHome();
+    }, [goToHome]);
 
     useEffect(() => {
         const loadInsights = async () => {
