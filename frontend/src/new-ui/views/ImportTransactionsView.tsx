@@ -39,10 +39,14 @@ const ImportTransactionsView: React.FC = () => {
     // Start realistic import simulation
     importState.startImport(`transactions_${accountName.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}.csv`, accountId);
 
-    // Simulate realistic import progress
+    // Simulate realistic import progress with deterministic increments
     let progress = 0;
+    let incrementCounter = 0;
+    const progressIncrements = [8, 12, 7, 15, 9, 11, 6, 13, 10, 14, 8, 16, 12, 9, 15]; // Predefined increments
     const progressInterval = setInterval(() => {
-      progress += Math.random() * 15 + 5; // Random progress increments
+      const increment = progressIncrements[incrementCounter % progressIncrements.length];
+      progress += increment;
+      incrementCounter++;
 
       if (progress < 30) {
         importState.updateProgress(progress, 'uploading');
@@ -60,7 +64,7 @@ const ImportTransactionsView: React.FC = () => {
           importState.completeImport({
             success: true,
             message: 'Import completed successfully!',
-            transactionCount: Math.floor(Math.random() * 200) + 50,
+            transactionCount: Math.floor((Date.now() % 150) + 50), // Deterministic count based on timestamp
             fileName: `transactions_${accountName.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}.csv`,
             accountName
           });
