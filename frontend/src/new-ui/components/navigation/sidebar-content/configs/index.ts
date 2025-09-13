@@ -5,4 +5,5 @@
 
 export { categoriesConfig } from './categoriesConfig';
 export { defaultConfig } from './defaultConfig';
+export { importConfig } from './importConfig';
 export { transactionsConfig } from './transactionsConfig';

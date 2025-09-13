@@ -1,0 +1,403 @@
+---
+description: Frontend View Component Organization Patterns and Conventions
+globs: frontend/src/new-ui/views/**
+alwaysApply: false
+---
+
+# View Component Organization Conventions
+
+## Overview
+This document defines patterns for organizing View components to improve maintainability, readability, and testability. Views are complex feature components that implement complete workflows and should be decomposed into logical, focused sections.
+
+## View Component Architecture
+
+### What are Views?
+Views are **complex feature components** that can be described as a merge between:
+- **Content Layout Component**: Visual organization and composition of a feature
+- **Set of Hooks**: State management and business logic for the feature
+
+Views sit between Pages (route containers) and Business Components (domain-specific UI) in the component hierarchy.
+
+## Four-Layer Decomposition Pattern
+
+### 1. Custom Hooks Layer (State Management)
+Extract complex state logic into focused custom hooks that handle specific concerns.
+
+**Location**: `/frontend/src/new-ui/hooks/`
+**Naming**: `use{FeatureName}{Concern}.ts`
+
+#### State Management Hook
+```typescript
+// useImportState.ts
+interface ImportState {
+  currentStep: number;
+  importStatus: ImportStatus;
+  errorMessage: string | null;
+  successAlert: ImportResult | null;
+}
+
+const useImportState = () => {
+  // Import workflow state management
+  // Progress tracking, error handling, success states
+  return { currentStep, importStatus, setError, showSuccess };
+};
+```
+
+#### Data Management Hook
+```typescript
+// useAccountsData.ts
+const useAccountsData = () => {
+  // Account fetching, caching, sorting logic
+  // Returns: { accounts, isLoading, error, refetch }
+};
+```
+
+#### Feature Logic Hook
+```typescript
+// useFileUploadLogic.ts
+const useFileUploadLogic = () => {
+  // File validation, upload, processing logic
+  // Modal state management for dialogs
+  return { uploadFile, modalState, validateFile };
+};
+```
+
+### 2. Layout Components Layer (Visual Structure)
+Handle overall page structure, responsive design, and visual organization.
+
+**Location**: `/frontend/src/new-ui/components/business/{feature}/`
+**Naming**: `{Feature}ViewLayout.tsx`, `{Feature}Header.tsx`, `{Feature}MainContent.tsx`
+
+#### View Layout Component
+```typescript
+// ImportViewLayout.tsx
+interface ImportViewLayoutProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+const ImportViewLayout: React.FC<ImportViewLayoutProps> = ({ children }) => {
+  return (
+    <div className="import-transactions-container">
+      <div className="import-content-wrapper">
+        {children}
+      </div>
+    </div>
+  );
+};
+```
+
+#### Header Component
+```typescript
+// ImportHeader.tsx
+interface ImportHeaderProps {
+  importStatus: ImportStatus;
+  onUploadClick: () => void;
+  onHistoryClick: () => void;
+}
+
+const ImportHeader: React.FC<ImportHeaderProps> = ({ importStatus, onUploadClick, onHistoryClick }) => {
+  return (
+    <header className="import-header">
+      <h1>Import Transactions</h1>
+      <div className="import-actions">
+        <button onClick={onUploadClick}>Upload New File</button>
+        <button onClick={onHistoryClick}>View History</button>
+      </div>
+      {importStatus.isImporting && <ImportProgressIndicator status={importStatus} />}
+    </header>
+  );
+};
+```
+
+#### Main Content Component
+```typescript
+// ImportMainContent.tsx
+interface ImportMainContentProps {
+  accounts: AccountForImport[];
+  onImportClick: (accountId: string) => void;
+  onAccountClick: (accountId: string) => void;
+  isLoading: boolean;
+  errorMessage?: string;
+}
+
+const ImportMainContent: React.FC<ImportMainContentProps> = ({ 
+  accounts, 
+  onImportClick, 
+  onAccountClick, 
+  isLoading, 
+  errorMessage 
+}) => {
+  return (
+    <main className="import-main-content">
+      {errorMessage && <ErrorAlert message={errorMessage} />}
+      <CompactAccountsList 
+        accounts={accounts}
+        onImportClick={onImportClick}
+        onAccountClick={onAccountClick}
+        isLoading={isLoading}
+      />
+    </main>
+  );
+};
+```
+
+### 3. Business Components Layer (Feature-Specific UI)
+Handle domain-specific UI elements and interactions.
+
+**Location**: `/frontend/src/new-ui/components/business/{feature}/`
+**Naming**: Follow existing business component conventions
+
+```typescript
+// CompactAccountsList.tsx
+interface CompactAccountsListProps {
+  accounts: AccountForImport[];
+  onImportClick: (accountId: string) => void;
+  onAccountClick: (accountId: string) => void;
+  isLoading?: boolean;
+}
+
+// CompactAccountItem.tsx
+interface CompactAccountItemProps {
+  account: AccountForImport;
+  onImportClick: (accountId: string) => void;
+  onAccountClick: (accountId: string) => void;
+}
+```
+
+### 4. Modal Components Layer (Dialog Management)
+Manage all modals, dialogs, and overlay components for the feature.
+
+**Location**: `/frontend/src/new-ui/components/business/{feature}/`
+**Naming**: `{Feature}Modals.tsx`
+
+```typescript
+// ImportModals.tsx
+interface ImportModalsProps {
+  fileUploadModal: {
+    isOpen: boolean;
+    selectedAccount?: string;
+    onClose: () => void;
+    onUpload: (file: File) => void;
+  };
+  mappingModal: {
+    isOpen: boolean;
+    fileData?: ParsedFileData;
+    onClose: () => void;
+    onComplete: (mapping: FieldMapping) => void;
+  };
+}
+
+const ImportModals: React.FC<ImportModalsProps> = ({ fileUploadModal, mappingModal }) => {
+  return (
+    <>
+      {fileUploadModal.isOpen && (
+        <FileUploadDialog
+          selectedAccount={fileUploadModal.selectedAccount}
+          onClose={fileUploadModal.onClose}
+          onUpload={fileUploadModal.onUpload}
+        />
+      )}
+      {mappingModal.isOpen && (
+        <FieldMappingDialog
+          fileData={mappingModal.fileData}
+          onClose={mappingModal.onClose}
+          onComplete={mappingModal.onComplete}
+        />
+      )}
+    </>
+  );
+};
+```
+
+## Organized View Structure
+
+With this decomposition, Views become clean, organized, and easy to follow:
+
+```typescript
+// ImportTransactionsView.tsx - Clean and organized
+const ImportTransactionsView: React.FC = () => {
+  // === 1. STATE MANAGEMENT SECTION ===
+  const importState = useImportState();
+  const accountsData = useAccountsData();
+  const fileUpload = useFileUploadLogic();
+  
+  // === 2. EVENT HANDLERS SECTION ===
+  const handleImportClick = useCallback((accountId: string) => {
+    fileUpload.startImport(accountId);
+  }, [fileUpload]);
+  
+  const handleAccountClick = useCallback((accountId: string) => {
+    // Navigate to account detail
+  }, []);
+  
+  // === 3. LAYOUT COMPOSITION SECTION ===
+  return (
+    <ImportViewLayout>
+      <ImportHeader 
+        importStatus={importState.importStatus}
+        onUploadClick={fileUpload.openUploadDialog}
+        onHistoryClick={importState.showHistory}
+      />
+      
+      <ImportMainContent
+        accounts={accountsData.accounts}
+        onImportClick={handleImportClick}
+        onAccountClick={handleAccountClick}
+        isLoading={accountsData.isLoading}
+        errorMessage={importState.errorMessage}
+      />
+      
+      <ImportModals
+        fileUploadModal={fileUpload.modalState.upload}
+        mappingModal={fileUpload.modalState.mapping}
+      />
+    </ImportViewLayout>
+  );
+};
+```
+
+## File Organization Structure
+
+```
+frontend/src/new-ui/
+├── views/
+│   └── ImportTransactionsView.tsx          # Main view component (50-100 lines)
+├── hooks/
+│   ├── useImportState.ts                   # State management hook
+│   ├── useAccountsData.ts                  # Data fetching hook
+│   └── useFileUploadLogic.ts               # Feature logic hook
+└── components/business/import/
+    ├── ImportViewLayout.tsx                # Layout structure
+    ├── ImportHeader.tsx                    # Header component
+    ├── ImportMainContent.tsx               # Main content area
+    ├── ImportModals.tsx                    # Modal management
+    ├── CompactAccountsList.tsx             # Business component
+    └── CompactAccountItem.tsx              # Business component
+```
+
+## Benefits of This Structure
+
+### 1. Separation of Concerns
+- **Hooks**: Handle state and business logic
+- **Layout Components**: Handle visual structure and responsive design
+- **Business Components**: Handle feature-specific UI elements
+- **Modal Components**: Handle dialog and overlay management
+
+### 2. Improved Readability
+- Each section has a clear, single responsibility
+- Easy to locate specific functionality
+- Logical flow from state → handlers → layout
+- View component stays under 100 lines
+
+### 3. Better Testability
+- Hooks can be tested independently with `@testing-library/react-hooks`
+- Components have focused, testable interfaces
+- Mock dependencies are clearly defined
+- Easier to write unit tests for specific concerns
+
+### 4. Enhanced Maintainability
+- Changes to state logic only affect hooks
+- UI changes only affect layout/business components
+- New features can be added by composing existing pieces
+- Easier to refactor and optimize individual pieces
+
+### 5. Team Collaboration
+- Different developers can work on hooks vs components without conflicts
+- Clear ownership boundaries for different aspects of the feature
+- Easier code reviews with focused, single-purpose files
+
+## When to Use This Pattern
+
+### Use This Pattern For:
+- ✅ Complex Views with multiple workflows (import, analytics, management)
+- ✅ Views with substantial state management (multi-step processes)
+- ✅ Views with multiple modals/dialogs
+- ✅ Views that compose many business components
+- ✅ Views that will be maintained by multiple developers
+
+### Don't Use This Pattern For:
+- ❌ Simple Views with minimal state (use existing monolithic approach)
+- ❌ Views that are primarily just layout containers
+- ❌ Views with fewer than 200 lines of code
+- ❌ Prototype or temporary Views
+
+## Migration Strategy
+
+### From Monolithic Views
+1. **Identify State Concerns**: Extract useState, useEffect, and business logic into hooks
+2. **Identify Layout Sections**: Break JSX into logical layout components
+3. **Extract Business Components**: Move domain-specific UI into business components
+4. **Consolidate Modals**: Group all modal/dialog logic into modal components
+5. **Refactor Main View**: Compose the new components in the main view
+
+### Example Migration
+```typescript
+// Before: Monolithic (900+ lines)
+const ImportTransactionsView = () => {
+  // 200 lines of state management
+  // 300 lines of event handlers  
+  // 400 lines of JSX rendering
+};
+
+// After: Organized (50 lines)
+const ImportTransactionsView = () => {
+  const importState = useImportState();        // Extracted state
+  const accountsData = useAccountsData();      // Extracted data logic
+  const fileUpload = useFileUploadLogic();     // Extracted feature logic
+  
+  return (
+    <ImportViewLayout>                         // Extracted layout
+      <ImportHeader {...headerProps} />       // Extracted header
+      <ImportMainContent {...contentProps} /> // Extracted content
+      <ImportModals {...modalProps} />        // Extracted modals
+    </ImportViewLayout>
+  );
+};
+```
+
+## Testing Conventions
+
+### Hook Testing
+```typescript
+// useImportState.test.ts
+import { renderHook, act } from '@testing-library/react-hooks';
+import { useImportState } from '../useImportState';
+
+describe('useImportState', () => {
+  it('should initialize with default state', () => {
+    const { result } = renderHook(() => useImportState());
+    expect(result.current.currentStep).toBe(1);
+  });
+});
+```
+
+### Component Testing
+```typescript
+// ImportHeader.test.tsx
+import { render, screen } from '@testing-library/react';
+import { ImportHeader } from '../ImportHeader';
+
+describe('ImportHeader', () => {
+  it('should render upload button', () => {
+    render(<ImportHeader importStatus={mockStatus} onUploadClick={jest.fn()} />);
+    expect(screen.getByText('Upload New File')).toBeInTheDocument();
+  });
+});
+```
+
+### Integration Testing
+```typescript
+// ImportTransactionsView.test.tsx
+import { render, screen } from '@testing-library/react';
+import { ImportTransactionsView } from '../ImportTransactionsView';
+
+describe('ImportTransactionsView', () => {
+  it('should render complete import interface', () => {
+    render(<ImportTransactionsView />);
+    expect(screen.getByText('Import Transactions')).toBeInTheDocument();
+  });
+});
+```
+
+This organization pattern transforms Views from monolithic components into clean, maintainable, and testable compositions of focused pieces.
