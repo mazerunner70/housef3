@@ -46,6 +46,13 @@ export const defaultConfig: SidebarContentConfig = {
                     '/files',
                     '📁',
                     (pathname) => pathname.startsWith('/files')
+                ),
+                createNavItem(
+                    'import',
+                    'Import Transactions',
+                    '/import',
+                    '📥',
+                    (pathname) => pathname.startsWith('/import')
                 )
             ],
             collapsible: false
@@ -88,12 +95,12 @@ export const defaultConfig: SidebarContentConfig = {
                     () => alert('Add Account functionality to be implemented'),
                     '➕'
                 ),
-                createFilterItem(
-                    'import-file',
+                createNavItem(
+                    'import-transactions',
                     'Import Transactions',
-                    '/transactions',
-                    { tab: 'imports' },
-                    '📥'
+                    '/import',
+                    '📥',
+                    (pathname) => pathname.startsWith('/import')
                 )
             ],
             collapsible: false
