@@ -1,0 +1,390 @@
+/* CompactAccountsList.css - Styles for the accounts list container in import workflow */
+
+.compact-accounts-list-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Summary Header */
+.accounts-summary-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: var(--color-background-secondary, #f8fafc);
+    border: 1px solid var(--color-border-light, #e5e7eb);
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+
+.summary-stats {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--color-primary, #3b82f6);
+    line-height: 1;
+}
+
+.stat-label {
+    font-size: 12px;
+    color: var(--color-text-secondary, #6b7280);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-separator {
+    color: var(--color-text-tertiary, #9ca3af);
+    font-size: 14px;
+    margin: 0 4px;
+}
+
+.sort-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--color-text-secondary, #6b7280);
+}
+
+.sort-icon {
+    font-size: 16px;
+}
+
+.sort-text {
+    font-weight: 500;
+}
+
+/* Main Accounts List */
+.compact-accounts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    /* Gap handled by individual items */
+}
+
+/* Loading State */
+.compact-accounts-list-container .loading-state {
+    padding: 60px 20px;
+    text-align: center;
+}
+
+/* Empty State */
+.empty-accounts-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    text-align: center;
+    background: var(--color-background-secondary, #f8fafc);
+    border: 2px dashed var(--color-border-light, #e5e7eb);
+    border-radius: 12px;
+    margin: 20px 0;
+}
+
+.empty-state-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.7;
+}
+
+.empty-state-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--color-text-primary, #111827);
+    margin: 0 0 8px 0;
+}
+
+.empty-state-description {
+    font-size: 16px;
+    color: var(--color-text-secondary, #6b7280);
+    margin: 0 0 24px 0;
+    max-width: 400px;
+    line-height: 1.5;
+}
+
+.create-account-button {
+    padding: 12px 24px;
+    background: var(--color-primary, #3b82f6);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+}
+
+.create-account-button:hover {
+    background: var(--color-primary-dark, #2563eb);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+}
+
+.create-account-button:focus {
+    outline: 2px solid var(--color-primary-light, #93c5fd);
+    outline-offset: 2px;
+}
+
+.create-account-button:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+}
+
+/* Footer Info */
+.accounts-list-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--color-background-tertiary, #f1f5f9);
+    border-radius: 6px;
+    margin-top: 8px;
+}
+
+.footer-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
+.info-icon {
+    font-size: 16px;
+    opacity: 0.8;
+}
+
+.info-text {
+    font-size: 13px;
+    color: var(--color-text-secondary, #6b7280);
+    line-height: 1.4;
+}
+
+.import-stats {
+    display: flex;
+    align-items: center;
+}
+
+.import-stats-text {
+    font-size: 13px;
+    color: var(--color-text-tertiary, #9ca3af);
+    font-weight: 500;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+    .compact-accounts-list-container {
+        max-width: none;
+        margin: 0;
+    }
+
+    .accounts-summary-header {
+        padding: 12px 16px;
+    }
+
+    .summary-stats {
+        gap: 8px;
+    }
+
+    .stat-value {
+        font-size: 18px;
+    }
+
+    .sort-info {
+        font-size: 12px;
+    }
+}
+
+@media (max-width: 768px) {
+    .accounts-summary-header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: stretch;
+    }
+
+    .summary-stats {
+        justify-content: center;
+    }
+
+    .sort-info {
+        justify-content: center;
+        padding-top: 8px;
+        border-top: 1px solid var(--color-border-light, #e5e7eb);
+    }
+
+    .accounts-list-footer {
+        flex-direction: column;
+        gap: 8px;
+        align-items: stretch;
+        text-align: center;
+    }
+
+    .footer-info {
+        justify-content: center;
+    }
+
+    .import-stats {
+        justify-content: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .compact-accounts-list-container {
+        gap: 12px;
+    }
+
+    .accounts-summary-header {
+        padding: 12px;
+        margin-bottom: 4px;
+    }
+
+    .summary-stats {
+        gap: 6px;
+    }
+
+    .stat-separator {
+        display: none;
+    }
+
+    .stat-item {
+        flex: 1;
+        padding: 8px;
+        background: white;
+        border-radius: 6px;
+        border: 1px solid var(--color-border-light, #e5e7eb);
+    }
+
+    .stat-value {
+        font-size: 16px;
+    }
+
+    .stat-label {
+        font-size: 11px;
+    }
+
+    .sort-info {
+        font-size: 11px;
+    }
+
+    .empty-state-icon {
+        font-size: 40px;
+    }
+
+    .empty-state-title {
+        font-size: 18px;
+    }
+
+    .empty-state-description {
+        font-size: 14px;
+    }
+
+    .create-account-button {
+        padding: 10px 20px;
+        font-size: 14px;
+    }
+
+    .accounts-list-footer {
+        padding: 8px 12px;
+    }
+
+    .info-text,
+    .import-stats-text {
+        font-size: 12px;
+    }
+}
+
+/* Accessibility Improvements */
+@media (prefers-reduced-motion: reduce) {
+    .create-account-button {
+        transition: none;
+    }
+
+    .create-account-button:hover {
+        transform: none;
+    }
+}
+
+/* High Contrast Mode Support */
+@media (prefers-contrast: high) {
+
+    .accounts-summary-header,
+    .empty-accounts-state,
+    .accounts-list-footer {
+        border-width: 2px;
+    }
+
+    .create-account-button {
+        border: 2px solid var(--color-primary, #3b82f6);
+    }
+
+    .stat-item {
+        border-width: 2px;
+    }
+}
+
+/* Dark Mode Support (if implemented) */
+@media (prefers-color-scheme: dark) {
+    .accounts-summary-header {
+        background: var(--color-background-secondary-dark, #374151);
+        border-color: var(--color-border-light-dark, #4b5563);
+    }
+
+    .empty-accounts-state {
+        background: var(--color-background-secondary-dark, #374151);
+        border-color: var(--color-border-light-dark, #4b5563);
+    }
+
+    .accounts-list-footer {
+        background: var(--color-background-tertiary-dark, #4b5563);
+    }
+
+    .empty-state-title {
+        color: var(--color-text-primary-dark, #f9fafb);
+    }
+
+    .empty-state-description,
+    .info-text,
+    .import-stats-text {
+        color: var(--color-text-secondary-dark, #d1d5db);
+    }
+
+    .stat-item {
+        background: var(--color-background-primary-dark, #1f2937);
+        border-color: var(--color-border-light-dark, #4b5563);
+    }
+}
+
+/* Performance Optimizations */
+.compact-accounts-list {
+    /* Enable GPU acceleration for smooth scrolling */
+    transform: translateZ(0);
+    will-change: scroll-position;
+}
+
+/* Focus management for keyboard navigation */
+.compact-accounts-list:focus-within {
+    /* Ensure focus is visible when navigating with keyboard */
+    outline: none;
+}
+
+/* Ensure proper spacing and alignment */
+.compact-accounts-list>div[role="listitem"]:last-child .compact-account-item {
+    margin-bottom: 0;
+}

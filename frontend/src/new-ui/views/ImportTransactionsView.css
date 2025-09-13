@@ -1,75 +1,345 @@
-/* Import Transactions View Styles - Stage 1 */
+/* Import Transactions View Styles - Enhanced for Stage 1 */
 
 .import-main-content {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
 }
 
-/* Error Container */
+/* Enhanced Error Container */
 .import-error-container {
-  background: white;
-  border: 1px solid #fecaca;
-  border-radius: 8px;
-  padding: 1rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  background: var(--color-error-background, #fef2f2);
+  border: 1px solid var(--color-error-border, #fecaca);
+  border-radius: 12px;
+  padding: 24px;
+  margin: 16px 0;
+  box-shadow: 0 4px 6px rgba(220, 38, 38, 0.1);
 }
 
 .error-content {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex: 1;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
 }
 
 .error-icon {
-  font-size: 1.5rem;
+  font-size: 24px;
   flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.error-details {
+  flex: 1;
 }
 
 .error-details h4 {
-  margin: 0 0 0.25rem 0;
-  color: #dc2626;
-  font-size: 1rem;
+  margin: 0 0 8px 0;
+  color: var(--color-error-text, #dc2626);
+  font-size: 18px;
   font-weight: 600;
+  line-height: 1.3;
 }
 
-.error-details p {
+.error-message {
+  margin: 0 0 8px 0;
+  color: var(--color-error-text-secondary, #7f1d1d);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.error-suggestion {
   margin: 0;
-  color: #7f1d1d;
-  font-size: 0.875rem;
+  color: var(--color-error-text-tertiary, #991b1b);
+  font-size: 13px;
+  line-height: 1.4;
+  opacity: 0.8;
+}
+
+.error-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .retry-button {
-  background-color: #dc2626;
-  color: white;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
   border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
-  font-size: 0.875rem;
-  font-weight: 500;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s ease;
-  flex-shrink: 0;
+  transition: all 0.2s ease-in-out;
+  min-width: 120px;
+  justify-content: center;
 }
 
-.retry-button:hover {
-  background-color: #b91c1c;
+.retry-button.primary {
+  background: var(--color-error, #dc2626);
+  color: white;
+}
+
+.retry-button.primary:hover:not(:disabled) {
+  background: var(--color-error-dark, #b91c1c);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(220, 38, 38, 0.3);
+}
+
+.retry-button.secondary {
+  background: white;
+  color: var(--color-error, #dc2626);
+  border: 1px solid var(--color-error-border, #fecaca);
+}
+
+.retry-button.secondary:hover:not(:disabled) {
+  background: var(--color-error-background, #fef2f2);
+  border-color: var(--color-error, #dc2626);
+  transform: translateY(-1px);
+}
+
+.retry-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.loading-spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Success Container */
+.import-success-container {
+  background: var(--color-success-background, #f0fdf4);
+  border: 1px solid var(--color-success-border, #bbf7d0);
+  border-radius: 12px;
+  padding: 20px;
+  margin: 16px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  box-shadow: 0 4px 6px rgba(34, 197, 94, 0.1);
+  position: relative;
+}
+
+.success-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex: 1;
+}
+
+.success-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.success-details {
+  flex: 1;
+}
+
+.success-details h4 {
+  margin: 0 0 8px 0;
+  color: var(--color-success-text, #16a34a);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.success-message {
+  margin: 0 0 6px 0;
+  color: var(--color-success-text-secondary, #15803d);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.success-stats {
+  margin: 0;
+  color: var(--color-success-text-tertiary, #166534);
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+.close-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: var(--color-success-text-tertiary, #166534);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s ease-in-out;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-button:hover {
+  background: var(--color-success-border, #bbf7d0);
+  color: var(--color-success-text, #16a34a);
+}
+
+.close-button:focus {
+  outline: 2px solid var(--color-success, #22c55e);
+  outline-offset: 2px;
 }
 
 /* Responsive Design */
+@media (max-width: 1024px) {
+  .import-main-content {
+    padding: 0 16px;
+  }
+}
+
 @media (max-width: 768px) {
-  .import-error-container {
+  .import-main-content {
+    padding: 0 12px;
+  }
+
+  .import-error-container,
+  .import-success-container {
+    padding: 16px;
+    margin: 12px 0;
+  }
+
+  .error-content,
+  .success-content {
     flex-direction: column;
     align-items: stretch;
     text-align: center;
+    gap: 12px;
+  }
+
+  .error-actions {
+    justify-content: center;
   }
 
   .retry-button {
+    flex: 1;
+    min-width: auto;
+  }
+
+  .close-button {
+    position: static;
     align-self: center;
-    width: fit-content;
+    margin-top: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .import-main-content {
+    padding: 0 8px;
+  }
+
+  .import-error-container,
+  .import-success-container {
+    padding: 12px;
+    margin: 8px 0;
+  }
+
+  .error-details h4,
+  .success-details h4 {
+    font-size: 16px;
+  }
+
+  .error-message,
+  .success-message {
+    font-size: 13px;
+  }
+
+  .error-suggestion,
+  .success-stats {
+    font-size: 12px;
+  }
+
+  .error-actions {
+    flex-direction: column;
+  }
+
+  .retry-button {
+    padding: 12px 16px;
+  }
+}
+
+/* Accessibility Improvements */
+@media (prefers-reduced-motion: reduce) {
+
+  .retry-button,
+  .close-button {
+    transition: none;
+  }
+
+  .retry-button:hover:not(:disabled) {
+    transform: none;
+  }
+
+  .loading-spinner {
+    animation: none;
+  }
+}
+
+/* High Contrast Mode Support */
+@media (prefers-contrast: high) {
+
+  .import-error-container,
+  .import-success-container {
+    border-width: 2px;
+  }
+
+  .retry-button {
+    border-width: 2px;
+  }
+}
+
+/* Dark Mode Support (if implemented) */
+@media (prefers-color-scheme: dark) {
+  .import-error-container {
+    background: var(--color-error-background-dark, #450a0a);
+    border-color: var(--color-error-border-dark, #7f1d1d);
+  }
+
+  .import-success-container {
+    background: var(--color-success-background-dark, #052e16);
+    border-color: var(--color-success-border-dark, #166534);
+  }
+
+  .error-details h4 {
+    color: var(--color-error-text-dark, #fca5a5);
+  }
+
+  .success-details h4 {
+    color: var(--color-success-text-dark, #86efac);
+  }
+
+  .error-message,
+  .error-suggestion {
+    color: var(--color-error-text-secondary-dark, #fecaca);
+  }
+
+  .success-message,
+  .success-stats {
+    color: var(--color-success-text-secondary-dark, #bbf7d0);
   }
 }
