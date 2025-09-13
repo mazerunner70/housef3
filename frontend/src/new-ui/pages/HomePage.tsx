@@ -40,8 +40,8 @@ const HomePage: React.FC = () => {
     };
 
     const handleViewStaleAccounts = () => {
-        // Navigate to accounts page with a filter or highlight for stale accounts
-        navigate('/accounts?filter=stale');
+        // Navigate to import page to help users update their accounts
+        navigate('/import');
     };
 
     if (loading) {
