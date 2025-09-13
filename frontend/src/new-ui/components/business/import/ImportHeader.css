@@ -1,0 +1,111 @@
+/* Import Header Styles */
+
+.import-header {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e5e7eb;
+}
+
+.import-header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.import-header-text {
+    flex: 1;
+}
+
+.import-header-title {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.875rem;
+    font-weight: 600;
+    color: #111827;
+}
+
+.import-header-subtitle {
+    margin: 0;
+    font-size: 1rem;
+    color: #6b7280;
+    line-height: 1.5;
+}
+
+.import-header-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-shrink: 0;
+}
+
+.import-action-button {
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.import-action-button.primary {
+    background-color: #3b82f6;
+    color: white;
+    border-color: #3b82f6;
+}
+
+.import-action-button.primary:hover:not(:disabled) {
+    background-color: #2563eb;
+    border-color: #2563eb;
+}
+
+.import-action-button.secondary {
+    background-color: white;
+    color: #374151;
+    border-color: #d1d5db;
+}
+
+.import-action-button.secondary:hover:not(:disabled) {
+    background-color: #f9fafb;
+    border-color: #9ca3af;
+}
+
+.import-action-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .import-header {
+        padding: 1rem;
+    }
+
+    .import-header-content {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .import-header-actions {
+        justify-content: stretch;
+    }
+
+    .import-action-button {
+        flex: 1;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .import-header-title {
+        font-size: 1.5rem;
+    }
+
+    .import-header-actions {
+        flex-direction: column;
+    }
+}

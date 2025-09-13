@@ -5,6 +5,7 @@ import NewUILayout from './new-ui/layouts/NewUILayout';
 import HomePage from './new-ui/pages/HomePage';
 import AccountsPage from './new-ui/pages/AccountsPage';
 import TransactionsPage from '@/new-ui/pages/TransactionsPage';
+import ImportTransactionsPage from '@/new-ui/pages/ImportTransactionsPage';
 import AnalyticsView from './new-ui/views/AnalyticsView';
 import FZIPManagementView from './new-ui/views/FZIPManagementView';
 import {
@@ -128,6 +129,9 @@ function App() {
         <Route path="transactions/:transactionId" element={<TransactionDetailPage />} />
         <Route path="transactions/:transactionId/edit" element={<TransactionEditPage />} />
         <Route path="transactions/compare" element={<TransactionComparePage />} />
+
+        {/* Import */}
+        <Route path="import" element={<ImportTransactionsPage />} />
 
         {/* Files */}
         <Route path="files" element={<FilesPage />} />

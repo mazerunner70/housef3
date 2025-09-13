@@ -1,0 +1,122 @@
+---
+description: Frontend Contextual Sidebar development patterns and conventions
+globs: frontend/src/new-ui/components/navigation/**
+alwaysApply: false
+---
+
+# Contextual Sidebar System
+
+## Architecture
+The contextual sidebar system provides route-aware navigation that adapts based on the current page context. It uses a configuration-driven approach to eliminate code duplication and ensure consistency.
+
+## Core Components
+- **`ContextualSidebar.tsx`** - Main container that routes to appropriate sidebar content based on current route
+- **`BaseSidebarContent.tsx`** - Reusable base component that processes configuration objects
+- **`SidebarConfigFactory.ts`** - Factory functions for creating and processing sidebar configurations
+- **`sidebar-content/types.ts`** - TypeScript interfaces for the configuration system
+
+## Development Patterns
+
+### Configuration-Based Approach (Preferred)
+Use declarative configuration objects with `BaseSidebarContent` for simple, static sidebars:
+
+```typescript
+// configs/featureConfig.ts
+export const featureConfig: SidebarContentConfig = {
+    sections: [
+        {
+            type: 'navigation',
+            title: 'Feature Navigation',
+            items: [
+                createNavItem('item-id', 'Display Label', '/path', '🔗'),
+                createActionItem('action-id', 'Action Label', () => doAction(), '⚡')
+            ]
+        }
+    ]
+};
+
+// FeatureSidebarContent.tsx
+const FeatureSidebarContent: React.FC<Props> = ({ sidebarCollapsed }) => {
+    return <BaseSidebarContent config={featureConfig} sidebarCollapsed={sidebarCollapsed} />;
+};
+```
+
+### Custom Components (When Needed)
+For complex dynamic behavior that requires runtime data or complex state management:
+
+```typescript
+const DynamicSidebarContent: React.FC<Props> = ({ sidebarCollapsed }) => {
+    const { data } = useDataStore();
+    
+    const sections = useMemo(() => {
+        return generateDynamicSections(data);
+    }, [data]);
+
+    return (
+        <>
+            {sections.map((section, index) => (
+                <SidebarSection key={`${section.type}-${index}`} section={section} sidebarCollapsed={sidebarCollapsed} />
+            ))}
+        </>
+    );
+};
+```
+
+## File Organization
+```
+new-ui/components/navigation/
+├── ContextualSidebar.tsx          # Main routing component
+├── sidebar-content/
+│   ├── types.ts                   # TypeScript interfaces
+│   ├── BaseSidebarContent.tsx     # Reusable base component
+│   ├── SidebarConfigFactory.ts    # Factory functions
+│   ├── configs/                   # Configuration objects
+│   │   ├── accountsConfig.ts
+│   │   ├── transactionsConfig.ts
+│   │   └── importConfig.ts
+│   ├── AccountsSidebarContent.tsx # Route-specific components
+│   ├── TransactionsSidebarContent.tsx
+│   └── ImportSidebarContent.tsx
+├── SidebarSection.tsx             # Section rendering component
+└── SidebarItem.tsx               # Individual item component
+```
+
+## Naming Conventions
+- Sidebar content components: `{Context}SidebarContent.tsx`
+- Configuration files: `configs/{context}Config.ts`
+- Use descriptive, consistent naming across all sidebar components
+
+## Section Types
+- **`navigation`** - Primary navigation links and menu items
+- **`context`** - Contextual information and secondary navigation
+- **`actions`** - Action buttons and quick actions
+
+## Integration Steps
+1. Create configuration object (if using config-based approach)
+2. Create sidebar content component
+3. Register in `ContextualSidebar.tsx` route switching logic
+4. Test both collapsed and expanded states
+
+## State Management
+- Use `useNavigationStore` for sidebar-related state (collapsed/expanded, selected items)
+- Access route information via `useLocation` for context-aware behavior
+- Integrate with domain-specific stores for dynamic content
+
+## Accessibility Requirements
+- Implement proper ARIA attributes for navigation sections
+- Support keyboard navigation (Tab, Arrow keys, Enter/Space, Escape)
+- Provide screen reader support with descriptive labels
+- Ensure proper heading hierarchy and semantic HTML
+
+## Performance Considerations
+- Use `useMemo` for expensive section generation
+- Consider lazy loading for data-heavy sidebars
+- Cache static configurations to avoid recreating objects
+
+## Testing
+- Test both collapsed and expanded sidebar states
+- Verify route-based content switching
+- Test keyboard navigation and accessibility features
+- Mock external dependencies and stores appropriately
+
+For detailed implementation patterns, see `sidebar-content/sidebar-conventions.md`.
