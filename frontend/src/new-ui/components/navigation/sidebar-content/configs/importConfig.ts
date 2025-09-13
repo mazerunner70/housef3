@@ -1,6 +1,8 @@
 /**
- * Configuration for Import Transactions page sidebar content
- * Provides import-specific navigation and tools
+ * Import sidebar configuration for Stage 1 implementation
+ * 
+ * Provides navigation, context, and actions specific to the import workflow
+ * Uses the established configuration-based approach with BaseSidebarContent
  */
 
 import { SidebarContentConfig } from '../types';
@@ -8,64 +10,44 @@ import { createNavItem, createActionItem } from '../SidebarConfigFactory';
 
 export const importConfig: SidebarContentConfig = {
     sections: [
+        // Navigation Section - Import Tools
         {
             type: 'navigation',
             title: 'Import Tools',
             items: [
                 createNavItem(
-                    'import-overview',
-                    'Import Overview',
-                    '/import',
+                    'upload-file',
+                    'Upload File',
+                    '/import/upload',
                     '📤',
-                    (pathname) => pathname === '/import'
+                    // Custom active check for upload functionality
+                    (pathname) => pathname.includes('/import/upload')
                 ),
                 createNavItem(
                     'import-history',
                     'Import History',
                     '/import/history',
-                    '📊'
+                    '📊',
+                    (pathname) => pathname.includes('/import/history')
                 ),
                 createNavItem(
                     'field-mappings',
                     'Field Mappings',
                     '/import/mappings',
-                    '🗂️'
+                    '🗂️',
+                    (pathname) => pathname.includes('/import/mappings')
                 ),
                 createNavItem(
                     'import-settings',
                     'Import Settings',
                     '/import/settings',
-                    '⚙️'
+                    '⚙️',
+                    (pathname) => pathname.includes('/import/settings')
                 )
-            ],
-            collapsible: false
+            ]
         },
-        {
-            type: 'context',
-            title: 'Account Management',
-            items: [
-                createNavItem(
-                    'view-accounts',
-                    'View All Accounts',
-                    '/accounts',
-                    '🏦'
-                ),
-                createNavItem(
-                    'stale-accounts',
-                    'Accounts Needing Updates',
-                    '/accounts?filter=stale',
-                    '⚠️'
-                ),
-                createNavItem(
-                    'recent-imports',
-                    'Recent Imports',
-                    '/files?filter=recent',
-                    '📁'
-                )
-            ],
-            collapsible: true,
-            collapsed: false
-        },
+
+        // Actions Section - Quick Actions
         {
             type: 'actions',
             title: 'Quick Actions',
@@ -74,28 +56,81 @@ export const importConfig: SidebarContentConfig = {
                     'add-account',
                     'Add New Account',
                     () => {
-                        // TODO: Implement add account modal/dialog
-                        alert('Add Account functionality coming soon!');
+                        console.log('Add new account clicked');
+                        // TODO: Implement account creation dialog
+                        alert('Account creation functionality coming soon!');
                     },
-                    '➕'
+                    '🏦'
                 ),
                 createActionItem(
                     'refresh-accounts',
                     'Refresh Account Data',
                     () => {
-                        // TODO: Implement account refresh
+                        console.log('Refresh accounts clicked');
+                        // TODO: Implement account data refresh
                         window.location.reload();
                     },
                     '🔄'
                 ),
                 createNavItem(
-                    'help-import',
-                    'Import Help & Guides',
-                    '/help/import',
-                    '❓'
+                    'view-accounts',
+                    'View All Accounts',
+                    '/accounts',
+                    '📈'
                 )
-            ],
-            collapsible: false
+            ]
         }
-    ]
+    ],
+
+    // Dynamic sections for import status and recent activity
+    dynamicSections: () => {
+        const sections = [];
+
+        // Context Section - Import Status & Recent Activity
+        // This will be enhanced in Stage 2 with real import status data
+        const contextItems = [];
+
+        // Placeholder for import status (Stage 1)
+        contextItems.push({
+            id: 'import-status-placeholder',
+            label: 'No Active Imports',
+            icon: '⏸️',
+            onClick: () => {
+                console.log('Import status clicked');
+            }
+        });
+
+        // Placeholder for recent imports (Stage 1)
+        contextItems.push({
+            id: 'recent-imports-placeholder',
+            label: 'View Recent Imports',
+            icon: '📋',
+            onClick: () => {
+                console.log('Recent imports clicked');
+                // TODO: Navigate to import history
+            }
+        });
+
+        // Add help and documentation
+        contextItems.push({
+            id: 'import-help',
+            label: 'Import Help & Guide',
+            icon: '❓',
+            onClick: () => {
+                console.log('Import help clicked');
+                // TODO: Open help documentation
+                alert('Import help documentation coming soon!');
+            }
+        });
+
+        sections.push({
+            type: 'context' as const,
+            title: 'Import Status',
+            items: contextItems
+        });
+
+        return sections;
+    }
 };
+
+export default importConfig;

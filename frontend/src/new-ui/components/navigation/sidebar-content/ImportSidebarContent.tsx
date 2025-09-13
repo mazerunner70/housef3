@@ -1,21 +1,29 @@
+/**
+ * ImportSidebarContent - Contextual sidebar for import workflow
+ * 
+ * Stage 1 Implementation:
+ * - Uses configuration-based approach with BaseSidebarContent
+ * - Provides import-specific navigation and tools
+ * - Dynamic sections for import status and recent activity
+ * - Integration with existing navigation system
+ * - Follows established sidebar conventions
+ */
+
 import React from 'react';
-import BaseSidebarContent from '@/new-ui/components/navigation/sidebar-content/BaseSidebarContent';
-import { importConfig } from '@/new-ui/components/navigation/sidebar-content/configs/importConfig';
+import BaseSidebarContent from './BaseSidebarContent';
+import importConfig from './configs/importConfig';
 
 interface ImportSidebarContentProps {
     sidebarCollapsed: boolean;
 }
 
 /**
- * ImportSidebarContent - Contextual sidebar for import transactions workflow
- * 
- * Features:
- * - Import-specific navigation and tools
- * - Quick actions for account management
- * - Context-aware content based on import status
- * - Follows established sidebar patterns
+ * Sidebar content component for import workflow pages
+ * Leverages the established configuration-based approach to eliminate code duplication
  */
-const ImportSidebarContent: React.FC<ImportSidebarContentProps> = ({ sidebarCollapsed }) => {
+const ImportSidebarContent: React.FC<ImportSidebarContentProps> = ({
+    sidebarCollapsed
+}) => {
     return (
         <BaseSidebarContent
             sidebarCollapsed={sidebarCollapsed}
