@@ -1,5 +1,6 @@
 import React from 'react';
 import { Account } from '@/schemas/Account';
+import { Decimal } from 'decimal.js';
 import './SimpleAccountsList.css';
 
 interface SimpleAccountsListProps {
@@ -26,13 +27,12 @@ const SimpleAccountsList: React.FC<SimpleAccountsListProps> = ({
     isLoading = false
 }) => {
     // Split currency for decimal alignment
-    const formatCurrencyParts = (amount: any, currency: string = 'USD') => {
+    const formatCurrencyParts = (amount: Decimal, currency: string = 'USD') => {
         try {
-            const numValue = typeof amount?.toNumber === 'function' ? amount.toNumber() : parseFloat(amount);
             const formatted = new Intl.NumberFormat('en-US', {
                 style: 'currency',
                 currency: currency
-            }).format(numValue);
+            }).format(amount.toNumber());
 
             // Split on decimal point
             const parts = formatted.split('.');

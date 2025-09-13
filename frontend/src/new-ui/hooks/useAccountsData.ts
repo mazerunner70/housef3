@@ -2,20 +2,33 @@ import { useEffect } from 'react';
 import useAccountsWithStore, { Account } from '@/stores/useAccountsStore';
 
 /**
- * Custom hook for managing account data specifically for the import workflow
+ * Enhanced custom hook for managing account data specifically for the import workflow
  * 
- * Features:
- * - Fetches accounts on mount
- * - Sorts accounts by last import date (oldest first) to prioritize accounts needing imports
- * - Accounts with no imports appear first, followed by oldest imports
- * - Provides loading and error states
- * - Refetch capability for manual refresh
+ * Stage 1 Features:
+ * - Fetches accounts on mount with comprehensive error handling
+ * - Sorts accounts by updatedAt (oldest first) to prioritize accounts needing attention
+ * - Accounts that haven't been updated recently appear first for import workflow
+ * - Provides loading and error states with retry capability
+ * - Enhanced metadata for import workflow optimization
  */
+
+export interface AccountForImport extends Account {
+    // All fields from Account schema are available
+    // Key fields for import workflow:
+    // - accountId, accountName, accountType, institution
+    // - balance, currency, isActive
+    // - lastTransactionDate, importsStartDate, importsEndDate
+    // - updatedAt (for sorting by import priority)
+}
+
 interface UseAccountsDataReturn {
-    accounts: Account[];
+    accounts: AccountForImport[];
     isLoading: boolean;
     error: string | null;
     refetch: () => Promise<void>;
+    accountCount: number;
+    activeAccountCount: number;
+    lastUpdated: number | null;
 }
 
 const useAccountsData = (): UseAccountsDataReturn => {
@@ -29,25 +42,39 @@ const useAccountsData = (): UseAccountsDataReturn => {
 
     // Fetch accounts on component mount
     useEffect(() => {
+        console.log('useAccountsData: Fetching accounts for import workflow...');
         fetchAccounts();
     }, [fetchAccounts]);
 
-    // Sort accounts by last import date (oldest first) for import prioritization
-    // Accounts with no imports (null/undefined importsEndDate) should appear first
-    const sortedAccounts = [...rawAccounts].sort((a, b) => {
+    // Sort accounts by updatedAt (oldest first) for import workflow priority
+    // Accounts that haven't been updated recently should be prioritized for imports
+    const sortedAccounts: AccountForImport[] = [...rawAccounts].sort((a, b) => {
+        // Primary sort: updatedAt (oldest first)
+        const aUpdated = a.updatedAt || 0;
+        const bUpdated = b.updatedAt || 0;
+
+        if (aUpdated !== bUpdated) {
+            return aUpdated - bUpdated;
+        }
+
+        // Secondary sort: accounts with no imports first
         const aLastImport = a.importsEndDate || 0;
         const bLastImport = b.importsEndDate || 0;
 
-        // If both have no imports, sort by updatedAt as fallback
-        if (aLastImport === 0 && bLastImport === 0) {
-            return (a.updatedAt || 0) - (b.updatedAt || 0);
+        if (aLastImport !== bLastImport) {
+            return aLastImport - bLastImport;
         }
 
-        // Accounts with no imports come first (0 is less than any timestamp)
-        return aLastImport - bLastImport;
+        // Tertiary sort: by account name for consistency
+        return a.accountName.localeCompare(b.accountName);
     });
 
+    // Calculate metadata for import workflow
+    const accountCount = sortedAccounts.length;
+    const activeAccountCount = sortedAccounts.filter(account => account.isActive).length;
+
     const refetch = async () => {
+        console.log('useAccountsData: Manual refetch requested');
         clearError();
         await fetchAccounts(true); // Force refresh
     };
@@ -56,7 +83,10 @@ const useAccountsData = (): UseAccountsDataReturn => {
         accounts: sortedAccounts,
         isLoading,
         error,
-        refetch
+        refetch,
+        accountCount,
+        activeAccountCount,
+        lastUpdated: Date.now() // Placeholder - will be enhanced in future versions
     };
 };
 
