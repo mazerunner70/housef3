@@ -20,8 +20,9 @@ App.tsx (Router Setup)
 ### Layer Responsibilities
 1. **Layout**: `NewUILayout` provides app shell with navigation and `<Outlet />` for router content
 2. **Pages**: Route-level containers that compose business components, follow `{Feature}Page.tsx` naming
-3. **Business Components**: Domain-specific, can use domain terminology, not reusable across domains
-4. **UI Components**: Domain-agnostic, reusable, no business terminology, composable only with other UI components
+3. **Views**: Complex feature components that merge layout + hooks logic (see frontend-view-conventions.mdc)
+4. **Business Components**: Domain-specific, can use domain terminology, not reusable across domains
+5. **UI Components**: Domain-agnostic, reusable, no business terminology, composable only with other UI components
 
 ## File Structure
 - frontend/src/components/ - OLD components (no new files)
@@ -38,7 +39,7 @@ App.tsx (Router Setup)
   - new-ui/hooks/ - Custom React hooks
   - new-ui/styles/ - Global styles/themes
   - new-ui/utils/ - UI-specific utility functions
-  - new-ui/views/ - Complex view components (higher-level than pages)
+  - new-ui/views/ - Complex view components (see frontend-view-conventions.mdc for organization patterns)
 - frontend/src/services/ - API clients and external service integrations
   - Service classes for backend API communication
   - Authentication service, account service, transaction service, etc.
@@ -160,6 +161,11 @@ App.tsx (Router Setup)
 - Use consistent import grouping and ordering for maintainability
 - Use path aliases for internal imports: `@/` maps to `src/` (configured in tsconfig.app.json)
 - Example: `import { Button } from '@/new-ui/components/ui/Button'`
+
+## Contextual Sidebar System
+- Route-aware navigation that adapts based on current page context
+- Uses configuration-driven approach to eliminate code duplication
+- **See frontend-sidebar-conventions.mdc for detailed patterns and implementation guidelines**
 
 ## Accessibility Rules
 - Visible, non-interactive elements with click handlers must have at least one keyboard listener
