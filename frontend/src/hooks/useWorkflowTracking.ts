@@ -47,7 +47,7 @@ export function useWorkflowTracking(
     // Generate unique hook instance ID for logging - only once per hook instance
     const hookInstanceId = useRef<string | null>(null);
     const isFirstRender = useRef(true);
-
+    // Using Math.random() for non-security debugging ID generation - safe for this context
     if (!hookInstanceId.current) {
         hookInstanceId.current = `hook_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     }

@@ -85,67 +85,96 @@ class AnalyticsEventConsumer(BaseEventConsumer):
     def process_event(self, event: BaseEvent) -> None:
         """Trigger analytics processing for the event"""
         try:
+            self._log_processing_start(event)
+            
             event_type = event.event_type
             priority = self.PRIORITY_MAP.get(event_type, 3)
-            analytics_types = self.ANALYTICS_TYPE_MAP.get(event_type, [])
-            
-            logger.info(f"Processing {event_type} event {event.event_id} for user {event.user_id}")
-            logger.info(f"Priority: {priority}, Analytics types: {analytics_types}")
-            
-            # If no specific analytics types, refresh all types
-            if not analytics_types:
-                analytics_types = [t.value for t in AnalyticType]
-            else:
-                # Convert string values to AnalyticType enum values
-                analytics_types = [t for t in analytics_types]
+            analytics_types = self._get_analytics_types(event_type)
             
             # Create status records for each analytics type
-            success_count = 0
-            for analytic_type_str in analytics_types:
-                try:
-                    # Convert string to AnalyticType enum
-                    analytic_type = AnalyticType(analytic_type_str.lower())
-                    
-                    status_record = AnalyticsProcessingStatus(
-                        userId=event.user_id,
-                        analyticType=analytic_type,
-                        lastComputedDate=None,  # Force recomputation
-                        dataAvailableThrough=None,
-                        computationNeeded=True,
-                        processingPriority=priority
-                    )
-                    
-                    store_analytics_status(status_record)
-                    success_count += 1
-                    
-                    logger.debug(f"Created analytics status for {analytic_type.value}")
-                    
-                except ValueError as e:
-                    logger.warning(f"Invalid analytic type '{analytic_type_str}': {str(e)}")
-                except Exception as e:
-                    logger.error(f"Failed to create status for {analytic_type_str}: {str(e)}")
+            success_count = self._create_analytics_status_records(event, analytics_types, priority)
             
-            logger.info(f"Successfully queued {success_count} analytics types for processing")
-            
-            # Publish vote event for coordination (if this is a file deletion request)
-            if event_type == 'file.deletion.requested' and ENABLE_EVENT_PUBLISHING:
-                self._publish_deletion_vote(event, 'proceed')
-            
-            # Log event details for monitoring
+            self._log_processing_success(success_count)
+            self._handle_deletion_vote_if_needed(event, 'proceed')
             self._log_event_metrics(event, success_count, len(analytics_types))
                 
         except Exception as e:
-            logger.error(f"Error processing analytics event {event.event_id}: {str(e)}")
-            logger.error(f"Stacktrace: {traceback.format_exc()}")
-            
-            # Publish deny vote for coordination (if this is a file deletion request)
-            if event.event_type == 'file.deletion.requested' and ENABLE_EVENT_PUBLISHING:
-                try:
-                    self._publish_deletion_vote(event, 'deny', str(e))
-                except Exception as vote_error:
-                    logger.error(f"Failed to publish deletion vote: {str(vote_error)}")
-            
+            self._handle_processing_error(event, e)
             raise
+    
+    def _log_processing_start(self, event: BaseEvent) -> None:
+        """Log the start of event processing"""
+        event_type = event.event_type
+        priority = self.PRIORITY_MAP.get(event_type, 3)
+        analytics_types = self.ANALYTICS_TYPE_MAP.get(event_type, [])
+        
+        logger.info(f"Processing {event_type} event {event.event_id} for user {event.user_id}")
+        logger.info(f"Priority: {priority}, Analytics types: {analytics_types}")
+    
+    def _get_analytics_types(self, event_type: str) -> List[str]:
+        """Get analytics types for the given event type"""
+        analytics_types = self.ANALYTICS_TYPE_MAP.get(event_type, [])
+        
+        # If no specific analytics types, refresh all types
+        if not analytics_types:
+            return [t.value for t in AnalyticType]
+        
+        return analytics_types
+    
+    def _create_analytics_status_records(self, event: BaseEvent, analytics_types: List[str], priority: int) -> int:
+        """Create analytics status records for all analytics types"""
+        success_count = 0
+        
+        for analytic_type_str in analytics_types:
+            try:
+                # Convert string to AnalyticType enum
+                analytic_type = AnalyticType(analytic_type_str.lower())
+                
+                status_record = AnalyticsProcessingStatus(
+                    userId=event.user_id,
+                    analyticType=analytic_type,
+                    lastComputedDate=None,  # Force recomputation
+                    dataAvailableThrough=None,
+                    computationNeeded=True,
+                    processingPriority=priority
+                )
+                
+                store_analytics_status(status_record)
+                success_count += 1
+                
+                logger.debug(f"Created analytics status for {analytic_type.value}")
+                
+            except ValueError as e:
+                logger.warning(f"Invalid analytic type '{analytic_type_str}': {str(e)}")
+            except Exception as e:
+                logger.error(f"Failed to create status for {analytic_type_str}: {str(e)}")
+        
+        return success_count
+    
+    def _log_processing_success(self, success_count: int) -> None:
+        """Log successful processing"""
+        logger.info(f"Successfully queued {success_count} analytics types for processing")
+    
+    def _handle_deletion_vote_if_needed(self, event: BaseEvent, decision: str, reason: Optional[str] = None) -> None:
+        """Handle deletion vote publishing if this is a file deletion request"""
+        if event.event_type == 'file.deletion.requested' and ENABLE_EVENT_PUBLISHING:
+            try:
+                self._publish_deletion_vote(event, decision, reason)
+            except Exception as vote_error:
+                logger.error(f"Failed to publish deletion vote: {str(vote_error)}")
+                if decision == 'deny':
+                    # Don't re-raise vote errors during error handling
+                    pass
+                else:
+                    raise
+    
+    def _handle_processing_error(self, event: BaseEvent, error: Exception) -> None:
+        """Handle processing errors with consistent logging and voting"""
+        logger.error(f"Error processing analytics event {event.event_id}: {str(error)}")
+        logger.error(f"Stacktrace: {traceback.format_exc()}")
+        
+        # Publish deny vote for coordination (if this is a file deletion request)
+        self._handle_deletion_vote_if_needed(event, 'deny', str(error))
     
     def _log_event_metrics(self, event: BaseEvent, success_count: int, total_count: int):
         """Log metrics for monitoring and debugging"""
