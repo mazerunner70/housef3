@@ -169,6 +169,31 @@ export const validateApiResponse = async <T>(
             throw error;
         }
 
+        // Check if this is an HTTP error from ApiClient before attempting validation
+        if (error instanceof Error && error.message?.includes('Request failed:')) {
+            // Extract status code from error message (e.g., "Request failed: 404 Not Found")
+            const statusMatch = error.message.match(/Request failed: (\d+)/);
+            if (statusMatch) {
+                const statusCode = parseInt(statusMatch[1]);
+
+                // Log HTTP error with structured data (use info level for expected 404s)
+                const logLevel = statusCode === 404 ? 'info' : 'error';
+                logger[logLevel](`HTTP ${statusCode} error in ${context}`, {
+                    context,
+                    statusCode,
+                    httpError: error.message,
+                    apiEndpoint: apiMetadata?.endpoint,
+                    apiMethod: apiMetadata?.method,
+                    apiService: apiMetadata?.service,
+                    ...collectErrorData(error)
+                });
+
+                // Re-throw the HTTP error as-is for proper handling by calling code
+                // The calling service should handle specific status codes (like 404) appropriately
+                throw error;
+            }
+        }
+
         // Handle other API errors with structured logging
         logger.error(`API error in ${context}`, {
             context,

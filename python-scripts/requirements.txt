@@ -1,0 +1,10 @@
+# Scripts Virtual Environment Requirements
+# For diagnostic tools and utility scripts
+
+# AWS SDK
+boto3>=1.40.0
+
+# Optional: Add other diagnostic/utility dependencies as needed
+# requests>=2.31.0
+# pandas>=2.0.0  # For data analysis scripts
+# click>=8.0.0   # For CLI tools

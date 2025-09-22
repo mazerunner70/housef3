@@ -41,9 +41,13 @@ except Exception as e:
 
 # Import after path fixing
 from consumers.base_consumer import BaseEventConsumer
-from models.events import BaseEvent
+from models.events import BaseEvent, FileDeletionVoteEvent
 from models.analytics import AnalyticType, AnalyticsProcessingStatus
 from utils.db_utils import store_analytics_status
+from services.event_service import event_service
+
+# Shadow mode configuration
+ENABLE_EVENT_PUBLISHING = os.environ.get('ENABLE_EVENT_PUBLISHING', 'true').lower() == 'true'
 
 
 class AnalyticsEventConsumer(BaseEventConsumer):
@@ -56,7 +60,8 @@ class AnalyticsEventConsumer(BaseEventConsumer):
         'transactions.deleted': 2,  # Medium priority - data removal
         'account.created': 3,       # Low priority - no transactions yet
         'account.updated': 3,       # Low priority - metadata changes only
-        'account.deleted': 1        # High priority - major data change
+        'account.deleted': 1,       # High priority - major data change
+        'file.deletion.requested': 2  # Medium priority - prepare for file deletion
     }
     
     # Analytics types affected by each event type
@@ -66,7 +71,8 @@ class AnalyticsEventConsumer(BaseEventConsumer):
         'transactions.deleted': ['cash_flow', 'category_trends', 'financial_health'],
         'account.created': [],  # No analytics until transactions exist
         'account.updated': [],  # Metadata only, no financial impact
-        'account.deleted': ['cash_flow', 'category_trends', 'financial_health', 'account_efficiency']
+        'account.deleted': ['cash_flow', 'category_trends', 'financial_health', 'account_efficiency'],
+        'file.deletion.requested': ['cash_flow', 'category_trends', 'financial_health', 'account_efficiency']
     }
     
     def __init__(self):
@@ -121,12 +127,24 @@ class AnalyticsEventConsumer(BaseEventConsumer):
             
             logger.info(f"Successfully queued {success_count} analytics types for processing")
             
+            # Publish vote event for coordination (if this is a file deletion request)
+            if event_type == 'file.deletion.requested' and ENABLE_EVENT_PUBLISHING:
+                self._publish_deletion_vote(event, 'proceed')
+            
             # Log event details for monitoring
             self._log_event_metrics(event, success_count, len(analytics_types))
                 
         except Exception as e:
             logger.error(f"Error processing analytics event {event.event_id}: {str(e)}")
             logger.error(f"Stacktrace: {traceback.format_exc()}")
+            
+            # Publish deny vote for coordination (if this is a file deletion request)
+            if event.event_type == 'file.deletion.requested' and ENABLE_EVENT_PUBLISHING:
+                try:
+                    self._publish_deletion_vote(event, 'deny', str(e))
+                except Exception as vote_error:
+                    logger.error(f"Failed to publish deletion vote: {str(vote_error)}")
+            
             raise
     
     def _log_event_metrics(self, event: BaseEvent, success_count: int, total_count: int):
@@ -146,6 +164,35 @@ class AnalyticsEventConsumer(BaseEventConsumer):
             
         except Exception as e:
             logger.warning(f"Failed to log metrics: {str(e)}")
+    
+    def _publish_deletion_vote(self, original_event: BaseEvent, decision: str, reason: Optional[str] = None):
+        """Publish deletion vote event for coordination"""
+        try:
+            if not original_event.data or not original_event.data.get('fileId'):
+                logger.error("Cannot publish deletion vote: missing fileId in original event")
+                return
+            
+            file_id = original_event.data['fileId']
+            request_id = original_event.data.get('requestId') or original_event.correlation_id or original_event.event_id
+            
+            vote_event = FileDeletionVoteEvent(
+                user_id=original_event.user_id,
+                file_id=file_id,
+                request_id=request_id,
+                voter=self.get_voter_id(),
+                decision=decision,
+                reason=reason
+            )
+            
+            success = event_service.publish_event(vote_event)
+            if success:
+                logger.info(f"Published deletion vote for file {file_id}, decision: {decision}")
+            else:
+                logger.error(f"Failed to publish deletion vote for file {file_id}")
+                
+        except Exception as e:
+            logger.error(f"Error publishing deletion vote: {str(e)}")
+            raise
 
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:

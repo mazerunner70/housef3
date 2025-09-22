@@ -320,6 +320,135 @@ class CategoryRuleCreatedEvent(BaseEvent):
         )
 
 
+@dataclass
+class FileDeletionRequestedEvent(BaseEvent):
+    """L1 -> L2,L3: Published when file deletion is requested - triggers voting"""
+    
+    def __init__(self, user_id: str, file_id: str, account_id: Optional[str] = None, 
+                 file_name: Optional[str] = None, transaction_count: int = 0,
+                 request_id: Optional[str] = None, **kwargs):
+        super().__init__(
+            event_id=str(uuid.uuid4()),
+            event_type='file.deletion.requested',
+            event_version='1.0',
+            timestamp=int(datetime.now().timestamp() * 1000),
+            source='file.service',
+            user_id=user_id,
+            correlation_id=request_id,
+            data={
+                'fileId': file_id,
+                'accountId': account_id,
+                'fileName': file_name,
+                'transactionCount': transaction_count,
+                'requestId': request_id,
+                **kwargs
+            }
+        )
+
+
+@dataclass
+class FileDeletionVoteEvent(BaseEvent):
+    """L2,L3 -> L4: Published by voters to approve/deny file deletion"""
+    
+    def __init__(self, user_id: str, file_id: str, request_id: str, voter: str, 
+                 decision: str, reason: Optional[str] = None, **kwargs):
+        super().__init__(
+            event_id=str(uuid.uuid4()),
+            event_type='file.deletion.vote',
+            event_version='1.0',
+            timestamp=int(datetime.now().timestamp() * 1000),
+            source=f'{voter.replace("_", ".")}.service',
+            user_id=user_id,
+            correlation_id=request_id,
+            data={
+                'fileId': file_id,
+                'requestId': request_id,
+                'voter': voter,
+                'decision': decision,  # 'proceed' or 'deny'
+                'reason': reason,
+                **kwargs
+            }
+        )
+
+
+@dataclass
+class FileDeletionApprovedEvent(BaseEvent):
+    """L4 -> L5: Published when all voters approve file deletion"""
+    
+    def __init__(self, user_id: str, file_id: str, request_id: str, 
+                 approved_by: List[str], all_votes: Dict[str, Any], **kwargs):
+        super().__init__(
+            event_id=str(uuid.uuid4()),
+            event_type='file.deletion.approved',
+            event_version='1.0',
+            timestamp=int(datetime.now().timestamp() * 1000),
+            source='deletion.aggregator',
+            user_id=user_id,
+            correlation_id=request_id,
+            data={
+                'fileId': file_id,
+                'requestId': request_id,
+                'approvedBy': approved_by,
+                'allVotes': all_votes,
+                **kwargs
+            }
+        )
+
+
+@dataclass
+class FileDeletionDeniedEvent(BaseEvent):
+    """L4 -> API: Published when any voter denies file deletion"""
+    
+    def __init__(self, user_id: str, file_id: str, request_id: str, 
+                 denied_by: str, reason: str, all_votes: Dict[str, Any], **kwargs):
+        super().__init__(
+            event_id=str(uuid.uuid4()),
+            event_type='file.deletion.denied',
+            event_version='1.0',
+            timestamp=int(datetime.now().timestamp() * 1000),
+            source='deletion.aggregator',
+            user_id=user_id,
+            correlation_id=request_id,
+            data={
+                'fileId': file_id,
+                'requestId': request_id,
+                'deniedBy': denied_by,
+                'reason': reason,
+                'allVotes': all_votes,
+                **kwargs
+            }
+        )
+
+
+@dataclass
+class FileDeletedEvent(BaseEvent):
+    """L5 -> All: Published after file is actually deleted - for cleanup and notifications"""
+    
+    def __init__(self, user_id: str, file_id: str, account_id: Optional[str] = None,
+                 file_name: Optional[str] = None, transaction_count: int = 0,
+                 request_id: Optional[str] = None, **kwargs):
+        super().__init__(
+            event_id=str(uuid.uuid4()),
+            event_type='file.deleted',
+            event_version='1.0',
+            timestamp=int(datetime.now().timestamp() * 1000),
+            source='deletion.executor',
+            user_id=user_id,
+            correlation_id=request_id,
+            data={
+                'fileId': file_id,
+                'accountId': account_id,
+                'fileName': file_name,
+                'transactionCount': transaction_count,
+                'requestId': request_id,
+                **kwargs
+            }
+        )
+
+
+# ConsumerCompletionEvent removed - replaced with voting pattern
+
+
 # =============================================================================
 # EXPORT/IMPORT EVENTS
 # =============================================================================

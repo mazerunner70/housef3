@@ -6,6 +6,7 @@ import HomePage from './new-ui/pages/HomePage';
 import AccountsPage from './new-ui/pages/AccountsPage';
 import TransactionsPage from '@/new-ui/pages/TransactionsPage';
 import ImportTransactionsPage from '@/new-ui/pages/ImportTransactionsPage';
+import AccountFileUploadPage from '@/new-ui/pages/AccountFileUploadPage';
 import AnalyticsView from './new-ui/views/AnalyticsView';
 import FZIPManagementView from './new-ui/views/FZIPManagementView';
 import {
@@ -132,6 +133,7 @@ function App() {
 
         {/* Import */}
         <Route path="import" element={<ImportTransactionsPage />} />
+        <Route path="import/account/:accountId" element={<AccountFileUploadPage />} />
 
         {/* Files */}
         <Route path="files" element={<FilesPage />} />

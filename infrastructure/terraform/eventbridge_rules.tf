@@ -15,26 +15,39 @@ resource "aws_cloudwatch_event_rule" "analytics_events" {
   event_bus_name = aws_cloudwatch_event_bus.app_events.name
 
   event_pattern = jsonencode({
-    source = ["transaction.service", "account.service"]
-    detail-type = [
-      "file.processed",
-      "transactions.created",
-      "transaction.updated",
-      "transactions.deleted",
-      "account.created",
-      "account.updated",
-      "account.deleted"
-    ]
-    # Only process successful file processing events
-    detail = {
-      data = {
-        processingStatus = [
-          {
-            "anything-but" : "failed"
+    "$or" : [
+      {
+        # File processing events - only successful ones
+        source = ["transaction.service"]
+        detail-type = ["file.processed"]
+        detail = {
+          data = {
+            processingStatus = [
+              {
+                "anything-but" : "failed"
+              }
+            ]
           }
+        }
+      },
+      {
+        # Transaction and account events - all of them
+        source = ["transaction.service", "account.service"]
+        detail-type = [
+          "transactions.created",
+          "transaction.updated", 
+          "transactions.deleted",
+          "account.created",
+          "account.updated",
+          "account.deleted"
         ]
+      },
+      {
+        # File deletion events - all of them
+        source = ["file.service"]
+        detail-type = ["file.deletion.requested"]
       }
-    }
+    ]
   })
 
   tags = {
@@ -46,28 +59,62 @@ resource "aws_cloudwatch_event_rule" "analytics_events" {
 }
 
 # =============================================================================
-# CATEGORIZATION CONSUMER RULES  
+# FILE PROCESSOR CONSUMER RULES
 # =============================================================================
 
-# Rule for categorization events - captures transaction creation events for auto-categorization
-resource "aws_cloudwatch_event_rule" "categorization_events" {
-  name           = "${var.project_name}-${var.environment}-categorization-events"
-  description    = "Route transaction creation events for categorization"
+# Rule for file upload events - captures file uploads for processing
+resource "aws_cloudwatch_event_rule" "file_processor_events" {
+  name           = "${var.project_name}-${var.environment}-file-processor-events"
+  description    = "Route file upload events for processing"
   event_bus_name = aws_cloudwatch_event_bus.app_events.name
 
   event_pattern = jsonencode({
     source      = ["transaction.service"]
-    detail-type = ["transactions.created"]
-    # Only process events with actual transactions
-    detail = {
-      data = {
-        transactionCount = [
-          {
-            "numeric" : [">", 0]
+    detail-type = ["file.uploaded"]
+    # Process all file upload events
+  })
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+    Purpose     = "file-processor-event-routing"
+  }
+}
+
+# =============================================================================
+# CATEGORIZATION CONSUMER RULES  
+# =============================================================================
+
+# Rule for categorization events - captures file processing events for auto-categorization
+resource "aws_cloudwatch_event_rule" "categorization_events" {
+  name           = "${var.project_name}-${var.environment}-categorization-events"
+  description    = "Route file processing events for categorization"
+  event_bus_name = aws_cloudwatch_event_bus.app_events.name
+
+  event_pattern = jsonencode({
+    "$or" : [
+      {
+        # File processing events from transaction service
+        source = ["transaction.service"]
+        detail-type = ["file.processed"]
+        detail = {
+          data = {
+            processingStatus = ["success"]
+            transactionCount = [
+              {
+                "numeric" : [">", 0]
+              }
+            ]
           }
-        ]
+        }
+      },
+      {
+        # File deletion events from file service
+        source = ["file.service"]
+        detail-type = ["file.deletion.requested"]
       }
-    }
+    ]
   })
 
   tags = {
@@ -100,6 +147,124 @@ resource "aws_cloudwatch_event_rule" "category_rule_events" {
     Project     = var.project_name
     ManagedBy   = "terraform"
     Purpose     = "category-rule-event-routing"
+  }
+}
+
+# =============================================================================
+# FILE DELETION CONSUMER RULES
+# =============================================================================
+
+# Rule for file deletion coordination events
+resource "aws_cloudwatch_event_rule" "file_deletion_events" {
+  name           = "${var.project_name}-${var.environment}-file-deletion-events"
+  description    = "Route file deletion coordination events"
+  event_bus_name = aws_cloudwatch_event_bus.app_events.name
+
+  event_pattern = jsonencode({
+    source      = ["transaction.service", "consumer.service"]
+    detail-type = ["file.deletion.requested", "consumer.completion"]
+    # Process all file deletion requests and consumer completion events
+    "$or" : [
+      {
+        detail-type = ["file.deletion.requested"]
+      },
+      {
+        detail-type = ["consumer.completion"]
+        detail = {
+          data = {
+            originalEventType = ["file.deletion.requested"]
+          }
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+    Purpose     = "file-deletion-event-routing"
+  }
+}
+
+# =============================================================================
+# GENERIC VOTE AGGREGATOR CONSUMER RULES
+# =============================================================================
+
+# Rule for vote aggregation events - captures voting requests and votes
+resource "aws_cloudwatch_event_rule" "vote_aggregator_events" {
+  name           = "${var.project_name}-${var.environment}-vote-aggregator-events"
+  description    = "Route voting-related events for aggregation and decision making"
+  event_bus_name = aws_cloudwatch_event_bus.app_events.name
+
+  event_pattern = jsonencode({
+    source = ["file.service", "consumer.service", "analytics.manager.service", "category.manager.service"]
+    detail-type = [
+      "file.deletion.requested",
+      "file.deletion.vote"
+    ]
+    # Process all voting-related events
+  })
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+    Purpose     = "vote-aggregator-event-routing"
+  }
+}
+
+# =============================================================================
+# FILE DELETION EXECUTOR CONSUMER RULES
+# =============================================================================
+
+# Rule for file deletion executor events - captures approval events
+resource "aws_cloudwatch_event_rule" "file_deletion_executor_events" {
+  name           = "${var.project_name}-${var.environment}-file-deletion-executor-events"
+  description    = "Route file deletion approval events for execution"
+  event_bus_name = aws_cloudwatch_event_bus.app_events.name
+
+  event_pattern = jsonencode({
+    source      = ["vote.aggregator"]
+    detail-type = ["file.deletion.approved"]
+    # Process only approved deletion events
+  })
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+    Purpose     = "file-deletion-executor-event-routing"
+  }
+}
+
+# =============================================================================
+# WORKFLOW TRACKING CONSUMER RULES
+# =============================================================================
+
+# Rule for workflow tracking events - captures all deletion-related events for progress tracking
+resource "aws_cloudwatch_event_rule" "workflow_tracking_events" {
+  name           = "${var.project_name}-${var.environment}-workflow-tracking-events"
+  description    = "Route deletion-related events for workflow progress tracking"
+  event_bus_name = aws_cloudwatch_event_bus.app_events.name
+
+  event_pattern = jsonencode({
+    source = ["transaction.service", "file.service", "analytics.manager.service", "category.manager.service", "vote.aggregator"]
+    detail-type = [
+      "file.deletion.requested",
+      "file.deletion.vote",
+      "file.deletion.approved", 
+      "file.deletion.denied",
+      "file.deletion.completed",
+      "file.deletion.failed"
+    ]
+  })
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+    Purpose     = "workflow-tracking-event-routing"
   }
 }
 
@@ -276,6 +441,11 @@ output "analytics_rule_arn" {
   value       = aws_cloudwatch_event_rule.analytics_events.arn
 }
 
+output "file_processor_rule_arn" {
+  description = "ARN of the file processor events rule"
+  value       = aws_cloudwatch_event_rule.file_processor_events.arn
+}
+
 output "categorization_rule_arn" {
   description = "ARN of the categorization events rule"
   value       = aws_cloudwatch_event_rule.categorization_events.arn
@@ -294,4 +464,24 @@ output "notification_rule_arn" {
 output "monitoring_rule_arn" {
   description = "ARN of the monitoring events rule"
   value       = aws_cloudwatch_event_rule.monitoring_events.arn
+}
+
+output "file_deletion_rule_arn" {
+  description = "ARN of the file deletion events rule"
+  value       = aws_cloudwatch_event_rule.file_deletion_events.arn
+}
+
+output "vote_aggregator_rule_arn" {
+  description = "ARN of the vote aggregator EventBridge rule"
+  value       = aws_cloudwatch_event_rule.vote_aggregator_events.arn
+}
+
+output "file_deletion_executor_rule_arn" {
+  description = "ARN of the file deletion executor EventBridge rule"
+  value       = aws_cloudwatch_event_rule.file_deletion_executor_events.arn
+}
+
+output "workflow_tracking_rule_arn" {
+  description = "ARN of the workflow tracking EventBridge rule"
+  value       = aws_cloudwatch_event_rule.workflow_tracking_events.arn
 } 
