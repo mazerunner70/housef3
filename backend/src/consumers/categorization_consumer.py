@@ -38,10 +38,14 @@ except Exception as e:
 
 # Import after path fixing
 from consumers.base_consumer import BaseEventConsumer
-from models.events import BaseEvent
+from models.events import BaseEvent, FileDeletionVoteEvent
 from models.category import CategorySuggestionStrategy
 from services.category_rule_engine import CategoryRuleEngine
+from services.event_service import event_service
 from utils.db_utils import list_categories_by_user_from_db, get_transactions_table
+
+# Event publishing configuration
+ENABLE_EVENT_PUBLISHING = os.environ.get('ENABLE_EVENT_PUBLISHING', 'true').lower() == 'true'
 
 
 class CategorizationEventConsumer(BaseEventConsumer):
@@ -49,7 +53,8 @@ class CategorizationEventConsumer(BaseEventConsumer):
     
     # Event types that should trigger categorization
     CATEGORIZATION_EVENT_TYPES = {
-        'file.processed'  # New transactions from file uploads
+        'file.processed',        # New transactions from file uploads
+        'file.deletion.requested'  # Process before file deletion
     }
     
     def __init__(self):
@@ -96,10 +101,22 @@ class CategorizationEventConsumer(BaseEventConsumer):
             
             # Log results for monitoring
             self._log_categorization_metrics(event, results)
+            
+            # Publish vote event for coordination (if this is a file deletion request)
+            if event_type == 'file.deletion.requested' and ENABLE_EVENT_PUBLISHING:
+                self._publish_deletion_vote(event, 'proceed')
                 
         except Exception as e:
             logger.error(f"Error processing categorization event {event.event_id}: {str(e)}")
             logger.error(f"Stacktrace: {traceback.format_exc()}")
+            
+            # Publish deny vote for coordination (if this is a file deletion request)
+            if event.event_type == 'file.deletion.requested' and ENABLE_EVENT_PUBLISHING:
+                try:
+                    self._publish_deletion_vote(event, 'deny', str(e))
+                except Exception as vote_error:
+                    logger.error(f"Failed to publish deletion vote: {str(vote_error)}")
+            
             raise
     
     def _extract_transaction_ids(self, event: BaseEvent) -> List[str]:
@@ -113,6 +130,27 @@ class CategorizationEventConsumer(BaseEventConsumer):
                 transaction_ids = event.data.get('transactionIds', [])
                 logger.info(f"Extracted {len(transaction_ids)} transaction IDs from file.processed event")
                 return transaction_ids
+            elif event.event_type == 'file.deletion.requested':
+                # For file deletion, get all transactions for the file
+                if event.data is None:
+                    logger.warning("Event data is None")
+                    return []
+                file_id = event.data.get('fileId')
+                if not file_id:
+                    logger.warning("No fileId in file.deletion.requested event")
+                    return []
+                
+                # Get all transactions for this file
+                from utils.db_utils import list_file_transactions
+                import uuid
+                try:
+                    transactions = list_file_transactions(uuid.UUID(file_id))
+                    transaction_ids = [str(tx.transaction_id) for tx in transactions]
+                    logger.info(f"Extracted {len(transaction_ids)} transaction IDs from file {file_id} for deletion processing")
+                    return transaction_ids
+                except Exception as e:
+                    logger.error(f"Error getting transactions for file {file_id}: {str(e)}")
+                    return []
             
             # Add handling for other event types as needed
             logger.warning(f"Unknown event type for transaction extraction: {event.event_type}")
@@ -216,6 +254,35 @@ class CategorizationEventConsumer(BaseEventConsumer):
             
         except Exception as e:
             logger.warning(f"Failed to log categorization metrics: {str(e)}")
+    
+    def _publish_deletion_vote(self, original_event: BaseEvent, decision: str, reason: Optional[str] = None):
+        """Publish deletion vote event for coordination"""
+        try:
+            if not original_event.data or not original_event.data.get('fileId'):
+                logger.error("Cannot publish deletion vote: missing fileId in original event")
+                return
+            
+            file_id = original_event.data['fileId']
+            request_id = original_event.data.get('requestId') or original_event.correlation_id or original_event.event_id
+            
+            vote_event = FileDeletionVoteEvent(
+                user_id=original_event.user_id,
+                file_id=file_id,
+                request_id=request_id,
+                voter=self.get_voter_id(),
+                decision=decision,
+                reason=reason
+            )
+            
+            success = event_service.publish_event(vote_event)
+            if success:
+                logger.info(f"Published deletion vote for file {file_id}, decision: {decision}")
+            else:
+                logger.error(f"Failed to publish deletion vote for file {file_id}")
+                
+        except Exception as e:
+            logger.error(f"Error publishing deletion vote: {str(e)}")
+            raise
 
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -260,4 +327,4 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'error': 'Categorization consumer failed',
                 'message': str(e)
             })
-        } 
+        }

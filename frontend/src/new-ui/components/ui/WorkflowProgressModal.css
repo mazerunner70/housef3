@@ -1,0 +1,487 @@
+/* Generic Operation Progress Modal Styles */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.operation-progress-modal {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: background-color 0.2s;
+}
+
+.close-button:hover {
+  background-color: #f3f4f6;
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+/* Progress Section */
+.progress-section {
+  margin-bottom: 24px;
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 8px;
+  background-color: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-bar {
+  height: 100%;
+  background-color: var(--primary-color, #3b82f6);
+  transition: width 0.3s ease;
+  border-radius: 4px;
+}
+
+.progress-text {
+  text-align: center;
+  font-size: 14px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+/* Status Section */
+.status-section {
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.status-badge.blue {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.status-badge.green {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.status-badge.orange {
+  background-color: #fed7aa;
+  color: #c2410c;
+}
+
+.status-badge.red {
+  background-color: #fecaca;
+  color: #dc2626;
+}
+
+.status-badge.gray {
+  background-color: #f3f4f6;
+  color: #4b5563;
+}
+
+.step-description {
+  margin: 0;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+/* Time Section */
+.time-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background-color: #f8fafc;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.time-label {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.time-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f2937;
+}
+
+/* Step Indicator */
+.step-indicator {
+  margin-bottom: 24px;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 8px 0;
+}
+
+.step:last-child {
+  margin-bottom: 0;
+}
+
+.step-number {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  margin-right: 12px;
+  background-color: #e5e7eb;
+  color: #6b7280;
+  transition: all 0.3s ease;
+}
+
+.step.active .step-number {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.step.completed .step-number {
+  background-color: #10b981;
+  color: white;
+}
+
+.step.failed .step-number {
+  background-color: #ef4444;
+  color: white;
+}
+
+.step .step-description {
+  flex: 1;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.step.active .step-description {
+  color: #1f2937;
+  font-weight: 500;
+}
+
+/* Message States */
+.success-message,
+.error-message,
+.denied-message,
+.cancelled-message,
+.error-state {
+  text-align: center;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.success-message {
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.error-message,
+.denied-message,
+.error-state {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
+.cancelled-message {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.success-icon,
+.error-icon,
+.denied-icon,
+.cancelled-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.success-message h4,
+.error-message h4,
+.denied-message h4,
+.cancelled-message h4,
+.error-state h4 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.success-message h4 {
+  color: #166534;
+}
+
+.error-message h4,
+.denied-message h4,
+.error-state h4 {
+  color: #dc2626;
+}
+
+.cancelled-message h4 {
+  color: #4b5563;
+}
+
+.success-message p,
+.error-message p,
+.denied-message p,
+.cancelled-message p,
+.error-state p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+/* Modal Footer */
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.cancel-button,
+.retry-button,
+.close-button-footer {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid;
+}
+
+.cancel-button {
+  background-color: #fef2f2;
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.cancel-button:hover {
+  background-color: #fee2e2;
+}
+
+.retry-button,
+.close-button-footer {
+  background-color: #f8fafc;
+  color: #4b5563;
+  border-color: #e2e8f0;
+}
+
+.retry-button:hover,
+.close-button-footer:hover {
+  background-color: #f1f5f9;
+}
+
+/* Percent Mode Styles */
+.operation-progress-modal.percent-mode {
+  max-width: 400px;
+}
+
+.percent-progress-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 20px 0;
+}
+
+.progress-circle {
+  position: relative;
+  display: inline-block;
+}
+
+.progress-ring {
+  transform: rotate(-90deg);
+}
+
+.progress-ring-background {
+  transition: stroke-dashoffset 0.3s ease;
+}
+
+.progress-ring-progress {
+  transition: stroke-dashoffset 0.5s ease;
+  stroke-linecap: round;
+}
+
+.progress-text-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.progress-percentage {
+  display: block;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1;
+}
+
+.progress-status {
+  display: block;
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.time-remaining-simple {
+  text-align: center;
+  font-size: 14px;
+  color: #6b7280;
+  margin: 16px 0;
+}
+
+/* Simple Status Messages for Percent Mode */
+.success-message-simple,
+.error-message-simple,
+.denied-message-simple {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 16px 0;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.success-message-simple {
+  background-color: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.error-message-simple,
+.denied-message-simple {
+  background-color: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.success-message-simple .success-icon,
+.error-message-simple .error-icon,
+.denied-message-simple .denied-icon {
+  font-size: 16px;
+}
+
+/* Compact footer for percent mode */
+.operation-progress-modal.percent-mode .modal-footer {
+  padding: 12px 24px;
+}
+
+.operation-progress-modal.percent-mode .cancel-button,
+.operation-progress-modal.percent-mode .close-button-footer {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+/* Responsive Design */
+@media (max-width: 640px) {
+  .operation-progress-modal {
+    width: 95%;
+    margin: 20px;
+  }
+
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding: 16px;
+  }
+
+  .step {
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .step-number {
+    margin-right: 0;
+    margin-bottom: 8px;
+  }
+
+  /* Percent mode responsive */
+  .operation-progress-modal.percent-mode {
+    max-width: 350px;
+  }
+
+  .progress-ring {
+    width: 100px;
+    height: 100px;
+  }
+
+  .progress-percentage {
+    font-size: 20px;
+  }
+}

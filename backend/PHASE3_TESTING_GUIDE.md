@@ -122,9 +122,8 @@ aws events put-events --entries '[
 **Scenario**: Upload a transaction file and verify complete event flow.
 
 ```bash
-# 1. Enable shadow mode for testing
+# 1. Enable event publishing for testing
 export ENABLE_EVENT_PUBLISHING=true
-export ENABLE_DIRECT_TRIGGERS=true
 
 # 2. Upload a test file through the UI or API
 # 3. Monitor CloudWatch logs for event flow
