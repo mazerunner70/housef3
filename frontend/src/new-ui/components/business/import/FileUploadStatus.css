@@ -1,0 +1,212 @@
+/* FileUploadStatus Styles */
+
+.file-upload-status {
+    margin-bottom: 0;
+}
+
+.status-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #111827;
+    margin: 0 0 1rem 0;
+}
+
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.status-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+}
+
+.status-card:hover {
+    background-color: #f3f4f6;
+    border-color: #d1d5db;
+}
+
+.status-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.files-icon {
+    filter: hue-rotate(200deg);
+}
+
+.transactions-icon {
+    filter: hue-rotate(120deg);
+}
+
+.date-icon {
+    filter: hue-rotate(60deg);
+}
+
+.status-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.status-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+}
+
+.status-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #111827;
+    line-height: 1.25;
+    word-break: break-word;
+}
+
+/* Loading States */
+.status-card.loading {
+    background-color: #f9fafb;
+    border-color: #e5e7eb;
+    cursor: default;
+}
+
+.status-card.loading:hover {
+    background-color: #f9fafb;
+    border-color: #e5e7eb;
+}
+
+.status-icon-skeleton {
+    width: 1.5rem;
+    height: 1.5rem;
+    background-color: #e5e7eb;
+    border-radius: 0.25rem;
+    flex-shrink: 0;
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.status-label-skeleton {
+    height: 0.75rem;
+    background-color: #e5e7eb;
+    border-radius: 0.125rem;
+    margin-bottom: 0.5rem;
+    width: 80%;
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.status-value-skeleton {
+    height: 1rem;
+    background-color: #e5e7eb;
+    border-radius: 0.125rem;
+    width: 60%;
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+}
+
+/* Empty State */
+.empty-state-message {
+    margin-top: 1rem;
+    padding: 1rem;
+    background-color: #f0f9ff;
+    border: 1px solid #e0f2fe;
+    border-radius: 0.5rem;
+    text-align: center;
+}
+
+.empty-state-message p {
+    margin: 0;
+    color: #0c4a6e;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .status-grid {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+
+    .status-card {
+        padding: 0.75rem;
+        gap: 0.5rem;
+    }
+
+    .status-icon {
+        font-size: 1.25rem;
+    }
+
+    .status-label {
+        font-size: 0.6875rem;
+    }
+
+    .status-value {
+        font-size: 0.875rem;
+    }
+
+    .status-title {
+        font-size: 1rem;
+        margin-bottom: 0.75rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .status-card {
+        flex-direction: column;
+        text-align: center;
+        gap: 0.5rem;
+        padding: 0.75rem 0.5rem;
+    }
+
+    .status-icon {
+        font-size: 1.5rem;
+    }
+
+    .status-content {
+        width: 100%;
+    }
+
+    .status-label {
+        margin-bottom: 0.125rem;
+    }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .status-card {
+        border-width: 2px;
+        border-color: #374151;
+    }
+
+    .status-card:hover {
+        border-color: #111827;
+    }
+
+    .status-label {
+        color: #374151;
+    }
+
+    .status-value {
+        color: #000000;
+    }
+}

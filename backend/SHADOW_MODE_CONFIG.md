@@ -1,6 +1,8 @@
-# Shadow Mode Configuration Guide
+# Shadow Mode Configuration Guide [DEPRECATED]
 
-This guide explains how to configure environment variables to control the event-driven architecture deployment modes.
+**NOTE: Shadow mode has been removed. The system now operates in pure event-driven mode.**
+
+This document is kept for historical reference. The system previously supported shadow mode to allow gradual migration from direct processing to event-driven architecture.
 
 ## Environment Variables
 

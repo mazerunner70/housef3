@@ -190,12 +190,12 @@ resource "aws_s3_bucket_notification" "file_upload_notification" {
   bucket = aws_s3_bucket.file_storage.id
 
   lambda_function {
-    lambda_function_arn = aws_lambda_function.file_processor.arn
+    lambda_function_arn = aws_lambda_function.s3_event_handler.arn
     events              = ["s3:ObjectCreated:*"]
     filter_suffix       = "" # Process all file types
   }
 
-  depends_on = [aws_lambda_permission.allow_s3]
+  depends_on = [aws_lambda_permission.allow_s3_event_handler]
 }
 
 # Outputs for the file storage resources

@@ -52,6 +52,7 @@ ANALYTICS_DATA_TABLE = os.environ.get('ANALYTICS_DATA_TABLE', 'housef3-analytics
 ANALYTICS_STATUS_TABLE = os.environ.get('ANALYTICS_STATUS_TABLE', 'housef3-analytics-status')
 FZIP_JOBS_TABLE = os.environ.get('FZIP_JOBS_TABLE')
 USER_PREFERENCES_TABLE = os.environ.get('USER_PREFERENCES_TABLE')
+WORKFLOWS_TABLE = os.environ.get('WORKFLOWS_TABLE')
 
 # Initialize table resources lazily
 _accounts_table = None
@@ -63,11 +64,12 @@ _analytics_status_table = None
 _categories_table = None
 _fzip_jobs_table = None
 _user_preferences_table = None
+_workflows_table = None
 
 def initialize_tables():
     """Initialize all DynamoDB table resources."""
     global _transactions_table, _accounts_table, _files_table, _file_maps_table
-    global _analytics_data_table, _analytics_status_table, _categories_table, _fzip_jobs_table, _user_preferences_table, dynamodb
+    global _analytics_data_table, _analytics_status_table, _categories_table, _fzip_jobs_table, _user_preferences_table, _workflows_table, dynamodb
     
     # Re-initialize DynamoDB resource
     dynamodb = boto3.resource('dynamodb')
@@ -91,6 +93,8 @@ def initialize_tables():
         _fzip_jobs_table = dynamodb.Table(FZIP_JOBS_TABLE)
     if USER_PREFERENCES_TABLE:
         _user_preferences_table = dynamodb.Table(USER_PREFERENCES_TABLE)
+    if WORKFLOWS_TABLE:
+        _workflows_table = dynamodb.Table(WORKFLOWS_TABLE)
 
 def get_transactions_table() -> Any:
     """Get the transactions table resource, initializing it if needed."""
@@ -154,6 +158,13 @@ def get_user_preferences_table() -> Any:
     if _user_preferences_table is None:
         initialize_tables()
     return _user_preferences_table
+
+def get_workflows_table() -> Any:
+    """Get the workflows table resource, initializing it if needed."""
+    global _workflows_table
+    if _workflows_table is None:
+        initialize_tables()
+    return _workflows_table
 
 
 class NotAuthorized(Exception):
@@ -276,6 +287,31 @@ def checked_optional_category(category_id: Optional[uuid.UUID], user_id: str) ->
         return checked_mandatory_category(category_id, user_id)
     except NotFound:
         return None
+
+def checked_mandatory_workflow(workflow_id: str, user_id: str) -> Dict[str, Any]:
+    """Check if workflow exists and user has access to it."""
+    from typing import Dict, Any
+    from services.operation_tracking_service import operation_tracking_service
+    
+    if not workflow_id or not isinstance(workflow_id, str):
+        raise ValueError("Invalid workflow ID format")
+        
+    status = operation_tracking_service.get_operation_status(workflow_id)
+    if not status:
+        raise NotFound("Workflow not found")
+        
+    # Debug logging to diagnose authorization issue
+    workflow_user_id = status.get('userId')
+    logger.info(f"WORKFLOW_AUTH_DEBUG: workflow_id={workflow_id}, request_user_id={user_id}")
+    logger.info(f"WORKFLOW_AUTH_DEBUG: workflow_user_id from status={workflow_user_id}")
+    logger.info(f"WORKFLOW_AUTH_DEBUG: status keys={list(status.keys())}")
+    logger.info(f"WORKFLOW_AUTH_DEBUG: comparison result: workflow_user_id != user_id = {workflow_user_id != user_id}")
+    
+    if workflow_user_id != user_id:
+        logger.error(f"WORKFLOW_AUTH_DEBUG: Authorization failed - workflow_user_id='{workflow_user_id}' != request_user_id='{user_id}'")
+        raise NotAuthorized("Not authorized to access this workflow")
+        
+    return status
 
 def get_account(account_id: uuid.UUID) -> Optional[Account]:
     """

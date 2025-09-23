@@ -45,9 +45,8 @@ import traceback
 from services.event_service import event_service
 from models.events import FileProcessedEvent
 
-# Shadow mode configuration
+# Event publishing configuration
 ENABLE_EVENT_PUBLISHING = os.environ.get('ENABLE_EVENT_PUBLISHING', 'true').lower() == 'true'
-ENABLE_DIRECT_TRIGGERS = os.environ.get('ENABLE_DIRECT_TRIGGERS', 'false').lower() == 'true'
 
 # Configure logging
 logger = logging.getLogger()
@@ -234,15 +233,7 @@ def handler(event, context):
                         logger.warning(f"Failed to publish events for user {user_id}: {str(e)}")
                         # Don't fail the file processing because of event publishing failure
                 
-                # OLD: Direct analytics triggering (if enabled for shadow mode)
-                if ENABLE_DIRECT_TRIGGERS:
-                    try:
-                        from utils.analytics_utils import trigger_analytics_refresh
-                        trigger_analytics_refresh(user_id, priority=2)  # Medium priority for file upload
-                        logger.info(f"Direct analytics refresh triggered for user {user_id} after successful file processing")
-                    except Exception as e:
-                        logger.warning(f"Failed to trigger direct analytics for user {user_id}: {str(e)}")
-                        # Don't fail the file processing because of analytics trigger failure
+                # Analytics processing is now handled by analytics_consumer via events
 
             # Re-fetch the transaction file to get its latest state for the response
             updated_transaction_file = get_transaction_file(transaction_file.file_id)
@@ -265,7 +256,7 @@ def handler(event, context):
             logger.error(f"Error processing file: {str(e)}")
             logger.error(f"Stack trace: {traceback.format_exc()}")
             
-            # Handle file processing failure with shadow mode support
+            # Handle file processing failure and publish failure event
             if ENABLE_EVENT_PUBLISHING:
                 try:
                     file_event = FileProcessedEvent(
@@ -282,7 +273,7 @@ def handler(event, context):
                 except Exception as event_error:
                     logger.warning(f"Failed to publish failure event: {str(event_error)}")
             
-            # Note: No direct trigger needed for failures
+            # Analytics consumer will not be triggered for failed processing
             
             return {
                 'statusCode': 500,
