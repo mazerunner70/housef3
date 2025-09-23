@@ -59,7 +59,6 @@ from models.events import FileAssociatedEvent, TransactionsDeletedEvent, FileDel
 
 # Shadow mode configuration
 ENABLE_EVENT_PUBLISHING = os.environ.get('ENABLE_EVENT_PUBLISHING', 'true').lower() == 'true'
-ENABLE_DIRECT_TRIGGERS = os.environ.get('ENABLE_DIRECT_TRIGGERS', 'false').lower() == 'true'
 
 # Configure logging
 logger = logging.getLogger()
@@ -411,14 +410,7 @@ def unassociate_file_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
             except Exception as e:
                 logger.warning(f"Failed to publish file unassociation event: {str(e)}")
         
-        # OLD: Direct analytics triggering (if enabled for shadow mode)
-        if ENABLE_DIRECT_TRIGGERS:
-            try:
-                from utils.analytics_utils import trigger_analytics_for_account_change
-                trigger_analytics_for_account_change(user_id, 'unassociate')
-                logger.info(f"Direct analytics refresh triggered for file unassociation: {file_id}")
-            except Exception as e:
-                logger.warning(f"Failed to trigger direct analytics for file unassociation: {str(e)}")
+        # Analytics processing is now handled by analytics_consumer via events
         
         return create_response(200, {
             "message": "File successfully unassociated from account",
@@ -476,14 +468,7 @@ def associate_file_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any
         except Exception as e:
             logger.warning(f"Failed to publish file association event: {str(e)}")
     
-    # OLD: Direct analytics triggering (if enabled for shadow mode)
-    if ENABLE_DIRECT_TRIGGERS:
-        try:
-            from utils.analytics_utils import trigger_analytics_for_account_change
-            trigger_analytics_for_account_change(user_id, 'associate')
-            logger.info(f"Direct analytics refresh triggered for file association: {file_id}")
-        except Exception as e:
-            logger.warning(f"Failed to trigger direct analytics for file association: {str(e)}")
+    # Analytics processing is now handled by analytics_consumer via events
     
     return response.model_dump(by_alias=True, mode='json')
 
@@ -654,14 +639,7 @@ def delete_file_transactions_handler(event: Dict[str, Any], user_id: str) -> Dic
                 except Exception as e:
                     logger.warning(f"Failed to publish bulk transaction deletion event: {str(e)}")
             
-            # OLD: Direct analytics triggering (if enabled for shadow mode)
-            if ENABLE_DIRECT_TRIGGERS:
-                try:
-                    from utils.analytics_utils import trigger_analytics_for_transaction_change
-                    trigger_analytics_for_transaction_change(user_id, 'bulk_delete')
-                    logger.info(f"Direct analytics refresh triggered for bulk transaction deletion: {deleted_count} transactions")
-                except Exception as e:
-                    logger.warning(f"Failed to trigger direct analytics for bulk transaction deletion: {str(e)}")
+            # Analytics processing is now handled by analytics_consumer via events
         
         return create_response(200, {
             'fileId': file_id,

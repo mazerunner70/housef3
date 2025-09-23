@@ -46,7 +46,7 @@ from models.analytics import AnalyticType, AnalyticsProcessingStatus
 from utils.db_utils import store_analytics_status
 from services.event_service import event_service
 
-# Shadow mode configuration
+# Event publishing configuration
 ENABLE_EVENT_PUBLISHING = os.environ.get('ENABLE_EVENT_PUBLISHING', 'true').lower() == 'true'
 
 

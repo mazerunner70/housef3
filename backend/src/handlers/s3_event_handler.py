@@ -35,7 +35,7 @@ from services.event_service import event_service
 from models.events import FileUploadedEvent
 from utils.s3_dao import get_object_metadata
 
-# Shadow mode configuration
+# Event publishing configuration
 ENABLE_EVENT_PUBLISHING = os.environ.get('ENABLE_EVENT_PUBLISHING', 'true').lower() == 'true'
 
 
