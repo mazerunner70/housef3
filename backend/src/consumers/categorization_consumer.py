@@ -44,7 +44,7 @@ from services.category_rule_engine import CategoryRuleEngine
 from services.event_service import event_service
 from utils.db_utils import list_categories_by_user_from_db, get_transactions_table
 
-# Shadow mode configuration
+# Event publishing configuration
 ENABLE_EVENT_PUBLISHING = os.environ.get('ENABLE_EVENT_PUBLISHING', 'true').lower() == 'true'
 
 

@@ -56,9 +56,8 @@ from utils.db_utils import (
 )
 from utils.s3_dao import get_object_content, get_object_metadata
 
-# Shadow mode configuration
+# Event publishing configuration
 ENABLE_EVENT_PUBLISHING = os.environ.get('ENABLE_EVENT_PUBLISHING', 'true').lower() == 'true'
-ENABLE_DIRECT_TRIGGERS = os.environ.get('ENABLE_DIRECT_TRIGGERS', 'false').lower() == 'true'
 
 
 def json_serial(obj: Any) -> str:
@@ -234,15 +233,7 @@ class FileProcessorEventConsumer(BaseEventConsumer):
                     logger.warning(f"Failed to publish FileProcessedEvent for user {user_id}: {str(e)}")
                     # Don't fail the file processing because of event publishing failure
             
-            # Legacy direct analytics triggering (if enabled for shadow mode)
-            if result['transaction_count'] > 0 and ENABLE_DIRECT_TRIGGERS:
-                try:
-                    from utils.analytics_utils import trigger_analytics_refresh
-                    trigger_analytics_refresh(user_id, priority=2)  # Medium priority for file upload
-                    logger.info(f"Direct analytics refresh triggered for user {user_id} after successful file processing")
-                except Exception as e:
-                    logger.warning(f"Failed to trigger direct analytics for user {user_id}: {str(e)}")
-                    # Don't fail the file processing because of analytics trigger failure
+            # Analytics processing is now handled by analytics_consumer via events
             
             return result
             
