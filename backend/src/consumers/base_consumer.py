@@ -1,7 +1,31 @@
 """
 Base consumer framework for event-driven architecture.
 Provides common functionality for all event consumers including event parsing, 
-error handling, metrics, and Lambda integration.
+error handling, metrics, Lambda integration, and standardized voter ID management.
+
+## Voter ID Standardization
+
+The BaseEventConsumer provides a standardized approach to voter IDs through the 
+get_voter_id() method. This automatically derives voter IDs from consumer names 
+using transformation rules, ensuring consistency with vote service configuration 
+without requiring manual mapping maintenance.
+
+Transformation rules:
+- Remove '_consumer' suffix from consumer name
+- Apply role-specific transformations (e.g., 'categorization' → 'category_manager')
+- Default to adding '_manager' suffix for most roles
+
+Example usage in a consumer:
+```python
+vote_event = FileDeletionVoteEvent(
+    user_id=original_event.user_id,
+    file_id=file_id,
+    request_id=request_id,
+    voter=self.get_voter_id(),  # Automatically derived from consumer name
+    decision=decision,
+    reason=reason
+)
+```
 """
 import json
 import logging
@@ -50,6 +74,42 @@ class BaseEventConsumer(ABC):
         
         # Configure logging
         logger.info(f"Initializing {consumer_name} consumer")
+    
+    def get_voter_id(self) -> str:
+        """
+        Get standardized voter ID for this consumer.
+        
+        Automatically derives voter ID from consumer name using transformation rules:
+        - Remove '_consumer' suffix
+        - Convert specific patterns to standard roles
+        - Use 'manager' suffix for most roles, with exceptions for specialized roles
+        
+        Examples:
+        - 'analytics_consumer' → 'analytics_manager'
+        - 'categorization_consumer' → 'category_manager' 
+        - 'file_processor_consumer' → 'file_processor'
+        - 'security_consumer' → 'security_scanner'
+        
+        Returns:
+            str: Standardized voter ID for use in voting events
+        """
+        # Start with consumer name and remove '_consumer' suffix
+        base_name = self.consumer_name.replace('_consumer', '')
+        
+        # Handle special cases with specific transformations
+        if base_name == 'categorization':
+            return 'category_manager'
+        elif base_name in ['security', 'format_validator']:
+            # These roles use 'scanner' or keep original name
+            return f"{base_name}_scanner" if base_name == 'security' else base_name
+        elif base_name == 'data_integrity':
+            return 'data_integrity_checker'
+        elif base_name in ['file_processor', 'format_validator']:
+            # These roles don't get '_manager' suffix
+            return base_name
+        else:
+            # Default: add '_manager' suffix for most roles
+            return f"{base_name}_manager"
         
     def handle_eventbridge_event(self, event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         """

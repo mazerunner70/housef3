@@ -55,7 +55,7 @@ from utils.handler_decorators import api_handler, require_authenticated_user, st
 
 # Event-driven architecture imports
 from services.event_service import event_service
-from models.events import FileAssociatedEvent, TransactionsDeletedEvent
+from models.events import FileAssociatedEvent, TransactionsDeletedEvent, FileDeletionRequestedEvent
 
 # Shadow mode configuration
 ENABLE_EVENT_PUBLISHING = os.environ.get('ENABLE_EVENT_PUBLISHING', 'true').lower() == 'true'
@@ -248,26 +248,22 @@ def get_download_url_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
     }
 
 def delete_file_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
-    """Delete a file and all its associated data.
+    """Delete a file using event-driven coordination.
     
-    This handler performs the following operations in sequence:
-    1. Validates the request and file ownership
-    2. Deletes all associated transactions from DynamoDB
-    3. Deletes the file content from S3
-    4. Deletes the file metadata from DynamoDB
-    5. Verifies the deletion was successful
+    This handler now publishes a FileDeleteRequestedEvent instead of performing
+    direct deletion. The file deletion consumer will coordinate with other consumers
+    and perform the actual deletion after all consumers have processed the file.
     
     Args:
         event: API Gateway event containing the file ID in pathParameters
-        user: Dictionary containing authenticated user information
+        user_id: Authenticated user ID
         
     Returns:
         API Gateway response with status code and message
     """
     try:
         # Step 1: Request validation and authorization
-        # Extract file ID from the request path parameters
-        logger.info(f"Deleting file {event}")
+        logger.info(f"Processing file deletion request {event}")
         file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
             
         # Retrieve file metadata to verify existence and ownership
@@ -277,82 +273,104 @@ def delete_file_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
         if file.user_id != user_id:
             return create_response(403, {"message": "Access denied"})
         
-        # Step 2: Handle account association cleanup
-        # Check and log if file is associated with an account for audit purposes
-        account_id = None
-        if file.account_id:
-            account_id = file.account_id
-            logger.info(f"File {file_id} is associated with account {account_id}. This association will be removed during deletion.")
-            
-        # Step 3: Delete associated transactions
-        # Remove all transactions linked to this file from DynamoDB
+        # Count transactions for event data
+        from utils.db_utils import list_file_transactions
         try:
-            transactions_deleted = delete_transactions_for_file(file_id)
-            logger.info(f"Deleted {transactions_deleted} transactions for file {file_id}")
-        except Exception as tx_error:
-            logger.error(f"Error deleting transactions: {str(tx_error)}")
-            return create_response(500, {"message": f"Error deleting associated transactions with file {file_id}"})
-            
-        # Step 4: Delete file content from S3
-        # Remove the actual file content from the S3 bucket
-        if not delete_object(file.s3_key):
-            return create_response(500, {"message": f"Error deleting file from S3 with key {file.s3_key}"})
+            transactions = list_file_transactions(file_id)
+            transaction_count = len(transactions)
+        except Exception as e:
+            logger.warning(f"Could not count transactions for file {file_id}: {str(e)}")
+            transaction_count = 0
         
-        logger.info(f"Successfully deleted file {file_id} from S3 bucket")
-        
-        # Step 5: Delete file metadata and verify deletion
-        try:
-            # Remove the file metadata from DynamoDB
-            delete_file_metadata(file_id)
-            logger.info(f"Successfully deleted file {file_id} from DynamoDB table")
-            
-            # Step 5.5: Update derived values for the affected account
-            if file.account_id:
-                try:
-                    update_account_derived_values(file.account_id, user_id)
-                    logger.info(f"Updated derived values for account {file.account_id} after file deletion")
-                except Exception as derived_error:
-                    logger.error(f"Error updating derived values for account {file.account_id}: {str(derived_error)}")
-                    # Don't fail the whole operation for this
-            
-            # Step 6: Verification checks
-            # Verify the file metadata was actually deleted
-            verification = get_transaction_file(file_id)
-            if verification is not None:
-                logger.error(f"File {file_id} was not deleted from DynamoDB, instead it is {verification}")
-                return create_response(500, {"message": "Error verifying file deletion"})
+        # Step 2: Generate operation ID and publish FileDeleteRequestedEvent
+        if ENABLE_EVENT_PUBLISHING:
+            try:
+                # Generate a simple operation ID without database write
+                from datetime import datetime
+                operation_id = f"op_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(file_id)[:8]}"
                 
-            # If file was associated with an account, verify it's removed from the account index
-            if account_id:
-                # Check the AccountIdIndex to ensure the file is no longer associated
-                account_files = list_account_files(account_id)
-                for account_file in account_files:
-                    if getattr(account_file, 'file_id', None) == file_id:
-                        logger.error(f"File {file_id} still appears in account {account_id} index")
-                        # This should never happen if the main item is deleted
+                # Publish deletion request event (use operation_id as request_id)
+                delete_request_event = FileDeletionRequestedEvent(
+                    user_id=user_id,
+                    file_id=str(file_id),
+                    account_id=str(file.account_id) if file.account_id else None,
+                    file_name=file.file_name,
+                    transaction_count=transaction_count,
+                    request_id=operation_id  # Use operation_id as request_id for coordination
+                )
+                
+                success = event_service.publish_event(delete_request_event)
+                if not success:
+                    logger.error(f"Failed to publish FileDeletionRequestedEvent for file {file_id}")
+                    return create_response(500, {"message": "Error initiating file deletion process"})
+                
+                logger.info(f"FileDeletionRequestedEvent published for file {file_id} with operation ID {operation_id}")
+                
+                return create_response(202, {
+                    'message': 'File deletion initiated successfully',
+                    'fileId': str(file_id),
+                    'operationId': operation_id,  # Return operation_id for tracking
+                    'metadata': {
+                        'transactionCount': transaction_count,
+                        'status': 'deletion_requested'
+                    }
+                })
+                
+            except Exception as e:
+                logger.error(f"Error publishing file deletion event: {str(e)}")
+                return create_response(500, {"message": "Error initiating file deletion process"})
+        else:
+            # Fallback to direct deletion if event publishing is disabled
+            logger.warning("Event publishing disabled, falling back to direct file deletion")
+            return _perform_direct_file_deletion(file_id, user_id, file)
             
-            logger.info(f"File {file_id} deletion verified")
-            
-        except Exception as dynamo_error:
-            logger.error(f"Error deleting file from DynamoDB: {str(dynamo_error)}")
-            return create_response(500, {"message": "Error deleting file metadata from database"})
-        
-        # Step 7: Return success response with metadata
-        return create_response(200, {
-            'message': 'File deleted successfully',
-            'fileId': file_id,
-            'metadata': {
-                'transactionsDeleted': transactions_deleted
-            }
-        })
     except ValueError as e:
-        logger.error(f"Error deleting file: {str(e)}", exc_info=True)
+        logger.error(f"Error processing file deletion request: {str(e)}", exc_info=True)
         return handle_error(400, str(e))
     except NotFound as e:
         logger.error(f"File not found: {str(e)}", exc_info=True)
         return handle_error(404, str(e))
     except Exception as e:
-        logger.error(f"Error deleting file: {str(e)}", exc_info=True)
+        logger.error(f"Error processing file deletion request: {str(e)}", exc_info=True)
+        return create_response(500, {"message": "Error processing file deletion request"})
+
+
+def _perform_direct_file_deletion(file_id: uuid.UUID, user_id: str, file) -> Dict[str, Any]:
+    """Fallback method for direct file deletion when events are disabled"""
+    try:
+        logger.info(f"Performing direct file deletion for {file_id}")
+        
+        # Delete associated transactions
+        transactions_deleted = delete_transactions_for_file(file_id)
+        logger.info(f"Deleted {transactions_deleted} transactions for file {file_id}")
+        
+        # Delete file content from S3
+        if not delete_object(file.s3_key):
+            return create_response(500, {"message": f"Error deleting file from S3 with key {file.s3_key}"})
+        logger.info(f"Successfully deleted file {file_id} from S3 bucket")
+        
+        # Delete file metadata from DynamoDB
+        delete_file_metadata(file_id)
+        logger.info(f"Successfully deleted file {file_id} from DynamoDB table")
+        
+        # Update derived values for the affected account
+        if file.account_id:
+            try:
+                update_account_derived_values(file.account_id, user_id)
+                logger.info(f"Updated derived values for account {file.account_id} after file deletion")
+            except Exception as derived_error:
+                logger.error(f"Error updating derived values for account {file.account_id}: {str(derived_error)}")
+        
+        return create_response(200, {
+            'message': 'File deleted successfully',
+            'fileId': str(file_id),
+            'metadata': {
+                'transactionsDeleted': transactions_deleted
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in direct file deletion: {str(e)}")
         return create_response(500, {"message": "Error deleting file"})
 
 def unassociate_file_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
@@ -1164,6 +1182,7 @@ def try_decode_content(content_bytes: bytes) -> str:
             
     # If all encodings fail, use 'utf-8' with error handling as last resort
     return content_bytes.decode('utf-8', errors='replace')
+
 
 @require_authenticated_user
 @standard_error_handling  

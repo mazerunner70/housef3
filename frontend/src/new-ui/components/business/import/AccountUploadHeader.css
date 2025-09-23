@@ -1,0 +1,238 @@
+/* AccountUploadHeader Styles */
+
+.account-upload-header {
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 1.5rem;
+    margin-bottom: 0;
+}
+
+/* Breadcrumb Navigation */
+.account-upload-breadcrumb {
+    margin-bottom: 1rem;
+}
+
+.breadcrumb-list {
+    display: flex;
+    align-items: center;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 0.875rem;
+    color: #6b7280;
+}
+
+.breadcrumb-item {
+    display: flex;
+    align-items: center;
+}
+
+.breadcrumb-link {
+    background: none;
+    border: none;
+    color: #3b82f6;
+    cursor: pointer;
+    text-decoration: none;
+    padding: 0;
+    font-size: inherit;
+    transition: color 0.2s ease;
+}
+
+.breadcrumb-link:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
+}
+
+.breadcrumb-link:focus {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+    border-radius: 0.125rem;
+}
+
+.breadcrumb-separator {
+    margin: 0 0.5rem;
+    color: #9ca3af;
+}
+
+.breadcrumb-current {
+    color: #374151;
+    font-weight: 500;
+}
+
+/* Header Content */
+.account-upload-header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.account-upload-title-section {
+    flex: 1;
+}
+
+.account-info {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.account-icon {
+    font-size: 2rem;
+    line-height: 1;
+    margin-top: 0.125rem;
+}
+
+.account-details {
+    flex: 1;
+}
+
+.account-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #111827;
+    margin: 0 0 0.5rem 0;
+    line-height: 1.25;
+}
+
+.account-subtitle {
+    font-size: 0.875rem;
+    color: #6b7280;
+    margin: 0;
+    line-height: 1.5;
+}
+
+.account-institution {
+    font-weight: 500;
+    color: #374151;
+}
+
+.account-separator {
+    color: #9ca3af;
+}
+
+.account-type {
+    color: #6b7280;
+}
+
+.account-balance {
+    color: #059669;
+    font-weight: 500;
+}
+
+/* Back Button (Mobile) */
+.back-button-mobile {
+    display: none;
+    background-color: #f3f4f6;
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    color: #374151;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.back-button-mobile:hover {
+    background-color: #e5e7eb;
+    border-color: #9ca3af;
+}
+
+.back-button-mobile:focus {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+}
+
+.back-icon {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.back-text {
+    font-weight: 500;
+}
+
+/* Import Status Indicator */
+.import-status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    padding: 0.5rem 0.75rem;
+    background-color: #f0f9ff;
+    border: 1px solid #e0f2fe;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    color: #0c4a6e;
+}
+
+.status-icon {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.status-text {
+    font-weight: 500;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .account-upload-header {
+        padding-bottom: 1rem;
+    }
+
+    .account-upload-header-content {
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .account-info {
+        gap: 0.5rem;
+    }
+
+    .account-icon {
+        font-size: 1.5rem;
+    }
+
+    .account-title {
+        font-size: 1.25rem;
+    }
+
+    .back-button-mobile {
+        display: flex;
+        align-self: flex-start;
+    }
+
+    .breadcrumb-list {
+        font-size: 0.75rem;
+    }
+
+    .breadcrumb-separator {
+        margin: 0 0.375rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .account-info {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .account-icon {
+        align-self: flex-start;
+    }
+
+    .account-title {
+        font-size: 1.125rem;
+    }
+
+    .account-subtitle {
+        font-size: 0.8125rem;
+    }
+
+    .import-status-indicator {
+        padding: 0.375rem 0.5rem;
+        font-size: 0.8125rem;
+    }
+}

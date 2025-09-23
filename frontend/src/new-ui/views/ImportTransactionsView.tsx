@@ -1,4 +1,5 @@
 import React, { useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ImportViewLayout from '@/new-ui/components/business/import/ImportViewLayout';
 import ImportHeader from '@/new-ui/components/business/import/ImportHeader';
 import CompactAccountsList from '@/new-ui/components/business/import/CompactAccountsList';
@@ -25,62 +26,16 @@ import './ImportTransactionsView.css';
  */
 const ImportTransactionsView: React.FC = () => {
   // === 1. STATE MANAGEMENT SECTION ===
+  const navigate = useNavigate();
   const accountsData = useAccountsData();
   const importState = useImportState();
 
   // === 2. EVENT HANDLERS SECTION ===
   const handleImportClick = useCallback((accountId: string) => {
-    // Stage 1: Enhanced import workflow simulation with realistic progress
-    const account = accountsData.accounts.find(acc => acc.accountId === accountId);
-    const accountName = account?.accountName || 'Unknown Account';
-
-    console.log('Import clicked for account:', accountId, accountName);
-
-    // Start realistic import simulation
-    importState.startImport(`transactions_${accountName.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}.csv`, accountId);
-
-    // Simulate realistic import progress with deterministic increments
-    let progress = 0;
-    let incrementCounter = 0;
-    const progressIncrements = [8, 12, 7, 15, 9, 11, 6, 13, 10, 14, 8, 16, 12, 9, 15]; // Predefined increments
-    const progressInterval = setInterval(() => {
-      const increment = progressIncrements[incrementCounter % progressIncrements.length];
-      progress += increment;
-      incrementCounter++;
-
-      if (progress < 30) {
-        importState.updateProgress(progress, 'uploading');
-      } else if (progress < 60) {
-        importState.updateProgress(progress, 'parsing');
-      } else if (progress < 90) {
-        importState.updateProgress(progress, 'processing');
-      } else {
-        progress = 100;
-        importState.updateProgress(progress, 'complete');
-        clearInterval(progressInterval);
-
-        // Complete the import after a short delay
-        setTimeout(() => {
-          importState.completeImport({
-            success: true,
-            message: 'Import completed successfully!',
-            transactionCount: Math.floor((Date.now() % 150) + 50), // Deterministic count based on timestamp
-            fileName: `transactions_${accountName.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}.csv`,
-            accountName
-          });
-
-          // Reset after showing success
-          setTimeout(() => {
-            importState.resetImportState();
-          }, 3000);
-        }, 1000);
-      }
-    }, 300);
-
-    // Show enhanced notification
-    console.log(`🚀 Starting import for ${accountName} (${accountId})`);
-    console.log('📁 This will open the account file upload page in Stage 2');
-  }, [accountsData.accounts, importState]);
+    // Stage 2: Navigate to dedicated account file upload page
+    console.log('Navigating to account upload page for account:', accountId);
+    navigate(`/import/account/${accountId}`);
+  }, [navigate]);
 
   const handleAccountClick = useCallback((accountId: string) => {
     // Navigate to account detail view

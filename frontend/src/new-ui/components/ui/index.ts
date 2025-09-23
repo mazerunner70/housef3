@@ -16,6 +16,7 @@ export { default as Alert } from './Alert';
 export { default as LoadingState } from './LoadingState';
 export { default as SortableTable } from './SortableTable';
 export { default as DateRangePicker } from './DateRangePicker';
+export { WorkflowProgressModal } from './WorkflowProgressModal';
 
 // Export types
 export type { ActionConfig } from './RowActions';

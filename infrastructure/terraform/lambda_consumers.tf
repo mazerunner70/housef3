@@ -4,28 +4,25 @@
 # and their connections to the EventBridge rules.
 
 # ==============================================================================
-# LAMBDA ZIP DATA SOURCE
+# CONSUMER LAMBDA FUNCTIONS
 # ==============================================================================
-
-data "archive_file" "lambda_zip" {
-  type        = "zip"
-  source_dir  = "../../backend/src"
-  output_path = "../../backend/lambda_consumers.zip"
-  excludes    = ["__pycache__", "*.pyc", "*.pyo", "*.pyd", ".pytest_cache", ".coverage"]
-}
+# All consumer functions use the same deployment package (lambda_deploy.zip)
+# created by the backend build process
 
 # ==============================================================================
 # Analytics Consumer Lambda
 # ==============================================================================
 
 resource "aws_lambda_function" "analytics_consumer" {
-  filename      = data.archive_file.lambda_zip.output_path
-  function_name = "${var.environment}-analytics-consumer"
-  role          = aws_iam_role.lambda_exec.arn
-  handler       = "consumers.analytics_consumer.lambda_handler"
-  runtime       = "python3.9"
-  timeout       = 300
-  memory_size   = 512
+  filename         = "../../backend/lambda_deploy.zip"
+  function_name    = "${var.project_name}-${var.environment}-analytics-consumer"
+  role             = aws_iam_role.lambda_exec.arn
+  handler          = "consumers/analytics_consumer.handler"
+  runtime          = "python3.12"
+  timeout          = 300
+  memory_size      = 512
+  source_code_hash = base64encode(local.source_code_hash)
+  depends_on       = [null_resource.prepare_lambda]
 
   environment {
     variables = {
@@ -39,6 +36,7 @@ resource "aws_lambda_function" "analytics_consumer" {
       FILE_MAPS_TABLE        = aws_dynamodb_table.file_maps.name
       FILES_TABLE            = aws_dynamodb_table.transaction_files.name
       FZIP_JOBS_TABLE        = aws_dynamodb_table.fzip_jobs.name
+      WORKFLOWS_TABLE        = aws_dynamodb_table.workflows.name
     }
   }
 
@@ -76,17 +74,83 @@ resource "aws_lambda_permission" "allow_eventbridge_analytics" {
 }
 
 # ==============================================================================
+# File Processor Consumer Lambda
+# ==============================================================================
+
+resource "aws_lambda_function" "file_processor_consumer" {
+  filename         = "../../backend/lambda_deploy.zip"
+  function_name    = "${var.project_name}-${var.environment}-file-processor-consumer"
+  role             = aws_iam_role.lambda_exec.arn
+  handler          = "consumers/file_processor_consumer.handler"
+  runtime          = "python3.12"
+  timeout          = 600  # 10 minutes for file processing
+  memory_size      = 1024  # More memory for file processing
+  source_code_hash = base64encode(local.source_code_hash)
+  depends_on       = [null_resource.prepare_lambda]
+
+  environment {
+    variables = {
+      ENVIRONMENT            = var.environment
+      EVENTS_TABLE           = aws_dynamodb_table.event_store.name
+      ACCOUNTS_TABLE         = aws_dynamodb_table.accounts.name
+      TRANSACTIONS_TABLE     = aws_dynamodb_table.transactions.name
+      CATEGORIES_TABLE_NAME  = aws_dynamodb_table.categories.name
+      FILE_MAPS_TABLE        = aws_dynamodb_table.file_maps.name
+      FILES_TABLE            = aws_dynamodb_table.transaction_files.name
+      FZIP_JOBS_TABLE        = aws_dynamodb_table.fzip_jobs.name
+      FILE_STORAGE_BUCKET    = aws_s3_bucket.file_storage.bucket
+      ENABLE_EVENT_PUBLISHING = "true"
+      ENABLE_DIRECT_TRIGGERS = "false"
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = "housef3"
+    Component   = "file-processor-consumer"
+  }
+}
+
+# Connect EventBridge file processor rule to Lambda
+resource "aws_cloudwatch_event_target" "file_processor_consumer_target" {
+  rule           = aws_cloudwatch_event_rule.file_processor_events.name
+  event_bus_name = aws_cloudwatch_event_bus.app_events.name
+  target_id      = "FileProcessorConsumerTarget"
+  arn            = aws_lambda_function.file_processor_consumer.arn
+
+  retry_policy {
+    maximum_retry_attempts       = 2
+    maximum_event_age_in_seconds = 300  # 5 minutes for file processing
+  }
+
+  dead_letter_config {
+    arn = aws_sqs_queue.event_dlq.arn
+  }
+}
+
+# Permission for EventBridge to invoke File Processor Consumer
+resource "aws_lambda_permission" "allow_eventbridge_file_processor" {
+  statement_id  = "AllowExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.file_processor_consumer.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.file_processor_events.arn
+}
+
+# ==============================================================================
 # Categorization Consumer Lambda
 # ==============================================================================
 
 resource "aws_lambda_function" "categorization_consumer" {
-  filename      = data.archive_file.lambda_zip.output_path
-  function_name = "${var.environment}-categorization-consumer"
-  role          = aws_iam_role.lambda_exec.arn
-  handler       = "consumers.categorization_consumer.lambda_handler"
-  runtime       = "python3.9"
-  timeout       = 300
-  memory_size   = 512
+  filename         = "../../backend/lambda_deploy.zip"
+  function_name    = "${var.project_name}-${var.environment}-categorization-consumer"
+  role             = aws_iam_role.lambda_exec.arn
+  handler          = "consumers/categorization_consumer.handler"
+  runtime          = "python3.12"
+  timeout          = 300
+  memory_size      = 512
+  source_code_hash = base64encode(local.source_code_hash)
+  depends_on       = [null_resource.prepare_lambda]
 
   environment {
     variables = {
@@ -98,6 +162,7 @@ resource "aws_lambda_function" "categorization_consumer" {
       FILE_MAPS_TABLE       = aws_dynamodb_table.file_maps.name
       FILES_TABLE           = aws_dynamodb_table.transaction_files.name
       FZIP_JOBS_TABLE       = aws_dynamodb_table.fzip_jobs.name
+      WORKFLOWS_TABLE       = aws_dynamodb_table.workflows.name
     }
   }
 
@@ -132,6 +197,191 @@ resource "aws_lambda_permission" "allow_eventbridge_categorization" {
   function_name = aws_lambda_function.categorization_consumer.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.categorization_events.arn
+}
+
+# ==============================================================================
+# File Deletion Consumer Lambda
+# ==============================================================================
+
+# Note: The old file_deletion_consumer has been replaced by the voting system
+# consisting of generic_vote_aggregator_consumer and file_deletion_executor_consumer
+
+# ==============================================================================
+# Generic Vote Aggregator Consumer Lambda
+# ==============================================================================
+
+resource "aws_lambda_function" "generic_vote_aggregator_consumer" {
+  filename         = "../../backend/lambda_deploy.zip"
+  function_name    = "${var.project_name}-${var.environment}-generic-vote-aggregator-consumer"
+  role             = aws_iam_role.lambda_exec.arn
+  handler          = "consumers/generic_vote_aggregator.handler"
+  runtime          = "python3.12"
+  timeout          = 300  # 5 minutes for vote coordination
+  memory_size      = 512
+  source_code_hash = base64encode(local.source_code_hash)
+  depends_on       = [null_resource.prepare_lambda]
+
+  environment {
+    variables = {
+      ENVIRONMENT                   = var.environment
+      EVENTS_TABLE                 = aws_dynamodb_table.event_store.name
+      WORKFLOWS_TABLE              = aws_dynamodb_table.workflows.name
+      ENABLE_EVENT_PUBLISHING      = "true"
+      VOTE_TIMEOUT_MINUTES         = "5"
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = "housef3"
+    Component   = "generic-vote-aggregator-consumer"
+  }
+}
+
+# Connect EventBridge vote aggregator rule to Lambda
+resource "aws_cloudwatch_event_target" "generic_vote_aggregator_consumer_target" {
+  rule           = aws_cloudwatch_event_rule.vote_aggregator_events.name
+  event_bus_name = aws_cloudwatch_event_bus.app_events.name
+  target_id      = "GenericVoteAggregatorConsumerTarget"
+  arn            = aws_lambda_function.generic_vote_aggregator_consumer.arn
+
+  retry_policy {
+    maximum_retry_attempts       = 2
+    maximum_event_age_in_seconds = 300  # 5 minutes for vote coordination
+  }
+
+  dead_letter_config {
+    arn = aws_sqs_queue.event_dlq.arn
+  }
+}
+
+# Permission for EventBridge to invoke Generic Vote Aggregator Consumer
+resource "aws_lambda_permission" "allow_eventbridge_generic_vote_aggregator" {
+  statement_id  = "AllowExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.generic_vote_aggregator_consumer.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.vote_aggregator_events.arn
+}
+
+# ==============================================================================
+# File Deletion Executor Consumer Lambda
+# ==============================================================================
+
+resource "aws_lambda_function" "file_deletion_executor_consumer" {
+  filename         = "../../backend/lambda_deploy.zip"
+  function_name    = "${var.project_name}-${var.environment}-file-deletion-executor-consumer"
+  role             = aws_iam_role.lambda_exec.arn
+  handler          = "consumers/file_deletion_executor.handler"
+  runtime          = "python3.12"
+  timeout          = 300  # 5 minutes for file deletion execution
+  memory_size      = 512
+  source_code_hash = base64encode(local.source_code_hash)
+  depends_on       = [null_resource.prepare_lambda]
+
+  environment {
+    variables = {
+      ENVIRONMENT                   = var.environment
+      EVENTS_TABLE                 = aws_dynamodb_table.event_store.name
+      ACCOUNTS_TABLE               = aws_dynamodb_table.accounts.name
+      TRANSACTIONS_TABLE           = aws_dynamodb_table.transactions.name
+      CATEGORIES_TABLE_NAME        = aws_dynamodb_table.categories.name
+      FILE_MAPS_TABLE              = aws_dynamodb_table.file_maps.name
+      FILES_TABLE                  = aws_dynamodb_table.transaction_files.name
+      FZIP_JOBS_TABLE              = aws_dynamodb_table.fzip_jobs.name
+      WORKFLOWS_TABLE              = aws_dynamodb_table.workflows.name
+      FILE_STORAGE_BUCKET          = aws_s3_bucket.file_storage.bucket
+      ENABLE_EVENT_PUBLISHING      = "true"
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = "housef3"
+    Component   = "file-deletion-executor-consumer"
+  }
+}
+
+# Connect EventBridge file deletion executor rule to Lambda
+resource "aws_cloudwatch_event_target" "file_deletion_executor_consumer_target" {
+  rule           = aws_cloudwatch_event_rule.file_deletion_executor_events.name
+  event_bus_name = aws_cloudwatch_event_bus.app_events.name
+  target_id      = "FileDeletionExecutorConsumerTarget"
+  arn            = aws_lambda_function.file_deletion_executor_consumer.arn
+
+  retry_policy {
+    maximum_retry_attempts       = 2
+    maximum_event_age_in_seconds = 300  # 5 minutes for execution
+  }
+
+  dead_letter_config {
+    arn = aws_sqs_queue.event_dlq.arn
+  }
+}
+
+# Permission for EventBridge to invoke File Deletion Executor Consumer
+resource "aws_lambda_permission" "allow_eventbridge_file_deletion_executor" {
+  statement_id  = "AllowExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.file_deletion_executor_consumer.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.file_deletion_executor_events.arn
+}
+
+# ==============================================================================
+# Workflow Tracking Consumer Lambda
+# ==============================================================================
+
+resource "aws_lambda_function" "workflow_tracking_consumer" {
+  filename         = "../../backend/lambda_deploy.zip"
+  function_name    = "${var.project_name}-${var.environment}-workflow-tracking-consumer"
+  role             = aws_iam_role.lambda_exec.arn
+  handler          = "consumers/workflow_tracking_consumer.handler"
+  runtime          = "python3.12"
+  timeout          = 120  # 2 minutes for operation tracking
+  memory_size      = 256  # Less memory needed for tracking updates
+  source_code_hash = base64encode(local.source_code_hash)
+  depends_on       = [null_resource.prepare_lambda]
+
+  environment {
+    variables = {
+      ENVIRONMENT      = var.environment
+      EVENTS_TABLE     = aws_dynamodb_table.event_store.name
+      WORKFLOWS_TABLE  = aws_dynamodb_table.workflows.name
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = "housef3"
+    Component   = "workflow-tracking-consumer"
+  }
+}
+
+# Connect EventBridge workflow tracking rule to Lambda
+resource "aws_cloudwatch_event_target" "workflow_tracking_consumer_target" {
+  rule           = aws_cloudwatch_event_rule.workflow_tracking_events.name
+  event_bus_name = aws_cloudwatch_event_bus.app_events.name
+  target_id      = "WorkflowTrackingConsumerTarget"
+  arn            = aws_lambda_function.workflow_tracking_consumer.arn
+
+  retry_policy {
+    maximum_retry_attempts       = 2
+    maximum_event_age_in_seconds = 60
+  }
+
+  dead_letter_config {
+    arn = aws_sqs_queue.event_dlq.arn
+  }
+}
+
+# Permission for EventBridge to invoke Workflow Tracking Consumer
+resource "aws_lambda_permission" "allow_eventbridge_workflow_tracking" {
+  statement_id  = "AllowExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.workflow_tracking_consumer.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.workflow_tracking_events.arn
 }
 
 # ==============================================================================
@@ -243,7 +493,9 @@ resource "aws_iam_policy" "event_consumer_policy" {
           aws_dynamodb_table.transaction_files.arn,
           "${aws_dynamodb_table.transaction_files.arn}/index/*",
           aws_dynamodb_table.fzip_jobs.arn,
-          "${aws_dynamodb_table.fzip_jobs.arn}/index/*"
+          "${aws_dynamodb_table.fzip_jobs.arn}/index/*",
+          aws_dynamodb_table.workflows.arn,
+          "${aws_dynamodb_table.workflows.arn}/index/*"
         ]
       },
       {
@@ -260,6 +512,15 @@ resource "aws_iam_policy" "event_consumer_policy" {
           "sqs:GetQueueUrl"
         ]
         Resource = aws_sqs_queue.event_dlq.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject"
+        ]
+        Resource = "${aws_s3_bucket.file_storage.arn}/*"
       }
     ]
   })
@@ -329,9 +590,29 @@ output "analytics_consumer_function_arn" {
   value       = aws_lambda_function.analytics_consumer.arn
 }
 
+output "file_processor_consumer_function_arn" {
+  description = "ARN of the file processor consumer Lambda function"
+  value       = aws_lambda_function.file_processor_consumer.arn
+}
+
 output "categorization_consumer_function_arn" {
   description = "ARN of the categorization consumer Lambda function"
   value       = aws_lambda_function.categorization_consumer.arn
+}
+
+output "generic_vote_aggregator_consumer_function_arn" {
+  description = "ARN of the generic vote aggregator consumer Lambda function"
+  value       = aws_lambda_function.generic_vote_aggregator_consumer.arn
+}
+
+output "file_deletion_executor_consumer_function_arn" {
+  description = "ARN of the file deletion executor consumer Lambda function"
+  value       = aws_lambda_function.file_deletion_executor_consumer.arn
+}
+
+output "workflow_tracking_consumer_function_arn" {
+  description = "ARN of the workflow tracking consumer Lambda function"
+  value       = aws_lambda_function.workflow_tracking_consumer.arn
 }
 
 output "audit_consumer_function_arn" {

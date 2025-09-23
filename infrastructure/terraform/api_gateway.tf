@@ -1,3 +1,617 @@
+# =========================================
+# LOCAL CONFIGURATION FOR API GATEWAY
+# =========================================
+
+locals {
+  # Lambda function configurations
+  lambda_functions = {
+    getcolors                    = aws_lambda_function.getcolors
+    file_operations             = aws_lambda_function.file_operations
+    workflow_tracking           = aws_lambda_function.workflow_tracking
+    account_operations          = aws_lambda_function.account_operations
+    transaction_operations      = aws_lambda_function.transaction_operations
+    transfer_operations         = aws_lambda_function.transfer_operations
+    field_map_operations        = aws_lambda_function.file_map_operations
+    category_operations         = aws_lambda_function.categories_lambda
+    analytics_operations        = aws_lambda_function.analytics_operations
+    export_operations           = aws_lambda_function.export_operations
+    user_preferences_operations = aws_lambda_function.user_preferences_operations
+  }
+
+  # Special lambda with alias
+  fzip_operations_arn = aws_lambda_alias.fzip_operations_version.invoke_arn
+  fzip_operations_function_name = aws_lambda_alias.fzip_operations_version.arn
+
+  # Integration configurations
+  integrations = {
+    getcolors = {
+      lambda_key  = "getcolors"
+      description = "Lambda integration for getcolors endpoint"
+    }
+    file_operations = {
+      lambda_key  = "file_operations"
+      description = "Lambda integration for file operations endpoints"
+    }
+    workflow_tracking = {
+      lambda_key  = "workflow_tracking"
+      description = "Lambda integration for workflow tracking endpoints"
+    }
+    account_operations = {
+      lambda_key  = "account_operations"
+      description = "Lambda integration for account operations endpoints"
+    }
+    transaction_operations = {
+      lambda_key  = "transaction_operations"
+      description = "Lambda integration for transaction operations"
+    }
+    transfer_operations = {
+      lambda_key  = "transfer_operations"
+      description = "Lambda integration for transfer operations"
+    }
+    field_map_operations = {
+      lambda_key  = "field_map_operations"
+      description = "Lambda integration for field map operations"
+    }
+    category_operations = {
+      lambda_key  = "category_operations"
+      description = "Lambda integration for category CRUD operations"
+    }
+    analytics_operations = {
+      lambda_key  = "analytics_operations"
+      description = "Lambda integration for analytics operations endpoints"
+    }
+    export_operations = {
+      lambda_key  = "export_operations"
+      description = "Lambda integration for export operations endpoints"
+    }
+    user_preferences_operations = {
+      lambda_key  = "user_preferences_operations"
+      description = "Lambda integration for user preferences operations endpoints"
+    }
+    fzip_operations = {
+      lambda_key  = "fzip_operations"
+      description = "Lambda integration for unified FZIP backup/restore operations (versioned)"
+      use_alias   = true
+    }
+  }
+
+  # Route configurations
+  routes = {
+    # Colors
+    getcolors = {
+      route_key    = "GET /colors"
+      integration  = "getcolors"
+      requires_auth = true
+    }
+
+    # File Operations
+    get_file_transactions = {
+      route_key    = "GET /files/{id}/transactions"
+      integration  = "file_operations"
+      requires_auth = true
+    }
+    delete_file_transactions = {
+      route_key    = "DELETE /files/{id}/transactions"
+      integration  = "file_operations"
+      requires_auth = true
+    }
+    list_files = {
+      route_key    = "GET /files"
+      integration  = "file_operations"
+      requires_auth = true
+    }
+    get_file = {
+      route_key    = "GET /files/{id}"
+      integration  = "file_operations"
+      requires_auth = true
+    }
+    list_files_by_account = {
+      route_key    = "GET /files/account/{accountId}"
+      integration  = "file_operations"
+      requires_auth = true
+    }
+    get_s3_upload_url = {
+      route_key    = "POST /files/upload"
+      integration  = "file_operations"
+      requires_auth = true
+    }
+    get_download_url = {
+      route_key    = "GET /files/{id}/download"
+      integration  = "file_operations"
+      requires_auth = true
+    }
+    delete_file = {
+      route_key    = "DELETE /files/{id}"
+      integration  = "file_operations"
+      requires_auth = true
+    }
+    unassociate_file = {
+      route_key    = "PUT /files/{id}/unassociate"
+      integration  = "file_operations"
+      requires_auth = true
+    }
+    associate_file = {
+      route_key    = "PUT /files/{id}/associate"
+      integration  = "file_operations"
+      requires_auth = true
+    }
+    file_balance = {
+      route_key    = "PUT /files/{id}/balance"
+      integration  = "file_operations"
+      requires_auth = true
+    }
+    file_closing_balance = {
+      route_key    = "PUT /files/{id}/closing-balance"
+      integration  = "file_operations"
+      requires_auth = true
+    }
+    get_file_metadata = {
+      route_key    = "GET /files/{id}/metadata"
+      integration  = "file_operations"
+      requires_auth = true
+    }
+    update_file_field_map = {
+      route_key    = "PUT /files/{id}/file-map"
+      integration  = "file_operations"
+      requires_auth = true
+    }
+    get_file_preview = {
+      route_key    = "GET /files/{id}/preview"
+      integration  = "file_operations"
+      requires_auth = true
+    }
+
+    # Workflow Tracking
+    get_workflow_status = {
+      route_key    = "GET /workflows/{workflowId}/status"
+      integration  = "workflow_tracking"
+      requires_auth = true
+    }
+    list_user_workflows = {
+      route_key    = "GET /workflows"
+      integration  = "workflow_tracking"
+      requires_auth = true
+    }
+    cancel_workflow = {
+      route_key    = "POST /workflows/{workflowId}/cancel"
+      integration  = "workflow_tracking"
+      requires_auth = true
+    }
+
+    # Account Operations
+    create_account = {
+      route_key    = "POST /accounts"
+      integration  = "account_operations"
+      requires_auth = true
+    }
+    list_accounts = {
+      route_key    = "GET /accounts"
+      integration  = "account_operations"
+      requires_auth = true
+    }
+    delete_accounts = {
+      route_key    = "DELETE /accounts"
+      integration  = "account_operations"
+      requires_auth = true
+    }
+    get_account = {
+      route_key    = "GET /accounts/{id}"
+      integration  = "account_operations"
+      requires_auth = true
+    }
+    update_account = {
+      route_key    = "PUT /accounts/{id}"
+      integration  = "account_operations"
+      requires_auth = true
+    }
+    delete_account = {
+      route_key    = "DELETE /accounts/{id}"
+      integration  = "account_operations"
+      requires_auth = true
+    }
+    account_files = {
+      route_key    = "GET /accounts/{id}/files"
+      integration  = "account_operations"
+      requires_auth = true
+    }
+    account_file_upload = {
+      route_key    = "POST /accounts/{id}/files"
+      integration  = "account_operations"
+      requires_auth = true
+    }
+    delete_account_files = {
+      route_key    = "DELETE /accounts/{id}/files"
+      integration  = "account_operations"
+      requires_auth = true
+    }
+    get_account_transactions = {
+      route_key    = "GET /accounts/{id}/transactions"
+      integration  = "account_operations"
+      requires_auth = true
+    }
+    account_file_timeline = {
+      route_key    = "GET /accounts/{id}/timeline"
+      integration  = "account_operations"
+      requires_auth = true
+    }
+
+    # Transaction Operations
+    get_transactions = {
+      route_key    = "GET /transactions"
+      integration  = "transaction_operations"
+      requires_auth = true
+    }
+    delete_transaction = {
+      route_key    = "DELETE /transactions/{id}"
+      integration  = "transaction_operations"
+      requires_auth = true
+    }
+
+    # Transfer Operations
+    detect_transfers = {
+      route_key    = "GET /transfers/detect"
+      integration  = "transfer_operations"
+      requires_auth = true
+    }
+    get_paired_transfers = {
+      route_key    = "GET /transfers/paired"
+      integration  = "transfer_operations"
+      requires_auth = true
+    }
+    mark_transfer_pair = {
+      route_key    = "POST /transfers/mark-pair"
+      integration  = "transfer_operations"
+      requires_auth = true
+    }
+    bulk_mark_transfers = {
+      route_key    = "POST /transfers/bulk-mark"
+      integration  = "transfer_operations"
+      requires_auth = true
+    }
+
+    # Field Map Operations
+    create_field_map = {
+      route_key    = "POST /file-maps"
+      integration  = "field_map_operations"
+      requires_auth = true
+    }
+    get_field_map = {
+      route_key    = "GET /file-maps/{id}"
+      integration  = "field_map_operations"
+      requires_auth = true
+    }
+    list_field_maps = {
+      route_key    = "GET /file-maps"
+      integration  = "field_map_operations"
+      requires_auth = true
+    }
+    update_field_map = {
+      route_key    = "PUT /file-maps/{id}"
+      integration  = "field_map_operations"
+      requires_auth = true
+    }
+    delete_field_map = {
+      route_key    = "DELETE /file-maps/{id}"
+      integration  = "field_map_operations"
+      requires_auth = true
+    }
+
+    # Category Operations
+    create_category = {
+      route_key    = "POST /categories"
+      integration  = "category_operations"
+      requires_auth = true
+    }
+    list_categories = {
+      route_key    = "GET /categories"
+      integration  = "category_operations"
+      requires_auth = true
+    }
+    get_categories_hierarchy = {
+      route_key    = "GET /categories/hierarchy"
+      integration  = "category_operations"
+      requires_auth = true
+    }
+    get_category = {
+      route_key    = "GET /categories/{categoryId}"
+      integration  = "category_operations"
+      requires_auth = true
+    }
+    update_category = {
+      route_key    = "PUT /categories/{categoryId}"
+      integration  = "category_operations"
+      requires_auth = true
+    }
+    delete_category = {
+      route_key    = "DELETE /categories/{categoryId}"
+      integration  = "category_operations"
+      requires_auth = true
+    }
+    test_category_rule = {
+      route_key    = "POST /categories/test-rule"
+      integration  = "category_operations"
+      requires_auth = true
+    }
+    preview_category_matches = {
+      route_key    = "GET /categories/{categoryId}/preview-matches"
+      integration  = "category_operations"
+      requires_auth = true
+    }
+    validate_regex_pattern = {
+      route_key    = "POST /categories/validate-regex"
+      integration  = "category_operations"
+      requires_auth = true
+    }
+    generate_pattern = {
+      route_key    = "POST /categories/generate-pattern"
+      integration  = "category_operations"
+      requires_auth = true
+    }
+    generate_category_suggestions = {
+      route_key    = "POST /transactions/{transactionId}/category-suggestions"
+      integration  = "category_operations"
+      requires_auth = true
+    }
+    apply_category_rules_bulk = {
+      route_key    = "POST /categories/apply-rules-bulk"
+      integration  = "category_operations"
+      requires_auth = true
+    }
+    add_rule_to_category = {
+      route_key    = "POST /categories/{categoryId}/rules"
+      integration  = "category_operations"
+      requires_auth = true
+    }
+    update_category_rule = {
+      route_key    = "PUT /categories/{categoryId}/rules/{ruleId}"
+      integration  = "category_operations"
+      requires_auth = true
+    }
+    delete_category_rule = {
+      route_key    = "DELETE /categories/{categoryId}/rules/{ruleId}"
+      integration  = "category_operations"
+      requires_auth = true
+    }
+    suggest_category_from_transaction = {
+      route_key    = "POST /categories/suggest-from-transaction"
+      integration  = "category_operations"
+      requires_auth = true
+    }
+    extract_patterns = {
+      route_key    = "POST /categories/extract-patterns"
+      integration  = "category_operations"
+      requires_auth = true
+    }
+    create_category_with_rule = {
+      route_key    = "POST /categories/create-with-rule"
+      integration  = "category_operations"
+      requires_auth = true
+    }
+    reset_and_reapply_categories = {
+      route_key    = "POST /categories/reset-and-reapply"
+      integration  = "category_operations"
+      requires_auth = true
+    }
+
+    # Analytics Operations
+    get_analytics = {
+      route_key    = "GET /analytics"
+      integration  = "analytics_operations"
+      requires_auth = true
+    }
+    refresh_analytics = {
+      route_key    = "POST /analytics/refresh"
+      integration  = "analytics_operations"
+      requires_auth = true
+    }
+    get_analytics_status = {
+      route_key    = "GET /analytics/status"
+      integration  = "analytics_operations"
+      requires_auth = true
+    }
+
+    # Export Operations
+    initiate_export = {
+      route_key    = "POST /export"
+      integration  = "export_operations"
+      requires_auth = true
+    }
+    list_exports = {
+      route_key    = "GET /export"
+      integration  = "export_operations"
+      requires_auth = true
+    }
+    get_export_status = {
+      route_key    = "GET /export/{exportId}/status"
+      integration  = "export_operations"
+      requires_auth = true
+    }
+    get_export_download = {
+      route_key    = "GET /export/{exportId}/download"
+      integration  = "export_operations"
+      requires_auth = true
+    }
+    delete_export = {
+      route_key    = "DELETE /export/{exportId}"
+      integration  = "export_operations"
+      requires_auth = true
+    }
+
+    # FZIP Operations
+    fzip_initiate_backup = {
+      route_key    = "POST /fzip/backup"
+      integration  = "fzip_operations"
+      requires_auth = true
+    }
+    fzip_list_backups = {
+      route_key    = "GET /fzip/backup"
+      integration  = "fzip_operations"
+      requires_auth = true
+    }
+    fzip_get_backup_status = {
+      route_key    = "GET /fzip/backup/{jobId}/status"
+      integration  = "fzip_operations"
+      requires_auth = true
+    }
+    fzip_get_backup_download = {
+      route_key    = "GET /fzip/backup/{jobId}/download"
+      integration  = "fzip_operations"
+      requires_auth = true
+    }
+    fzip_delete_backup = {
+      route_key    = "DELETE /fzip/backup/{jobId}"
+      integration  = "fzip_operations"
+      requires_auth = true
+    }
+    fzip_create_restore = {
+      route_key    = "POST /fzip/restore"
+      integration  = "fzip_operations"
+      requires_auth = true
+    }
+    fzip_list_restores = {
+      route_key    = "GET /fzip/restore"
+      integration  = "fzip_operations"
+      requires_auth = true
+    }
+    fzip_get_restore_status = {
+      route_key    = "GET /fzip/restore/{jobId}/status"
+      integration  = "fzip_operations"
+      requires_auth = true
+    }
+    fzip_delete_restore = {
+      route_key    = "DELETE /fzip/restore/{jobId}"
+      integration  = "fzip_operations"
+      requires_auth = true
+    }
+    fzip_upload_restore_package = {
+      route_key    = "POST /fzip/restore/{jobId}/upload"
+      integration  = "fzip_operations"
+      requires_auth = true
+    }
+    fzip_start_restore_processing = {
+      route_key    = "POST /fzip/restore/{jobId}/start"
+      integration  = "fzip_operations"
+      requires_auth = true
+    }
+    fzip_restore_upload_url = {
+      route_key    = "POST /fzip/restore/upload-url"
+      integration  = "fzip_operations"
+      requires_auth = true
+    }
+    fzip_cancel_restore = {
+      route_key    = "POST /fzip/restore/{jobId}/cancel"
+      integration  = "fzip_operations"
+      requires_auth = true
+    }
+
+    # User Preferences Operations
+    get_user_preferences = {
+      route_key    = "GET /user-preferences"
+      integration  = "user_preferences_operations"
+      requires_auth = true
+    }
+    update_user_preferences = {
+      route_key    = "PUT /user-preferences"
+      integration  = "user_preferences_operations"
+      requires_auth = true
+    }
+    get_transfer_preferences = {
+      route_key    = "GET /user-preferences/transfers"
+      integration  = "user_preferences_operations"
+      requires_auth = true
+    }
+    update_transfer_preferences = {
+      route_key    = "PUT /user-preferences/transfers"
+      integration  = "user_preferences_operations"
+      requires_auth = true
+    }
+    get_account_date_range = {
+      route_key    = "GET /user-preferences/account-date-range"
+      integration  = "user_preferences_operations"
+      requires_auth = true
+    }
+  }
+
+  # Lambda permission configurations
+  lambda_permissions = {
+    api_gateway_colors = {
+      statement_id  = "AllowAPIGatewayInvokeColors"
+      function_name = "getcolors"
+      source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/colors"
+    }
+    api_gateway_files = {
+      statement_id  = "AllowAPIGatewayInvokeFiles"
+      function_name = "file_operations"
+      source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/files*"
+    }
+    api_gateway_upload = {
+      statement_id  = "AllowAPIGatewayInvokeUpload"
+      function_name = "file_operations"
+      source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/files/upload"
+    }
+    api_gateway_accounts = {
+      statement_id  = "AllowAPIGatewayInvokeAccounts"
+      function_name = "account_operations"
+      source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/accounts*"
+    }
+    api_gateway_transactions = {
+      statement_id  = "AllowAPIGatewayInvokeTransactions"
+      function_name = "transaction_operations"
+      source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/transactions*"
+    }
+    api_gateway_transfers = {
+      statement_id  = "AllowAPIGatewayInvokeTransfers"
+      function_name = "transfer_operations"
+      source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/transfers*"
+    }
+    getcolors = {
+      statement_id  = "AllowAPIGatewayInvoke"
+      function_name = "getcolors"
+      source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+    }
+    api_gateway_field_maps = {
+      statement_id  = "AllowAPIGatewayInvokeFieldMapsLambda"
+      function_name = "field_map_operations"
+      source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+    }
+    api_gateway_categories = {
+      statement_id  = "AllowAPIGatewayInvokeCategoriesLambda"
+      function_name = "category_operations"
+      source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+    }
+    api_gateway_analytics = {
+      statement_id  = "AllowAPIGatewayInvokeAnalyticsLambda"
+      function_name = "analytics_operations"
+      source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/analytics*"
+    }
+    api_gateway_workflows = {
+      statement_id  = "AllowAPIGatewayInvokeWorkflowsLambda"
+      function_name = "workflow_tracking"
+      source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/workflows*"
+    }
+    api_gateway_export = {
+      statement_id  = "AllowExecutionFromAPIGateway"
+      function_name = "export_operations"
+      source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+    }
+    api_gateway_fzip = {
+      statement_id  = "AllowAPIGatewayInvokeFZIPLambda"
+      function_name = "fzip_operations"
+      source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/fzip*"
+      use_alias     = true
+    }
+    api_gateway_user_preferences_ops = {
+      statement_id  = "AllowAPIGatewayInvokeUserPreferencesLambda"
+      function_name = "user_preferences_operations"
+      source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+    }
+  }
+}
+
+# =========================================
+# API GATEWAY MAIN CONFIGURATION
+# =========================================
+
 resource "aws_apigatewayv2_api" "main" {
   name          = "${var.project_name}-${var.environment}-api"
   protocol_type = "HTTP"
@@ -28,784 +642,39 @@ resource "aws_apigatewayv2_authorizer" "cognito" {
   }
 }
 
-resource "aws_apigatewayv2_integration" "getcolors" {
+# =========================================
+# DYNAMIC INTEGRATIONS
+# =========================================
+
+resource "aws_apigatewayv2_integration" "lambda_integrations" {
+  for_each = local.integrations
+
   api_id                 = aws_apigatewayv2_api.main.id
   integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.getcolors.invoke_arn
+  integration_uri        = lookup(each.value, "use_alias", false) ? local.fzip_operations_arn : local.lambda_functions[each.value.lambda_key].invoke_arn
   payload_format_version = "2.0"
-  description            = "Lambda integration for getcolors endpoint"
+  description            = each.value.description
 }
 
-resource "aws_apigatewayv2_route" "getcolors" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /colors"
-  target             = "integrations/${aws_apigatewayv2_integration.getcolors.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# File Operations Integration
-resource "aws_apigatewayv2_integration" "file_operations" {
-  api_id                 = aws_apigatewayv2_api.main.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.file_operations.invoke_arn
-  payload_format_version = "2.0"
-  description            = "Lambda integration for file operations endpoints"
-}
-
-# File Transaction Routes
-resource "aws_apigatewayv2_route" "get_file_transactions" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /files/{id}/transactions"
-  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-resource "aws_apigatewayv2_route" "delete_file_transactions" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "DELETE /files/{id}/transactions"
-  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# File listing route
-resource "aws_apigatewayv2_route" "list_files" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /files"
-  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Get single file route
-resource "aws_apigatewayv2_route" "get_file" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /files/{id}"
-  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# List files by account route
-resource "aws_apigatewayv2_route" "list_files_by_account" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /files/account/{accountId}"
-  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# S3 direct upload URL route
-resource "aws_apigatewayv2_route" "get_s3_upload_url" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /files/upload"
-  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# File download URL route
-resource "aws_apigatewayv2_route" "get_download_url" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /files/{id}/download"
-  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# File deletion route
-resource "aws_apigatewayv2_route" "delete_file" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "DELETE /files/{id}"
-  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# File unassociate route
-resource "aws_apigatewayv2_route" "unassociate_file" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "PUT /files/{id}/unassociate"
-  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# File associate route
-resource "aws_apigatewayv2_route" "associate_file" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "PUT /files/{id}/associate"
-  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# File balance update route
-resource "aws_apigatewayv2_route" "file_balance" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "PUT /files/{id}/balance"
-  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# File closing balance update route
-resource "aws_apigatewayv2_route" "file_closing_balance" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "PUT /files/{id}/closing-balance"
-  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# File metadata route
-resource "aws_apigatewayv2_route" "get_file_metadata" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /files/{id}/metadata"
-  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# File field map route
-resource "aws_apigatewayv2_route" "update_file_field_map" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "PUT /files/{id}/file-map"
-  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# File preview route
-resource "aws_apigatewayv2_route" "get_file_preview" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /files/{id}/preview"
-  target             = "integrations/${aws_apigatewayv2_integration.file_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Account Operations Integration
-resource "aws_apigatewayv2_integration" "account_operations" {
-  api_id                 = aws_apigatewayv2_api.main.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.account_operations.invoke_arn
-  payload_format_version = "2.0"
-  description            = "Lambda integration for account operations endpoints"
-}
-
-
-# Account creation route
-resource "aws_apigatewayv2_route" "create_account" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /accounts"
-  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Account listing route
-resource "aws_apigatewayv2_route" "list_accounts" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /accounts"
-  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Account deletion route
-resource "aws_apigatewayv2_route" "delete_accounts" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "DELETE /accounts"
-  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Account details route
-resource "aws_apigatewayv2_route" "get_account" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /accounts/{id}"
-  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Account update route
-resource "aws_apigatewayv2_route" "update_account" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "PUT /accounts/{id}"
-  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Account deletion route
-resource "aws_apigatewayv2_route" "delete_account" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "DELETE /accounts/{id}"
-  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Account files route
-resource "aws_apigatewayv2_route" "account_files" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /accounts/{id}/files"
-  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# File upload for account route
-resource "aws_apigatewayv2_route" "account_file_upload" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /accounts/{id}/files"
-  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Delete account files route
-resource "aws_apigatewayv2_route" "delete_account_files" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "DELETE /accounts/{id}/files"
-  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Account transactions route
-resource "aws_apigatewayv2_route" "get_account_transactions" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /accounts/{id}/transactions"
-  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Account timeline route
-resource "aws_apigatewayv2_route" "account_file_timeline" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /accounts/{id}/timeline"
-  target             = "integrations/${aws_apigatewayv2_integration.account_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Transaction operations integration
-resource "aws_apigatewayv2_integration" "transaction_operations" {
-  api_id                 = aws_apigatewayv2_api.main.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.transaction_operations.invoke_arn
-  payload_format_version = "2.0"
-  description            = "Lambda integration for transaction operations"
-}
-
-# Transfer Operations Integration
-resource "aws_apigatewayv2_integration" "transfer_operations" {
-  api_id                 = aws_apigatewayv2_api.main.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.transfer_operations.invoke_arn
-  payload_format_version = "2.0"
-  description            = "Lambda integration for transfer operations"
-}
-
-# Transaction Routes
-resource "aws_apigatewayv2_route" "get_transactions" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /transactions"
-  target             = "integrations/${aws_apigatewayv2_integration.transaction_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-resource "aws_apigatewayv2_route" "delete_transaction" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "DELETE /transactions/{id}"
-  target             = "integrations/${aws_apigatewayv2_integration.transaction_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Transfer Routes
-resource "aws_apigatewayv2_route" "detect_transfers" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /transfers/detect"
-  target             = "integrations/${aws_apigatewayv2_integration.transfer_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-resource "aws_apigatewayv2_route" "get_paired_transfers" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /transfers/paired"
-  target             = "integrations/${aws_apigatewayv2_integration.transfer_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-resource "aws_apigatewayv2_route" "mark_transfer_pair" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /transfers/mark-pair"
-  target             = "integrations/${aws_apigatewayv2_integration.transfer_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-resource "aws_apigatewayv2_route" "bulk_mark_transfers" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /transfers/bulk-mark"
-  target             = "integrations/${aws_apigatewayv2_integration.transfer_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Field map routes
-resource "aws_apigatewayv2_integration" "field_map_operations" {
-  api_id                 = aws_apigatewayv2_api.main.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.file_map_operations.invoke_arn
-  payload_format_version = "2.0"
-}
-
-# Create field map
-resource "aws_apigatewayv2_route" "create_field_map" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /file-maps"
-  target             = "integrations/${aws_apigatewayv2_integration.field_map_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Get field map by ID
-resource "aws_apigatewayv2_route" "get_field_map" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /file-maps/{id}"
-  target             = "integrations/${aws_apigatewayv2_integration.field_map_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# List field maps
-resource "aws_apigatewayv2_route" "list_field_maps" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /file-maps"
-  target             = "integrations/${aws_apigatewayv2_integration.field_map_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Update field map
-resource "aws_apigatewayv2_route" "update_field_map" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "PUT /file-maps/{id}"
-  target             = "integrations/${aws_apigatewayv2_integration.field_map_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Delete field map
-resource "aws_apigatewayv2_route" "delete_field_map" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "DELETE /file-maps/{id}"
-  target             = "integrations/${aws_apigatewayv2_integration.field_map_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Categories Operations Integration
-resource "aws_apigatewayv2_integration" "category_operations" {
-  api_id                 = aws_apigatewayv2_api.main.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.categories_lambda.invoke_arn # From lambda_categories.tf
-  payload_format_version = "2.0"
-  description            = "Lambda integration for category CRUD operations"
-}
+# =========================================
+# DYNAMIC ROUTES
+# =========================================
 
-# Create Category route
-resource "aws_apigatewayv2_route" "create_category" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /categories"
-  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# List Categories route
-resource "aws_apigatewayv2_route" "list_categories" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /categories"
-  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Get Categories Hierarchy route
-resource "aws_apigatewayv2_route" "get_categories_hierarchy" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /categories/hierarchy"
-  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Get Category by ID route
-resource "aws_apigatewayv2_route" "get_category" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /categories/{categoryId}"
-  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Update Category by ID route
-resource "aws_apigatewayv2_route" "update_category" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "PUT /categories/{categoryId}"
-  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Delete Category by ID route
-resource "aws_apigatewayv2_route" "delete_category" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "DELETE /categories/{categoryId}"
-  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Phase 2.1 Rule Testing & Preview API Endpoints
-
-# Test Category Rule route
-resource "aws_apigatewayv2_route" "test_category_rule" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /categories/test-rule"
-  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Preview Category Matches route
-resource "aws_apigatewayv2_route" "preview_category_matches" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /categories/{categoryId}/preview-matches"
-  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Validate Regex Pattern route
-resource "aws_apigatewayv2_route" "validate_regex_pattern" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /categories/validate-regex"
-  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Generate Pattern route
-resource "aws_apigatewayv2_route" "generate_pattern" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /categories/generate-pattern"
-  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Generate Category Suggestions route
-resource "aws_apigatewayv2_route" "generate_category_suggestions" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /transactions/{transactionId}/category-suggestions"
-  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Apply Category Rules Bulk route
-resource "aws_apigatewayv2_route" "apply_category_rules_bulk" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /categories/apply-rules-bulk"
-  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Category Rule Management routes
-
-# Add Rule to Category route
-resource "aws_apigatewayv2_route" "add_rule_to_category" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /categories/{categoryId}/rules"
-  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Update Category Rule route
-resource "aws_apigatewayv2_route" "update_category_rule" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "PUT /categories/{categoryId}/rules/{ruleId}"
-  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Delete Category Rule route
-resource "aws_apigatewayv2_route" "delete_category_rule" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "DELETE /categories/{categoryId}/rules/{ruleId}"
-  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Phase 4.1 Pattern Extraction & Smart Category Creation routes
-
-# Suggest Category from Transaction route
-resource "aws_apigatewayv2_route" "suggest_category_from_transaction" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /categories/suggest-from-transaction"
-  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Extract Patterns route
-resource "aws_apigatewayv2_route" "extract_patterns" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /categories/extract-patterns"
-  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Create Category with Rule route
-resource "aws_apigatewayv2_route" "create_category_with_rule" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /categories/create-with-rule"
-  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Reset and Reapply Categories route
-resource "aws_apigatewayv2_route" "reset_and_reapply_categories" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /categories/reset-and-reapply"
-  target             = "integrations/${aws_apigatewayv2_integration.category_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Analytics Operations Integration
-resource "aws_apigatewayv2_integration" "analytics_operations" {
-  api_id                 = aws_apigatewayv2_api.main.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.analytics_operations.invoke_arn
-  payload_format_version = "2.0"
-  description            = "Lambda integration for analytics operations endpoints"
-}
-
-# Analytics routes
-resource "aws_apigatewayv2_route" "get_analytics" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /analytics"
-  target             = "integrations/${aws_apigatewayv2_integration.analytics_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-resource "aws_apigatewayv2_route" "refresh_analytics" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /analytics/refresh"
-  target             = "integrations/${aws_apigatewayv2_integration.analytics_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-resource "aws_apigatewayv2_route" "get_analytics_status" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /analytics/status"
-  target             = "integrations/${aws_apigatewayv2_integration.analytics_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# Export Operations Integration
-resource "aws_apigatewayv2_integration" "export_operations" {
-  api_id                 = aws_apigatewayv2_api.main.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.export_operations.invoke_arn
-  payload_format_version = "2.0"
-  description            = "Lambda integration for export operations endpoints"
-}
-
-# Export routes
-resource "aws_apigatewayv2_route" "initiate_export" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /export"
-  target             = "integrations/${aws_apigatewayv2_integration.export_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-resource "aws_apigatewayv2_route" "list_exports" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /export"
-  target             = "integrations/${aws_apigatewayv2_integration.export_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-resource "aws_apigatewayv2_route" "get_export_status" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /export/{exportId}/status"
-  target             = "integrations/${aws_apigatewayv2_integration.export_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-resource "aws_apigatewayv2_route" "get_export_download" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /export/{exportId}/download"
-  target             = "integrations/${aws_apigatewayv2_integration.export_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-resource "aws_apigatewayv2_route" "delete_export" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "DELETE /export/{exportId}"
-  target             = "integrations/${aws_apigatewayv2_integration.export_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# FZIP Operations Integration (Unified Backup/Restore)
-resource "aws_apigatewayv2_integration" "fzip_operations" {
-  api_id                 = aws_apigatewayv2_api.main.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_alias.fzip_operations_version.invoke_arn
-  payload_format_version = "2.0"
-  description            = "Lambda integration for unified FZIP backup/restore operations (versioned)"
-}
-
-
-
-# FZIP Backup routes
-resource "aws_apigatewayv2_route" "fzip_initiate_backup" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /fzip/backup"
-  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
+resource "aws_apigatewayv2_route" "api_routes" {
+  for_each = local.routes
 
-resource "aws_apigatewayv2_route" "fzip_list_backups" {
   api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /fzip/backup"
-  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  route_key          = each.value.route_key
+  target             = "integrations/${aws_apigatewayv2_integration.lambda_integrations[each.value.integration].id}"
+  authorization_type = each.value.requires_auth ? "JWT" : "NONE"
+  authorizer_id      = each.value.requires_auth ? aws_apigatewayv2_authorizer.cognito.id : null
 }
 
-resource "aws_apigatewayv2_route" "fzip_get_backup_status" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /fzip/backup/{jobId}/status"
-  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-resource "aws_apigatewayv2_route" "fzip_get_backup_download" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /fzip/backup/{jobId}/download"
-  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-resource "aws_apigatewayv2_route" "fzip_delete_backup" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "DELETE /fzip/backup/{jobId}"
-  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-
-
-# FZIP Restore routes
-resource "aws_apigatewayv2_route" "fzip_create_restore" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /fzip/restore"
-  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-resource "aws_apigatewayv2_route" "fzip_list_restores" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /fzip/restore"
-  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
 
-resource "aws_apigatewayv2_route" "fzip_get_restore_status" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /fzip/restore/{jobId}/status"
-  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-resource "aws_apigatewayv2_route" "fzip_delete_restore" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "DELETE /fzip/restore/{jobId}"
-  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-resource "aws_apigatewayv2_route" "fzip_upload_restore_package" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /fzip/restore/{jobId}/upload"
-  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
+# =========================================
+# STAGE CONFIGURATION
+# =========================================
 
-resource "aws_apigatewayv2_route" "fzip_start_restore_processing" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /fzip/restore/{jobId}/start"
-  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# New simplified flow endpoints
-resource "aws_apigatewayv2_route" "fzip_restore_upload_url" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /fzip/restore/upload-url"
-  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-resource "aws_apigatewayv2_route" "fzip_cancel_restore" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /fzip/restore/{jobId}/cancel"
-  target             = "integrations/${aws_apigatewayv2_integration.fzip_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
 
 resource "aws_apigatewayv2_stage" "main" {
   api_id      = aws_apigatewayv2_api.main.id
@@ -839,177 +708,591 @@ resource "aws_cloudwatch_log_group" "api_gateway" {
   }
 }
 
-# Lambda permission to allow API Gateway to invoke the function
-resource "aws_lambda_permission" "api_gateway_colors" {
-  statement_id  = "AllowAPIGatewayInvokeColors"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.getcolors.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/colors"
-}
+# =========================================
+# DYNAMIC LAMBDA PERMISSIONS
+# =========================================
 
-# Lambda permission for file operations
-resource "aws_lambda_permission" "api_gateway_files" {
-  statement_id  = "AllowAPIGatewayInvokeFiles"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.file_operations.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/files*"
-}
+resource "aws_lambda_permission" "api_gateway_lambda_permissions" {
+  for_each = local.lambda_permissions
 
-# Lambda permission for upload endpoint
-resource "aws_lambda_permission" "api_gateway_upload" {
-  statement_id  = "AllowAPIGatewayInvokeUpload"
+  statement_id  = each.value.statement_id
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.file_operations.function_name
+  function_name = lookup(each.value, "use_alias", false) ? local.fzip_operations_function_name : local.lambda_functions[each.value.function_name].function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/files/upload"
-}
-
-# Lambda permission for account operations
-resource "aws_lambda_permission" "api_gateway_accounts" {
-  statement_id  = "AllowAPIGatewayInvokeAccounts"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.account_operations.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/accounts*"
-}
-
-# Lambda permission for API Gateway to invoke transaction operations
-resource "aws_lambda_permission" "api_gateway_transactions" {
-  statement_id  = "AllowAPIGatewayInvokeTransactions"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.transaction_operations.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/transactions*"
-}
-
-# Lambda permission for transfer operations
-resource "aws_lambda_permission" "api_gateway_transfers" {
-  statement_id  = "AllowAPIGatewayInvokeTransfers"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.transfer_operations.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/transfers*"
-}
-
-# Lambda permission for getcolors
-resource "aws_lambda_permission" "getcolors" {
-  statement_id  = "AllowAPIGatewayInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.getcolors.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
-}
-
-# Lambda permission for field maps
-resource "aws_lambda_permission" "api_gateway_field_maps" {
-  statement_id  = "AllowAPIGatewayInvokeFieldMapsLambda"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.file_map_operations.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
-}
-
-# Lambda permission for categories
-resource "aws_lambda_permission" "api_gateway_categories" {
-  statement_id  = "AllowAPIGatewayInvokeCategoriesLambda"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.categories_lambda.function_name # From lambda_categories.tf
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
-}
-
-# Lambda permission for analytics
-resource "aws_lambda_permission" "api_gateway_analytics" {
-  statement_id  = "AllowAPIGatewayInvokeAnalyticsLambda"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.analytics_operations.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/analytics*"
-}
-
-resource "aws_lambda_permission" "api_gateway_export" {
-  statement_id  = "AllowExecutionFromAPIGateway"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.export_operations.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
-}
-
-# Lambda permission for FZIP operations (unified backup/restore) - via alias
-resource "aws_lambda_permission" "api_gateway_fzip" {
-  statement_id  = "AllowAPIGatewayInvokeFZIPLambda"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_alias.fzip_operations_version.arn
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/fzip*"
+  source_arn    = each.value.source_arn
 }
 
 # =========================================
-# USER PREFERENCES API INTEGRATION
+# MOVED BLOCKS FOR REFACTORING
 # =========================================
 
-# Integration for user preferences operations
-resource "aws_apigatewayv2_integration" "user_preferences_operations" {
-  api_id                 = aws_apigatewayv2_api.main.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.user_preferences_operations.invoke_arn
-  payload_format_version = "2.0"
-  description            = "Lambda integration for user preferences operations endpoints"
+# Integration moves
+moved {
+  from = aws_apigatewayv2_integration.getcolors
+  to   = aws_apigatewayv2_integration.lambda_integrations["getcolors"]
 }
 
-# Routes for user preferences operations
-resource "aws_apigatewayv2_route" "get_user_preferences" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /user-preferences"
-  target             = "integrations/${aws_apigatewayv2_integration.user_preferences_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+moved {
+  from = aws_apigatewayv2_integration.file_operations
+  to   = aws_apigatewayv2_integration.lambda_integrations["file_operations"]
 }
 
-resource "aws_apigatewayv2_route" "update_user_preferences" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "PUT /user-preferences"
-  target             = "integrations/${aws_apigatewayv2_integration.user_preferences_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+moved {
+  from = aws_apigatewayv2_integration.workflow_tracking
+  to   = aws_apigatewayv2_integration.lambda_integrations["workflow_tracking"]
 }
 
-resource "aws_apigatewayv2_route" "get_transfer_preferences" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /user-preferences/transfers"
-  target             = "integrations/${aws_apigatewayv2_integration.user_preferences_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+moved {
+  from = aws_apigatewayv2_integration.account_operations
+  to   = aws_apigatewayv2_integration.lambda_integrations["account_operations"]
 }
 
-resource "aws_apigatewayv2_route" "update_transfer_preferences" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "PUT /user-preferences/transfers"
-  target             = "integrations/${aws_apigatewayv2_integration.user_preferences_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+moved {
+  from = aws_apigatewayv2_integration.transaction_operations
+  to   = aws_apigatewayv2_integration.lambda_integrations["transaction_operations"]
 }
 
-resource "aws_apigatewayv2_route" "get_account_date_range" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /user-preferences/account-date-range"
-  target             = "integrations/${aws_apigatewayv2_integration.user_preferences_operations.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+moved {
+  from = aws_apigatewayv2_integration.transfer_operations
+  to   = aws_apigatewayv2_integration.lambda_integrations["transfer_operations"]
 }
 
-# Lambda permission for user preferences
-resource "aws_lambda_permission" "api_gateway_user_preferences_ops" {
-  statement_id  = "AllowAPIGatewayInvokeUserPreferencesLambda"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.user_preferences_operations.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+moved {
+  from = aws_apigatewayv2_integration.field_map_operations
+  to   = aws_apigatewayv2_integration.lambda_integrations["field_map_operations"]
 }
 
-# Outputs
+moved {
+  from = aws_apigatewayv2_integration.category_operations
+  to   = aws_apigatewayv2_integration.lambda_integrations["category_operations"]
+}
+
+moved {
+  from = aws_apigatewayv2_integration.analytics_operations
+  to   = aws_apigatewayv2_integration.lambda_integrations["analytics_operations"]
+}
+
+moved {
+  from = aws_apigatewayv2_integration.export_operations
+  to   = aws_apigatewayv2_integration.lambda_integrations["export_operations"]
+}
+
+moved {
+  from = aws_apigatewayv2_integration.fzip_operations
+  to   = aws_apigatewayv2_integration.lambda_integrations["fzip_operations"]
+}
+
+moved {
+  from = aws_apigatewayv2_integration.user_preferences_operations
+  to   = aws_apigatewayv2_integration.lambda_integrations["user_preferences_operations"]
+}
+
+# Route moves
+moved {
+  from = aws_apigatewayv2_route.getcolors
+  to   = aws_apigatewayv2_route.api_routes["getcolors"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_file_transactions
+  to   = aws_apigatewayv2_route.api_routes["get_file_transactions"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.delete_file_transactions
+  to   = aws_apigatewayv2_route.api_routes["delete_file_transactions"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.list_files
+  to   = aws_apigatewayv2_route.api_routes["list_files"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_file
+  to   = aws_apigatewayv2_route.api_routes["get_file"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.list_files_by_account
+  to   = aws_apigatewayv2_route.api_routes["list_files_by_account"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_s3_upload_url
+  to   = aws_apigatewayv2_route.api_routes["get_s3_upload_url"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_download_url
+  to   = aws_apigatewayv2_route.api_routes["get_download_url"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.delete_file
+  to   = aws_apigatewayv2_route.api_routes["delete_file"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.unassociate_file
+  to   = aws_apigatewayv2_route.api_routes["unassociate_file"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.associate_file
+  to   = aws_apigatewayv2_route.api_routes["associate_file"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.file_balance
+  to   = aws_apigatewayv2_route.api_routes["file_balance"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.file_closing_balance
+  to   = aws_apigatewayv2_route.api_routes["file_closing_balance"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_file_metadata
+  to   = aws_apigatewayv2_route.api_routes["get_file_metadata"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.update_file_field_map
+  to   = aws_apigatewayv2_route.api_routes["update_file_field_map"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_file_preview
+  to   = aws_apigatewayv2_route.api_routes["get_file_preview"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_workflow_status
+  to   = aws_apigatewayv2_route.api_routes["get_workflow_status"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.list_user_workflows
+  to   = aws_apigatewayv2_route.api_routes["list_user_workflows"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.cancel_workflow
+  to   = aws_apigatewayv2_route.api_routes["cancel_workflow"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.create_account
+  to   = aws_apigatewayv2_route.api_routes["create_account"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.list_accounts
+  to   = aws_apigatewayv2_route.api_routes["list_accounts"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.delete_accounts
+  to   = aws_apigatewayv2_route.api_routes["delete_accounts"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_account
+  to   = aws_apigatewayv2_route.api_routes["get_account"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.update_account
+  to   = aws_apigatewayv2_route.api_routes["update_account"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.delete_account
+  to   = aws_apigatewayv2_route.api_routes["delete_account"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.account_files
+  to   = aws_apigatewayv2_route.api_routes["account_files"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.account_file_upload
+  to   = aws_apigatewayv2_route.api_routes["account_file_upload"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.delete_account_files
+  to   = aws_apigatewayv2_route.api_routes["delete_account_files"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_account_transactions
+  to   = aws_apigatewayv2_route.api_routes["get_account_transactions"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.account_file_timeline
+  to   = aws_apigatewayv2_route.api_routes["account_file_timeline"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_transactions
+  to   = aws_apigatewayv2_route.api_routes["get_transactions"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.delete_transaction
+  to   = aws_apigatewayv2_route.api_routes["delete_transaction"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.detect_transfers
+  to   = aws_apigatewayv2_route.api_routes["detect_transfers"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_paired_transfers
+  to   = aws_apigatewayv2_route.api_routes["get_paired_transfers"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.mark_transfer_pair
+  to   = aws_apigatewayv2_route.api_routes["mark_transfer_pair"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.bulk_mark_transfers
+  to   = aws_apigatewayv2_route.api_routes["bulk_mark_transfers"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.create_field_map
+  to   = aws_apigatewayv2_route.api_routes["create_field_map"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_field_map
+  to   = aws_apigatewayv2_route.api_routes["get_field_map"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.list_field_maps
+  to   = aws_apigatewayv2_route.api_routes["list_field_maps"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.update_field_map
+  to   = aws_apigatewayv2_route.api_routes["update_field_map"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.delete_field_map
+  to   = aws_apigatewayv2_route.api_routes["delete_field_map"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.create_category
+  to   = aws_apigatewayv2_route.api_routes["create_category"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.list_categories
+  to   = aws_apigatewayv2_route.api_routes["list_categories"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_categories_hierarchy
+  to   = aws_apigatewayv2_route.api_routes["get_categories_hierarchy"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_category
+  to   = aws_apigatewayv2_route.api_routes["get_category"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.update_category
+  to   = aws_apigatewayv2_route.api_routes["update_category"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.delete_category
+  to   = aws_apigatewayv2_route.api_routes["delete_category"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.test_category_rule
+  to   = aws_apigatewayv2_route.api_routes["test_category_rule"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.preview_category_matches
+  to   = aws_apigatewayv2_route.api_routes["preview_category_matches"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.validate_regex_pattern
+  to   = aws_apigatewayv2_route.api_routes["validate_regex_pattern"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.generate_pattern
+  to   = aws_apigatewayv2_route.api_routes["generate_pattern"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.generate_category_suggestions
+  to   = aws_apigatewayv2_route.api_routes["generate_category_suggestions"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.apply_category_rules_bulk
+  to   = aws_apigatewayv2_route.api_routes["apply_category_rules_bulk"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.add_rule_to_category
+  to   = aws_apigatewayv2_route.api_routes["add_rule_to_category"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.update_category_rule
+  to   = aws_apigatewayv2_route.api_routes["update_category_rule"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.delete_category_rule
+  to   = aws_apigatewayv2_route.api_routes["delete_category_rule"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.suggest_category_from_transaction
+  to   = aws_apigatewayv2_route.api_routes["suggest_category_from_transaction"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.extract_patterns
+  to   = aws_apigatewayv2_route.api_routes["extract_patterns"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.create_category_with_rule
+  to   = aws_apigatewayv2_route.api_routes["create_category_with_rule"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.reset_and_reapply_categories
+  to   = aws_apigatewayv2_route.api_routes["reset_and_reapply_categories"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_analytics
+  to   = aws_apigatewayv2_route.api_routes["get_analytics"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.refresh_analytics
+  to   = aws_apigatewayv2_route.api_routes["refresh_analytics"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_analytics_status
+  to   = aws_apigatewayv2_route.api_routes["get_analytics_status"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.initiate_export
+  to   = aws_apigatewayv2_route.api_routes["initiate_export"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.list_exports
+  to   = aws_apigatewayv2_route.api_routes["list_exports"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_export_status
+  to   = aws_apigatewayv2_route.api_routes["get_export_status"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_export_download
+  to   = aws_apigatewayv2_route.api_routes["get_export_download"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.delete_export
+  to   = aws_apigatewayv2_route.api_routes["delete_export"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.fzip_initiate_backup
+  to   = aws_apigatewayv2_route.api_routes["fzip_initiate_backup"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.fzip_list_backups
+  to   = aws_apigatewayv2_route.api_routes["fzip_list_backups"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.fzip_get_backup_status
+  to   = aws_apigatewayv2_route.api_routes["fzip_get_backup_status"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.fzip_get_backup_download
+  to   = aws_apigatewayv2_route.api_routes["fzip_get_backup_download"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.fzip_delete_backup
+  to   = aws_apigatewayv2_route.api_routes["fzip_delete_backup"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.fzip_create_restore
+  to   = aws_apigatewayv2_route.api_routes["fzip_create_restore"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.fzip_list_restores
+  to   = aws_apigatewayv2_route.api_routes["fzip_list_restores"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.fzip_get_restore_status
+  to   = aws_apigatewayv2_route.api_routes["fzip_get_restore_status"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.fzip_delete_restore
+  to   = aws_apigatewayv2_route.api_routes["fzip_delete_restore"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.fzip_upload_restore_package
+  to   = aws_apigatewayv2_route.api_routes["fzip_upload_restore_package"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.fzip_start_restore_processing
+  to   = aws_apigatewayv2_route.api_routes["fzip_start_restore_processing"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.fzip_restore_upload_url
+  to   = aws_apigatewayv2_route.api_routes["fzip_restore_upload_url"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.fzip_cancel_restore
+  to   = aws_apigatewayv2_route.api_routes["fzip_cancel_restore"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_user_preferences
+  to   = aws_apigatewayv2_route.api_routes["get_user_preferences"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.update_user_preferences
+  to   = aws_apigatewayv2_route.api_routes["update_user_preferences"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_transfer_preferences
+  to   = aws_apigatewayv2_route.api_routes["get_transfer_preferences"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.update_transfer_preferences
+  to   = aws_apigatewayv2_route.api_routes["update_transfer_preferences"]
+}
+
+moved {
+  from = aws_apigatewayv2_route.get_account_date_range
+  to   = aws_apigatewayv2_route.api_routes["get_account_date_range"]
+}
+
+# Lambda permission moves
+moved {
+  from = aws_lambda_permission.api_gateway_colors
+  to   = aws_lambda_permission.api_gateway_lambda_permissions["api_gateway_colors"]
+}
+
+moved {
+  from = aws_lambda_permission.api_gateway_files
+  to   = aws_lambda_permission.api_gateway_lambda_permissions["api_gateway_files"]
+}
+
+moved {
+  from = aws_lambda_permission.api_gateway_upload
+  to   = aws_lambda_permission.api_gateway_lambda_permissions["api_gateway_upload"]
+}
+
+moved {
+  from = aws_lambda_permission.api_gateway_accounts
+  to   = aws_lambda_permission.api_gateway_lambda_permissions["api_gateway_accounts"]
+}
+
+moved {
+  from = aws_lambda_permission.api_gateway_transactions
+  to   = aws_lambda_permission.api_gateway_lambda_permissions["api_gateway_transactions"]
+}
+
+moved {
+  from = aws_lambda_permission.api_gateway_transfers
+  to   = aws_lambda_permission.api_gateway_lambda_permissions["api_gateway_transfers"]
+}
+
+moved {
+  from = aws_lambda_permission.getcolors
+  to   = aws_lambda_permission.api_gateway_lambda_permissions["getcolors"]
+}
+
+moved {
+  from = aws_lambda_permission.api_gateway_field_maps
+  to   = aws_lambda_permission.api_gateway_lambda_permissions["api_gateway_field_maps"]
+}
+
+moved {
+  from = aws_lambda_permission.api_gateway_categories
+  to   = aws_lambda_permission.api_gateway_lambda_permissions["api_gateway_categories"]
+}
+
+moved {
+  from = aws_lambda_permission.api_gateway_analytics
+  to   = aws_lambda_permission.api_gateway_lambda_permissions["api_gateway_analytics"]
+}
+
+moved {
+  from = aws_lambda_permission.api_gateway_workflows
+  to   = aws_lambda_permission.api_gateway_lambda_permissions["api_gateway_workflows"]
+}
+
+moved {
+  from = aws_lambda_permission.api_gateway_export
+  to   = aws_lambda_permission.api_gateway_lambda_permissions["api_gateway_export"]
+}
+
+moved {
+  from = aws_lambda_permission.api_gateway_fzip
+  to   = aws_lambda_permission.api_gateway_lambda_permissions["api_gateway_fzip"]
+}
+
+moved {
+  from = aws_lambda_permission.api_gateway_user_preferences_ops
+  to   = aws_lambda_permission.api_gateway_lambda_permissions["api_gateway_user_preferences_ops"]
+}
+
+# =========================================
+# OUTPUTS
+# =========================================
+
 output "api_endpoint" {
   value = "https://${aws_cloudfront_distribution.frontend.domain_name}/dev"
 }
@@ -1024,4 +1307,8 @@ output "api_accounts_endpoint" {
 
 output "api_stage" {
   value = aws_apigatewayv2_stage.main.name
-} 
+}
+
+
+
+

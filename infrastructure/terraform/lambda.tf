@@ -99,6 +99,7 @@ resource "aws_lambda_function" "file_operations" {
       ACCOUNTS_TABLE      = aws_dynamodb_table.accounts.name
       TRANSACTIONS_TABLE  = aws_dynamodb_table.transactions.name
       FILE_MAPS_TABLE     = aws_dynamodb_table.file_maps.name
+      WORKFLOWS_TABLE     = aws_dynamodb_table.workflows.name
       DEPLOYMENT_VERSION  = "v4"
     }
   }
@@ -110,11 +111,11 @@ resource "aws_lambda_function" "file_operations" {
   }
 }
 
-# File Processor Lambda
-resource "aws_lambda_function" "file_processor" {
+# S3 Event Handler Lambda (replaces direct file processor)
+resource "aws_lambda_function" "s3_event_handler" {
   filename         = "../../backend/lambda_deploy.zip"
-  function_name    = "${var.project_name}-${var.environment}-file-processor"
-  handler          = "handlers/file_processor.handler"
+  function_name    = "${var.project_name}-${var.environment}-s3-event-handler"
+  handler          = "handlers/s3_event_handler.handler"
   runtime          = "python3.12"
   role             = aws_iam_role.lambda_exec.arn
   timeout          = 60
@@ -125,13 +126,9 @@ resource "aws_lambda_function" "file_processor" {
   environment {
     variables = {
       ENVIRONMENT            = var.environment
-      FILES_TABLE            = aws_dynamodb_table.transaction_files.name
-      TRANSACTIONS_TABLE     = aws_dynamodb_table.transactions.name
       FILE_STORAGE_BUCKET    = aws_s3_bucket.file_storage.id
-      ACCOUNTS_TABLE         = aws_dynamodb_table.accounts.name
-      FILE_MAPS_TABLE        = aws_dynamodb_table.file_maps.name
-      ANALYTICS_DATA_TABLE   = aws_dynamodb_table.analytics_data.name
-      ANALYTICS_STATUS_TABLE = aws_dynamodb_table.analytics_status.name
+      EVENT_BUS_NAME         = aws_cloudwatch_event_bus.app_events.name
+      ENABLE_EVENT_PUBLISHING = "true"
     }
   }
 
@@ -261,6 +258,32 @@ resource "aws_lambda_function" "analytics_operations" {
   }
 }
 
+# Workflow Tracking Lambda
+resource "aws_lambda_function" "workflow_tracking" {
+  filename         = "../../backend/lambda_deploy.zip"
+  function_name    = "${var.project_name}-${var.environment}-workflow-tracking"
+  handler          = "handlers/workflow_tracking.handler"
+  runtime          = "python3.12"
+  role             = aws_iam_role.lambda_exec.arn
+  timeout          = 30
+  memory_size      = 256
+  source_code_hash = base64encode(local.source_code_hash)
+  depends_on       = [null_resource.prepare_lambda]
+
+  environment {
+    variables = {
+      ENVIRONMENT      = var.environment
+      WORKFLOWS_TABLE  = aws_dynamodb_table.workflows.name
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
 # Get Colors Lambda
 resource "aws_lambda_function" "getcolors" {
   filename         = "../../backend/lambda_deploy.zip"
@@ -289,11 +312,11 @@ resource "aws_lambda_function" "getcolors" {
   }
 }
 
-# S3 Trigger for File Processor
-resource "aws_lambda_permission" "allow_s3" {
+# S3 Trigger for S3 Event Handler
+resource "aws_lambda_permission" "allow_s3_event_handler" {
   statement_id  = "AllowExecutionFromS3"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.file_processor.function_name
+  function_name = aws_lambda_function.s3_event_handler.function_name
   principal     = "s3.amazonaws.com"
   source_arn    = aws_s3_bucket.file_storage.arn
 }
@@ -445,8 +468,8 @@ resource "aws_cloudwatch_log_group" "file_operations" {
   }
 }
 
-resource "aws_cloudwatch_log_group" "file_processor" {
-  name              = "/aws/lambda/${aws_lambda_function.file_processor.function_name}"
+resource "aws_cloudwatch_log_group" "s3_event_handler" {
+  name              = "/aws/lambda/${aws_lambda_function.s3_event_handler.function_name}"
   retention_in_days = 14
 
   tags = {
@@ -814,8 +837,8 @@ output "lambda_file_operations_name" {
   value = aws_lambda_function.file_operations.function_name
 }
 
-output "lambda_file_processor_name" {
-  value = aws_lambda_function.file_processor.function_name
+output "lambda_s3_event_handler_name" {
+  value = aws_lambda_function.s3_event_handler.function_name
 }
 
 output "lambda_account_operations_name" {
