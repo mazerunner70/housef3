@@ -100,7 +100,6 @@ resource "aws_lambda_function" "file_processor_consumer" {
       FZIP_JOBS_TABLE        = aws_dynamodb_table.fzip_jobs.name
       FILE_STORAGE_BUCKET    = aws_s3_bucket.file_storage.bucket
       ENABLE_EVENT_PUBLISHING = "true"
-      ENABLE_DIRECT_TRIGGERS = "false"
     }
   }
 
