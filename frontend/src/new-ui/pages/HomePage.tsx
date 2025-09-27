@@ -136,11 +136,14 @@ const StaleAccountsSection: React.FC<StaleAccountsSectionProps> = ({ insights })
                         </div>
                     </div>
                 ))}
-                {insights.accountsNeedingUpdate.length > 5 && (
-                    <div className="more-accounts">
-                        +{insights.accountsNeedingUpdate.length - 5} more accounts
-                    </div>
-                )}
+                {(() => {
+                    const extra = insights.accountsNeedingUpdate.length - 5;
+                    return extra > 0 && (
+                        <div className="more-accounts">
+                            +{extra} more account{extra === 1 ? '' : 's'}
+                        </div>
+                    );
+                })()}
             </div>
         </div>
     );

@@ -342,12 +342,19 @@ Associates a file with an account. This endpoint allows you to link an existing 
 **Request Parameters:**
 - `id` (path parameter): ID of the file to associate with an account
 
+**Request Headers:**
+- `Authorization`: Bearer token for user authentication
+- `Content-Type`: application/json
+
 **Request Body:**
 ```json
 {
   "accountId": "6286d8bc-1cb7-4715-95c2-8c5a57d40cfd"
 }
 ```
+
+**Request Body Fields:**
+- `accountId`: UUID of the account to associate the file with (required)
 
 **Response:**
 ```json
@@ -358,6 +365,150 @@ Associates a file with an account. This endpoint allows you to link an existing 
   "accountName": "Test Account"
 }
 ```
+
+**Error Responses:**
+- `400 Bad Request`: Invalid file ID format or account ID format
+- `404 Not Found`: File not found or account not found
+- `403 Forbidden`: File or account does not belong to the authenticated user
+- `500 Internal Server Error`: Server error during association
+
+**Validation Rules:**
+- File ID must be a valid UUID format
+- Account ID must be a valid UUID format and exist in the system
+- File must belong to the authenticated user
+- Account must belong to the authenticated user
+- File can only be associated with one account at a time (existing associations will be replaced)
+
+**Side Effects:**
+- If the file was previously associated with another account, that association is removed
+- File processing may be triggered to update transaction-account relationships
+- Analytics data may be recalculated for affected accounts
+
+**Usage Examples:**
+
+*Request:*
+```http
+POST /files/d31b6f5a-6ab1-4d89-89c0-c405cfe1124c/associate
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: application/json
+
+{
+  "accountId": "6286d8bc-1cb7-4715-95c2-8c5a57d40cfd"
+}
+```
+
+*Response (Success):*
+```json
+{
+  "message": "File successfully associated with account",
+  "fileId": "d31b6f5a-6ab1-4d89-89c0-c405cfe1124c",
+  "accountId": "6286d8bc-1cb7-4715-95c2-8c5a57d40cfd",
+  "accountName": "Test Account"
+}
+```
+
+*Response (Invalid Account):*
+```json
+{
+  "error": "Account not found",
+  "statusCode": 404
+}
+```
+
+**Related Endpoints:**
+- [`PUT /files/{id}/unassociate`](#put-filesidunassociate) - Remove account association from a file
+- [`GET /files/{id}/metadata`](#get-filesidmetadata) - Get file metadata including association status
+- [`GET /accounts/{id}/files`](#get-accountsidfiles) - List files associated with a specific account
+- [`GET /accounts`](#get-accounts) - List available accounts for association
+
+**Best Practices:**
+1. **Verify Account Ownership**: Ensure the account belongs to the authenticated user before association
+2. **Consider File Type**: Associate files with accounts that match their content (bank statements with bank accounts, etc.)
+3. **Handle Existing Associations**: Be aware that associating a file will replace any existing account association
+4. **Batch Operations**: For multiple files, make individual calls to this endpoint as batch operations are not currently supported
+
+#### PUT /files/{id}/unassociate
+
+Removes the account association from a file. This endpoint allows you to unlink a file from its associated account without deleting the file itself.
+
+**Request Parameters:**
+- `id` (path parameter): ID of the file to unassociate from its account
+
+**Request Headers:**
+- `Authorization`: Bearer token for user authentication
+- `Content-Type`: application/json (optional, no body required)
+
+**Request Body:**
+No request body required. This endpoint operates solely on the file ID provided in the path parameter.
+
+**Response:**
+```json
+{
+  "message": "File successfully unassociated from account",
+  "fileId": "d31b6f5a-6ab1-4d89-89c0-c405cfe1124c",
+  "previousAccountId": "6286d8bc-1cb7-4715-95c2-8c5a57d40cfd"
+}
+```
+
+**Error Responses:**
+- `400 Bad Request`: Invalid file ID format or file is not currently associated with any account
+- `404 Not Found`: File not found
+- `403 Forbidden`: File does not belong to the authenticated user
+- `500 Internal Server Error`: Server error during unassociation
+
+**Response Fields:**
+- `message`: Confirmation message indicating successful unassociation
+- `fileId`: UUID of the file that was unassociated
+- `previousAccountId`: UUID of the account the file was previously associated with
+
+**Validation Rules:**
+- File ID must be a valid UUID format
+- File must exist in the system
+- File must belong to the authenticated user
+- File must currently be associated with an account (cannot unassociate a standalone file)
+
+**Side Effects:**
+- File becomes a standalone file (no account association)
+- Transaction-account relationships may be updated
+- Analytics data may be recalculated for the previously associated account
+- File processing events may be triggered for downstream systems
+
+**Usage Examples:**
+
+*Request:*
+```http
+PUT /files/d31b6f5a-6ab1-4d89-89c0-c405cfe1124c/unassociate
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+*Response (Success):*
+```json
+{
+  "message": "File successfully unassociated from account",
+  "fileId": "d31b6f5a-6ab1-4d89-89c0-c405cfe1124c",
+  "previousAccountId": "6286d8bc-1cb7-4715-95c2-8c5a57d40cfd"
+}
+```
+
+*Response (File Not Associated):*
+```json
+{
+  "error": "File is not currently associated with any account",
+  "statusCode": 400
+}
+```
+
+**Related Endpoints:**
+- [`POST /files/{id}/associate`](#post-filesidassociate) - Associate a file with an account
+- [`GET /files/{id}/metadata`](#get-filesidmetadata) - Get file metadata including association status
+- [`GET /accounts/{id}/files`](#get-accountsidfiles) - List files associated with a specific account
+- [`DELETE /files/{id}`](#delete-filesid) - Delete a file entirely
+
+**Best Practices:**
+1. **Before Unassociation**: Consider if the file should remain associated for organizational purposes
+2. **After Unassociation**: The file becomes standalone and can be found in the main files list but not in account-specific file lists
+3. **Re-association**: Use the associate endpoint to link the file to a different account if needed
+4. **Bulk Operations**: For multiple files, make individual calls to this endpoint as batch operations are not currently supported
 
 ## Account-File Association Usage Recommendations
 

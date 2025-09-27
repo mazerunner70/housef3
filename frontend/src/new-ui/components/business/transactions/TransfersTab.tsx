@@ -23,6 +23,13 @@ import { DateRange } from '@/new-ui/components/ui/DateRangePicker';
 import { useLocale } from '@/new-ui/hooks/useLocale';
 import './TransfersTab.css';
 
+// Helper function to generate unique keys for transfer pairs
+const getTransferPairKey = (pair: TransferPair): string => {
+    const outgoingId = pair.outgoingTransaction.transactionId || (pair.outgoingTransaction as any).id;
+    const incomingId = pair.incomingTransaction.transactionId || (pair.incomingTransaction as any).id;
+    return `${outgoingId}-${incomingId}`;
+};
+
 interface TransfersTabProps { }
 
 const TransfersTab: React.FC<TransfersTabProps> = () => {
@@ -49,12 +56,17 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
         const endDateParam = searchParams.get('endDate');
 
         if (startDateParam && endDateParam) {
-            return {
-                startDate: new Date(startDateParam),
-                endDate: new Date(endDateParam)
-            };
+            // Parse and validate dates from URL parameters
+            const startDate = new Date(startDateParam);
+            const endDate = new Date(endDateParam);
+
+            // Check if both dates are valid (not NaN)
+            if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+                return { startDate, endDate };
+            }
         }
 
+        // Fall back to default 7-day range if URL params are missing or invalid
         const endDate = new Date();
         const startDate = new Date();
         startDate.setDate(endDate.getDate() - 7);
@@ -79,9 +91,14 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
             setSearchParams(newParams, { replace: true });
 
             // Trigger scan after a short delay to ensure data is loaded
-            setTimeout(() => {
+            const timer: NodeJS.Timeout = setTimeout(() => {
                 handleDetectTransfers();
             }, 500);
+
+            // Cleanup function to clear timeout if component unmounts or dependencies change
+            return () => {
+                clearTimeout(timer);
+            };
         }
     }, [searchParams, detectLoading, loading]);
 
@@ -164,7 +181,7 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
         setError(null);
         try {
             const selectedPairs = detectedTransfers
-                .filter((_, index) => selectedDetectedTransfers.has(index.toString()))
+                .filter(pair => selectedDetectedTransfers.has(getTransferPairKey(pair)))
                 .map(pair => ({
                     outgoingTransactionId: (pair.outgoingTransaction.transactionId || (pair.outgoingTransaction as any).id) as string,
                     incomingTransactionId: (pair.incomingTransaction.transactionId || (pair.incomingTransaction as any).id) as string,
@@ -192,7 +209,19 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
                         !successfulIds.has((pair.incomingTransaction.transactionId || (pair.incomingTransaction as any).id) as string)
                     )
                 );
-                setSelectedDetectedTransfers(new Set());
+
+                // Remove successful pairs from selection
+                setSelectedDetectedTransfers(prev => {
+                    const newSelected = new Set(prev);
+                    detectedTransfers.forEach(pair => {
+                        const outgoingId = (pair.outgoingTransaction.transactionId || (pair.outgoingTransaction as any).id) as string;
+                        const incomingId = (pair.incomingTransaction.transactionId || (pair.incomingTransaction as any).id) as string;
+                        if (successfulIds.has(outgoingId) || successfulIds.has(incomingId)) {
+                            newSelected.delete(getTransferPairKey(pair));
+                        }
+                    });
+                    return newSelected;
+                });
             }
 
             if (result.failureCount > 0) {
@@ -274,12 +303,12 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
         }
     };
 
-    const toggleDetectedTransfer = (index: string) => {
+    const toggleDetectedTransfer = (pairKey: string) => {
         const newSelected = new Set(selectedDetectedTransfers);
-        if (newSelected.has(index)) {
-            newSelected.delete(index);
+        if (newSelected.has(pairKey)) {
+            newSelected.delete(pairKey);
         } else {
-            newSelected.add(index);
+            newSelected.add(pairKey);
         }
         setSelectedDetectedTransfers(newSelected);
     };
@@ -288,7 +317,7 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
         if (selectedDetectedTransfers.size === detectedTransfers.length) {
             setSelectedDetectedTransfers(new Set());
         } else {
-            setSelectedDetectedTransfers(new Set(detectedTransfers.map((_, index) => index.toString())));
+            setSelectedDetectedTransfers(new Set(detectedTransfers.map(pair => getTransferPairKey(pair))));
         }
     };
 
@@ -331,8 +360,8 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {pairedTransfers.map((pair, index) => (
-                                    <tr key={index}>
+                                {pairedTransfers.map((pair) => (
+                                    <tr key={getTransferPairKey(pair)}>
                                         <td>{getAccountName(pair.outgoingTransaction.accountId || undefined)}</td>
                                         <td><DateCell date={pair.outgoingTransaction.date} format="short" locale={localeConfig.locale} /></td>
                                         <td>
@@ -511,36 +540,39 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {detectedTransfers.map((pair, index) => (
-                                        <tr key={index} className={selectedDetectedTransfers.has(index.toString()) ? 'selected' : ''}>
-                                            <td>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedDetectedTransfers.has(index.toString())}
-                                                    onChange={() => toggleDetectedTransfer(index.toString())}
-                                                />
-                                            </td>
-                                            <td>{getAccountName(pair.outgoingTransaction.accountId || undefined)}</td>
-                                            <td><DateCell date={pair.outgoingTransaction.date} format="short" locale={localeConfig.locale} /></td>
-                                            <td>
-                                                <CurrencyDisplay
-                                                    amount={Math.abs(Number(pair.outgoingTransaction.amount))}
-                                                    currency={pair.outgoingTransaction.currency || 'USD'}
-                                                    className="currency-negative"
-                                                />
-                                            </td>
-                                            <td>{getAccountName(pair.incomingTransaction.accountId || undefined)}</td>
-                                            <td><DateCell date={pair.incomingTransaction.date} format="short" locale={localeConfig.locale} /></td>
-                                            <td>
-                                                <CurrencyDisplay
-                                                    amount={Number(pair.incomingTransaction.amount)}
-                                                    currency={pair.incomingTransaction.currency || 'USD'}
-                                                    className="currency-positive"
-                                                />
-                                            </td>
-                                            <td>{pair.dateDifference}</td>
-                                        </tr>
-                                    ))}
+                                    {detectedTransfers.map((pair) => {
+                                        const pairKey = getTransferPairKey(pair);
+                                        return (
+                                            <tr key={pairKey} className={selectedDetectedTransfers.has(pairKey) ? 'selected' : ''}>
+                                                <td>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedDetectedTransfers.has(pairKey)}
+                                                        onChange={() => toggleDetectedTransfer(pairKey)}
+                                                    />
+                                                </td>
+                                                <td>{getAccountName(pair.outgoingTransaction.accountId || undefined)}</td>
+                                                <td><DateCell date={pair.outgoingTransaction.date} format="short" locale={localeConfig.locale} /></td>
+                                                <td>
+                                                    <CurrencyDisplay
+                                                        amount={Math.abs(Number(pair.outgoingTransaction.amount))}
+                                                        currency={pair.outgoingTransaction.currency || 'USD'}
+                                                        className="currency-negative"
+                                                    />
+                                                </td>
+                                                <td>{getAccountName(pair.incomingTransaction.accountId || undefined)}</td>
+                                                <td><DateCell date={pair.incomingTransaction.date} format="short" locale={localeConfig.locale} /></td>
+                                                <td>
+                                                    <CurrencyDisplay
+                                                        amount={Number(pair.incomingTransaction.amount)}
+                                                        currency={pair.incomingTransaction.currency || 'USD'}
+                                                        className="currency-positive"
+                                                    />
+                                                </td>
+                                                <td>{pair.dateDifference}</td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>

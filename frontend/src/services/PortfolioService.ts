@@ -94,6 +94,10 @@ export const getPortfolioInsights = async (): Promise<PortfolioInsights> => {
             account.lastTransactionDate && account.lastTransactionDate < sevenDaysAgo
         ).length;
 
+        // Guard against missing transfer progress data
+        const progress = transferProgressData?.progress ?? {};
+        const recommendedRange = transferProgressData?.recommendedRange ?? null;
+
         const insights: PortfolioInsights = {
             totalAccounts,
             activeAccounts,
@@ -109,20 +113,20 @@ export const getPortfolioInsights = async (): Promise<PortfolioInsights> => {
                 accountsWithOldTransactions
             },
             transferScanProgress: {
-                totalDays: transferProgressData.progress.totalDays || 0,
-                checkedDays: transferProgressData.progress.checkedDays || 0,
-                progressPercentage: transferProgressData.progress.progressPercentage || 0,
-                isComplete: transferProgressData.progress.isComplete || false,
-                hasData: transferProgressData.progress.hasData || false,
+                totalDays: progress.totalDays ?? 0,
+                checkedDays: progress.checkedDays ?? 0,
+                progressPercentage: progress.progressPercentage ?? 0,
+                isComplete: progress.isComplete ?? false,
+                hasData: progress.hasData ?? false,
                 accountDateRange: {
-                    startDate: transferProgressData.progress.accountDateRange?.startDate || null,
-                    endDate: transferProgressData.progress.accountDateRange?.endDate || null
+                    startDate: progress.accountDateRange?.startDate ?? null,
+                    endDate: progress.accountDateRange?.endDate ?? null
                 },
                 checkedDateRange: {
-                    startDate: transferProgressData.progress.checkedDateRange?.startDate || null,
-                    endDate: transferProgressData.progress.checkedDateRange?.endDate || null
+                    startDate: progress.checkedDateRange?.startDate ?? null,
+                    endDate: progress.checkedDateRange?.endDate ?? null
                 },
-                recommendedRange: transferProgressData.recommendedRange
+                recommendedRange: recommendedRange
             }
         };
 
