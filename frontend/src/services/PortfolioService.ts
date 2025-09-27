@@ -1,5 +1,6 @@
 import { Account } from '@/schemas/Account';
 import { listAccounts } from './AccountService';
+import { getTransferProgressAndRecommendation } from './TransferService';
 import { createLogger } from '@/utils/logger';
 
 const logger = createLogger('PortfolioService');
@@ -18,6 +19,25 @@ export interface PortfolioInsights {
         accountsWithRecentTransactions: number;
         accountsWithOldTransactions: number;
     };
+    transferScanProgress: {
+        totalDays: number;
+        checkedDays: number;
+        progressPercentage: number;
+        isComplete: boolean;
+        hasData: boolean;
+        accountDateRange: {
+            startDate: number | null;
+            endDate: number | null;
+        };
+        checkedDateRange: {
+            startDate: number | null;
+            endDate: number | null;
+        };
+        recommendedRange: {
+            startDate: number;
+            endDate: number;
+        } | null;
+    };
 }
 
 /**
@@ -27,7 +47,11 @@ export const getPortfolioInsights = async (): Promise<PortfolioInsights> => {
     logger.info('Calculating portfolio insights');
 
     try {
-        const accountsResponse = await listAccounts();
+        // Load accounts and transfer progress in parallel
+        const [accountsResponse, transferProgressData] = await Promise.all([
+            listAccounts(),
+            getTransferProgressAndRecommendation()
+        ]);
         const accounts = accountsResponse.accounts;
 
         // Calculate basic counts
@@ -70,6 +94,10 @@ export const getPortfolioInsights = async (): Promise<PortfolioInsights> => {
             account.lastTransactionDate && account.lastTransactionDate < sevenDaysAgo
         ).length;
 
+        // Guard against missing transfer progress data
+        const progress = transferProgressData?.progress ?? {};
+        const recommendedRange = transferProgressData?.recommendedRange ?? null;
+
         const insights: PortfolioInsights = {
             totalAccounts,
             activeAccounts,
@@ -83,6 +111,22 @@ export const getPortfolioInsights = async (): Promise<PortfolioInsights> => {
             recentActivity: {
                 accountsWithRecentTransactions,
                 accountsWithOldTransactions
+            },
+            transferScanProgress: {
+                totalDays: progress.totalDays ?? 0,
+                checkedDays: progress.checkedDays ?? 0,
+                progressPercentage: progress.progressPercentage ?? 0,
+                isComplete: progress.isComplete ?? false,
+                hasData: progress.hasData ?? false,
+                accountDateRange: {
+                    startDate: progress.accountDateRange?.startDate ?? null,
+                    endDate: progress.accountDateRange?.endDate ?? null
+                },
+                checkedDateRange: {
+                    startDate: progress.checkedDateRange?.startDate ?? null,
+                    endDate: progress.checkedDateRange?.endDate ?? null
+                },
+                recommendedRange: recommendedRange
             }
         };
 
