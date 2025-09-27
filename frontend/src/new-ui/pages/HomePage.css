@@ -56,6 +56,21 @@
     position: relative;
     overflow: hidden;
     border: 1px solid #e2e8f0;
+    text-align: left;
+    width: 100%;
+    font-family: inherit;
+    font-size: inherit;
+    cursor: default;
+}
+
+/* Button-specific styles for clickable cards */
+button.insight-card {
+    cursor: pointer;
+}
+
+button.insight-card:focus {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
 }
 
 .insight-card:hover {
