@@ -342,12 +342,19 @@ Associates a file with an account. This endpoint allows you to link an existing 
 **Request Parameters:**
 - `id` (path parameter): ID of the file to associate with an account
 
+**Request Headers:**
+- `Authorization`: Bearer token for user authentication
+- `Content-Type`: application/json
+
 **Request Body:**
 ```json
 {
   "accountId": "6286d8bc-1cb7-4715-95c2-8c5a57d40cfd"
 }
 ```
+
+**Request Body Fields:**
+- `accountId`: UUID of the account to associate the file with (required)
 
 **Response:**
 ```json
@@ -358,6 +365,150 @@ Associates a file with an account. This endpoint allows you to link an existing 
   "accountName": "Test Account"
 }
 ```
+
+**Error Responses:**
+- `400 Bad Request`: Invalid file ID format or account ID format
+- `404 Not Found`: File not found or account not found
+- `403 Forbidden`: File or account does not belong to the authenticated user
+- `500 Internal Server Error`: Server error during association
+
+**Validation Rules:**
+- File ID must be a valid UUID format
+- Account ID must be a valid UUID format and exist in the system
+- File must belong to the authenticated user
+- Account must belong to the authenticated user
+- File can only be associated with one account at a time (existing associations will be replaced)
+
+**Side Effects:**
+- If the file was previously associated with another account, that association is removed
+- File processing may be triggered to update transaction-account relationships
+- Analytics data may be recalculated for affected accounts
+
+**Usage Examples:**
+
+*Request:*
+```http
+POST /files/d31b6f5a-6ab1-4d89-89c0-c405cfe1124c/associate
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: application/json
+
+{
+  "accountId": "6286d8bc-1cb7-4715-95c2-8c5a57d40cfd"
+}
+```
+
+*Response (Success):*
+```json
+{
+  "message": "File successfully associated with account",
+  "fileId": "d31b6f5a-6ab1-4d89-89c0-c405cfe1124c",
+  "accountId": "6286d8bc-1cb7-4715-95c2-8c5a57d40cfd",
+  "accountName": "Test Account"
+}
+```
+
+*Response (Invalid Account):*
+```json
+{
+  "error": "Account not found",
+  "statusCode": 404
+}
+```
+
+**Related Endpoints:**
+- [`PUT /files/{id}/unassociate`](#put-filesidunassociate) - Remove account association from a file
+- [`GET /files/{id}/metadata`](#get-filesidmetadata) - Get file metadata including association status
+- [`GET /accounts/{id}/files`](#get-accountsidfiles) - List files associated with a specific account
+- [`GET /accounts`](#get-accounts) - List available accounts for association
+
+**Best Practices:**
+1. **Verify Account Ownership**: Ensure the account belongs to the authenticated user before association
+2. **Consider File Type**: Associate files with accounts that match their content (bank statements with bank accounts, etc.)
+3. **Handle Existing Associations**: Be aware that associating a file will replace any existing account association
+4. **Batch Operations**: For multiple files, make individual calls to this endpoint as batch operations are not currently supported
+
+#### PUT /files/{id}/unassociate
+
+Removes the account association from a file. This endpoint allows you to unlink a file from its associated account without deleting the file itself.
+
+**Request Parameters:**
+- `id` (path parameter): ID of the file to unassociate from its account
+
+**Request Headers:**
+- `Authorization`: Bearer token for user authentication
+- `Content-Type`: application/json (optional, no body required)
+
+**Request Body:**
+No request body required. This endpoint operates solely on the file ID provided in the path parameter.
+
+**Response:**
+```json
+{
+  "message": "File successfully unassociated from account",
+  "fileId": "d31b6f5a-6ab1-4d89-89c0-c405cfe1124c",
+  "previousAccountId": "6286d8bc-1cb7-4715-95c2-8c5a57d40cfd"
+}
+```
+
+**Error Responses:**
+- `400 Bad Request`: Invalid file ID format or file is not currently associated with any account
+- `404 Not Found`: File not found
+- `403 Forbidden`: File does not belong to the authenticated user
+- `500 Internal Server Error`: Server error during unassociation
+
+**Response Fields:**
+- `message`: Confirmation message indicating successful unassociation
+- `fileId`: UUID of the file that was unassociated
+- `previousAccountId`: UUID of the account the file was previously associated with
+
+**Validation Rules:**
+- File ID must be a valid UUID format
+- File must exist in the system
+- File must belong to the authenticated user
+- File must currently be associated with an account (cannot unassociate a standalone file)
+
+**Side Effects:**
+- File becomes a standalone file (no account association)
+- Transaction-account relationships may be updated
+- Analytics data may be recalculated for the previously associated account
+- File processing events may be triggered for downstream systems
+
+**Usage Examples:**
+
+*Request:*
+```http
+PUT /files/d31b6f5a-6ab1-4d89-89c0-c405cfe1124c/unassociate
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+*Response (Success):*
+```json
+{
+  "message": "File successfully unassociated from account",
+  "fileId": "d31b6f5a-6ab1-4d89-89c0-c405cfe1124c",
+  "previousAccountId": "6286d8bc-1cb7-4715-95c2-8c5a57d40cfd"
+}
+```
+
+*Response (File Not Associated):*
+```json
+{
+  "error": "File is not currently associated with any account",
+  "statusCode": 400
+}
+```
+
+**Related Endpoints:**
+- [`POST /files/{id}/associate`](#post-filesidassociate) - Associate a file with an account
+- [`GET /files/{id}/metadata`](#get-filesidmetadata) - Get file metadata including association status
+- [`GET /accounts/{id}/files`](#get-accountsidfiles) - List files associated with a specific account
+- [`DELETE /files/{id}`](#delete-filesid) - Delete a file entirely
+
+**Best Practices:**
+1. **Before Unassociation**: Consider if the file should remain associated for organizational purposes
+2. **After Unassociation**: The file becomes standalone and can be found in the main files list but not in account-specific file lists
+3. **Re-association**: Use the associate endpoint to link the file to a different account if needed
+4. **Bulk Operations**: For multiple files, make individual calls to this endpoint as batch operations are not currently supported
 
 ## Account-File Association Usage Recommendations
 
@@ -393,4 +544,330 @@ Associates a file with an account. This endpoint allows you to link an existing 
 * Deleting an account does not automatically delete associated files. Files must be deleted separately.
 * Files can be associated with only one account at a time.
 * Existing standalone files can be associated with accounts using the `/files/{id}/associate` endpoint.
-* Files can be unassociated from accounts using the `/files/{id}/unassociate` endpoint without deleting the file. 
+* Files can be unassociated from accounts using the `/files/{id}/unassociate` endpoint without deleting the file.
+
+## Transfers
+
+The transfer detection system provides endpoints for identifying and managing inter-account transfers. These endpoints help users automatically detect when money moves between their own accounts and properly categorize these transactions.
+
+### GET /transfers/detect
+
+Detects potential transfer transactions within a specified date range.
+
+**Query Parameters:**
+- `startDate` (optional): Start date in milliseconds since epoch or ISO 8601 format
+- `endDate` (optional): End date in milliseconds since epoch or ISO 8601 format
+
+**Default Behavior:**
+If no dates are provided, defaults to the last 7 days.
+
+**Example Request:**
+```
+GET /transfers/detect?startDate=1704067200000&endDate=1704758400000
+```
+
+**Example Response:**
+```json
+{
+  "transfers": [
+    {
+      "outgoingTransaction": {
+        "transactionId": "tx-123",
+        "accountId": "acc-456",
+        "amount": -500.00,
+        "date": 1704067200000,
+        "description": "Transfer to Savings",
+        "currency": "USD"
+      },
+      "incomingTransaction": {
+        "transactionId": "tx-124",
+        "accountId": "acc-789",
+        "amount": 500.00,
+        "date": 1704067200000,
+        "description": "Transfer from Checking",
+        "currency": "USD"
+      },
+      "amount": 500.00,
+      "dateDifference": 0
+    }
+  ],
+  "count": 1,
+  "dateRange": {
+    "startDate": 1704067200000,
+    "endDate": 1704758400000
+  }
+}
+```
+
+**Detection Criteria:**
+- Transactions must be from different accounts
+- Amounts must be opposite (one negative, one positive) within $0.01 tolerance
+- Transactions must occur within 7 days of each other
+- Only uncategorized transactions are considered
+
+### GET /transfers/paired
+
+Returns existing transfer pairs that have already been marked as transfers.
+
+**Query Parameters:**
+- `startDate` (optional): Start date filter in milliseconds since epoch or ISO 8601 format
+- `endDate` (optional): End date filter in milliseconds since epoch or ISO 8601 format
+
+**Default Behavior:**
+If no dates are provided, returns all existing transfer pairs.
+
+**Example Request:**
+```
+GET /transfers/paired?startDate=1704067200000&endDate=1704758400000
+```
+
+**Example Response:**
+```json
+{
+  "pairedTransfers": [
+    {
+      "outgoingTransaction": {
+        "transactionId": "tx-123",
+        "accountId": "acc-456",
+        "amount": -500.00,
+        "date": 1704067200000,
+        "description": "Transfer to Savings",
+        "currency": "USD",
+        "categories": [
+          {
+            "categoryId": "cat-transfer",
+            "categoryName": "Transfers"
+          }
+        ]
+      },
+      "incomingTransaction": {
+        "transactionId": "tx-124",
+        "accountId": "acc-789",
+        "amount": 500.00,
+        "date": 1704067200000,
+        "description": "Transfer from Checking",
+        "currency": "USD",
+        "categories": [
+          {
+            "categoryId": "cat-transfer",
+            "categoryName": "Transfers"
+          }
+        ]
+      },
+      "amount": 500.00,
+      "dateDifference": 0
+    }
+  ],
+  "count": 1,
+  "dateRange": {
+    "startDate": 1704067200000,
+    "endDate": 1704758400000
+  }
+}
+```
+
+### POST /transfers/mark-pair
+
+Marks two specific transactions as a transfer pair.
+
+**Request Body:**
+```json
+{
+  "outgoingTransactionId": "tx-123",
+  "incomingTransactionId": "tx-124"
+}
+```
+
+**Example Response:**
+```json
+{
+  "message": "Transfer pair marked successfully"
+}
+```
+
+**Behavior:**
+- Creates or assigns a "Transfers" category to both transactions
+- Sets the transfer category as the primary category
+- Updates both transactions in the database
+- Validates that both transactions belong to the authenticated user
+
+### POST /transfers/bulk-mark
+
+Marks multiple detected transfer pairs as transfers in a single operation.
+
+**Request Body:**
+```json
+{
+  "transferPairs": [
+    {
+      "outgoingTransactionId": "tx-123",
+      "incomingTransactionId": "tx-124"
+    },
+    {
+      "outgoingTransactionId": "tx-125",
+      "incomingTransactionId": "tx-126"
+    }
+  ]
+}
+```
+
+**Example Response:**
+```json
+{
+  "successful": [
+    {
+      "outgoingTransactionId": "tx-123",
+      "incomingTransactionId": "tx-124"
+    }
+  ],
+  "failed": [
+    {
+      "pair": {
+        "outgoingTransactionId": "tx-125",
+        "incomingTransactionId": "tx-126"
+      },
+      "error": "One or both transactions not found"
+    }
+  ],
+  "successCount": 1,
+  "failureCount": 1
+}
+```
+
+**Behavior:**
+- Processes each transfer pair individually
+- Returns detailed success/failure information
+- Continues processing even if some pairs fail
+- Validates user ownership for all transactions
+
+## Transfer Detection Algorithm
+
+The system uses a sophisticated sliding window algorithm to efficiently detect transfers:
+
+### Sliding Window Processing
+- **Window Size**: 14 days with 3-day overlap
+- **Memory Efficient**: Uses minimal transaction objects during processing
+- **Scalable**: Handles large datasets without memory issues
+
+### Matching Logic
+1. **Account Validation**: Transactions must be from different accounts
+2. **Amount Matching**: Absolute amounts must match within $0.01 tolerance
+3. **Sign Validation**: One transaction must be negative (outgoing), one positive (incoming)
+4. **Date Proximity**: Transactions must be within 7 days of each other
+5. **Availability**: Only uncategorized transactions are considered
+
+### Performance Optimizations
+- **Amount Sorting**: Enables early termination when amount differences are too large
+- **Batch Processing**: Processes transactions in manageable chunks
+- **Pagination Handling**: Prevents infinite loops in database pagination
+
+## Transfer Category Management
+
+### Automatic Category Creation
+When transfers are marked, the system automatically:
+1. Creates a "Transfers" category if none exists
+2. Assigns the transfer category to both transactions
+3. Sets the category as the primary category
+4. Uses category type `TRANSFER` for proper reporting exclusion
+
+### Category Properties
+```json
+{
+  "name": "Transfers",
+  "type": "TRANSFER",
+  "icon": "transfer",
+  "color": "#6B7280"
+}
+```
+
+### Impact on Financial Reporting
+- Transfer transactions are excluded from income/expense calculations
+- Account balances remain accurate (transfers don't affect net worth)
+- Transfers appear in their own category for reporting purposes
+
+## Error Handling
+
+### Common Error Responses
+
+**400 Bad Request - Invalid Date Format:**
+```json
+{
+  "error": "Invalid date format. Expected milliseconds since epoch"
+}
+```
+
+**404 Not Found - Transaction Not Found:**
+```json
+{
+  "error": "One or both transactions not found"
+}
+```
+
+**401 Unauthorized - Access Denied:**
+```json
+{
+  "error": "Unauthorized access to transactions"
+}
+```
+
+**500 Internal Server Error - Processing Failed:**
+```json
+{
+  "error": "Failed to mark transfer pair"
+}
+```
+
+## Usage Examples
+
+### Detecting Transfers for Last 30 Days
+```javascript
+const thirtyDaysAgo = new Date();
+thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+const now = new Date();
+
+const response = await fetch(`/transfers/detect?startDate=${thirtyDaysAgo.getTime()}&endDate=${now.getTime()}`, {
+  headers: {
+    'Authorization': 'your-jwt-token'
+  }
+});
+```
+
+### Bulk Marking Detected Transfers
+```javascript
+const transferPairs = [
+  { outgoingTransactionId: 'tx-1', incomingTransactionId: 'tx-2' },
+  { outgoingTransactionId: 'tx-3', incomingTransactionId: 'tx-4' }
+];
+
+const response = await fetch('/transfers/bulk-mark', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'your-jwt-token',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({ transferPairs })
+});
+```
+
+### Getting Existing Transfer Pairs
+```javascript
+const response = await fetch('/transfers/paired', {
+  headers: {
+    'Authorization': 'your-jwt-token'
+  }
+});
+```
+
+## Best Practices
+
+### For API Consumers
+1. **Use Appropriate Date Ranges**: Start with 7-30 days for better performance
+2. **Review Before Marking**: Always review detected transfers before bulk marking
+3. **Handle Partial Failures**: Check both success and failure arrays in bulk operations
+4. **Progressive Processing**: Use systematic date ranges to cover all data
+
+### For Performance
+1. **Limit Date Ranges**: Smaller ranges (7-30 days) perform better than large ranges
+2. **Batch Operations**: Use bulk-mark for multiple transfers
+3. **Monitor Progress**: Track which date ranges have been processed
+4. **Handle Timeouts**: Be prepared for longer processing times with large datasets 
