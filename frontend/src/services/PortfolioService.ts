@@ -1,5 +1,6 @@
 import { Account } from '@/schemas/Account';
 import { listAccounts } from './AccountService';
+import { getTransferProgressAndRecommendation } from './TransferService';
 import { createLogger } from '@/utils/logger';
 
 const logger = createLogger('PortfolioService');
@@ -18,6 +19,25 @@ export interface PortfolioInsights {
         accountsWithRecentTransactions: number;
         accountsWithOldTransactions: number;
     };
+    transferScanProgress: {
+        totalDays: number;
+        checkedDays: number;
+        progressPercentage: number;
+        isComplete: boolean;
+        hasData: boolean;
+        accountDateRange: {
+            startDate: number | null;
+            endDate: number | null;
+        };
+        checkedDateRange: {
+            startDate: number | null;
+            endDate: number | null;
+        };
+        recommendedRange: {
+            startDate: number;
+            endDate: number;
+        } | null;
+    };
 }
 
 /**
@@ -27,7 +47,11 @@ export const getPortfolioInsights = async (): Promise<PortfolioInsights> => {
     logger.info('Calculating portfolio insights');
 
     try {
-        const accountsResponse = await listAccounts();
+        // Load accounts and transfer progress in parallel
+        const [accountsResponse, transferProgressData] = await Promise.all([
+            listAccounts(),
+            getTransferProgressAndRecommendation()
+        ]);
         const accounts = accountsResponse.accounts;
 
         // Calculate basic counts
@@ -83,6 +107,22 @@ export const getPortfolioInsights = async (): Promise<PortfolioInsights> => {
             recentActivity: {
                 accountsWithRecentTransactions,
                 accountsWithOldTransactions
+            },
+            transferScanProgress: {
+                totalDays: transferProgressData.progress.totalDays || 0,
+                checkedDays: transferProgressData.progress.checkedDays || 0,
+                progressPercentage: transferProgressData.progress.progressPercentage || 0,
+                isComplete: transferProgressData.progress.isComplete || false,
+                hasData: transferProgressData.progress.hasData || false,
+                accountDateRange: {
+                    startDate: transferProgressData.progress.accountDateRange?.startDate || null,
+                    endDate: transferProgressData.progress.accountDateRange?.endDate || null
+                },
+                checkedDateRange: {
+                    startDate: transferProgressData.progress.checkedDateRange?.startDate || null,
+                    endDate: transferProgressData.progress.checkedDateRange?.endDate || null
+                },
+                recommendedRange: transferProgressData.recommendedRange
             }
         };
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
     listPairedTransfers,
     detectPotentialTransfers,
@@ -26,6 +27,7 @@ interface TransfersTabProps { }
 
 const TransfersTab: React.FC<TransfersTabProps> = () => {
     const { localeConfig, formatDate } = useLocale();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [pairedTransfers, setPairedTransfers] = useState<TransferPair[]>([]);
     const [detectedTransfers, setDetectedTransfers] = useState<TransferPair[]>([]);
     const [accounts, setAccounts] = useState<AccountInfo[]>([]);
@@ -41,8 +43,18 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
     const [recommendedRange, setRecommendedRange] = useState<any>(null);
     const [progressLoading, setProgressLoading] = useState(false);
 
-    // Date range management - default to last 7 days
+    // Date range management - check URL params first, then default to last 7 days
     const [currentDateRange, setCurrentDateRange] = useState<DateRange>(() => {
+        const startDateParam = searchParams.get('startDate');
+        const endDateParam = searchParams.get('endDate');
+
+        if (startDateParam && endDateParam) {
+            return {
+                startDate: new Date(startDateParam),
+                endDate: new Date(endDateParam)
+            };
+        }
+
         const endDate = new Date();
         const startDate = new Date();
         startDate.setDate(endDate.getDate() - 7);
@@ -56,6 +68,22 @@ const TransfersTab: React.FC<TransfersTabProps> = () => {
     useEffect(() => {
         loadAllInitialData();
     }, []);
+
+    // Auto-scan if URL parameter is present
+    useEffect(() => {
+        const autoScan = searchParams.get('autoScan');
+        if (autoScan === 'true' && !detectLoading && !loading) {
+            // Clear the autoScan parameter to prevent repeated scans
+            const newParams = new URLSearchParams(searchParams);
+            newParams.delete('autoScan');
+            setSearchParams(newParams, { replace: true });
+
+            // Trigger scan after a short delay to ensure data is loaded
+            setTimeout(() => {
+                handleDetectTransfers();
+            }, 500);
+        }
+    }, [searchParams, detectLoading, loading]);
 
     const loadAllInitialData = async () => {
         setLoading(true);

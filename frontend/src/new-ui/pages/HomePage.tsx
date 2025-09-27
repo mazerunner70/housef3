@@ -44,6 +44,18 @@ const HomePage: React.FC = () => {
         navigate('/import');
     };
 
+    const handleViewTransfers = () => {
+        navigate('/transactions?tab=transfers');
+    };
+
+    const handleUseRecommendedRange = () => {
+        if (insights?.transferScanProgress.recommendedRange) {
+            const startDate = new Date(insights.transferScanProgress.recommendedRange.startDate).toISOString().split('T')[0];
+            const endDate = new Date(insights.transferScanProgress.recommendedRange.endDate).toISOString().split('T')[0];
+            navigate(`/transactions?tab=transfers&startDate=${startDate}&endDate=${endDate}&autoScan=true`);
+        }
+    };
+
     if (loading) {
         return (
             <div className="home-page">
@@ -198,6 +210,56 @@ const HomePage: React.FC = () => {
                     )}
                 </div>
 
+                {/* Transfer Scan Progress Card */}
+                <div
+                    className={`insight-card transfer-progress ${insights.transferScanProgress.hasData ? (insights.transferScanProgress.isComplete ? 'complete' : 'in-progress') : 'no-data'}`}
+                    onClick={handleViewTransfers}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleViewTransfers();
+                        }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="View transfer detection progress"
+                >
+                    <div className="card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M7 16.5L12 12l5 4.5" />
+                            <path d="M7 7.5L12 3l5 4.5" />
+                            <path d="M12 3v18" />
+                        </svg>
+                    </div>
+                    <div className="card-content">
+                        <h3>Transfer Scan Progress</h3>
+                        <div className="metric-value">
+                            {insights.transferScanProgress.hasData ? insights.transferScanProgress.progressPercentage : 0}
+                            <span className="metric-unit">%</span>
+                        </div>
+                        <div className="metric-detail">
+                            {insights.transferScanProgress.hasData
+                                ? `${insights.transferScanProgress.checkedDays} of ${insights.transferScanProgress.totalDays} days scanned`
+                                : 'No transfer scanning data available'
+                            }
+                        </div>
+                        {insights.transferScanProgress.hasData && !insights.transferScanProgress.isComplete && (
+                            <div className="progress-bar">
+                                <div
+                                    className="progress-fill"
+                                    style={{ width: `${insights.transferScanProgress.progressPercentage}%` }}
+                                ></div>
+                            </div>
+                        )}
+                    </div>
+                    <div className="card-action">
+                        <span>{insights.transferScanProgress.isComplete ? 'Complete' : 'Manage'}</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="m9 18 6-6-6-6" />
+                        </svg>
+                    </div>
+                </div>
+
                 {/* Recent Activity Card */}
                 <div className="insight-card recent-activity">
                     <div className="card-icon">
@@ -216,6 +278,40 @@ const HomePage: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Transfer Scan Recommendation (if available) */}
+            {insights.transferScanProgress.hasData && !insights.transferScanProgress.isComplete && insights.transferScanProgress.recommendedRange && (
+                <div className="transfer-recommendation-section">
+                    <h2>Continue Transfer Scanning</h2>
+                    <p>We recommend scanning this date range next to systematically check all your transaction data for transfers:</p>
+                    <div className="recommendation-card">
+                        <div className="recommendation-info">
+                            <div className="recommended-range">
+                                <strong>
+                                    {new Date(insights.transferScanProgress.recommendedRange.startDate).toLocaleDateString('en-US', {
+                                        year: 'numeric',
+                                        month: 'short',
+                                        day: 'numeric'
+                                    })} - {new Date(insights.transferScanProgress.recommendedRange.endDate).toLocaleDateString('en-US', {
+                                        year: 'numeric',
+                                        month: 'short',
+                                        day: 'numeric'
+                                    })}
+                                </strong>
+                            </div>
+                            <div className="recommendation-details">
+                                This range provides optimal coverage with 3-day overlap for accurate transfer detection
+                            </div>
+                        </div>
+                        <button
+                            className="use-range-button"
+                            onClick={handleUseRecommendedRange}
+                        >
+                            Scan This Range
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Stale Accounts List (if any) */}
             {insights.staleAccounts > 0 && (
