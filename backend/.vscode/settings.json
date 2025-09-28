@@ -1,5 +1,9 @@
 {
     "cursorpyright.analysis.extraPaths": [
         "./src"
-    ]
+    ],
+    "sonarlint.connectedMode.project": {
+        "connectionId": "mazerunner70",
+        "projectKey": "mazerunner70_housef3"
+    }
 }
