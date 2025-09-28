@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
     listPairedTransfers,
+    getTotalPairedTransfersCount,
     detectPotentialTransfers,
     bulkMarkTransfers,
     TransferPair,
@@ -12,15 +13,14 @@ import { getAccounts } from '@/services/TransactionService';
 import { AccountInfo } from '@/schemas/Transaction';
 import {
     Alert,
-    LoadingState
+    LoadingState,
+    DateRange
 } from '@/new-ui/components/ui';
-import { DateRange } from '@/new-ui/components/ui/DateRangePicker';
+import Button from '@/new-ui/components/Button';
 
 import { useLocale } from '@/new-ui/hooks/useLocale';
-import TransferProgressDashboard from '../transfers/TransferProgressDashboard';
 import ScanControlsPanel from '../transfers/ScanControlsPanel';
 import TransferResultsDashboard from '../transfers/TransferResultsDashboard';
-import TransferAnalyticsDashboard from '../transfers/TransferAnalyticsDashboard';
 import './TransfersDashboard.css';
 
 // Helper function to generate unique keys for transfer pairs
@@ -30,6 +30,19 @@ const getTransferPairKey = (pair: TransferPair): string => {
     return `${outgoingId}-${incomingId}`;
 };
 
+// Helper function to check if a date is an epoch date (1970)
+const isEpochDate = (date: Date): boolean => {
+    return date.getFullYear() === 1970;
+};
+
+// Helper function to check if a checked date range is valid (not epoch)
+const isValidCheckedDateRange = (checkedDateRange: any): boolean => {
+    if (!checkedDateRange) return false;
+    const startDate = new Date(checkedDateRange.startDate);
+    const endDate = new Date(checkedDateRange.endDate);
+    return !isEpochDate(startDate) && !isEpochDate(endDate);
+};
+
 interface TransfersDashboardProps { }
 
 const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
@@ -37,18 +50,20 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const [pairedTransfers, setPairedTransfers] = useState<TransferPair[]>([]);
     const [detectedTransfers, setDetectedTransfers] = useState<TransferPair[]>([]);
+    const [totalPairedTransfersCount, setTotalPairedTransfersCount] = useState<number>(0);
     const [accounts, setAccounts] = useState<AccountInfo[]>([]);
     const [loading, setLoading] = useState(false);
     const [detectLoading, setDetectLoading] = useState(false);
     const [bulkMarkLoading, setBulkMarkLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selectedDetectedTransfers, setSelectedDetectedTransfers] = useState<Set<string>>(new Set());
+    const [ignoredTransfers, setIgnoredTransfers] = useState<Set<string>>(new Set());
     const [showDateRangeSuggestion, setShowDateRangeSuggestion] = useState(false);
+    const [showDetectionSuccess, setShowDetectionSuccess] = useState(false);
 
     // Transfer progress and date range tracking
     const [transferProgress, setTransferProgress] = useState<any>(null);
     const [recommendedRange, setRecommendedRange] = useState<any>(null);
-    const [progressLoading, setProgressLoading] = useState(false);
     const [recalculateLoading, setRecalculateLoading] = useState(false);
 
     // Scanning statistics for analytics
@@ -59,23 +74,9 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
         lastScanDate: undefined as Date | undefined
     });
 
-    // Date range management - check URL params first, then default to last 7 days
+    // Date range management - will be set from preferences in loadAllInitialData
     const [currentDateRange, setCurrentDateRange] = useState<DateRange>(() => {
-        const startDateParam = searchParams.get('startDate');
-        const endDateParam = searchParams.get('endDate');
-
-        if (startDateParam && endDateParam) {
-            // Parse and validate dates from URL parameters
-            const startDate = new Date(startDateParam);
-            const endDate = new Date(endDateParam);
-
-            // Check if both dates are valid (not NaN)
-            if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
-                return { startDate, endDate };
-            }
-        }
-
-        // Fall back to default 7-day range if URL params are missing or invalid
+        // Initialize with a default range, but this will be overridden by preferences
         const endDate = new Date();
         const startDate = new Date();
         startDate.setDate(endDate.getDate() - 7);
@@ -113,41 +114,92 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
 
     const loadAllInitialData = async () => {
         setLoading(true);
-        setProgressLoading(true);
         setError(null);
         try {
-            // Load all data in parallel with optimized progress/recommendation call
-            const [transfersData, accountsData, progressAndRecommendation] = await Promise.all([
-                listPairedTransfers({
+            // First load progress to get checked range
+            const progressAndRecommendation = await getTransferProgressAndRecommendation();
+            setTransferProgress(progressAndRecommendation.progress);
+            setRecommendedRange(progressAndRecommendation.recommendedRange);
+
+            // Determine the date range to use - prioritize checked range from preferences
+            const startDateParam = searchParams.get('startDate');
+            const endDateParam = searchParams.get('endDate');
+
+            let dateRangeToUse: DateRange;
+            let rangeToUseForAPI: { startDate: number; endDate: number };
+
+            if (startDateParam && endDateParam) {
+                // URL parameters take precedence (for direct navigation)
+                const startDate = new Date(startDateParam);
+                const endDate = new Date(endDateParam);
+                if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+                    dateRangeToUse = { startDate, endDate };
+                    rangeToUseForAPI = {
+                        startDate: startDate.getTime(),
+                        endDate: endDate.getTime()
+                    };
+                } else {
+                    // Invalid URL params, fall back to checked range or default
+                    if (isValidCheckedDateRange(progressAndRecommendation.progress?.checkedDateRange)) {
+                        dateRangeToUse = {
+                            startDate: new Date(progressAndRecommendation.progress.checkedDateRange.startDate),
+                            endDate: new Date(progressAndRecommendation.progress.checkedDateRange.endDate)
+                        };
+                    } else {
+                        dateRangeToUse = currentDateRange;
+                    }
+
+                    rangeToUseForAPI = {
+                        startDate: dateRangeToUse.startDate.getTime(),
+                        endDate: dateRangeToUse.endDate.getTime()
+                    };
+                }
+            } else if (isValidCheckedDateRange(progressAndRecommendation.progress?.checkedDateRange)) {
+                // Use checked range from preferences (most common case)
+                dateRangeToUse = {
+                    startDate: new Date(progressAndRecommendation.progress.checkedDateRange.startDate),
+                    endDate: new Date(progressAndRecommendation.progress.checkedDateRange.endDate)
+                };
+                rangeToUseForAPI = {
+                    startDate: progressAndRecommendation.progress.checkedDateRange.startDate,
+                    endDate: progressAndRecommendation.progress.checkedDateRange.endDate
+                };
+            } else {
+                // No preferences or URL params, use current default range
+                dateRangeToUse = currentDateRange;
+                rangeToUseForAPI = {
                     startDate: currentDateRange.startDate.getTime(),
                     endDate: currentDateRange.endDate.getTime()
-                })(),
-                getAccounts(),
-                getTransferProgressAndRecommendation()
+                };
+            }
+
+            // Update the current date range state
+            setCurrentDateRange(dateRangeToUse);
+
+            // Load remaining data in parallel
+            const [transfersData, totalCount, accountsData] = await Promise.all([
+                listPairedTransfers(rangeToUseForAPI)(),
+                getTotalPairedTransfersCount()(),
+                getAccounts()
             ]);
 
             setPairedTransfers(transfersData.pairedTransfers);
+            setTotalPairedTransfersCount(totalCount);
             setAccounts(accountsData);
-            setTransferProgress(progressAndRecommendation.progress);
-            setRecommendedRange(progressAndRecommendation.recommendedRange);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to load transfer data');
         } finally {
             setLoading(false);
-            setProgressLoading(false);
         }
     };
 
     const loadTransferProgress = async () => {
-        setProgressLoading(true);
         try {
             const progressAndRecommendation = await getTransferProgressAndRecommendation();
             setTransferProgress(progressAndRecommendation.progress);
             setRecommendedRange(progressAndRecommendation.recommendedRange);
         } catch (err) {
             console.warn('Failed to load transfer progress:', err);
-        } finally {
-            setProgressLoading(false);
         }
     };
 
@@ -158,17 +210,43 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
         setDetectLoading(true);
         setError(null);
         setShowDateRangeSuggestion(false);
+        setShowDetectionSuccess(false);
         try {
+            // Use recommended range if available, otherwise fall back to current range
+            const scanRange = recommendedRange ? {
+                startDate: recommendedRange.startDate,
+                endDate: recommendedRange.endDate
+            } : {
+                startDate: currentDateRange.startDate.getTime(),
+                endDate: currentDateRange.endDate.getTime()
+            };
+
             // Use date range API
             const detected = await detectPotentialTransfers(
-                currentDateRange.startDate.getTime(),
-                currentDateRange.endDate.getTime()
+                scanRange.startDate,
+                scanRange.endDate
             )();
             setDetectedTransfers(detected.transfers);
             setSelectedDetectedTransfers(new Set());
+            // Clear ignored transfers when new detection is run
+            setIgnoredTransfers(new Set());
 
-            // Show suggestion to expand date range if no matches found and user has auto-expand enabled
-            if (detected.transfers.length === 0 && autoExpandSuggestion) {
+            // Update current date range to match what was actually scanned
+            if (recommendedRange) {
+                const newRange = {
+                    startDate: new Date(recommendedRange.startDate),
+                    endDate: new Date(recommendedRange.endDate)
+                };
+                setCurrentDateRange(newRange);
+            }
+
+            // Show success message with clear next steps
+            if (detected.transfers.length > 0) {
+                setError(null); // Clear any previous errors
+                setShowDetectionSuccess(true);
+                // Auto-hide success message after 10 seconds
+                setTimeout(() => setShowDetectionSuccess(false), 10000);
+            } else if (autoExpandSuggestion) {
                 setShowDateRangeSuggestion(true);
             }
 
@@ -243,6 +321,7 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
             setRecommendedRange(null);
             setDetectedTransfers([]);
             setSelectedDetectedTransfers(new Set());
+            setIgnoredTransfers(new Set());
             setScanningStats({
                 totalScansRun: 0,
                 totalTimeSpent: 0,
@@ -297,6 +376,26 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
         window.URL.revokeObjectURL(url);
     };
 
+    const handleBulkIgnoreTransfers = () => {
+        if (selectedDetectedTransfers.size === 0) {
+            setError('Please select at least one transfer pair to ignore');
+            return;
+        }
+
+        // Add selected transfers to ignored set
+        setIgnoredTransfers(prev => {
+            const newIgnored = new Set(prev);
+            selectedDetectedTransfers.forEach(pairKey => newIgnored.add(pairKey));
+            return newIgnored;
+        });
+
+        // Clear selection
+        setSelectedDetectedTransfers(new Set());
+
+        // Clear any existing error
+        setError(null);
+    };
+
     const handleBulkMarkTransfers = async () => {
         if (selectedDetectedTransfers.size === 0) {
             setError('Please select at least one transfer pair to mark');
@@ -315,15 +414,28 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
                     dateDifference: pair.dateDifference
                 }));
 
-            const result = await bulkMarkTransfers(selectedPairs);
+            // Pass the current date range so the backend can update the checked range in preferences
+            const scannedDateRange = {
+                startDate: currentDateRange.startDate.getTime(),
+                endDate: currentDateRange.endDate.getTime()
+            };
+
+            const result = await bulkMarkTransfers(selectedPairs, scannedDateRange);
 
             if (result.successCount > 0) {
-                // Reload paired transfers to show the newly marked ones
-                const updatedTransfers = await listPairedTransfers({
-                    startDate: currentDateRange.startDate.getTime(),
-                    endDate: currentDateRange.endDate.getTime()
-                })();
+                // Reload paired transfers and total count to show the newly marked ones
+                const [updatedTransfers, updatedTotalCount] = await Promise.all([
+                    listPairedTransfers({
+                        startDate: currentDateRange.startDate.getTime(),
+                        endDate: currentDateRange.endDate.getTime()
+                    })(),
+                    getTotalPairedTransfersCount()()
+                ]);
                 setPairedTransfers(updatedTransfers.pairedTransfers);
+                setTotalPairedTransfersCount(updatedTotalCount);
+
+                // Refresh transfer progress to get updated checked date range
+                await loadTransferProgress();
 
                 // Remove successfully marked transfers from detected list
                 const successfulIds = new Set(
@@ -387,6 +499,7 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
             )();
             setDetectedTransfers(detected.transfers);
             setSelectedDetectedTransfers(new Set());
+            setIgnoredTransfers(new Set());
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to detect transfers');
         } finally {
@@ -423,10 +536,14 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
     };
 
     const selectAllDetected = () => {
-        if (selectedDetectedTransfers.size === detectedTransfers.length) {
+        // Only work with visible (non-ignored) transfers
+        const visibleTransfers = detectedTransfers.filter(pair => !ignoredTransfers.has(getTransferPairKey(pair)));
+        const visibleKeys = visibleTransfers.map(pair => getTransferPairKey(pair));
+
+        if (selectedDetectedTransfers.size === visibleKeys.length) {
             setSelectedDetectedTransfers(new Set());
         } else {
-            setSelectedDetectedTransfers(new Set(detectedTransfers.map(pair => getTransferPairKey(pair))));
+            setSelectedDetectedTransfers(new Set(visibleKeys));
         }
     };
 
@@ -436,7 +553,7 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
 
     return (
         <div className="transfers-dashboard">
-            {/* Enhanced Header with Quick Stats */}
+            {/* Overall Status Header with Account Coverage Timeline */}
             <div className="transfers-dashboard-header">
                 <div className="header-content">
                     <div className="header-text">
@@ -449,7 +566,7 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
                             <span className="stat-label">Accounts</span>
                         </div>
                         <div className="quick-stat">
-                            <span className="stat-value">🔄 {pairedTransfers.length}</span>
+                            <span className="stat-value">🔄 {totalPairedTransfersCount}</span>
                             <span className="stat-label">Pairs Found</span>
                         </div>
                         {scanningStats.lastScanDate && (
@@ -464,6 +581,98 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
                         </div>
                     </div>
                 </div>
+
+                {/* Account Coverage Timeline - Moved from Progress Dashboard */}
+                <div className="header-timeline-section">
+                    <h4>📅 Account Coverage Timeline</h4>
+                    {transferProgress?.accountDateRange ? (
+                        <div className="timeline-container">
+                            <div className="timeline-labels">
+                                <span className="timeline-start">
+                                    {formatDate(transferProgress.accountDateRange.startDate, {
+                                        year: 'numeric',
+                                        month: 'short'
+                                    })}
+                                </span>
+                                <span className="timeline-end">
+                                    {formatDate(transferProgress.accountDateRange.endDate, {
+                                        year: 'numeric',
+                                        month: 'short'
+                                    })}
+                                </span>
+                            </div>
+                            <div className="timeline-track">
+                                <div className="timeline-background"></div>
+                                {(() => {
+                                    if (!transferProgress?.accountDateRange) return [];
+
+                                    const totalRange = transferProgress.accountDateRange.endDate - transferProgress.accountDateRange.startDate;
+                                    const segments = [];
+
+                                    // Add checked segment
+                                    if (transferProgress.checkedDateRange) {
+                                        const checkedStart = Math.max(transferProgress.checkedDateRange.startDate, transferProgress.accountDateRange.startDate);
+                                        const checkedEnd = Math.min(transferProgress.checkedDateRange.endDate, transferProgress.accountDateRange.endDate);
+                                        const checkedOffset = ((checkedStart - transferProgress.accountDateRange.startDate) / totalRange) * 100;
+                                        const checkedWidth = ((checkedEnd - checkedStart) / totalRange) * 100;
+
+                                        segments.push({
+                                            type: 'checked',
+                                            left: checkedOffset,
+                                            width: checkedWidth,
+                                            label: `Checked: ${formatDate(checkedStart, { year: 'numeric', month: 'short', day: 'numeric' })} - ${formatDate(checkedEnd, { year: 'numeric', month: 'short', day: 'numeric' })}`
+                                        });
+                                    }
+
+                                    // Add recommended segment
+                                    if (recommendedRange) {
+                                        const recStart = new Date(recommendedRange.startDate).getTime();
+                                        const recEnd = new Date(recommendedRange.endDate).getTime();
+                                        const recOffset = ((recStart - transferProgress.accountDateRange.startDate) / totalRange) * 100;
+                                        const recWidth = ((recEnd - recStart) / totalRange) * 100;
+
+                                        segments.push({
+                                            type: 'recommended',
+                                            left: recOffset,
+                                            width: recWidth,
+                                            label: `Recommended: ${formatDate(recStart, { year: 'numeric', month: 'short', day: 'numeric' })} - ${formatDate(recEnd, { year: 'numeric', month: 'short', day: 'numeric' })}`
+                                        });
+                                    }
+
+                                    return segments;
+                                })().map((segment) => (
+                                    <div
+                                        key={`${segment.type}-${segment.left}-${segment.width}`}
+                                        className={`timeline-segment ${segment.type}`}
+                                        style={{
+                                            left: `${segment.left}%`,
+                                            width: `${segment.width}%`
+                                        }}
+                                        title={segment.label}
+                                    />
+                                ))}
+                            </div>
+                            <div className="timeline-legend">
+                                <div className="legend-item">
+                                    <div className="legend-color checked"></div>
+                                    <span>Checked ({transferProgress.totalDaysChecked || 0} days)</span>
+                                </div>
+                                <div className="legend-item">
+                                    <div className="legend-color unchecked"></div>
+                                    <span>Unchecked ({(transferProgress.totalDaysAvailable || 0) - (transferProgress.totalDaysChecked || 0)} days)</span>
+                                </div>
+                                {recommendedRange && (
+                                    <div className="legend-item">
+                                        <div className="legend-color recommended"></div>
+                                        <span>Recommended</span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="no-data">No transaction data available</div>
+                    )}
+                </div>
             </div>
 
             {error && (
@@ -472,59 +681,115 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
                 </Alert>
             )}
 
-            {/* Enhanced Progress Dashboard */}
-            <TransferProgressDashboard
-                progress={transferProgress}
-                recommendedRange={recommendedRange}
-                loading={progressLoading || recalculateLoading}
-                onUseRecommendedRange={(range) => {
-                    setCurrentDateRange(range);
-                    handleDateRangePickerChange(range);
-                }}
-                onRecalculateFromScratch={handleRecalculateFromScratch}
-                onContinueSystematic={handleSystematicScan}
-                totalConfirmedPairs={pairedTransfers.length}
-                lastScanDate={scanningStats.lastScanDate}
-            />
+            {/* Current Analysis Panel - Focus on Date Range Analysis */}
+            <div className="current-analysis-panel">
+                <div className="analysis-header">
+                    <h3>🔍 Current Analysis</h3>
+                    <div className="analysis-stats">
+                        <div className="stat-item">
+                            <span className="stat-value">{pairedTransfers.length}</span>
+                            <span className="stat-label">Pairs Found</span>
+                        </div>
+                        <div className="stat-item">
+                            <span className="stat-value">{detectedTransfers.length}</span>
+                            <span className="stat-label">Pending Review</span>
+                        </div>
+                        <div className="stat-item">
+                            <span className="stat-value">
+                                {(() => {
+                                    // If we have no URL params and have a valid checked range, show the checked range
+                                    // This ensures consistency with the timeline display
+                                    const startDateParam = searchParams.get('startDate');
+                                    const endDateParam = searchParams.get('endDate');
 
-            {/* Enhanced Scan Controls */}
-            <ScanControlsPanel
-                currentDateRange={currentDateRange}
-                onDateRangeChange={handleDateRangePickerChange}
-                onScanTransfers={handleDetectTransfers}
-                onSmartScan={handleSmartScan}
-                onSystematicScan={handleSystematicScan}
-                loading={detectLoading}
-            />
+                                    if (!startDateParam && !endDateParam && isValidCheckedDateRange(transferProgress?.checkedDateRange)) {
+                                        const checkedStart = new Date(transferProgress.checkedDateRange.startDate);
+                                        const checkedEnd = new Date(transferProgress.checkedDateRange.endDate);
+                                        return `${checkedStart.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} - ${checkedEnd.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+                                    }
 
-            {/* Enhanced Results Dashboard */}
+                                    // Otherwise show the current selected range
+                                    return `${currentDateRange.startDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} - ${currentDateRange.endDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+                                })()}
+                            </span>
+                            <span className="stat-label">
+                                {(() => {
+                                    const startDateParam = searchParams.get('startDate');
+                                    const endDateParam = searchParams.get('endDate');
+
+                                    if (!startDateParam && !endDateParam && isValidCheckedDateRange(transferProgress?.checkedDateRange)) {
+                                        return 'Checked Range';
+                                    }
+
+                                    return 'Current Range';
+                                })()}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Scan Controls */}
+                <ScanControlsPanel
+                    currentDateRange={currentDateRange}
+                    onDateRangeChange={handleDateRangePickerChange}
+                    onScanTransfers={handleDetectTransfers}
+                    onSmartScan={handleSmartScan}
+                    onSystematicScan={handleSystematicScan}
+                    loading={detectLoading}
+                    recommendedRange={recommendedRange ? {
+                        startDate: new Date(recommendedRange.startDate),
+                        endDate: new Date(recommendedRange.endDate)
+                    } : null}
+                    pairedTransfersCount={pairedTransfers.length}
+                    detectedTransfersCount={detectedTransfers.length}
+                />
+
+                {/* Quick Actions */}
+                <div className="quick-actions">
+                    <Button
+                        variant="danger"
+                        size="compact"
+                        onClick={handleRecalculateFromScratch}
+                        disabled={recalculateLoading}
+                    >
+                        🔄 Reset Progress
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        size="compact"
+                        onClick={handleSystematicScan}
+                        disabled={detectLoading}
+                    >
+                        ➡️ Continue Systematic
+                    </Button>
+                </div>
+            </div>
+
+            {/* Transfer Candidate Approval Panel */}
             <TransferResultsDashboard
                 confirmedTransfers={pairedTransfers}
                 pendingTransfers={detectedTransfers}
                 selectedPendingTransfers={selectedDetectedTransfers}
+                ignoredTransfers={ignoredTransfers}
                 accounts={accounts}
                 loading={loading}
                 bulkMarkLoading={bulkMarkLoading}
                 onTogglePendingTransfer={toggleDetectedTransfer}
                 onSelectAllPending={selectAllDetected}
                 onBulkMarkTransfers={handleBulkMarkTransfers}
+                onBulkIgnoreTransfers={handleBulkIgnoreTransfers}
                 onExportTransfers={handleExportTransfers}
                 getTransferPairKey={getTransferPairKey}
+                showSuccessMessage={showDetectionSuccess}
             />
 
-            {/* Analytics Dashboard */}
-            <TransferAnalyticsDashboard
-                confirmedTransfers={pairedTransfers}
-                accounts={accounts}
-                scanningStats={scanningStats}
-            />
 
             {/* Legacy Date Range Suggestion (keep for backward compatibility) */}
             {showDateRangeSuggestion && (
                 <div className="date-range-suggestion">
                     <div className="suggestion-content">
-                        <h4>No transfers found in current date range</h4>
-                        <p>Try expanding the date range to find more potential matches:</p>
+                        <h4>No transfer candidates found in current date range</h4>
+                        <p>Try expanding the date range to find more potential transfer pairs for review:</p>
                         <div className="suggestion-buttons">
                             <button
                                 className="suggestion-button"

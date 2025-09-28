@@ -138,34 +138,133 @@ def mark_transfer_pair_handler(event: Dict[str, Any], user_id: str) -> Dict[str,
 
 
 
+def _parse_date_range_parameters(event: Dict[str, Any]) -> tuple[Optional[int], Optional[int]]:
+    """Parse date range parameters from event."""
+    start_date_param = optional_query_parameter(event, "startDate")
+    end_date_param = optional_query_parameter(event, "endDate")
+    
+    if not (start_date_param and end_date_param):
+        return None, None
+    
+    try:
+        from datetime import datetime
+        start_date_ts = int(start_date_param)
+        end_date_ts = int(end_date_param)
+        
+        # Convert to datetime objects for logging
+        start_date = datetime.fromtimestamp(start_date_ts / 1000)
+        end_date = datetime.fromtimestamp(end_date_ts / 1000)
+        
+        logger.info(f"Filtering paired transfers from {start_date.isoformat()} to {end_date.isoformat()}")
+        return start_date_ts, end_date_ts
+    except (ValueError, TypeError) as e:
+        logger.error(f"Invalid date format: {e}")
+        raise ValueError("Invalid date format. Expected milliseconds since epoch")
+
+
+def _get_transfer_transactions_with_pagination(
+    user_id: str, 
+    transfer_category_ids: list, 
+    start_date_ts: Optional[int] = None, 
+    end_date_ts: Optional[int] = None
+) -> list:
+    """Get transfer transactions with pagination."""
+    from utils.db_utils import list_user_transactions
+    
+    transfer_transactions = []
+    last_evaluated_key = None
+    
+    while True:
+        if start_date_ts and end_date_ts:
+            batch_result, last_evaluated_key, _ = list_user_transactions(
+                user_id=user_id,
+                category_ids=transfer_category_ids,
+                start_date_ts=start_date_ts,
+                end_date_ts=end_date_ts,
+                last_evaluated_key=last_evaluated_key,
+                limit=500
+            )
+        else:
+            batch_result, last_evaluated_key, _ = list_user_transactions(
+                user_id=user_id,
+                category_ids=transfer_category_ids,
+                last_evaluated_key=last_evaluated_key,
+                limit=500
+            )
+        
+        transfer_transactions.extend(batch_result)
+        
+        if not last_evaluated_key:
+            break
+    
+    return transfer_transactions
+
+
+def _find_transfer_pairs(transfer_transactions: list, transfer_service: TransferDetectionService) -> list:
+    """Find transfer pairs from transactions."""
+    paired_transfers = []
+    processed_transaction_ids = set()
+    
+    for tx in transfer_transactions:
+        if str(tx.transaction_id) in processed_transaction_ids:
+            continue
+            
+        # Look for matching transfer transaction
+        for other_tx in transfer_transactions:
+            if _is_valid_transfer_pair(tx, other_tx, processed_transaction_ids, transfer_service):
+                outgoing_tx, incoming_tx = _determine_transfer_direction(tx, other_tx)
+                if outgoing_tx and incoming_tx:
+                    paired_transfers.append(_create_transfer_pair_response(outgoing_tx, incoming_tx))
+                    processed_transaction_ids.add(str(tx.transaction_id))
+                    processed_transaction_ids.add(str(other_tx.transaction_id))
+                    break
+    
+    return paired_transfers
+
+
+def _is_valid_transfer_pair(
+    tx: Any, 
+    other_tx: Any, 
+    processed_transaction_ids: set, 
+    transfer_service: TransferDetectionService
+) -> bool:
+    """Check if two transactions form a valid transfer pair."""
+    return (
+        str(other_tx.transaction_id) != str(tx.transaction_id) and
+        str(other_tx.transaction_id) not in processed_transaction_ids and
+        tx.account_id != other_tx.account_id and
+        transfer_service._transactions_could_be_transfer_pair(tx, other_tx)
+    )
+
+
+def _determine_transfer_direction(tx: Any, other_tx: Any) -> tuple[Optional[Any], Optional[Any]]:
+    """Determine which transaction is outgoing and which is incoming."""
+    if tx.amount < 0 and other_tx.amount > 0:
+        return tx, other_tx
+    elif tx.amount > 0 and other_tx.amount < 0:
+        return other_tx, tx
+    else:
+        return None, None  # Skip if both same sign
+
+
+def _create_transfer_pair_response(outgoing_tx: Any, incoming_tx: Any) -> Dict[str, Any]:
+    """Create transfer pair response object."""
+    return {
+        "outgoingTransaction": outgoing_tx.model_dump(by_alias=True, mode="json"),
+        "incomingTransaction": incoming_tx.model_dump(by_alias=True, mode="json"),
+        "amount": abs(outgoing_tx.amount),
+        "dateDifference": abs(outgoing_tx.date - incoming_tx.date) // (1000 * 60 * 60 * 24)  # Days
+    }
+
+
 @api_handler()
 def get_paired_transfers_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Get existing paired transfer transactions for a user."""
     logger.info(f"Getting paired transfers for user {user_id}")
     
-    # Get date range parameters - both are optional (if not provided, returns all)
-    start_date_param = optional_query_parameter(event, "startDate")
-    end_date_param = optional_query_parameter(event, "endDate")
-    
-    # Parse date range
-    start_date_ts = None
-    end_date_ts = None
-    
-    if start_date_param and end_date_param:
-        # Parse specific start and end dates as milliseconds since epoch
-        try:
-            from datetime import datetime
-            start_date_ts = int(start_date_param)
-            end_date_ts = int(end_date_param)
-            
-            # Convert to datetime objects for logging
-            start_date = datetime.fromtimestamp(start_date_ts / 1000)
-            end_date = datetime.fromtimestamp(end_date_ts / 1000)
-            
-            logger.info(f"Filtering paired transfers from {start_date.isoformat()} to {end_date.isoformat()}")
-        except (ValueError, TypeError) as e:
-            logger.error(f"Invalid date format: {e}")
-            raise ValueError("Invalid date format. Expected milliseconds since epoch")
+    # Parse parameters
+    start_date_ts, end_date_ts = _parse_date_range_parameters(event)
+    count_only_param = optional_query_parameter(event, "count_only")
     
     # Initialize transfer detection service
     transfer_service = TransferDetectionService()
@@ -176,6 +275,8 @@ def get_paired_transfers_handler(event: Dict[str, Any], user_id: str) -> Dict[st
     if not transfer_category_ids:
         # No transfer categories exist, return empty result
         logger.info(f"No transfer categories found for user {user_id}")
+        if count_only_param == "true":
+            return {"count": 0}
         return {
             "pairedTransfers": [],
             "count": 0,
@@ -185,82 +286,19 @@ def get_paired_transfers_handler(event: Dict[str, Any], user_id: str) -> Dict[st
             } if start_date_ts and end_date_ts else None
         }
     
-    # Get transfer transactions with optional date range filtering
-    from utils.db_utils import list_user_transactions
+    # Get transfer transactions with pagination
+    transfer_transactions = _get_transfer_transactions_with_pagination(
+        user_id, transfer_category_ids, start_date_ts, end_date_ts
+    )
     
-    if start_date_ts and end_date_ts:
-        # Get transfer transactions within date range with pagination
-        transfer_transactions = []
-        last_evaluated_key = None
-        
-        while True:
-            batch_result, last_evaluated_key, _ = list_user_transactions(
-                user_id=user_id,
-                category_ids=transfer_category_ids,
-                start_date_ts=start_date_ts,
-                end_date_ts=end_date_ts,
-                last_evaluated_key=last_evaluated_key,
-                limit=500
-            )
-            
-            transfer_transactions.extend(batch_result)
-            
-            if not last_evaluated_key:
-                break
-    else:
-        # No date range specified, get all transfer transactions with pagination
-        transfer_transactions = []
-        last_evaluated_key = None
-        
-        while True:
-            batch_result, last_evaluated_key, _ = list_user_transactions(
-                user_id=user_id,
-                category_ids=transfer_category_ids,
-                last_evaluated_key=last_evaluated_key,
-                limit=500
-            )
-            
-            transfer_transactions.extend(batch_result)
-            
-            if not last_evaluated_key:
-                break
-    
-    # Group transfer transactions by account and find pairs
-    paired_transfers = []
-    processed_transaction_ids = set()
-    
-    for tx in transfer_transactions:
-        if str(tx.transaction_id) in processed_transaction_ids:
-            continue
-            
-        # Look for matching transfer transaction
-        for other_tx in transfer_transactions:
-            if (str(other_tx.transaction_id) != str(tx.transaction_id) and
-                str(other_tx.transaction_id) not in processed_transaction_ids and
-                tx.account_id != other_tx.account_id and
-                transfer_service._transactions_could_be_transfer_pair(tx, other_tx)):
-                
-                # Determine which is outgoing (negative) and incoming (positive)
-                if tx.amount < 0 and other_tx.amount > 0:
-                    outgoing_tx, incoming_tx = tx, other_tx
-                elif tx.amount > 0 and other_tx.amount < 0:
-                    outgoing_tx, incoming_tx = other_tx, tx
-                else:
-                    continue  # Skip if both same sign
-                
-                paired_transfers.append({
-                    "outgoingTransaction": outgoing_tx.model_dump(by_alias=True, mode="json"),
-                    "incomingTransaction": incoming_tx.model_dump(by_alias=True, mode="json"),
-                    "amount": abs(outgoing_tx.amount),
-                    "dateDifference": abs(outgoing_tx.date - incoming_tx.date) // (1000 * 60 * 60 * 24)  # Days
-                })
-                
-                # Mark both as processed
-                processed_transaction_ids.add(str(tx.transaction_id))
-                processed_transaction_ids.add(str(other_tx.transaction_id))
-                break
+    # Find transfer pairs
+    paired_transfers = _find_transfer_pairs(transfer_transactions, transfer_service)
     
     logger.info(f"Found {len(paired_transfers)} existing transfer pairs")
+    
+    # If only count is requested, return just the count
+    if count_only_param == "true":
+        return {"count": len(paired_transfers)}
     
     return {
         "pairedTransfers": paired_transfers,
@@ -270,6 +308,67 @@ def get_paired_transfers_handler(event: Dict[str, Any], user_id: str) -> Dict[st
             "endDate": end_date_ts
         } if start_date_ts and end_date_ts else None
     }
+
+
+def _validate_transfer_pair_ids(pair: Dict[str, Any]) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """Validate and extract transaction IDs from transfer pair."""
+    outgoing_tx_id = pair.get("outgoingTransactionId")
+    incoming_tx_id = pair.get("incomingTransactionId")
+    
+    if not outgoing_tx_id or not incoming_tx_id:
+        return None, None, "Missing transaction IDs"
+    
+    return outgoing_tx_id, incoming_tx_id, None
+
+
+def _get_and_validate_transactions(
+    outgoing_tx_id: str, 
+    incoming_tx_id: str, 
+    user_id: str
+) -> tuple[Optional[Any], Optional[Any], Optional[str]]:
+    """Get and validate transactions for transfer pair."""
+    # Get transactions
+    outgoing_tx = get_transaction_by_id(uuid.UUID(outgoing_tx_id))
+    incoming_tx = get_transaction_by_id(uuid.UUID(incoming_tx_id))
+    
+    if not outgoing_tx or not incoming_tx:
+        return None, None, "One or both transactions not found"
+    
+    # Verify transactions belong to user
+    if outgoing_tx.user_id != user_id or incoming_tx.user_id != user_id:
+        return None, None, "Unauthorized access to transactions"
+    
+    return outgoing_tx, incoming_tx, None
+
+
+def _process_single_transfer_pair(
+    pair: Dict[str, Any], 
+    user_id: str, 
+    transfer_service: TransferDetectionService
+) -> tuple[Optional[Dict[str, str]], Optional[Dict[str, Any]]]:
+    """Process a single transfer pair and return success or failure result."""
+    # Validate transaction IDs
+    outgoing_tx_id, incoming_tx_id, validation_error = _validate_transfer_pair_ids(pair)
+    if validation_error or not outgoing_tx_id or not incoming_tx_id:
+        return None, {"pair": pair, "error": validation_error or "Missing transaction IDs"}
+    
+    # Get and validate transactions
+    outgoing_tx, incoming_tx, transaction_error = _get_and_validate_transactions(
+        outgoing_tx_id, incoming_tx_id, user_id
+    )
+    if transaction_error or not outgoing_tx or not incoming_tx:
+        return None, {"pair": pair, "error": transaction_error or "Transaction validation failed"}
+    
+    # Mark as transfer pair
+    success = transfer_service.mark_as_transfer_pair(outgoing_tx, incoming_tx, user_id)
+    
+    if success:
+        return {
+            "outgoingTransactionId": outgoing_tx_id,
+            "incomingTransactionId": incoming_tx_id
+        }, None
+    else:
+        return None, {"pair": pair, "error": "Failed to mark as transfer pair"}
 
 
 @api_handler()
@@ -282,6 +381,10 @@ def bulk_mark_transfers_handler(event: Dict[str, Any], user_id: str) -> Dict[str
     if not transfer_pairs:
         raise ValueError("No transfer pairs provided")
     
+    # Get the date range that was scanned to update checked range after successful approvals
+    scanned_start_date = body.get("scannedStartDate")  # milliseconds since epoch
+    scanned_end_date = body.get("scannedEndDate")      # milliseconds since epoch
+    
     # Initialize transfer detection service
     transfer_service = TransferDetectionService()
     
@@ -290,48 +393,12 @@ def bulk_mark_transfers_handler(event: Dict[str, Any], user_id: str) -> Dict[str
     
     for pair in transfer_pairs:
         try:
-            outgoing_tx_id = pair.get("outgoingTransactionId")
-            incoming_tx_id = pair.get("incomingTransactionId")
+            success_result, failure_result = _process_single_transfer_pair(pair, user_id, transfer_service)
             
-            if not outgoing_tx_id or not incoming_tx_id:
-                failed_pairs.append({
-                    "pair": pair,
-                    "error": "Missing transaction IDs"
-                })
-                continue
-            
-            # Get transactions
-            outgoing_tx = get_transaction_by_id(uuid.UUID(outgoing_tx_id))
-            incoming_tx = get_transaction_by_id(uuid.UUID(incoming_tx_id))
-            
-            if not outgoing_tx or not incoming_tx:
-                failed_pairs.append({
-                    "pair": pair,
-                    "error": "One or both transactions not found"
-                })
-                continue
-            
-            # Verify transactions belong to user
-            if outgoing_tx.user_id != user_id or incoming_tx.user_id != user_id:
-                failed_pairs.append({
-                    "pair": pair,
-                    "error": "Unauthorized access to transactions"
-                })
-                continue
-            
-            # Mark as transfer pair
-            success = transfer_service.mark_as_transfer_pair(outgoing_tx, incoming_tx, user_id)
-            
-            if success:
-                successful_pairs.append({
-                    "outgoingTransactionId": outgoing_tx_id,
-                    "incomingTransactionId": incoming_tx_id
-                })
-            else:
-                failed_pairs.append({
-                    "pair": pair,
-                    "error": "Failed to mark as transfer pair"
-                })
+            if success_result:
+                successful_pairs.append(success_result)
+            elif failure_result:
+                failed_pairs.append(failure_result)
                 
         except Exception as e:
             logger.error(f"Error processing transfer pair: {str(e)}")
@@ -340,6 +407,32 @@ def bulk_mark_transfers_handler(event: Dict[str, Any], user_id: str) -> Dict[str
                 "pair": pair,
                 "error": str(e)
             })
+    
+    # Update checked date range in user preferences if we have successful approvals and date range info
+    if successful_pairs and scanned_start_date and scanned_end_date:
+        try:
+            import asyncio
+            from services.user_preferences_service import UserPreferencesService
+            prefs_service = UserPreferencesService()
+            
+            # Get current transfer preferences
+            current_prefs = asyncio.run(prefs_service.get_transfer_preferences(user_id))
+            
+            # Update the checked date range to extend to the scanned range
+            updated_prefs = {
+                **current_prefs,
+                'checkedDateRangeStart': scanned_start_date,
+                'checkedDateRangeEnd': scanned_end_date
+            }
+            
+            # Save updated preferences
+            asyncio.run(prefs_service.update_transfer_preferences(user_id, updated_prefs))
+            
+            logger.info(f"Updated checked date range for user {user_id}: {scanned_start_date} to {scanned_end_date}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to update checked date range after bulk approval: {str(e)}")
+            # Don't fail the entire operation if preference update fails
     
     return {
         "successful": successful_pairs,

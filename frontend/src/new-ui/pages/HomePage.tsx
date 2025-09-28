@@ -361,14 +361,14 @@ const HomePage: React.FC = () => {
     };
 
     const handleViewTransfers = () => {
-        navigate('/transactions?tab=transfers');
+        navigate('/transfers');
     };
 
     const handleUseRecommendedRange = () => {
         if (insights?.transferScanProgress.recommendedRange) {
             const startDate = new Date(insights.transferScanProgress.recommendedRange.startDate).toISOString().split('T')[0];
             const endDate = new Date(insights.transferScanProgress.recommendedRange.endDate).toISOString().split('T')[0];
-            navigate(`/transactions?tab=transfers&startDate=${startDate}&endDate=${endDate}&autoScan=true`);
+            navigate(`/transfers?startDate=${startDate}&endDate=${endDate}&autoScan=true`);
         }
     };
 
