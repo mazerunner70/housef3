@@ -57,6 +57,7 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
     const [bulkMarkLoading, setBulkMarkLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selectedDetectedTransfers, setSelectedDetectedTransfers] = useState<Set<string>>(new Set());
+    const [ignoredTransfers, setIgnoredTransfers] = useState<Set<string>>(new Set());
     const [showDateRangeSuggestion, setShowDateRangeSuggestion] = useState(false);
     const [showDetectionSuccess, setShowDetectionSuccess] = useState(false);
 
@@ -227,6 +228,8 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
             )();
             setDetectedTransfers(detected.transfers);
             setSelectedDetectedTransfers(new Set());
+            // Clear ignored transfers when new detection is run
+            setIgnoredTransfers(new Set());
 
             // Update current date range to match what was actually scanned
             if (recommendedRange) {
@@ -318,6 +321,7 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
             setRecommendedRange(null);
             setDetectedTransfers([]);
             setSelectedDetectedTransfers(new Set());
+            setIgnoredTransfers(new Set());
             setScanningStats({
                 totalScansRun: 0,
                 totalTimeSpent: 0,
@@ -370,6 +374,26 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
         a.click();
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
+    };
+
+    const handleBulkIgnoreTransfers = () => {
+        if (selectedDetectedTransfers.size === 0) {
+            setError('Please select at least one transfer pair to ignore');
+            return;
+        }
+
+        // Add selected transfers to ignored set
+        setIgnoredTransfers(prev => {
+            const newIgnored = new Set(prev);
+            selectedDetectedTransfers.forEach(pairKey => newIgnored.add(pairKey));
+            return newIgnored;
+        });
+
+        // Clear selection
+        setSelectedDetectedTransfers(new Set());
+
+        // Clear any existing error
+        setError(null);
     };
 
     const handleBulkMarkTransfers = async () => {
@@ -475,6 +499,7 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
             )();
             setDetectedTransfers(detected.transfers);
             setSelectedDetectedTransfers(new Set());
+            setIgnoredTransfers(new Set());
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to detect transfers');
         } finally {
@@ -511,10 +536,14 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
     };
 
     const selectAllDetected = () => {
-        if (selectedDetectedTransfers.size === detectedTransfers.length) {
+        // Only work with visible (non-ignored) transfers
+        const visibleTransfers = detectedTransfers.filter(pair => !ignoredTransfers.has(getTransferPairKey(pair)));
+        const visibleKeys = visibleTransfers.map(pair => getTransferPairKey(pair));
+
+        if (selectedDetectedTransfers.size === visibleKeys.length) {
             setSelectedDetectedTransfers(new Set());
         } else {
-            setSelectedDetectedTransfers(new Set(detectedTransfers.map(pair => getTransferPairKey(pair))));
+            setSelectedDetectedTransfers(new Set(visibleKeys));
         }
     };
 
@@ -741,12 +770,14 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
                 confirmedTransfers={pairedTransfers}
                 pendingTransfers={detectedTransfers}
                 selectedPendingTransfers={selectedDetectedTransfers}
+                ignoredTransfers={ignoredTransfers}
                 accounts={accounts}
                 loading={loading}
                 bulkMarkLoading={bulkMarkLoading}
                 onTogglePendingTransfer={toggleDetectedTransfer}
                 onSelectAllPending={selectAllDetected}
                 onBulkMarkTransfers={handleBulkMarkTransfers}
+                onBulkIgnoreTransfers={handleBulkIgnoreTransfers}
                 onExportTransfers={handleExportTransfers}
                 getTransferPairKey={getTransferPairKey}
                 showSuccessMessage={showDetectionSuccess}

@@ -19,12 +19,14 @@ interface TransferResultsDashboardProps {
     confirmedTransfers: TransferPair[];
     pendingTransfers: TransferPair[];
     selectedPendingTransfers: Set<string>;
+    ignoredTransfers: Set<string>;
     accounts: AccountInfo[];
     loading: boolean;
     bulkMarkLoading: boolean;
     onTogglePendingTransfer: (pairKey: string) => void;
     onSelectAllPending: () => void;
     onBulkMarkTransfers: () => void;
+    onBulkIgnoreTransfers: () => void;
     onExportTransfers: () => void;
     getTransferPairKey: (pair: TransferPair) => string;
     showSuccessMessage?: boolean;
@@ -34,12 +36,14 @@ const TransferResultsDashboard: React.FC<TransferResultsDashboardProps> = ({
     confirmedTransfers,
     pendingTransfers,
     selectedPendingTransfers,
+    ignoredTransfers,
     accounts,
     loading,
     bulkMarkLoading,
     onTogglePendingTransfer,
     onSelectAllPending,
     onBulkMarkTransfers,
+    onBulkIgnoreTransfers,
     onExportTransfers,
     getTransferPairKey,
     showSuccessMessage = false
@@ -138,11 +142,15 @@ const TransferResultsDashboard: React.FC<TransferResultsDashboardProps> = ({
                 transfers = confirmedTransfers;
                 break;
             case 'pending':
-                transfers = pendingTransfers;
+                // Filter out ignored transfers from pending view
+                transfers = pendingTransfers.filter(pair => !ignoredTransfers.has(getTransferPairKey(pair)));
                 break;
-            case 'all':
-                transfers = [...confirmedTransfers, ...pendingTransfers];
+            case 'all': {
+                // Filter out ignored transfers from all view as well
+                const filteredPending = pendingTransfers.filter(pair => !ignoredTransfers.has(getTransferPairKey(pair)));
+                transfers = [...confirmedTransfers, ...filteredPending];
                 break;
+            }
         }
         return sortTransfers(filterTransfers(transfers));
     };
@@ -188,9 +196,20 @@ const TransferResultsDashboard: React.FC<TransferResultsDashboardProps> = ({
             <div className="view-controls">
                 <div className="view-tabs">
                     {[
-                        { key: 'pending', label: 'Pending Confirmation', count: pendingTransfers.length },
+                        {
+                            key: 'pending',
+                            label: 'Pending Confirmation',
+                            count: pendingTransfers.filter(pair => !ignoredTransfers.has(getTransferPairKey(pair))).length
+                        },
                         { key: 'confirmed', label: 'Confirmed in Range', count: confirmedTransfers.length },
-                        { key: 'all', label: 'All Detection Results', count: (() => confirmedTransfers.length + pendingTransfers.length)() }
+                        {
+                            key: 'all',
+                            label: 'All Detection Results',
+                            count: (() => {
+                                const filteredPending = pendingTransfers.filter(pair => !ignoredTransfers.has(getTransferPairKey(pair)));
+                                return confirmedTransfers.length + filteredPending.length;
+                            })()
+                        }
                     ].map(tab => (
                         <button
                             key={tab.key}
@@ -215,15 +234,15 @@ const TransferResultsDashboard: React.FC<TransferResultsDashboardProps> = ({
             </div>
 
             {/* Pending Confirmation Actions */}
-            {viewMode === 'pending' && pendingTransfers.length > 0 && (
+            {viewMode === 'pending' && pendingTransfers.filter(pair => !ignoredTransfers.has(getTransferPairKey(pair))).length > 0 && (
                 <div className="pending-actions">
                     <div className="confirmation-header">
                         <h4>⚠️ Confirmation Required</h4>
-                        <p>Review these detected transfer candidates and confirm the ones that are actual transfers.</p>
+                        <p>Review these detected transfer candidates and confirm the ones that are actual transfers, or ignore the ones that are not.</p>
                     </div>
                     <div className="selection-info">
                         <span>
-                            {selectedPendingTransfers.size} of {pendingTransfers.length} candidates selected for confirmation
+                            {selectedPendingTransfers.size} of {pendingTransfers.filter(pair => !ignoredTransfers.has(getTransferPairKey(pair))).length} candidates selected
                         </span>
                     </div>
                     <div className="bulk-actions">
@@ -232,7 +251,10 @@ const TransferResultsDashboard: React.FC<TransferResultsDashboardProps> = ({
                             size="compact"
                             onClick={onSelectAllPending}
                         >
-                            {selectedPendingTransfers.size === pendingTransfers.length ? 'Deselect All' : 'Select All Candidates'}
+                            {(() => {
+                                const visiblePending = pendingTransfers.filter(pair => !ignoredTransfers.has(getTransferPairKey(pair)));
+                                return selectedPendingTransfers.size === visiblePending.length ? 'Deselect All' : 'Select All Candidates';
+                            })()}
                         </Button>
                         <Button
                             variant="primary"
@@ -244,6 +266,18 @@ const TransferResultsDashboard: React.FC<TransferResultsDashboardProps> = ({
                                 const count = selectedPendingTransfers.size;
                                 const plural = count !== 1 ? 's' : '';
                                 return `✅ Confirm ${count} as Transfer${plural}`;
+                            })()}
+                        </Button>
+                        <Button
+                            variant="danger"
+                            size="compact"
+                            onClick={onBulkIgnoreTransfers}
+                            disabled={bulkMarkLoading || selectedPendingTransfers.size === 0}
+                        >
+                            {(() => {
+                                const count = selectedPendingTransfers.size;
+                                const plural = count !== 1 ? 's' : '';
+                                return `🚫 Ignore ${count} Candidate${plural}`;
                             })()}
                         </Button>
                     </div>
@@ -283,7 +317,10 @@ const TransferResultsDashboard: React.FC<TransferResultsDashboardProps> = ({
                                 {viewMode === 'pending' && <th className="checkbox-column">
                                     <input
                                         type="checkbox"
-                                        checked={selectedPendingTransfers.size === pendingTransfers.length && pendingTransfers.length > 0}
+                                        checked={(() => {
+                                            const visiblePending = pendingTransfers.filter(pair => !ignoredTransfers.has(getTransferPairKey(pair)));
+                                            return selectedPendingTransfers.size === visiblePending.length && visiblePending.length > 0;
+                                        })()}
                                         onChange={onSelectAllPending}
                                     />
                                 </th>}
@@ -425,11 +462,12 @@ const TransferResultsDashboard: React.FC<TransferResultsDashboardProps> = ({
                                 {(() => {
                                     let totalCount: number;
                                     if (viewMode === 'all') {
-                                        totalCount = confirmedTransfers.length + pendingTransfers.length;
+                                        const filteredPending = pendingTransfers.filter(pair => !ignoredTransfers.has(getTransferPairKey(pair)));
+                                        totalCount = confirmedTransfers.length + filteredPending.length;
                                     } else if (viewMode === 'confirmed') {
                                         totalCount = confirmedTransfers.length;
                                     } else {
-                                        totalCount = pendingTransfers.length;
+                                        totalCount = pendingTransfers.filter(pair => !ignoredTransfers.has(getTransferPairKey(pair))).length;
                                     }
                                     return `(filtered from ${totalCount})`;
                                 })()}
