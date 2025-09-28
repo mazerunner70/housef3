@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import DateCell from './DateCell';
 import './DateRangePicker.css';
 
 export interface DateRange {
@@ -77,13 +78,6 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
         return date.toISOString().split('T')[0];
     };
 
-    const formatDateForDisplay = (date: Date): string => {
-        return date.toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-        });
-    };
 
     const getCurrentRange = (): DateRange => {
         return value || customRange;
@@ -172,7 +166,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
             <div className="current-range-display">
                 <span className="range-label">Current range:</span>
                 <span className="range-dates">
-                    {formatDateForDisplay(getCurrentRange().startDate)} - {formatDateForDisplay(getCurrentRange().endDate)}
+                    <DateCell date={getCurrentRange().startDate} format="short" locale="en-GB" /> - <DateCell date={getCurrentRange().endDate} format="short" locale="en-GB" />
                 </span>
             </div>
         </div>

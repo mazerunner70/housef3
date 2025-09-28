@@ -624,3 +624,225 @@
         padding: 12px;
     }
 }
+
+/* New Layout Components */
+
+/* Header Timeline Section */
+.header-timeline-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.header-timeline-section h4 {
+    margin: 0 0 16px 0;
+    color: white;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.header-timeline-section .timeline-container {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.header-timeline-section .timeline-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.header-timeline-section .timeline-track {
+    position: relative;
+    height: 12px;
+    margin-bottom: 12px;
+}
+
+.header-timeline-section .timeline-background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+}
+
+.header-timeline-section .timeline-segment {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    border-radius: 6px;
+}
+
+.header-timeline-section .timeline-segment.checked {
+    background: #10b981;
+}
+
+.header-timeline-section .timeline-segment.recommended {
+    background: #f59e0b;
+}
+
+.header-timeline-section .timeline-legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.header-timeline-section .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.header-timeline-section .legend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+}
+
+.header-timeline-section .legend-color.checked {
+    background: #10b981;
+}
+
+.header-timeline-section .legend-color.unchecked {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.header-timeline-section .legend-color.recommended {
+    background: #f59e0b;
+}
+
+.header-timeline-section .no-data {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.7);
+    font-style: italic;
+    padding: 20px;
+}
+
+/* Current Analysis Panel */
+.current-analysis-panel {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    margin-bottom: 24px;
+    overflow: hidden;
+}
+
+.analysis-header {
+    background: #f8fafc;
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.analysis-header h3 {
+    margin: 0 0 16px 0;
+    color: #1e293b;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.analysis-stats {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+.analysis-stats .stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    min-width: 120px;
+}
+
+.analysis-stats .stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 4px;
+}
+
+.analysis-stats .stat-label {
+    font-size: 12px;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+}
+
+/* Smart Recommendations */
+.smart-recommendations {
+    padding: 20px 24px;
+    background: #fef3c7;
+    border-left: 4px solid #f59e0b;
+    margin: 0 24px 20px 24px;
+    border-radius: 0 8px 8px 0;
+}
+
+.smart-recommendations h4 {
+    margin: 0 0 12px 0;
+    color: #92400e;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.recommendation-card {
+    background: white;
+    border-radius: 8px;
+    padding: 16px;
+    border: 1px solid #fbbf24;
+}
+
+.recommendation-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.recommendation-text {
+    color: #1e293b;
+    font-weight: 500;
+}
+
+/* Quick Actions */
+.quick-actions {
+    padding: 20px 24px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .header-timeline-section {
+        margin-top: 16px;
+        padding-top: 16px;
+    }
+
+    .analysis-stats {
+        gap: 16px;
+    }
+
+    .analysis-stats .stat-item {
+        min-width: 100px;
+    }
+
+    .recommendation-content {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .quick-actions {
+        flex-direction: column;
+    }
+}

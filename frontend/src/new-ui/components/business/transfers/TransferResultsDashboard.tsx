@@ -4,7 +4,8 @@ import { AccountInfo } from '@/schemas/Transaction';
 import {
     CurrencyDisplay,
     DateCell,
-    LoadingState
+    LoadingState,
+    Alert
 } from '@/new-ui/components/ui';
 import Button from '@/new-ui/components/Button';
 import { useLocale } from '@/new-ui/hooks/useLocale';
@@ -26,6 +27,7 @@ interface TransferResultsDashboardProps {
     onBulkMarkTransfers: () => void;
     onExportTransfers: () => void;
     getTransferPairKey: (pair: TransferPair) => string;
+    showSuccessMessage?: boolean;
 }
 
 const TransferResultsDashboard: React.FC<TransferResultsDashboardProps> = ({
@@ -39,7 +41,8 @@ const TransferResultsDashboard: React.FC<TransferResultsDashboardProps> = ({
     onSelectAllPending,
     onBulkMarkTransfers,
     onExportTransfers,
-    getTransferPairKey
+    getTransferPairKey,
+    showSuccessMessage = false
 }) => {
     const { localeConfig } = useLocale();
     const [viewMode, setViewMode] = useState<ViewMode>('pending');
@@ -154,18 +157,7 @@ const TransferResultsDashboard: React.FC<TransferResultsDashboardProps> = ({
         <div className="transfer-results-dashboard">
             <div className="results-header">
                 <div className="results-title">
-                    <h3>📋 Transfer Results Dashboard</h3>
-                    <div className="results-summary">
-                        <span className="summary-item confirmed">
-                            ✅ {confirmedTransfers.length} Confirmed
-                        </span>
-                        <span className="summary-item pending">
-                            ⏳ {pendingTransfers.length} Pending Review
-                        </span>
-                        <span className="summary-item total">
-                            📊 {confirmedTransfers.length + pendingTransfers.length} Total
-                        </span>
-                    </div>
+                    <h3>📋 Transfer Detection Results</h3>
                 </div>
                 <div className="results-actions">
                     <Button
@@ -178,13 +170,27 @@ const TransferResultsDashboard: React.FC<TransferResultsDashboardProps> = ({
                 </div>
             </div>
 
+            {/* Success Message for New Detections */}
+            {showSuccessMessage && pendingTransfers.length > 0 && (
+                <Alert
+                    variant="success"
+                    title={`🎉 Detected ${pendingTransfers.length} Transfer Candidate${pendingTransfers.length !== 1 ? 's' : ''} - Confirmation Required!`}
+                    className="detection-success-alert"
+                >
+                    <p>
+                        <strong>These are potential transfers that need your confirmation.</strong> Review each candidate carefully,
+                        check the boxes next to the ones that are actual transfers, then click "Confirm as Transfers" to verify them.
+                    </p>
+                </Alert>
+            )}
+
             {/* View Controls */}
             <div className="view-controls">
                 <div className="view-tabs">
                     {[
-                        { key: 'pending', label: 'Pending Review', count: pendingTransfers.length },
-                        { key: 'confirmed', label: 'Confirmed', count: confirmedTransfers.length },
-                        { key: 'all', label: 'All Transfers', count: (() => confirmedTransfers.length + pendingTransfers.length)() }
+                        { key: 'pending', label: 'Pending Confirmation', count: pendingTransfers.length },
+                        { key: 'confirmed', label: 'Confirmed in Range', count: confirmedTransfers.length },
+                        { key: 'all', label: 'All Detection Results', count: (() => confirmedTransfers.length + pendingTransfers.length)() }
                     ].map(tab => (
                         <button
                             key={tab.key}
@@ -208,12 +214,16 @@ const TransferResultsDashboard: React.FC<TransferResultsDashboardProps> = ({
                 </div>
             </div>
 
-            {/* Pending Transfers Actions */}
+            {/* Pending Confirmation Actions */}
             {viewMode === 'pending' && pendingTransfers.length > 0 && (
                 <div className="pending-actions">
+                    <div className="confirmation-header">
+                        <h4>⚠️ Confirmation Required</h4>
+                        <p>Review these detected transfer candidates and confirm the ones that are actual transfers.</p>
+                    </div>
                     <div className="selection-info">
                         <span>
-                            {selectedPendingTransfers.size} of {pendingTransfers.length} selected
+                            {selectedPendingTransfers.size} of {pendingTransfers.length} candidates selected for confirmation
                         </span>
                     </div>
                     <div className="bulk-actions">
@@ -222,14 +232,19 @@ const TransferResultsDashboard: React.FC<TransferResultsDashboardProps> = ({
                             size="compact"
                             onClick={onSelectAllPending}
                         >
-                            {selectedPendingTransfers.size === pendingTransfers.length ? 'Deselect All' : 'Select All'}
+                            {selectedPendingTransfers.size === pendingTransfers.length ? 'Deselect All' : 'Select All Candidates'}
                         </Button>
                         <Button
                             variant="primary"
                             onClick={onBulkMarkTransfers}
                             disabled={bulkMarkLoading || selectedPendingTransfers.size === 0}
                         >
-                            {bulkMarkLoading ? 'Marking...' : `✅ Mark ${selectedPendingTransfers.size} as Transfers`}
+                            {(() => {
+                                if (bulkMarkLoading) return 'Confirming...';
+                                const count = selectedPendingTransfers.size;
+                                const plural = count !== 1 ? 's' : '';
+                                return `✅ Confirm ${count} as Transfer${plural}`;
+                            })()}
                         </Button>
                     </div>
                 </div>
@@ -241,22 +256,22 @@ const TransferResultsDashboard: React.FC<TransferResultsDashboardProps> = ({
                     {viewMode === 'pending' && (
                         <div className="no-results-content">
                             <span className="no-results-icon">🔍</span>
-                            <h4>No Pending Transfers</h4>
-                            <p>Run a scan to detect potential transfer pairs for review.</p>
+                            <h4>No Transfer Candidates Pending Confirmation</h4>
+                            <p>Run a scan to detect potential transfer pairs that need your confirmation.</p>
                         </div>
                     )}
                     {viewMode === 'confirmed' && (
                         <div className="no-results-content">
                             <span className="no-results-icon">✅</span>
                             <h4>No Confirmed Transfers</h4>
-                            <p>Mark detected transfer pairs to see them here.</p>
+                            <p>Confirm detected transfer candidates to see them here as verified transfers.</p>
                         </div>
                     )}
                     {viewMode === 'all' && (
                         <div className="no-results-content">
                             <span className="no-results-icon">📋</span>
-                            <h4>No Transfer Data</h4>
-                            <p>Start by scanning for transfers to populate this dashboard.</p>
+                            <h4>No Transfer Detection Results</h4>
+                            <p>Start by scanning for transfers to detect candidates that need confirmation.</p>
                         </div>
                     )}
                 </div>
@@ -388,7 +403,7 @@ const TransferResultsDashboard: React.FC<TransferResultsDashboardProps> = ({
                                         {viewMode === 'all' && (
                                             <td className="status-cell">
                                                 <span className={`status-badge ${isPending ? 'pending' : 'confirmed'}`}>
-                                                    {isPending ? '⏳ Pending' : '✅ Confirmed'}
+                                                    {isPending ? '⏳ Needs Confirmation' : '✅ Confirmed Transfer'}
                                                 </span>
                                             </td>
                                         )}

@@ -143,7 +143,7 @@ const TransferTransactionSchema = z.object({
     type: z.string().nullish(), // Handle null values from backend
     notes: z.string().nullish(), // Handle null values from backend
     isSplit: z.boolean().nullish() // Handle null values from backend
-}).passthrough(); // Allow additional fields from backend
+}); // Allow additional fields from backend
 
 const TransferPairSchema = z.object({
     outgoingTransaction: TransferTransactionSchema,
@@ -158,7 +158,7 @@ const PairedTransfersResponseSchema = z.object({
     dateRange: z.object({
         startDate: z.number(),
         endDate: z.number()
-    }).optional()
+    }).nullable().optional()
 });
 
 const DetectedTransfersResponseSchema = z.object({
@@ -232,6 +232,35 @@ const retryPreferenceUpdate = async (
 };
 
 // 5. Exported Functions - API operations with efficient logging
+
+/**
+ * Get total count of all paired transfers for the user (no date filtering)
+ * @returns Promise resolving to total count
+ */
+export const getTotalPairedTransfersCount = () => {
+    return withApiLogging(
+        'TransferService',
+        `${API_ENDPOINT}/paired?count_only=true`,
+        'GET',
+        async () => {
+            return validateApiResponse(
+                () => ApiClient.getJson<any>(`${API_ENDPOINT}/paired?count_only=true`),
+                (rawData) => {
+                    // Expect just a count response
+                    return rawData.count || 0;
+                },
+                'paired transfers count',
+                'Failed to load paired transfers count.'
+            );
+        },
+        {
+            operationName: 'getTotalPairedTransfersCount',
+            successData: (result) => ({
+                totalCount: result
+            })
+        }
+    );
+};
 
 /**
  * Get existing paired transfer transactions within a date range
@@ -390,19 +419,28 @@ export const markTransferPair = (outgoingTransactionId: string, incomingTransact
 /**
  * Mark multiple detected transfer pairs as transfers
  * @param transferPairs Array of transfer pairs to mark
+ * @param scannedDateRange Optional date range that was scanned to update checked range
  * @returns Promise resolving to bulk operation results
  */
 export const bulkMarkTransfers = withServiceLogging(
     'TransferService',
     'bulkMarkTransfers',
-    async (transferPairs: DetectedTransfer[]): Promise<BulkMarkTransfersResponse> => {
+    async (transferPairs: DetectedTransfer[], scannedDateRange?: DateRange): Promise<BulkMarkTransfersResponse> => {
+        const requestBody: any = {
+            transferPairs: transferPairs.map(pair => ({
+                outgoingTransactionId: pair.outgoingTransactionId,
+                incomingTransactionId: pair.incomingTransactionId
+            }))
+        };
+
+        // Include scanned date range if provided to update checked range in preferences
+        if (scannedDateRange) {
+            requestBody.scannedStartDate = scannedDateRange.startDate;
+            requestBody.scannedEndDate = scannedDateRange.endDate;
+        }
+
         return validateApiResponse(
-            () => ApiClient.postJson<any>(`${API_ENDPOINT}/bulk-mark`, {
-                transferPairs: transferPairs.map(pair => ({
-                    outgoingTransactionId: pair.outgoingTransactionId,
-                    incomingTransactionId: pair.incomingTransactionId
-                }))
-            }),
+            () => ApiClient.postJson<any>(`${API_ENDPOINT}/bulk-mark`, requestBody),
             (rawData) => {
                 return BulkMarkResponseSchema.parse(rawData);
             },
@@ -411,9 +449,10 @@ export const bulkMarkTransfers = withServiceLogging(
         );
     },
     {
-        logArgs: ([transferPairs]) => ({
+        logArgs: ([transferPairs, scannedDateRange]) => ({
             pairCount: transferPairs.length,
-            transactionIds: transferPairs.map(p => `${p.outgoingTransactionId}-${p.incomingTransactionId}`)
+            transactionIds: transferPairs.map(p => `${p.outgoingTransactionId}-${p.incomingTransactionId}`),
+            hasScannedRange: !!scannedDateRange
         }),
         logResult: (result) => ({
             successCount: result.successCount,
@@ -513,6 +552,161 @@ export const createDateRangeFromDays = (days: number): DateRange => {
     };
 };
 
+// Helper function to calculate transfer progress
+const calculateTransferProgress = (checkedRange: any, accountRange: any) => {
+    if (!accountRange.startDate || !accountRange.endDate) {
+        return {
+            hasData: false,
+            totalDays: 0,
+            checkedDays: 0,
+            progressPercentage: 0,
+            isComplete: false
+        };
+    }
+
+    const accountStart = new Date(accountRange.startDate);
+    const accountEnd = new Date(accountRange.endDate);
+    const totalDays = Math.ceil((accountEnd.getTime() - accountStart.getTime()) / (1000 * 60 * 60 * 24));
+
+    let checkedDays = 0;
+    if (checkedRange.startDate && checkedRange.endDate) {
+        const checkedStart = new Date(Math.max(checkedRange.startDate, accountStart.getTime()));
+        const checkedEnd = new Date(Math.min(checkedRange.endDate, accountEnd.getTime()));
+        checkedDays = Math.max(0, Math.ceil((checkedEnd.getTime() - checkedStart.getTime()) / (1000 * 60 * 60 * 24)));
+    }
+
+    const progressPercentage = totalDays > 0 ? Math.round((checkedDays / totalDays) * 100) : 0;
+    const isComplete = progressPercentage >= 100;
+
+    return {
+        hasData: true,
+        totalDays,
+        checkedDays,
+        progressPercentage,
+        isComplete,
+        accountDateRange: accountRange,
+        checkedDateRange: checkedRange
+    };
+};
+
+// Helper function to calculate initial recommendation when nothing is checked
+const calculateInitialRecommendation = (accountStartDate: Date, accountEndDate: Date, chunkDays: number): DateRange => {
+    logger.info('No previous checks found, suggesting recent chunk from actual transaction data');
+
+    const suggestedEnd = accountEndDate;
+    const suggestedStart = new Date(suggestedEnd);
+    suggestedStart.setDate(suggestedStart.getDate() - chunkDays);
+
+    // Don't go before account start
+    const effectiveStart = new Date(Math.max(suggestedStart.getTime(), accountStartDate.getTime()));
+
+    return {
+        startDate: effectiveStart.getTime(),
+        endDate: suggestedEnd.getTime()
+    };
+};
+
+// Helper function to calculate forward extension recommendation
+const calculateForwardRecommendation = (
+    checkedEndDate: Date,
+    accountEndDate: Date,
+    overlapDays: number,
+    chunkDays: number
+): DateRange => {
+    logger.info('Extending forward from checked range with overlap');
+
+    const nextStart = new Date(checkedEndDate);
+    nextStart.setDate(nextStart.getDate() - overlapDays);
+
+    const nextEnd = new Date(nextStart);
+    nextEnd.setDate(nextEnd.getDate() + chunkDays);
+
+    // Cap at actual account data boundary
+    const effectiveEnd = new Date(Math.min(nextEnd.getTime(), accountEndDate.getTime()));
+
+    const recommendation = {
+        startDate: nextStart.getTime(),
+        endDate: effectiveEnd.getTime()
+    };
+
+    logger.info('Forward extension recommendation', {
+        nextStart: nextStart.toISOString().split('T')[0],
+        effectiveEnd: effectiveEnd.toISOString().split('T')[0],
+        overlapDays
+    });
+
+    return recommendation;
+};
+
+// Helper function to calculate backward extension recommendation
+const calculateBackwardRecommendation = (
+    checkedStartDate: Date,
+    accountStartDate: Date,
+    overlapDays: number,
+    chunkDays: number
+): DateRange => {
+    logger.info('Extending backward from checked range with overlap');
+
+    const nextEnd = new Date(checkedStartDate);
+    nextEnd.setDate(nextEnd.getDate() + overlapDays);
+
+    const nextStart = new Date(nextEnd);
+    nextStart.setDate(nextStart.getDate() - chunkDays);
+
+    // Cap at actual account data boundary
+    const effectiveStart = new Date(Math.max(nextStart.getTime(), accountStartDate.getTime()));
+
+    const recommendation = {
+        startDate: effectiveStart.getTime(),
+        endDate: nextEnd.getTime()
+    };
+
+    logger.info('Backward extension recommendation', {
+        effectiveStart: effectiveStart.toISOString().split('T')[0],
+        nextEnd: nextEnd.toISOString().split('T')[0],
+        overlapDays
+    });
+
+    return recommendation;
+};
+
+// Helper function to calculate recommended date range
+const calculateRecommendedRange = (checkedRange: any, accountRange: any): DateRange | null => {
+    if (!accountRange.startDate || !accountRange.endDate) {
+        logger.warn('No account date range available for transfer checking');
+        return null;
+    }
+
+    const OVERLAP_DAYS = 3; // Days of overlap needed for transfer pair detection
+    const CHUNK_DAYS = 30; // Suggest ~1 month chunks for manageable processing
+
+    const accountStartDate = new Date(accountRange.startDate);
+    const accountEndDate = new Date(accountRange.endDate); // Latest actual transaction date
+
+    // If nothing has been checked yet, start with recent data (last 30 days of actual data)
+    if (!checkedRange.startDate || !checkedRange.endDate) {
+        return calculateInitialRecommendation(accountStartDate, accountEndDate, CHUNK_DAYS);
+    }
+
+    // Validate checked range against actual data boundaries
+    const checkedStartDate = new Date(Math.max(checkedRange.startDate, accountStartDate.getTime()));
+    const checkedEndDate = new Date(Math.min(checkedRange.endDate, accountEndDate.getTime()));
+
+    // Determine if we can extend forward (toward present) or backward (toward past)
+    const canExtendForward = checkedEndDate.getTime() < accountEndDate.getTime();
+    const canExtendBackward = checkedStartDate.getTime() > accountStartDate.getTime();
+
+    if (canExtendForward) {
+        return calculateForwardRecommendation(checkedEndDate, accountEndDate, OVERLAP_DAYS, CHUNK_DAYS);
+    } else if (canExtendBackward) {
+        return calculateBackwardRecommendation(checkedStartDate, accountStartDate, OVERLAP_DAYS, CHUNK_DAYS);
+    } else {
+        // All actual transaction data has been covered
+        logger.info('All actual transaction data has been checked, no recommendation needed');
+        return null;
+    }
+};
+
 /**
  * Get both transfer progress and recommended date range in a single optimized call
  * This avoids duplicate API calls when both pieces of data are needed
@@ -528,130 +722,11 @@ export const getTransferProgressAndRecommendation = withServiceLogging(
             // Get all transfer data in a single optimized call
             const { checkedRange, accountRange } = await getTransferDataForProgress();
 
-            // Calculate progress
-            let progress;
-            if (!accountRange.startDate || !accountRange.endDate) {
-                progress = {
-                    hasData: false,
-                    totalDays: 0,
-                    checkedDays: 0,
-                    progressPercentage: 0,
-                    isComplete: false
-                };
-            } else {
-                const accountStart = new Date(accountRange.startDate);
-                const accountEnd = new Date(accountRange.endDate);
-                const totalDays = Math.ceil((accountEnd.getTime() - accountStart.getTime()) / (1000 * 60 * 60 * 24));
+            // Calculate progress using helper function
+            const progress = calculateTransferProgress(checkedRange, accountRange);
 
-                let checkedDays = 0;
-                if (checkedRange.startDate && checkedRange.endDate) {
-                    const checkedStart = new Date(Math.max(checkedRange.startDate, accountStart.getTime()));
-                    const checkedEnd = new Date(Math.min(checkedRange.endDate, accountEnd.getTime()));
-                    checkedDays = Math.max(0, Math.ceil((checkedEnd.getTime() - checkedStart.getTime()) / (1000 * 60 * 60 * 24)));
-                }
-
-                const progressPercentage = totalDays > 0 ? Math.round((checkedDays / totalDays) * 100) : 0;
-                const isComplete = progressPercentage >= 100;
-
-                progress = {
-                    hasData: true,
-                    totalDays,
-                    checkedDays,
-                    progressPercentage,
-                    isComplete,
-                    accountDateRange: accountRange,
-                    checkedDateRange: checkedRange
-                };
-            }
-
-            // Calculate recommended range with continuous coverage and proper boundaries
-            let recommendedRange: DateRange | null = null;
-            if (accountRange.startDate && accountRange.endDate) {
-                const OVERLAP_DAYS = 3; // Days of overlap needed for transfer pair detection
-                const CHUNK_DAYS = 30; // Suggest ~1 month chunks for manageable processing
-
-                const accountStartDate = new Date(accountRange.startDate);
-                const accountEndDate = new Date(accountRange.endDate); // Latest actual transaction date
-
-                // If nothing has been checked yet, start with recent data (last 30 days of actual data)
-                if (!checkedRange.startDate || !checkedRange.endDate) {
-                    logger.info('No previous checks found, suggesting recent chunk from actual transaction data');
-
-                    const suggestedEnd = accountEndDate;
-                    const suggestedStart = new Date(suggestedEnd);
-                    suggestedStart.setDate(suggestedStart.getDate() - CHUNK_DAYS);
-
-                    // Don't go before account start
-                    const effectiveStart = new Date(Math.max(suggestedStart.getTime(), accountStartDate.getTime()));
-
-                    recommendedRange = {
-                        startDate: effectiveStart.getTime(),
-                        endDate: suggestedEnd.getTime()
-                    };
-                } else {
-                    // Validate checked range against actual data boundaries
-                    const checkedStartDate = new Date(Math.max(checkedRange.startDate, accountStartDate.getTime()));
-                    const checkedEndDate = new Date(Math.min(checkedRange.endDate, accountEndDate.getTime()));
-
-                    // Determine if we can extend forward (toward present) or backward (toward past)
-                    const canExtendForward = checkedEndDate.getTime() < accountEndDate.getTime();
-                    const canExtendBackward = checkedStartDate.getTime() > accountStartDate.getTime();
-
-                    if (canExtendForward) {
-                        // Extend forward with overlap, capped at actual data boundary
-                        logger.info('Extending forward from checked range with overlap');
-
-                        const nextStart = new Date(checkedEndDate);
-                        nextStart.setDate(nextStart.getDate() - OVERLAP_DAYS);
-
-                        const nextEnd = new Date(nextStart);
-                        nextEnd.setDate(nextEnd.getDate() + CHUNK_DAYS);
-
-                        // Cap at actual account data boundary
-                        const effectiveEnd = new Date(Math.min(nextEnd.getTime(), accountEndDate.getTime()));
-
-                        recommendedRange = {
-                            startDate: nextStart.getTime(),
-                            endDate: effectiveEnd.getTime()
-                        };
-
-                        logger.info('Forward extension recommendation', {
-                            nextStart: nextStart.toISOString().split('T')[0],
-                            effectiveEnd: effectiveEnd.toISOString().split('T')[0],
-                            overlapDays: OVERLAP_DAYS
-                        });
-                    } else if (canExtendBackward) {
-                        // Extend backward with overlap into historical data
-                        logger.info('Extending backward from checked range with overlap');
-
-                        const nextEnd = new Date(checkedStartDate);
-                        nextEnd.setDate(nextEnd.getDate() + OVERLAP_DAYS);
-
-                        const nextStart = new Date(nextEnd);
-                        nextStart.setDate(nextStart.getDate() - CHUNK_DAYS);
-
-                        // Cap at actual account data boundary
-                        const effectiveStart = new Date(Math.max(nextStart.getTime(), accountStartDate.getTime()));
-
-                        recommendedRange = {
-                            startDate: effectiveStart.getTime(),
-                            endDate: nextEnd.getTime()
-                        };
-
-                        logger.info('Backward extension recommendation', {
-                            effectiveStart: effectiveStart.toISOString().split('T')[0],
-                            nextEnd: nextEnd.toISOString().split('T')[0],
-                            overlapDays: OVERLAP_DAYS
-                        });
-                    } else {
-                        // All actual transaction data has been covered
-                        logger.info('All actual transaction data has been checked, no recommendation needed');
-                        recommendedRange = null;
-                    }
-                }
-            } else {
-                logger.warn('No account date range available for transfer checking');
-            }
+            // Calculate recommended range using helper function
+            const recommendedRange = calculateRecommendedRange(checkedRange, accountRange);
 
             return {
                 progress,
@@ -753,6 +828,7 @@ export const resetTransferProgress = withServiceLogging(
 export default {
     // Core transfer operations
     listPairedTransfers,
+    getTotalPairedTransfersCount,
     detectPotentialTransfers,
     markTransferPair,
     bulkMarkTransfers,

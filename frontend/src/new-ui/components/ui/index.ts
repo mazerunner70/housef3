@@ -24,6 +24,7 @@ export type { EditableCellOption, EditableCellDialogProps } from './EditableCell
 export type { StatusVariant } from './StatusBadge';
 export type { FileFormat } from './FileFormatDisplay';
 export type { AlertVariant } from './Alert';
+export type { DateRange } from './DateRangePicker';
 
 // Import the CSS for all UI components
 import './ui-components.css';
