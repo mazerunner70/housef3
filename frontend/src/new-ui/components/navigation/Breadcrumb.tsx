@@ -59,6 +59,8 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({
                 if (level < breadcrumb.length) {
                     if (breadcrumb[level].label === 'Home') {
                         navigate('/home');
+                    } else if (breadcrumb[level].label === 'Transfers') {
+                        navigate('/transfers');
                     } else {
                         breadcrumb[level].action();
                     }
@@ -99,6 +101,8 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({
         // Regular click = navigate
         if (item.label === 'Home') {
             navigate('/home');
+        } else if (item.label === 'Transfers') {
+            navigate('/transfers');
         } else {
             item.action();
         }

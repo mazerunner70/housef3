@@ -400,7 +400,7 @@ const HomePage: React.FC = () => {
             />
 
             <StaleAccountsSection insights={insights} />
-        </div>
+        </div >
     );
 };
 
