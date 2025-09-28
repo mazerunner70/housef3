@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import TransactionsListTab from '@/new-ui/components/business/transactions/TransactionsListTab';
 import CategoryManagementTab from '@/new-ui/components/business/categories/CategoryManagementTab';
 import StatementsImportsTab from '@/new-ui/components/business/transactions/StatementsImportsTab';
-import TransfersTab from '@/new-ui/components/business/transactions/TransfersTab';
+import TransfersDashboard from '@/new-ui/components/business/transactions/TransfersDashboard';
 import './TransactionsPage.css'; // Main CSS file for the page, should contain tab styles
 
 type TransactionPageTabId = 'TRANSACTIONS_LIST' | 'CATEGORY_MANAGEMENT' | 'STATEMENTS_IMPORTS' | 'TRANSFERS';
@@ -19,7 +19,7 @@ const TransactionsPage: React.FC = () => {
             case 'STATEMENTS_IMPORTS':
                 return <StatementsImportsTab />;
             case 'TRANSFERS':
-                return <TransfersTab />;
+                return <TransfersDashboard />;
             default:
                 // Should not happen with defined types, but good practice for a default
                 return <p>Please select a tab.</p>;

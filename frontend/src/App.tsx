@@ -5,6 +5,7 @@ import NewUILayout from './new-ui/layouts/NewUILayout';
 import HomePage from './new-ui/pages/HomePage';
 import AccountsPage from './new-ui/pages/AccountsPage';
 import TransactionsPage from '@/new-ui/pages/TransactionsPage';
+import TransfersPage from '@/new-ui/pages/TransfersPage';
 import ImportTransactionsPage from '@/new-ui/pages/ImportTransactionsPage';
 import AccountFileUploadPage from '@/new-ui/pages/AccountFileUploadPage';
 import AnalyticsView from './new-ui/views/AnalyticsView';
@@ -130,6 +131,9 @@ function App() {
         <Route path="transactions/:transactionId" element={<TransactionDetailPage />} />
         <Route path="transactions/:transactionId/edit" element={<TransactionEditPage />} />
         <Route path="transactions/compare" element={<TransactionComparePage />} />
+
+        {/* Transfers */}
+        <Route path="transfers" element={<TransfersPage />} />
 
         {/* Import */}
         <Route path="import" element={<ImportTransactionsPage />} />
