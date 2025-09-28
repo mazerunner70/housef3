@@ -5,6 +5,7 @@ import AccountsSidebarContent from './sidebar-content/AccountsSidebarContent';
 import TransactionsSidebarContent from './sidebar-content/TransactionsSidebarContent';
 import CategoriesSidebarContent from './sidebar-content/CategoriesSidebarContent';
 import ImportSidebarContent from './sidebar-content/ImportSidebarContent';
+import TransfersSidebarContent from './sidebar-content/TransfersSidebarContent';
 import DefaultSidebarContent from './sidebar-content/DefaultSidebarContent';
 import './ContextualSidebar.css';
 
@@ -14,7 +15,7 @@ interface ContextualSidebarProps {
 
 const ContextualSidebar: React.FC<ContextualSidebarProps> = ({ className = '' }) => {
     const location = useLocation();
-    const { sidebarCollapsed, toggleSidebar, breadcrumb } = useNavigationStore();
+    const { sidebarCollapsed, toggleSidebar } = useNavigationStore();
 
     // Determine which sidebar content to show based on current route
     const renderSidebarContent = () => {
@@ -26,6 +27,8 @@ const ContextualSidebar: React.FC<ContextualSidebarProps> = ({ className = '' })
                 return <AccountsSidebarContent sidebarCollapsed={sidebarCollapsed} />;
             case 'transactions':
                 return <TransactionsSidebarContent sidebarCollapsed={sidebarCollapsed} />;
+            case 'transfers':
+                return <TransfersSidebarContent sidebarCollapsed={sidebarCollapsed} />;
             case 'categories':
                 return <CategoriesSidebarContent sidebarCollapsed={sidebarCollapsed} />;
             case 'import':
@@ -40,32 +43,29 @@ const ContextualSidebar: React.FC<ContextualSidebarProps> = ({ className = '' })
     };
 
     return (
-        <>
-            <aside
-                className={`contextual-sidebar ${sidebarCollapsed ? 'collapsed' : ''} ${className}`}
-                role="navigation"
-                aria-label="Contextual navigation"
-            >
-                {/* Sidebar header with toggle */}
-                <div className="sidebar-header">
-                    <button
-                        className="sidebar-toggle"
-                        onClick={toggleSidebar}
-                        aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                    >
-                        {sidebarCollapsed ? '☰' : '×'}
-                    </button>
-                    {!sidebarCollapsed && (
-                        <h2 className="sidebar-title">Navigation</h2>
-                    )}
-                </div>
+        <nav
+            className={`contextual-sidebar ${sidebarCollapsed ? 'collapsed' : ''} ${className}`}
+            aria-label="Contextual navigation"
+        >
+            {/* Sidebar header with toggle */}
+            <div className="sidebar-header">
+                <button
+                    className="sidebar-toggle"
+                    onClick={toggleSidebar}
+                    aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                >
+                    {sidebarCollapsed ? '☰' : '×'}
+                </button>
+                {!sidebarCollapsed && (
+                    <h2 className="sidebar-title">Navigation</h2>
+                )}
+            </div>
 
-                {/* Sidebar content - route-aware */}
-                <div className="sidebar-content">
-                    {renderSidebarContent()}
-                </div>
-            </aside>
-        </>
+            {/* Sidebar content - route-aware */}
+            <div className="sidebar-content">
+                {renderSidebarContent()}
+            </div>
+        </nav>
     );
 };
 

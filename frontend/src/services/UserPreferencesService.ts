@@ -297,6 +297,32 @@ export const updateTransferCheckedDateRange = withServiceLogging(
 );
 
 /**
+ * Reset the checked date range for transfer pairs (clear all progress)
+ */
+export const resetTransferCheckedDateRange = withServiceLogging(
+    'UserPreferencesService',
+    'resetTransferCheckedDateRange',
+    async () => {
+        const updateData: Partial<TransferPreferences> = {
+            checkedDateRangeStart: null,
+            checkedDateRangeEnd: null
+        };
+
+        return await updateTransferPreferences(updateData);
+    },
+    {
+        logArgs: () => ({
+            operation: 'resetTransferCheckedDateRange'
+        }),
+        logResult: (result) => ({
+            userId: result.userId,
+            success: !!result.preferences?.transfers,
+            reset: true
+        })
+    }
+);
+
+/**
  * Get the overall account date range for transfer checking
  */
 export const getAccountDateRangeForTransfers = withApiLogging(

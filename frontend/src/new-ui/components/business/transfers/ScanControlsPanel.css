@@ -1,0 +1,324 @@
+.scan-controls-panel {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+}
+
+.scan-controls-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.scan-controls-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #1f2937;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.scan-status {
+    display: flex;
+    align-items: center;
+}
+
+.scanning-indicator {
+    font-size: 14px;
+    color: #3b82f6;
+    font-weight: 500;
+    animation: pulse 1.5s infinite;
+}
+
+/* Strategy Section */
+.strategy-section {
+    margin-bottom: 24px;
+}
+
+.strategy-section h4 {
+    margin: 0 0 16px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #374151;
+}
+
+.strategy-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+}
+
+.strategy-option {
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: #fafafa;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    font-size: inherit;
+}
+
+.strategy-option:hover {
+    border-color: #3b82f6;
+    background: #f8fafc;
+}
+
+.strategy-option.selected {
+    border-color: #3b82f6;
+    background: #eff6ff;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.strategy-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.strategy-icon {
+    font-size: 18px;
+}
+
+.strategy-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1f2937;
+    flex: 1;
+}
+
+.strategy-radio input[type="radio"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #3b82f6;
+}
+
+.strategy-description {
+    font-size: 12px;
+    color: #6b7280;
+    line-height: 1.4;
+    margin-left: 30px;
+}
+
+/* Date Range Section */
+.date-range-section {
+    margin-bottom: 24px;
+}
+
+.date-range-section h4 {
+    margin: 0 0 16px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #374151;
+}
+
+.scan-date-picker {
+    width: 100%;
+}
+
+/* Advanced Options */
+.advanced-options-section {
+    margin-bottom: 24px;
+}
+
+.advanced-toggle {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 12px 16px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: #374151;
+    transition: all 0.2s ease;
+}
+
+.advanced-toggle:hover {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+}
+
+.toggle-arrow {
+    transition: transform 0.2s ease;
+    font-size: 12px;
+}
+
+.toggle-arrow.expanded {
+    transform: rotate(180deg);
+}
+
+.advanced-options-content {
+    margin-top: 16px;
+    padding: 20px;
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.advanced-option {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.advanced-option label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #374151;
+}
+
+.option-help {
+    cursor: help;
+    font-size: 12px;
+    opacity: 0.7;
+}
+
+.advanced-input {
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    max-width: 120px;
+    transition: border-color 0.2s ease;
+}
+
+.advanced-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.account-filter-note {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #92400e;
+}
+
+.note-icon {
+    font-size: 14px;
+}
+
+/* Scan Actions */
+.scan-actions {
+    margin-bottom: 24px;
+}
+
+.primary-scan-button {
+    width: 100%;
+    min-height: 48px;
+    font-size: 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.loading-spinner {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.scan-info {
+    margin-top: 12px;
+}
+
+.strategy-info {
+    font-size: 12px;
+}
+
+/* Batch Actions */
+.batch-actions h4 {
+    margin: 0 0 16px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #374151;
+}
+
+.batch-buttons {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+.batch-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 40px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .scan-controls-panel {
+        padding: 16px;
+    }
+
+    .strategy-options {
+        grid-template-columns: 1fr;
+    }
+
+    .batch-buttons {
+        grid-template-columns: 1fr;
+    }
+
+    .advanced-options-content {
+        padding: 16px;
+    }
+
+    .primary-scan-button {
+        font-size: 14px;
+        min-height: 44px;
+    }
+}
+
+@media (max-width: 480px) {
+    .scan-controls-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .strategy-description {
+        margin-left: 0;
+        margin-top: 8px;
+    }
+
+    .advanced-input {
+        max-width: 100%;
+    }
+}

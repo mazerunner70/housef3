@@ -9,7 +9,8 @@ import {
 } from '@/utils/logger';
 import {
     updateTransferCheckedDateRange,
-    getTransferDataForProgress
+    getTransferDataForProgress,
+    resetTransferCheckedDateRange
 } from './UserPreferencesService';
 
 // 2. Type Definitions - Domain interfaces
@@ -725,6 +726,29 @@ export const getTransferCheckingProgress = withServiceLogging(
     }
 );
 
+/**
+ * Reset all transfer progress tracking data
+ * This clears the checked date range and allows starting fresh
+ * @returns Promise resolving when reset is complete
+ */
+export const resetTransferProgress = withServiceLogging(
+    'TransferService',
+    'resetTransferProgress',
+    async (): Promise<void> => {
+        try {
+            await resetTransferCheckedDateRange();
+            logger.info('Successfully reset transfer progress tracking');
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            logger.error('Failed to reset transfer progress tracking', { error: errorMessage });
+            throw new Error(`Failed to reset transfer progress: ${errorMessage}`);
+        }
+    },
+    {
+        logResult: () => ({ reset: true })
+    }
+);
+
 // 7. Default export with all service functions
 export default {
     // Core transfer operations
@@ -745,5 +769,6 @@ export default {
     // Transfer preferences and progress
     getRecommendedTransferDateRange,
     getTransferCheckingProgress,
-    getTransferProgressAndRecommendation
+    getTransferProgressAndRecommendation,
+    resetTransferProgress
 };
