@@ -131,8 +131,6 @@ export const createLogger = (serviceName: string): Logger => {
     const configLevel = getServiceLogLevel(serviceName);
     const logLevel = runtimeLevel || configLevel;
 
-    const config = getLoggerConfig();
-
     // Convert string log level to numeric for Consola
     const numericLevel = logLevelToNumeric(logLevel);
 
@@ -220,30 +218,37 @@ export const withApiLogging = <T>(
     serviceName: string,
     endpoint: string,
     method: string,
-    operation: () => Promise<T>,
+    operation: (url: string) => Promise<T>,
     options?: {
         operationName?: string;
         successData?: (result: T) => LogData;
         skipRequestLog?: boolean;
+        queryParams?: URLSearchParams;
     }
 ) => {
     const apiLogger = createApiLogger(serviceName);
     const perf = createPerformanceCollector();
-    const operationName = options?.operationName || `${method} ${endpoint}`;
+
+    // Build the full URL with query parameters if provided
+    const fullUrl = options?.queryParams?.toString()
+        ? `${endpoint}?${options.queryParams.toString()}`
+        : endpoint;
+
+    const operationName = options?.operationName || `${method} ${fullUrl}`;
 
     return async (): Promise<T> => {
         perf.start(operationName);
 
         if (!options?.skipRequestLog) {
-            apiLogger.request(endpoint, method);
+            apiLogger.request(fullUrl, method);
         }
 
         try {
-            const result = await operation();
+            const result = await operation(fullUrl);
             const perfData = perf.end(operationName);
 
             const successData = options?.successData ? options.successData(result) : {};
-            apiLogger.response(endpoint, method, 200, perfData.durationMs, {
+            apiLogger.response(fullUrl, method, 200, perfData.durationMs, {
                 ...successData,
                 ...perfData
             });
@@ -252,7 +257,7 @@ export const withApiLogging = <T>(
 
         } catch (error) {
             const perfData = perf.end(operationName);
-            apiLogger.error(endpoint, method, error, perfData.durationMs, perfData);
+            apiLogger.error(fullUrl, method, error, perfData.durationMs, perfData);
             throw error;
         }
     };
@@ -369,7 +374,13 @@ export const collectErrorData = (error: unknown): LogData => {
 
         // Only add cause if it exists (ES2022+ feature)
         if ('cause' in error && error.cause !== undefined) {
-            errorData.cause = String(error.cause);
+            if (error.cause instanceof Error) {
+                errorData.cause = error.cause.message;
+            } else if (typeof error.cause === 'string') {
+                errorData.cause = error.cause;
+            } else {
+                errorData.cause = JSON.stringify(error.cause);
+            }
         }
 
         return errorData;

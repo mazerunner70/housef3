@@ -88,10 +88,10 @@ const WorkflowStepSchema = z.object({
 
 const WorkflowProgressSchema = z.object({
     operationId: z.string(), // Backend still uses operationId
-    operationType: z.nativeEnum(WorkflowType), // Backend still uses operationType
+    operationType: z.enum([WorkflowType.FILE_DELETION, WorkflowType.FILE_UPLOAD, WorkflowType.ACCOUNT_MODIFICATION, WorkflowType.DATA_EXPORT, WorkflowType.BULK_CATEGORIZATION, WorkflowType.ACCOUNT_MIGRATION]), // Backend still uses operationType
     displayName: z.string(),
     entityId: z.string(),
-    status: z.nativeEnum(WorkflowStatus),
+    status: z.enum([WorkflowStatus.INITIATED, WorkflowStatus.IN_PROGRESS, WorkflowStatus.WAITING_FOR_APPROVAL, WorkflowStatus.APPROVED, WorkflowStatus.EXECUTING, WorkflowStatus.COMPLETED, WorkflowStatus.FAILED, WorkflowStatus.CANCELLED, WorkflowStatus.DENIED]),
     progressPercentage: z.number(),
     currentStep: z.number(),
     totalSteps: z.number(),
@@ -135,10 +135,10 @@ export const getWorkflowStatus = (workflowId: string) => withApiLogging(
     'WorkflowTrackingService',
     `${API_ENDPOINT}/${workflowId}/status`,
     'GET',
-    async () => {
+    async (url) => {
         try {
             const result = await validateApiResponse(
-                () => ApiClient.getJson<any>(`${API_ENDPOINT}/${workflowId}/status`),
+                () => ApiClient.getJson<any>(url),
                 (rawData) => {
                     // Extract workflow data from the nested response structure
                     const workflowData = rawData.workflow || rawData;
@@ -183,41 +183,42 @@ export const listUserWorkflows = (filters?: {
     status?: WorkflowStatus[];
     workflowType?: WorkflowType[];
     limit?: number;
-}) => withApiLogging(
-    'WorkflowTrackingService',
-    API_ENDPOINT,
-    'GET',
-    async () => {
-        const params = new URLSearchParams();
+}) => {
+    const params = new URLSearchParams();
 
-        if (filters?.status) {
-            params.append('status', filters.status.join(','));
-        }
-        if (filters?.workflowType) {
-            params.append('workflowType', filters.workflowType.join(','));
-        }
-        if (filters?.limit) {
-            params.append('limit', filters.limit.toString());
-        }
-
-        const endpoint = params.toString() ? `${API_ENDPOINT}?${params}` : API_ENDPOINT;
-
-        return validateApiResponse(
-            () => ApiClient.getJson<any>(endpoint),
-            (rawData) => WorkflowListResponseSchema.parse(rawData),
-            'workflows list data',
-            'Failed to load workflows list. The server response format is invalid.'
-        );
-    },
-    {
-        operationName: 'listUserWorkflows',
-        successData: (result) => ({
-            workflowCount: result.workflows.length,
-            totalWorkflows: result.total,
-            filters: filters ? Object.keys(filters).filter(key => filters[key as keyof typeof filters]) : []
-        })
+    if (filters?.status) {
+        params.append('status', filters.status.join(','));
     }
-);
+    if (filters?.workflowType) {
+        params.append('workflowType', filters.workflowType.join(','));
+    }
+    if (filters?.limit) {
+        params.append('limit', filters.limit.toString());
+    }
+
+    return withApiLogging(
+        'WorkflowTrackingService',
+        API_ENDPOINT,
+        'GET',
+        async (url) => {
+            return validateApiResponse(
+                () => ApiClient.getJson<any>(url),
+                (rawData) => WorkflowListResponseSchema.parse(rawData),
+                'workflows list data',
+                'Failed to load workflows list. The server response format is invalid.'
+            );
+        },
+        {
+            operationName: 'listUserWorkflows',
+            queryParams: params.toString() ? params : undefined,
+            successData: (result) => ({
+                workflowCount: result.workflows.length,
+                totalWorkflows: result.total,
+                filters: filters ? Object.keys(filters).filter(key => filters[key as keyof typeof filters]) : []
+            })
+        }
+    );
+};
 
 /**
  * Cancel a workflow
@@ -226,9 +227,9 @@ export const cancelWorkflow = (workflowId: string, reason?: string) => withApiLo
     'WorkflowTrackingService',
     `${API_ENDPOINT}/${workflowId}/cancel`,
     'POST',
-    async () => {
+    async (url) => {
         return validateApiResponse(
-            () => ApiClient.postJson<any>(`${API_ENDPOINT}/${workflowId}/cancel`, {
+            () => ApiClient.postJson<any>(url, {
                 reason: reason || 'Cancelled by user'
             }),
             (rawData) => CancelWorkflowResponseSchema.parse(rawData),

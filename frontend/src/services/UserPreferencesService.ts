@@ -17,7 +17,7 @@ const TransferPreferencesSchema = z.object({
     autoExpandSuggestion: z.boolean().optional(),
     checkedDateRangeStart: z.number().nullable().optional(),
     checkedDateRangeEnd: z.number().nullable().optional()
-}).passthrough(); // Allow extra fields like numeric keys
+}); // Allow extra fields like numeric keys
 
 const UIPreferencesSchema = z.object({
     theme: z.string().optional(),
@@ -37,10 +37,10 @@ const UserPreferencesSchema = z.object({
         transfers: TransferPreferencesSchema.optional(),
         ui: UIPreferencesSchema.optional(),
         transactions: TransactionPreferencesSchema.optional()
-    }).passthrough().optional(),
+    }).optional(),
     createdAt: z.number().optional(),
     updatedAt: z.number().optional()
-}).passthrough();
+});
 
 // TypeScript Interfaces (following naming conventions)
 export interface TransferPreferences {
@@ -89,9 +89,9 @@ export const getUserPreferences = withApiLogging(
     'UserPreferencesService',
     '/user-preferences',
     'GET',
-    async () => {
+    async (url) => {
         return validateApiResponseSmart(
-            () => ApiClient.getJson<any>('/user-preferences'),
+            () => ApiClient.getJson<any>(url),
             (rawData) => UserPreferencesSchema.parse(rawData),
             'user preferences data',
 
@@ -116,9 +116,9 @@ export const updateUserPreferences = (preferences: Partial<UserPreferencesRespon
     'UserPreferencesService',
     '/user-preferences',
     'PUT',
-    async (): Promise<UserPreferencesResponse> => {
+    async (url): Promise<UserPreferencesResponse> => {
         return validateApiResponse(
-            () => ApiClient.putJson<any>('/user-preferences', { preferences }),
+            () => ApiClient.putJson<any>(url, { preferences }),
             (rawData) => UserPreferencesSchema.parse(rawData),
             'updated user preferences data',
             'Failed to update user preferences. The server response format is invalid.'
@@ -163,7 +163,8 @@ export const getTransferPreferences = async (): Promise<TransferPreferences> => 
     } catch (error) {
         logger.warn('Failed to fetch transfer preferences, returning defaults', {
             operation: 'getTransferPreferences',
-            fallbackUsed: true
+            fallbackUsed: true,
+            errorMessage: error instanceof Error ? error.message : 'Unknown error'
         });
 
         // Return sensible defaults for non-critical data
@@ -329,9 +330,9 @@ export const getAccountDateRangeForTransfers = withApiLogging(
     'UserPreferencesService',
     '/user-preferences/account-date-range',
     'GET',
-    async () => {
+    async (url) => {
         return validateApiResponse(
-            () => ApiClient.getJson<any>('/user-preferences/account-date-range'),
+            () => ApiClient.getJson<any>(url),
             (rawData) => z.object({
                 startDate: z.number().nullable(),
                 endDate: z.number().nullable()

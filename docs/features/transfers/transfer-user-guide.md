@@ -102,6 +102,16 @@ The system shows potential matches in a table format:
    - Categorize both transactions as transfers
    - Remove them from income/expense calculations
 
+## Completing the Review Cycle and Progress Updates
+
+Progress now updates when a review cycle completes:
+
+- After you confirm or ignore all candidates in the current chunk, the system marks the date range as reviewed and automatically loads the next recommended chunk.
+- If a chunk has no candidates, use "Mark Reviewed & Next" to advance and update progress.
+- You can leave mid-review; the range won't be marked complete until all candidates are processed, so you can resume later without losing items.
+
+This end-of-cycle update makes scanning resumable and prevents marking ranges as completed before review.
+
 ## Managing Existing Transfers
 
 ### Viewing Transfer Pairs
