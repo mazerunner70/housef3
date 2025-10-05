@@ -54,12 +54,17 @@ export const dateRangeToEpochRange = (dateRange: DateRange): EpochDateRange => {
 // === APPLICATION LAYER: Date object operations ===
 
 /**
- * Calculate days between two dates
+ * Calculate days between two dates (ignoring time component)
  * Always use this instead of manual getTime() calculations
  */
 export const daysBetween = (startDate: Date, endDate: Date): number => {
-    const msPerDay = 1000 * 60 * 60 * 24;
-    return Math.ceil((endDate.getTime() - startDate.getTime()) / msPerDay);
+    // Strip time component by creating new dates with only date part
+    const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+
+    return Math.ceil(
+        (endDateOnly.getTime() - startDateOnly.getTime()) / MS_PER_DAY
+    );
 };
 
 /**
@@ -90,9 +95,14 @@ export const createDateRangeFromDays = (days: number, endDate: Date = new Date()
 
 /**
  * Check if two dates are the same day (ignoring time)
+ * @param date1 first date
+ * @param date2 second date
+ * @returns true if the two dates are the same day, false otherwise
  */
 export const isSameDay = (date1: Date, date2: Date): boolean => {
-    return date1.toDateString() === date2.toDateString();
+    return date1.getFullYear() === date2.getFullYear() &&
+        date1.getMonth() === date2.getMonth() &&
+        date1.getDate() === date2.getDate();
 };
 
 /**

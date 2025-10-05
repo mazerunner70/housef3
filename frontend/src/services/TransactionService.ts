@@ -139,7 +139,7 @@ export const listCategories = withApiLogging(
   'TransactionService',
   '/categories',
   'GET',
-  async (url): Promise<CategoryInfo[]> => {
+  async (url: string): Promise<CategoryInfo[]> => {
     return validateApiResponse(
       () => ApiClient.getJson<any>(url),
       (rawData) => {
@@ -165,7 +165,7 @@ export const listAccounts = withApiLogging(
   'TransactionService',
   '/accounts',
   'GET',
-  async (url): Promise<AccountInfo[]> => {
+  async (url: string): Promise<AccountInfo[]> => {
     return validateApiResponse(
       () => ApiClient.getJson<any>(url),
       (rawData) => {
@@ -193,7 +193,7 @@ export const updateTransactionCategory = (transactionId: string, categoryId: str
   'TransactionService',
   `/transactions/${transactionId}/category`,
   'PUT',
-  async (url): Promise<TransactionViewItem | { success: boolean }> => {
+  async (url: string): Promise<TransactionViewItem | { success: boolean }> => {
     return validateApiResponse(
       () => ApiClient.putJson<any>(url, { categoryId }),
       (rawData) => {
@@ -240,7 +240,7 @@ export const getFileTransactions = (fileId: string) => withApiLogging(
   'TransactionService',
   `/files/${fileId}/transactions`,
   'GET',
-  async (url): Promise<TransactionListResponse> => {
+  async (url: string): Promise<TransactionListResponse> => {
     return validateApiResponse(
       () => ApiClient.getJson<any>(url),
       (rawData) => TransactionListResponseSchema.parse(rawData),
@@ -266,7 +266,7 @@ export const getAccountTransactions = (accountId: string, limit: number = 50) =>
     'TransactionService',
     `/accounts/${accountId}/transactions`,
     'GET',
-    async (url): Promise<TransactionListResponse> => {
+    async (url: string): Promise<TransactionListResponse> => {
       return validateApiResponse(
         () => ApiClient.getJson<any>(url),
         (rawData) => TransactionListResponseSchema.parse(rawData),

@@ -88,7 +88,7 @@ const WorkflowStepSchema = z.object({
 
 const WorkflowProgressSchema = z.object({
     operationId: z.string(), // Backend still uses operationId
-    operationType: z.enum([WorkflowType.FILE_DELETION, WorkflowType.FILE_UPLOAD, WorkflowType.ACCOUNT_MODIFICATION, WorkflowType.DATA_EXPORT, WorkflowType.BULK_CATEGORIZATION, WorkflowType.ACCOUNT_MIGRATION]), // Backend still uses operationType
+    operationType: z.nativeEnum(WorkflowType), // Backend uses operationType
     displayName: z.string(),
     entityId: z.string(),
     status: z.enum([WorkflowStatus.INITIATED, WorkflowStatus.IN_PROGRESS, WorkflowStatus.WAITING_FOR_APPROVAL, WorkflowStatus.APPROVED, WorkflowStatus.EXECUTING, WorkflowStatus.COMPLETED, WorkflowStatus.FAILED, WorkflowStatus.CANCELLED, WorkflowStatus.DENIED]),

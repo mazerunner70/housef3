@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-    listPairedTransfers,
     getTotalPairedTransfersCount,
     detectPotentialTransfers,
     bulkMarkTransfers,
@@ -48,7 +47,6 @@ interface TransfersDashboardProps { }
 const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
     const { formatDate } = useLocale();
     const { urlContext, updateUrlContext } = useNavigationStore();
-    // Removed: pairedTransfers - not needed in compact UI
     const [detectedTransfers, setDetectedTransfers] = useState<TransferPair[]>([]);
     const [totalPairedTransfersCount, setTotalPairedTransfersCount] = useState<number>(0);
     const [accounts, setAccounts] = useState<AccountInfo[]>([]);
@@ -63,7 +61,6 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
     // Transfer progress and date range tracking
     const [transferProgress, setTransferProgress] = useState<any>(null);
     const [recommendedRange, setRecommendedRange] = useState<any>(null);
-    // Removed unused state: recalculateLoading, scanningStats, showDateRangeSuggestion, showDetectionSuccess
 
     // Date range management - will be set from preferences in loadAllInitialData
     const [currentDateRange, setCurrentDateRange] = useState<DateRange>(() => {
@@ -74,8 +71,6 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
         return { startDate, endDate };
     });
 
-    // Simple auto-expand suggestion state
-    // Removed: autoExpandSuggestion - not needed in compact UI
 
     // Load initial data
     useEffect(() => {
@@ -101,18 +96,6 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
         }
     }, [urlContext.autoScan, detectLoading, loading]);
 
-    // Watch for completion of transfer processing
-    useEffect(() => {
-        const checkCompletion = async () => {
-            if (areAllTransfersProcessed()) {
-                await completeReviewCycle();
-                // Reset the flag after processing
-                setHadTransfersToProcess(false);
-            }
-        };
-
-        checkCompletion();
-    }, [detectedTransfers, ignoredTransfers, hadTransfersToProcess]);
 
     /**
      * Determine date range from URL parameters
@@ -168,12 +151,8 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
             // Update the current date range state
             setCurrentDateRange(dateRange);
 
-            // Load remaining data in parallel (don't need transfersData in compact UI)
-            const [, totalCount, accountsData] = await Promise.all([
-                listPairedTransfers({
-                    startDate: dateRange.startDate.getTime(),
-                    endDate: dateRange.endDate.getTime()
-                })(),
+            // Load remaining data in parallel
+            const [totalCount, accountsData] = await Promise.all([
                 getTotalPairedTransfersCount()(),
                 getAccounts()
             ]);
@@ -234,16 +213,12 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
                 return;
             }
 
-            // No longer showing success messages or suggestions - compact UI handles this inline
-
-            // REMOVED: loadTransferProgress() - progress updates only at END of review cycle
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to detect transfers');
         } finally {
             setDetectLoading(false);
         }
     };
-    // Removed unused functions: handleSmartScan, handleSystematicScan, handleRecalculateFromScratch, handleExportTransfers
 
     const handleBulkIgnoreTransfers = () => {
         if (selectedDetectedTransfers.size === 0) {
@@ -291,11 +266,11 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
                     dateDifference: pair.dateDifference
                 }));
 
-            // Mark transfers (no scannedDateRange - checked range updates at END of cycle)
+            // Mark transfers
             const result = await bulkMarkTransfers(selectedPairs);
 
             if (result.successCount > 0) {
-                // Optimistic update: increment total count locally (no reload needed)
+                // Optimistic update: increment total count locally
                 setTotalPairedTransfersCount(prev => prev + result.successCount);
 
                 // Remove successfully marked transfers from detected list
@@ -400,7 +375,7 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
      * This is called when all candidates in current range have been processed
      * Updates checked range and loads next chunk
      */
-    const completeReviewCycle = async () => {
+    const completeReviewCycle = useCallback(async () => {
         try {
             console.log('Completing review cycle for range:', {
                 start: currentDateRange.startDate.toISOString().split('T')[0],
@@ -434,7 +409,7 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
 
             await updateTransferPreferences(updateData);
 
-            // 2. Update local progress state (optimistic, no refetch needed)
+            // 2. Update local progress state
             setTransferProgress((prev: any) => {
                 if (!prev) return prev;
                 return {
@@ -468,7 +443,7 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
                 })();
 
                 setDetectedTransfers(nextChunk.transfers);
-                setIgnoredTransfers(new Set()); // Clear ignored for new chunk
+                setIgnoredTransfers(new Set());
                 setSelectedDetectedTransfers(new Set());
                 setHadTransfersToProcess(nextChunk.transfers.length > 0);
 
@@ -489,9 +464,35 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
             console.error('Failed to complete review cycle:', error);
             setError(error instanceof Error ? error.message : 'Failed to complete review cycle');
         }
-    };
+    }, [currentDateRange, transferProgress]);
 
-    // Removed unused functions: handleExpandDateRange, handleDateRangePickerChange
+    // Watch for completion of transfer processing
+    useEffect(() => {
+        // Check completion status directly without intermediate function call
+        // Only consider it "all processed" if we had transfers to process initially
+        if (!hadTransfersToProcess) {
+            return;
+        }
+
+        // Check if all remaining detected transfers are ignored
+        const remainingUnprocessed = detectedTransfers.filter(transfer => {
+            const pairKey = getTransferPairKey(transfer);
+            return !ignoredTransfers.has(pairKey);
+        });
+
+        // All transfers are processed if there are no remaining unprocessed transfers
+        const allProcessed = remainingUnprocessed.length === 0;
+
+        if (allProcessed) {
+            const processCompletion = async () => {
+                await completeReviewCycle();
+                // Reset the flag after processing
+                setHadTransfersToProcess(false);
+            };
+            processCompletion();
+        }
+    }, [detectedTransfers, ignoredTransfers, hadTransfersToProcess, completeReviewCycle]);
+
 
     const toggleDetectedTransfer = (pairKey: string) => {
         const newSelected = new Set(selectedDetectedTransfers);

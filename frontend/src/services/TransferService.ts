@@ -24,29 +24,44 @@ export interface TransferTransaction {
     transactionId: string;
     fileId: string;
     userId: string;
-    date: number;
-    description: string;
-    amount: number;
-    balance: number;
-    currency: string;
-    accountId?: string | null;
-    transactionType?: string | null;
-    category?: string | null;
-    payee?: string | null;
-    memo?: string | null;
-    checkNumber?: string | null;
-    reference?: string | null;
-    status?: string | null;
-    debitOrCredit?: string | null;
-    importOrder?: number | null;
-    id?: string | null;
-    primaryCategoryId?: string | null;
-    categories?: any[] | null;
-    account?: string | null;
-    type?: string | null;
-    notes?: string | null;
-    isSplit?: boolean | null;
-    [key: string]: any; // Allow additional fields
+    // …other transform mappings…
+    outgoingTransaction: (() => {
+            const { date, ...rest } = pair.outgoingTransaction;
+return {
+    ...rest,
+    dateObject: epochToDate(date)
+};
+        }) (),
+    incomingTransaction: (() => {
+        const { date, ...rest } = pair.incomingTransaction;
+        return {
+            ...rest,
+            dateObject: epochToDate(date)
+        };
+    })()
+// …remaining transform mappings…
+description: string;
+amount: number;
+balance: number;
+currency: string;
+accountId ?: string | null;
+transactionType ?: string | null;
+category ?: string | null;
+payee ?: string | null;
+memo ?: string | null;
+checkNumber ?: string | null;
+reference ?: string | null;
+status ?: string | null;
+debitOrCredit ?: string | null;
+importOrder ?: number | null;
+id ?: string | null;
+primaryCategoryId ?: string | null;
+categories ?: any[] | null;
+account ?: string | null;
+type ?: string | null;
+notes ?: string | null;
+isSplit ?: boolean | null;
+[key: string]: any; // Allow additional fields
 }
 
 export interface TransferPair {
@@ -89,8 +104,8 @@ export interface DetectedTransfersResponse {
     transfers: TransferPair[];
     count: number;
     dateRange: {
-        startDate: number;
-        endDate: number;
+        startDateObject: Date;
+        endDateObject: Date;
     };
     progressTrackingWarning?: string; // Warning if progress tracking failed
 }
@@ -202,7 +217,31 @@ const DetectedTransfersResponseSchema = z.object({
         endDate: z.number()
     }),
     progressTrackingWarning: z.string().optional()
-});
+}).transform((data) => ({
+    transfers: data.transfers.map(pair => {
+        const { date: outgoingDate, ...outgoingRest } = pair.outgoingTransaction;
+        const { date: incomingDate, ...incomingRest } = pair.incomingTransaction;
+
+        return {
+            ...pair,
+            outgoingTransaction: {
+                ...outgoingRest,
+                dateObject: epochToDate(outgoingDate) // Create dateObject from epoch date
+            },
+            incomingTransaction: {
+                ...incomingRest,
+                dateObject: epochToDate(incomingDate) // Create dateObject from epoch date
+            }
+        };
+    }),
+    count: data.count,
+    dateRange: {
+        startDateObject: epochToDate(data.dateRange.startDate),
+        endDateObject: epochToDate(data.dateRange.endDate)
+        // Remove startDate and endDate epoch fields from client
+    },
+    progressTrackingWarning: data.progressTrackingWarning
+}));
 
 const BulkMarkResponseSchema = z.object({
     successful: z.array(z.object({
@@ -325,30 +364,8 @@ export const detectPotentialTransfers = (dateRange: DateRange) => {
             const result = await validateApiResponse(
                 () => ApiClient.getJson<any>(url),
                 (rawData) => {
-                    const validatedResponse = DetectedTransfersResponseSchema.parse(rawData);
-
-                    // BOUNDARY CONVERSION: Convert epoch timestamps back to Date objects
-                    const convertedResponse = {
-                        ...validatedResponse,
-                        transfers: validatedResponse.transfers.map(pair => ({
-                            ...pair,
-                            outgoingTransaction: {
-                                ...pair.outgoingTransaction,
-                                dateObject: epochToDate(pair.outgoingTransaction.date) // Add converted date
-                            },
-                            incomingTransaction: {
-                                ...pair.incomingTransaction,
-                                dateObject: epochToDate(pair.incomingTransaction.date) // Add converted date
-                            }
-                        })),
-                        dateRange: validatedResponse.dateRange ? {
-                            ...validatedResponse.dateRange,
-                            startDateObject: epochToDate(validatedResponse.dateRange.startDate),
-                            endDateObject: epochToDate(validatedResponse.dateRange.endDate)
-                        } : undefined
-                    };
-
-                    return convertedResponse;
+                    // BOUNDARY CONVERSION: Schema now handles epochToDate conversion automatically
+                    return DetectedTransfersResponseSchema.parse(rawData);
                 },
                 'detected transfers data',
                 'Failed to detect transfers. The transfer data format is invalid.'
@@ -368,7 +385,7 @@ export const detectPotentialTransfers = (dateRange: DateRange) => {
                 detectedCount: result.transfers.length,
                 hasDateRange: !!result.dateRange,
                 dateRangeFormatted: result.dateRange ?
-                    `${formatDisplayDate(epochToDate(result.dateRange.startDate))} - ${formatDisplayDate(epochToDate(result.dateRange.endDate))}` :
+                    `${formatDisplayDate(result.dateRange.startDateObject)} - ${formatDisplayDate(result.dateRange.endDateObject)}` :
                     'No date range'
             })
         }
