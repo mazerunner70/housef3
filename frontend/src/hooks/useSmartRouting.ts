@@ -1,6 +1,6 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
-import { useNavigationStore } from '@/stores/navigationStore';
+import { useNavigationStore, NavigationContext } from '@/stores/navigationStore';
 import useAccountsWithStore from '@/stores/useAccountsStore';
 
 /**
@@ -16,34 +16,6 @@ import useAccountsWithStore from '@/stores/useAccountsStore';
 // Maximum recommended path depth before using query params
 const MAX_PATH_DEPTH = 3;
 
-// URL patterns for different navigation depths
-const ROUTE_PATTERNS = {
-    shallow: {
-        accountList: '/accounts',
-        accountDetail: '/accounts/:accountId',
-        fileTransactions: '/accounts/:accountId/files/:fileId',
-        transactionDetail: '/accounts/:accountId/transactions/:transactionId'
-    },
-    deep: {
-        // For complex navigation, use query parameters
-        accountList: '/accounts',
-        accountDetail: '/accounts/:accountId',
-        contextual: '/accounts/:accountId?view=:view&context=:context'
-    }
-};
-
-interface NavigationContext {
-    view?: string;
-    fileId?: string;
-    transactionId?: string;
-    filter?: string;
-    sort?: string;
-    page?: string;
-    // Future expansion fields
-    categoryId?: string;
-    tagId?: string;
-    dateRange?: string;
-}
 
 export const useSmartRouting = () => {
     const navigate = useNavigate();
@@ -59,7 +31,8 @@ export const useSmartRouting = () => {
         selectAccount,
         selectFile,
         selectTransaction,
-        goToAccountList
+        goToAccountList,
+        setUrlContext
     } = useNavigationStore();
 
     const { accounts } = useAccountsWithStore();
@@ -91,70 +64,82 @@ export const useSmartRouting = () => {
             Object.keys(navigationContext).filter(key => navigationContext[key as keyof NavigationContext]).length > 2;
     }, [urlDepth, navigationContext]);
 
-    // Generate URL based on current navigation state
-    const generateUrl = useMemo(() => {
+    // Update navigation store with URL context
+    useEffect(() => {
+        setUrlContext(navigationContext);
+    }, [navigationContext, setUrlContext]);
+
+    // Helper functions for URL generation
+    const generateShallowUrl = useCallback(() => {
         const { accountId } = params;
 
-        if (!useDeepRouting) {
-            // Use traditional path-based routing for simple navigation
-            switch (currentView) {
-                case 'account-list':
-                    return '/accounts';
+        switch (currentView) {
+            case 'account-list':
+                return '/accounts';
 
-                case 'account-detail':
-                    return selectedAccount ? `/accounts/${selectedAccount.accountId}` : '/accounts';
+            case 'account-detail':
+                return selectedAccount ? `/accounts/${selectedAccount.accountId}` : '/accounts';
 
-                case 'file-transactions':
-                    return selectedAccount && selectedFile
-                        ? `/accounts/${selectedAccount.accountId}/files/${selectedFile.fileId}`
-                        : `/accounts/${selectedAccount?.accountId || accountId || ''}`;
+            case 'file-transactions':
+                return selectedAccount && selectedFile
+                    ? `/accounts/${selectedAccount.accountId}/files/${selectedFile.fileId}`
+                    : `/accounts/${selectedAccount?.accountId || accountId || ''}`;
 
-                case 'transaction-detail':
-                    if (selectedAccount && selectedTransaction) {
-                        if (selectedFile) {
-                            // This would exceed depth, use query params
-                            const url = new URL(`/accounts/${selectedAccount.accountId}`, window.location.origin);
-                            url.searchParams.set('view', 'transaction');
-                            url.searchParams.set('fileId', selectedFile.fileId);
-                            url.searchParams.set('transactionId', selectedTransaction.transactionId);
-                            return url.pathname + url.search;
-                        } else {
-                            return `/accounts/${selectedAccount.accountId}/transactions/${selectedTransaction.transactionId}`;
-                        }
-                    }
-                    return '/accounts';
+            case 'transaction-detail':
+                return generateTransactionDetailUrl();
 
-                default:
-                    return '/accounts';
-            }
-        } else {
-            // Use query parameter based routing for complex navigation
-            const baseUrl = selectedAccount ? `/accounts/${selectedAccount.accountId}` : '/accounts';
-            const url = new URL(baseUrl, window.location.origin);
-
-            // Add context via query parameters
-            if (currentView !== 'account-list' && currentView !== 'account-detail') {
-                url.searchParams.set('view', currentView);
-            }
-
-            if (selectedFile) {
-                url.searchParams.set('fileId', selectedFile.fileId);
-            }
-
-            if (selectedTransaction) {
-                url.searchParams.set('transactionId', selectedTransaction.transactionId);
-            }
-
-            // Preserve other context
-            Object.entries(navigationContext).forEach(([key, value]) => {
-                if (value && !['view', 'fileId', 'transactionId'].includes(key)) {
-                    url.searchParams.set(key, value);
-                }
-            });
-
-            return url.pathname + url.search;
+            default:
+                return '/accounts';
         }
-    }, [currentView, selectedAccount, selectedFile, selectedTransaction, useDeepRouting, params, navigationContext]);
+    }, [currentView, selectedAccount, selectedFile, params]);
+
+    const generateTransactionDetailUrl = useCallback(() => {
+        if (selectedAccount && selectedTransaction) {
+            if (selectedFile) {
+                // This would exceed depth, use query params
+                const url = new URL(`/accounts/${selectedAccount.accountId}`, window.location.origin);
+                url.searchParams.set('view', 'transaction');
+                url.searchParams.set('fileId', selectedFile.fileId);
+                url.searchParams.set('transactionId', selectedTransaction.transactionId);
+                return url.pathname + url.search;
+            } else {
+                return `/accounts/${selectedAccount.accountId}/transactions/${selectedTransaction.transactionId}`;
+            }
+        }
+        return '/accounts';
+    }, [selectedAccount, selectedTransaction, selectedFile]);
+
+    const generateDeepUrl = useCallback(() => {
+        const baseUrl = selectedAccount ? `/accounts/${selectedAccount.accountId}` : '/accounts';
+        const url = new URL(baseUrl, window.location.origin);
+
+        // Add context via query parameters
+        if (currentView !== 'account-list' && currentView !== 'account-detail') {
+            url.searchParams.set('view', currentView);
+        }
+
+        if (selectedFile) {
+            url.searchParams.set('fileId', selectedFile.fileId);
+        }
+
+        if (selectedTransaction) {
+            url.searchParams.set('transactionId', selectedTransaction.transactionId);
+        }
+
+        // Preserve other context
+        Object.entries(navigationContext).forEach(([key, value]) => {
+            if (value && !['view', 'fileId', 'transactionId'].includes(key)) {
+                url.searchParams.set(key, value);
+            }
+        });
+
+        return url.pathname + url.search;
+    }, [currentView, selectedAccount, selectedFile, selectedTransaction, navigationContext]);
+
+    // Generate URL based on current navigation state
+    const generateUrl = useMemo(() => {
+        return useDeepRouting ? generateDeepUrl() : generateShallowUrl();
+    }, [useDeepRouting, generateDeepUrl, generateShallowUrl]);
 
     // Sync navigation store changes to URL
     useEffect(() => {
@@ -166,24 +151,22 @@ export const useSmartRouting = () => {
         }
     }, [generateUrl, navigate, location.pathname, location.search]);
 
-    // Sync URL changes to navigation store
-    useEffect(() => {
+    // Helper functions for URL sync
+    const handleAccountSelection = useCallback(() => {
         const { accountId } = params;
-        const pathSegments = location.pathname.split('/').filter(Boolean);
-
-        // Handle account selection
         if (accountId && (!selectedAccount || selectedAccount.accountId !== accountId)) {
             const account = accounts.find(acc => acc.accountId === accountId);
             if (account) {
                 selectAccount(account);
-                return; // Let the account selection trigger the next navigation
+                return true; // Handled
             }
         }
+        return false;
+    }, [params, selectedAccount, accounts, selectAccount]);
 
-        // Handle view-based navigation from query parameters
+    const handleFileNavigation = useCallback((pathSegments: string[]) => {
         const view = navigationContext.view;
         const fileId = navigationContext.fileId;
-        const transactionId = navigationContext.transactionId;
 
         if (view === 'file-transactions' || (pathSegments.includes('files') && fileId)) {
             if (selectedAccount && fileId && (!selectedFile || selectedFile.fileId !== fileId)) {
@@ -197,7 +180,14 @@ export const useSmartRouting = () => {
                 };
                 selectFile(mockFile);
             }
-        } else if (view === 'transaction-detail' || view === 'transaction' ||
+        }
+    }, [navigationContext, selectedAccount, selectedFile, selectFile]);
+
+    const handleTransactionNavigation = useCallback((pathSegments: string[]) => {
+        const view = navigationContext.view;
+        const transactionId = navigationContext.transactionId;
+
+        if (view === 'transaction-detail' || view === 'transaction' ||
             (pathSegments.includes('transactions') && transactionId)) {
             if (selectedAccount && transactionId && (!selectedTransaction || selectedTransaction.transactionId !== transactionId)) {
                 const mockTransaction = {
@@ -208,14 +198,33 @@ export const useSmartRouting = () => {
                 };
                 selectTransaction(mockTransaction);
             }
-        } else if (pathSegments.length === 1 && pathSegments[0] === 'accounts' && !view) {
+        }
+    }, [navigationContext, selectedAccount, selectedTransaction, selectTransaction]);
+
+    const handleAccountListNavigation = useCallback((pathSegments: string[]) => {
+        const view = navigationContext.view;
+        if (pathSegments.length === 1 && pathSegments[0] === 'accounts' && !view) {
             if (currentView !== 'account-list') {
                 goToAccountList();
             }
         }
-    }, [params, location.pathname, location.search, navigationContext, accounts,
-        selectedAccount, selectedFile, selectedTransaction, currentView,
-        selectAccount, selectFile, selectTransaction, goToAccountList]);
+    }, [navigationContext, currentView, goToAccountList]);
+
+    // Sync URL changes to navigation store
+    useEffect(() => {
+        const pathSegments = location.pathname.split('/').filter(Boolean);
+
+        // Handle account selection first
+        if (handleAccountSelection()) {
+            return; // Let the account selection trigger the next navigation
+        }
+
+        // Handle other navigation types
+        handleFileNavigation(pathSegments);
+        handleTransactionNavigation(pathSegments);
+        handleAccountListNavigation(pathSegments);
+    }, [params, location.pathname, location.search, navigationContext,
+        handleAccountSelection, handleFileNavigation, handleTransactionNavigation, handleAccountListNavigation]);
 
     // Return utility functions for components to use
     return {

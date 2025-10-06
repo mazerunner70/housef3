@@ -83,9 +83,9 @@ export const listAccounts = withApiLogging(
   'AccountService',
   API_ENDPOINT,
   'GET',
-  async () => {
+  async (url) => {
     return validateApiResponse(
-      () => ApiClient.getJson<any>(API_ENDPOINT),
+      () => ApiClient.getJson<any>(url),
       (rawData) => {
         // Only log business-specific data - everything else is automatic
         logger.info('Account list processed', {
@@ -107,9 +107,9 @@ export const getAccount = (accountId: string) => withApiLogging(
   'AccountService',
   `${API_ENDPOINT}/${accountId}`,
   'GET',
-  async () => {
+  async (url) => {
     return validateApiResponse(
-      () => ApiClient.getJson<any>(`${API_ENDPOINT}/${accountId}`),
+      () => ApiClient.getJson<any>(url),
       (rawData) => {
         const validatedAccount = AccountSchema.parse(rawData.account);
         return { account: validatedAccount };
@@ -134,9 +134,9 @@ export const listAccountFiles = (accountId: string) => withApiLogging(
   'AccountService',
   `${API_ENDPOINT}/${accountId}/files`,
   'GET',
-  async () => {
+  async (url) => {
     return validateApiResponse(
-      () => ApiClient.getJson<any>(`${API_ENDPOINT}/${accountId}/files`),
+      () => ApiClient.getJson<any>(url),
       (rawData) => {
         // Log business-specific data for large file sets
         if (rawData.files?.length > 50) {
@@ -172,9 +172,9 @@ export const getAccountFileUploadUrl = (
   'AccountService',
   `${API_ENDPOINT}/${accountId}/files`,
   'POST',
-  async () => {
+  async (url) => {
     return validateApiResponse(
-      () => ApiClient.postJson<any>(`${API_ENDPOINT}/${accountId}/files`, {
+      () => ApiClient.postJson<any>(url, {
         fileName,
         contentType,
         fileSize
@@ -243,9 +243,9 @@ export const updateAccount = (accountId: string, accountData: Partial<Account>) 
   'AccountService',
   `${API_ENDPOINT}/${accountId}`,
   'PUT',
-  async () => {
+  async (url) => {
     return validateApiResponse(
-      () => ApiClient.putJson<any>(`${API_ENDPOINT}/${accountId}`, accountData),
+      () => ApiClient.putJson<any>(url, accountData),
       (rawData) => {
         const validatedAccount = AccountSchema.parse(rawData.account);
         return { account: validatedAccount };
@@ -281,9 +281,9 @@ export const getFileTimeline = (accountId: string) => withApiLogging(
   'AccountService',
   `${API_ENDPOINT}/${accountId}/timeline`,
   'GET',
-  async () => {
+  async (url) => {
     return validateApiResponse(
-      () => ApiClient.getJson<any>(`${API_ENDPOINT}/${accountId}/timeline`),
+      () => ApiClient.getJson<any>(url),
       (rawData) => TimelineResponseSchema.parse(rawData),
       'file timeline data',
       `Failed to load file timeline for account ${accountId}. The timeline data format is invalid.`

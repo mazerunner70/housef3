@@ -8,10 +8,15 @@ import {
     createLogger
 } from '@/utils/logger';
 import {
-    updateTransferCheckedDateRange,
     getTransferDataForProgress,
     resetTransferCheckedDateRange
 } from './UserPreferencesService';
+import {
+    epochToDate,
+    dateRangeToEpochRange,
+    formatDisplayDate,
+    subtractDays
+} from '@/utils/dateUtils';
 
 // 2. Type Definitions - Domain interfaces
 // Simplified transaction type for transfer operations (matches backend output)
@@ -19,29 +24,44 @@ export interface TransferTransaction {
     transactionId: string;
     fileId: string;
     userId: string;
-    date: number;
-    description: string;
-    amount: number;
-    balance: number;
-    currency: string;
-    accountId?: string | null;
-    transactionType?: string | null;
-    category?: string | null;
-    payee?: string | null;
-    memo?: string | null;
-    checkNumber?: string | null;
-    reference?: string | null;
-    status?: string | null;
-    debitOrCredit?: string | null;
-    importOrder?: number | null;
-    id?: string | null;
-    primaryCategoryId?: string | null;
-    categories?: any[] | null;
-    account?: string | null;
-    type?: string | null;
-    notes?: string | null;
-    isSplit?: boolean | null;
-    [key: string]: any; // Allow additional fields
+    // …other transform mappings…
+    outgoingTransaction: (() => {
+            const { date, ...rest } = pair.outgoingTransaction;
+return {
+    ...rest,
+    dateObject: epochToDate(date)
+};
+        }) (),
+    incomingTransaction: (() => {
+        const { date, ...rest } = pair.incomingTransaction;
+        return {
+            ...rest,
+            dateObject: epochToDate(date)
+        };
+    })()
+// …remaining transform mappings…
+description: string;
+amount: number;
+balance: number;
+currency: string;
+accountId ?: string | null;
+transactionType ?: string | null;
+category ?: string | null;
+payee ?: string | null;
+memo ?: string | null;
+checkNumber ?: string | null;
+reference ?: string | null;
+status ?: string | null;
+debitOrCredit ?: string | null;
+importOrder ?: number | null;
+id ?: string | null;
+primaryCategoryId ?: string | null;
+categories ?: any[] | null;
+account ?: string | null;
+type ?: string | null;
+notes ?: string | null;
+isSplit ?: boolean | null;
+[key: string]: any; // Allow additional fields
 }
 
 export interface TransferPair {
@@ -60,13 +80,13 @@ export interface DetectedTransfer {
 
 // Request/Response interfaces following conventions
 export interface TransferDetectionRequest {
-    startDate: number; // milliseconds since epoch
-    endDate: number;   // milliseconds since epoch
+    startDate: number; // milliseconds since epoch - API layer
+    endDate: number;   // milliseconds since epoch - API layer
 }
 
 export interface TransferListParams {
-    startDate?: number; // milliseconds since epoch
-    endDate?: number;   // milliseconds since epoch
+    startDate?: number; // milliseconds since epoch - API layer
+    endDate?: number;   // milliseconds since epoch - API layer
     limit?: number;
     offset?: number;
 }
@@ -84,8 +104,8 @@ export interface DetectedTransfersResponse {
     transfers: TransferPair[];
     count: number;
     dateRange: {
-        startDate: number;
-        endDate: number;
+        startDateObject: Date;
+        endDateObject: Date;
     };
     progressTrackingWarning?: string; // Warning if progress tracking failed
 }
@@ -109,10 +129,38 @@ export interface BulkMarkTransfersResponse {
     failed: Array<{ pair: any; error: string }>;
 }
 
-// Date range utilities
+// Date range utilities - keeping API types separate from application types
+export interface ApiDateRange {
+    startDate: number; // milliseconds since epoch - for API communication
+    endDate: number;   // milliseconds since epoch - for API communication
+}
+
+// Application layer should use the Date object version from dateUtils
 export interface DateRange {
-    startDate: number; // milliseconds since epoch
-    endDate: number;   // milliseconds since epoch
+    startDate: Date; // Application layer works with Date objects
+    endDate: Date;   // Application layer works with Date objects
+}
+
+// Transfer progress data interfaces
+export interface TransferProgressData {
+    hasData: boolean;
+    totalDays: number;
+    checkedDays: number;
+    progressPercentage: number;
+    isComplete: boolean;
+    accountDateRange?: ApiDateRange;  // Keep as epoch for this legacy interface
+    checkedDateRange?: ApiDateRange; // Keep as epoch for this legacy interface  
+    error?: string;
+}
+
+export interface CheckedRange {
+    startDate?: number | null; // milliseconds since epoch
+    endDate?: number | null;   // milliseconds since epoch
+}
+
+export interface AccountRange {
+    startDate?: number | null; // milliseconds since epoch
+    endDate?: number | null;   // milliseconds since epoch
 }
 
 // 3. Zod validation schemas
@@ -169,7 +217,31 @@ const DetectedTransfersResponseSchema = z.object({
         endDate: z.number()
     }),
     progressTrackingWarning: z.string().optional()
-});
+}).transform((data) => ({
+    transfers: data.transfers.map(pair => {
+        const { date: outgoingDate, ...outgoingRest } = pair.outgoingTransaction;
+        const { date: incomingDate, ...incomingRest } = pair.incomingTransaction;
+
+        return {
+            ...pair,
+            outgoingTransaction: {
+                ...outgoingRest,
+                dateObject: epochToDate(outgoingDate) // Create dateObject from epoch date
+            },
+            incomingTransaction: {
+                ...incomingRest,
+                dateObject: epochToDate(incomingDate) // Create dateObject from epoch date
+            }
+        };
+    }),
+    count: data.count,
+    dateRange: {
+        startDateObject: epochToDate(data.dateRange.startDate),
+        endDateObject: epochToDate(data.dateRange.endDate)
+        // Remove startDate and endDate epoch fields from client
+    },
+    progressTrackingWarning: data.progressTrackingWarning
+}));
 
 const BulkMarkResponseSchema = z.object({
     successful: z.array(z.object({
@@ -188,49 +260,6 @@ const BulkMarkResponseSchema = z.object({
 const API_ENDPOINT = '/transfers';
 const logger = createLogger('TransferService');
 
-// Helper function for retrying preference updates
-const retryPreferenceUpdate = async (
-    startMs: number,
-    endMs: number,
-    startDate: string,
-    endDate: string,
-    maxRetries: number = 3,
-    delayMs: number = 1000
-): Promise<void> => {
-    let lastError: Error | undefined;
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            await updateTransferCheckedDateRange(startMs, endMs);
-            logger.info('Successfully updated transfer checked date range', {
-                startDate,
-                endDate,
-                attempt,
-                startMs,
-                endMs
-            });
-            return; // Success, exit retry loop
-        } catch (error) {
-            lastError = error instanceof Error ? error : new Error('Unknown error');
-            logger.warn('Preference update attempt failed', {
-                startDate,
-                endDate,
-                attempt,
-                maxRetries,
-                error: lastError.message
-            });
-
-            // Wait before retrying (except on last attempt)
-            if (attempt < maxRetries) {
-                await new Promise(resolve => setTimeout(resolve, delayMs * attempt));
-            }
-        }
-    }
-
-    // All retries failed, throw the last error
-    throw lastError || new Error('All preference update attempts failed');
-};
-
 // 5. Exported Functions - API operations with efficient logging
 
 /**
@@ -238,13 +267,16 @@ const retryPreferenceUpdate = async (
  * @returns Promise resolving to total count
  */
 export const getTotalPairedTransfersCount = () => {
+    const query = new URLSearchParams();
+    query.append('count_only', 'true');
+
     return withApiLogging(
         'TransferService',
-        `${API_ENDPOINT}/paired?count_only=true`,
+        `${API_ENDPOINT}/paired`,
         'GET',
-        async () => {
+        async (url) => {
             return validateApiResponse(
-                () => ApiClient.getJson<any>(`${API_ENDPOINT}/paired?count_only=true`),
+                () => ApiClient.getJson<any>(url),
                 (rawData) => {
                     // Expect just a count response
                     return rawData.count || 0;
@@ -255,6 +287,7 @@ export const getTotalPairedTransfersCount = () => {
         },
         {
             operationName: 'getTotalPairedTransfersCount',
+            queryParams: query,
             successData: (result) => ({
                 totalCount: result
             })
@@ -284,15 +317,11 @@ export const listPairedTransfers = (params?: TransferListParams) => {
         query.append('offset', params.offset.toString());
     }
 
-    const url = query.toString()
-        ? `${API_ENDPOINT}/paired?${query.toString()}`
-        : `${API_ENDPOINT}/paired`;
-
     return withApiLogging(
         'TransferService',
-        url,
+        `${API_ENDPOINT}/paired`,
         'GET',
-        async () => {
+        async (url) => {
             return validateApiResponse(
                 () => ApiClient.getJson<any>(url),
                 (rawData) => {
@@ -305,6 +334,7 @@ export const listPairedTransfers = (params?: TransferListParams) => {
         },
         {
             operationName: 'listPairedTransfers',
+            queryParams: query.toString() ? query : undefined,
             successData: (result) => ({
                 transferCount: result.pairedTransfers.length,
                 hasDateRange: !!result.dateRange
@@ -314,71 +344,63 @@ export const listPairedTransfers = (params?: TransferListParams) => {
 };
 
 /**
- * Detect potential transfer transactions within a date range
- * @param startDate Start date for detection period (milliseconds since epoch)
- * @param endDate End date for detection period (milliseconds since epoch)
- * @returns Promise resolving to detected transfers response
+ * Detect potential transfer transactions within a date range (APPLICATION LAYER)
+ * @param dateRange DateRange with Date objects from application logic
+ * @returns Promise resolving to detected transfers response with Date objects
  */
-export const detectPotentialTransfers = (startDate: number, endDate: number) => {
+export const detectPotentialTransfers = (dateRange: DateRange) => {
+    // BOUNDARY CONVERSION: Convert Date objects to epoch for API
+    const apiRange = dateRangeToEpochRange(dateRange);
+
     const query = new URLSearchParams();
-
-    // Use milliseconds since epoch
-    query.append('startDate', startDate.toString());
-    query.append('endDate', endDate.toString());
-
-    const url = `${API_ENDPOINT}/detect?${query.toString()}`;
+    query.append('startDate', apiRange.startDate.toString());
+    query.append('endDate', apiRange.endDate.toString());
 
     return withApiLogging(
         'TransferService',
-        url,
+        `${API_ENDPOINT}/detect`,
         'GET',
-        async () => {
+        async (url) => {
             const result = await validateApiResponse(
                 () => ApiClient.getJson<any>(url),
                 (rawData) => {
-                    const validatedResponse = DetectedTransfersResponseSchema.parse(rawData);
-                    return validatedResponse;
+                    // BOUNDARY CONVERSION: Schema now handles epochToDate conversion automatically
+                    return DetectedTransfersResponseSchema.parse(rawData);
                 },
                 'detected transfers data',
                 'Failed to detect transfers. The transfer data format is invalid.'
             );
 
-            // Update the checked date range in preferences after successful detection
-            let progressTrackingWarning: string | undefined;
-            try {
-                // Use the millisecond timestamps directly
-                const startMs = startDate;
-                const endMs = endDate;
+            // REMOVED: Automatic preference update
+            // The checked range should only update at the END of the review cycle,
+            // not when candidates are first detected. This allows users to leave
+            // mid-review and return to the same range without losing candidates.
 
-                // Attempt to update with retry mechanism
-                await retryPreferenceUpdate(startMs, endMs, new Date(startDate).toISOString().split('T')[0], new Date(endDate).toISOString().split('T')[0]);
-                logger.info('Updated transfer checked date range', { startDate, endDate, startMs, endMs });
-            } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                logger.error('Failed to update transfer checked date range after retries', {
-                    startDate,
-                    endDate,
-                    error: errorMessage
-                });
-
-                // Set warning to be included in response
-                progressTrackingWarning = `Transfer detection completed successfully, but progress tracking failed to update. You may need to manually track this date range (${new Date(startDate).toISOString().split('T')[0]} to ${new Date(endDate).toISOString().split('T')[0]}) to avoid duplicate checking.`;
-            }
-
-            // Include progress tracking warning in response if it occurred
-            return {
-                ...result,
-                ...(progressTrackingWarning && { progressTrackingWarning })
-            };
+            return result;
         },
         {
             operationName: 'detectPotentialTransfers',
+            queryParams: query,
             successData: (result) => ({
                 detectedCount: result.transfers.length,
-                hasDateRange: !!result.dateRange
+                hasDateRange: !!result.dateRange,
+                dateRangeFormatted: result.dateRange ?
+                    `${formatDisplayDate(result.dateRange.startDateObject)} - ${formatDisplayDate(result.dateRange.endDateObject)}` :
+                    'No date range'
             })
         }
     );
+};
+
+/**
+ * Legacy function for backward compatibility - converts epoch params to Date objects
+ * @deprecated Use detectPotentialTransfers(DateRange) instead
+ */
+export const detectPotentialTransfersLegacy = (startDate: number, endDate: number) => {
+    return detectPotentialTransfers({
+        startDate: epochToDate(startDate),
+        endDate: epochToDate(endDate)
+    });
 };
 
 /**
@@ -392,9 +414,9 @@ export const markTransferPair = (outgoingTransactionId: string, incomingTransact
         'TransferService',
         `${API_ENDPOINT}/mark-pair`,
         'POST',
-        async () => {
+        async (url) => {
             return validateApiResponse(
-                () => ApiClient.postJson<any>(`${API_ENDPOINT}/mark-pair`, {
+                () => ApiClient.postJson<any>(url, {
                     outgoingTransactionId,
                     incomingTransactionId
                 }),
@@ -466,21 +488,31 @@ export const bulkMarkTransfers = withServiceLogging(
 // 6. Utility functions for date range handling
 
 /**
- * Convert number of days to a date range ending today
+ * Convert number of days to a date range ending today (APPLICATION LAYER)
  * @param days Number of days to go back from today
- * @returns Object with startDate and endDate in milliseconds since epoch
+ * @returns DateRange with Date objects for application logic
  */
 export const convertDaysToDateRange = (days: number): DateRange => {
     logger.info('Converting days to date range', { days });
 
+    // Work with Date objects in application layer
     const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(endDate.getDate() - days);
+    const startDate = subtractDays(endDate, days);
 
     return {
-        startDate: startDate.getTime(),
-        endDate: endDate.getTime()
+        startDate,
+        endDate
     };
+};
+
+/**
+ * Convert number of days to API date range ending today (API BOUNDARY)
+ * @param days Number of days to go back from today
+ * @returns ApiDateRange with epoch timestamps for API communication
+ */
+export const convertDaysToApiDateRange = (days: number): ApiDateRange => {
+    const dateRange = convertDaysToDateRange(days);
+    return dateRangeToEpochRange(dateRange);
 };
 
 /**
@@ -537,23 +569,32 @@ export const createTransferDateRange = (startDate: Date, endDate: Date): Transfe
 };
 
 /**
- * Create a date range from number of days
+ * Create a date range from number of days (APPLICATION LAYER)
  * @param days Number of days to go back from today
- * @returns Formatted date range for API requests (milliseconds since epoch)
+ * @returns DateRange with Date objects for application logic
  */
 export const createDateRangeFromDays = (days: number): DateRange => {
     const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(endDate.getDate() - days);
+    const startDate = subtractDays(endDate, days);
 
     return {
-        startDate: startDate.getTime(),
-        endDate: endDate.getTime()
+        startDate,
+        endDate
     };
 };
 
+/**
+ * Create an API date range from number of days (API BOUNDARY)
+ * @param days Number of days to go back from today
+ * @returns ApiDateRange with epoch timestamps for API communication
+ */
+export const createApiDateRangeFromDays = (days: number): ApiDateRange => {
+    const dateRange = createDateRangeFromDays(days);
+    return dateRangeToEpochRange(dateRange);
+};
+
 // Helper function to calculate transfer progress
-const calculateTransferProgress = (checkedRange: any, accountRange: any) => {
+const calculateTransferProgress = (checkedRange: CheckedRange, accountRange: AccountRange): TransferProgressData => {
     if (!accountRange.startDate || !accountRange.endDate) {
         return {
             hasData: false,
@@ -584,13 +625,19 @@ const calculateTransferProgress = (checkedRange: any, accountRange: any) => {
         checkedDays,
         progressPercentage,
         isComplete,
-        accountDateRange: accountRange,
-        checkedDateRange: checkedRange
+        accountDateRange: accountRange.startDate && accountRange.endDate ? {
+            startDate: accountRange.startDate,
+            endDate: accountRange.endDate
+        } : undefined,
+        checkedDateRange: checkedRange.startDate && checkedRange.endDate ? {
+            startDate: checkedRange.startDate,
+            endDate: checkedRange.endDate
+        } : undefined
     };
 };
 
 // Helper function to calculate initial recommendation when nothing is checked
-const calculateInitialRecommendation = (accountStartDate: Date, accountEndDate: Date, chunkDays: number): DateRange => {
+const calculateInitialRecommendation = (accountStartDate: Date, accountEndDate: Date, chunkDays: number): ApiDateRange => {
     logger.info('No previous checks found, suggesting recent chunk from actual transaction data');
 
     const suggestedEnd = accountEndDate;
@@ -612,7 +659,7 @@ const calculateForwardRecommendation = (
     accountEndDate: Date,
     overlapDays: number,
     chunkDays: number
-): DateRange => {
+): ApiDateRange => {
     logger.info('Extending forward from checked range with overlap');
 
     const nextStart = new Date(checkedEndDate);
@@ -644,7 +691,7 @@ const calculateBackwardRecommendation = (
     accountStartDate: Date,
     overlapDays: number,
     chunkDays: number
-): DateRange => {
+): ApiDateRange => {
     logger.info('Extending backward from checked range with overlap');
 
     const nextEnd = new Date(checkedStartDate);
@@ -671,7 +718,7 @@ const calculateBackwardRecommendation = (
 };
 
 // Helper function to calculate recommended date range
-const calculateRecommendedRange = (checkedRange: any, accountRange: any): DateRange | null => {
+const calculateRecommendedRange = (checkedRange: CheckedRange, accountRange: AccountRange): ApiDateRange | null => {
     if (!accountRange.startDate || !accountRange.endDate) {
         logger.warn('No account date range available for transfer checking');
         return null;
@@ -683,6 +730,16 @@ const calculateRecommendedRange = (checkedRange: any, accountRange: any): DateRa
     const accountStartDate = new Date(accountRange.startDate);
     const accountEndDate = new Date(accountRange.endDate); // Latest actual transaction date
 
+    // Explain inputs used for recommendation
+    logger.info('calculateRecommendedRange: inputs', {
+        accountStart: accountStartDate.toISOString(),
+        accountEnd: accountEndDate.toISOString(),
+        checkedRangeStart: checkedRange?.startDate ? new Date(checkedRange.startDate).toISOString() : null,
+        checkedRangeEnd: checkedRange?.endDate ? new Date(checkedRange.endDate).toISOString() : null,
+        overlapDays: OVERLAP_DAYS,
+        chunkDays: CHUNK_DAYS
+    });
+
     // If nothing has been checked yet, start with recent data (last 30 days of actual data)
     if (!checkedRange.startDate || !checkedRange.endDate) {
         return calculateInitialRecommendation(accountStartDate, accountEndDate, CHUNK_DAYS);
@@ -692,13 +749,26 @@ const calculateRecommendedRange = (checkedRange: any, accountRange: any): DateRa
     const checkedStartDate = new Date(Math.max(checkedRange.startDate, accountStartDate.getTime()));
     const checkedEndDate = new Date(Math.min(checkedRange.endDate, accountEndDate.getTime()));
 
+    // Show clamped boundaries after validating against account range
+    logger.info('calculateRecommendedRange: clamped checked boundaries', {
+        checkedStart: checkedStartDate.toISOString(),
+        checkedEnd: checkedEndDate.toISOString()
+    });
+
     // Determine if we can extend forward (toward present) or backward (toward past)
     const canExtendForward = checkedEndDate.getTime() < accountEndDate.getTime();
     const canExtendBackward = checkedStartDate.getTime() > accountStartDate.getTime();
 
+    logger.info('calculateRecommendedRange: extension options', {
+        canExtendForward,
+        canExtendBackward
+    });
+
     if (canExtendForward) {
+        logger.info('calculateRecommendedRange: decision', { direction: 'forward' });
         return calculateForwardRecommendation(checkedEndDate, accountEndDate, OVERLAP_DAYS, CHUNK_DAYS);
     } else if (canExtendBackward) {
+        logger.info('calculateRecommendedRange: decision', { direction: 'backward' });
         return calculateBackwardRecommendation(checkedStartDate, accountStartDate, OVERLAP_DAYS, CHUNK_DAYS);
     } else {
         // All actual transaction data has been covered
@@ -715,8 +785,8 @@ export const getTransferProgressAndRecommendation = withServiceLogging(
     'TransferService',
     'getTransferProgressAndRecommendation',
     async (): Promise<{
-        progress: any;
-        recommendedRange: DateRange | null;
+        progress: TransferProgressData;
+        recommendedRange: ApiDateRange | null;
     }> => {
         try {
             // Get all transfer data in a single optimized call
@@ -768,15 +838,15 @@ export const getTransferProgressAndRecommendation = withServiceLogging(
 export const getRecommendedTransferDateRange = withServiceLogging(
     'TransferService',
     'getRecommendedTransferDateRange',
-    async (): Promise<DateRange | null> => {
+    async (): Promise<ApiDateRange | null> => {
         const { recommendedRange } = await getTransferProgressAndRecommendation();
         return recommendedRange;
     },
     {
         logResult: (result) => ({
             hasRecommendation: !!result,
-            startDate: result?.startDate,
-            endDate: result?.endDate
+            startDate: result?.startDate || null,
+            endDate: result?.endDate || null
         })
     }
 );
