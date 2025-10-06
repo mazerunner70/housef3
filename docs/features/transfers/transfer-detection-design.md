@@ -72,17 +72,25 @@ REST API endpoints for transfer operations:
 
 Client-side service handling:
 - API communication
-- Progress tracking
-- Date range recommendations
+- Date range recommendations via `getTransferProgressAndRecommendation()`
 - Error handling and validation
 
-### 4. Transfer UI Component (`frontend/src/new-ui/components/business/transactions/TransfersTab.tsx`)
+Key change from redesign:
+- `detectPotentialTransfers(startDate,endDate)` no longer updates the checked range. Progress updates are performed only at the end of a review cycle by the UI (see below).
 
-User interface providing:
-- Transfer detection controls
-- Progress visualization
-- Bulk selection and marking
-- Date range management
+### 4. Transfer UI Component (`frontend/src/new-ui/components/business/transactions/TransfersDashboard.tsx`)
+
+The compact Transfers Dashboard provides a streamlined review flow:
+- Scan next chunk (uses recommendation when available)
+- Review candidates in a condensed table with keyboard shortcuts
+- Confirm or ignore selections
+- Complete review cycle (advance to next chunk)
+
+Key functions in the redesign:
+- `handleDetectTransfers()` scans a range but does not update progress
+- `handleBulkMarkTransfers()` marks selected pairs without passing a scannedDateRange
+- `handleBulkIgnoreTransfers()` ignores selected pairs locally
+- `completeReviewCycle()` updates the checked date range and auto-loads the recommended next chunk
 
 ## Detection Algorithm
 
@@ -174,12 +182,9 @@ overlap_size = 3  # days
 
 ## Progress Tracking System
 
-### User Preferences Integration
+### User Preferences Integration (End-of-Cycle Updates)
 
-The system tracks which date ranges have been checked to:
-- Avoid duplicate processing
-- Show progress to users
-- Recommend next ranges to check
+Progress is updated only when a review cycle completes (all candidates in the current chunk are confirmed or ignored, or the user explicitly marks the chunk as reviewed). This ensures resumability if the user leaves mid-review.
 
 ```typescript
 interface TransferProgress {
