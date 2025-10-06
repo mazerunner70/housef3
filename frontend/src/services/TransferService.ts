@@ -24,44 +24,30 @@ export interface TransferTransaction {
     transactionId: string;
     fileId: string;
     userId: string;
-    // …other transform mappings…
-    outgoingTransaction: (() => {
-            const { date, ...rest } = pair.outgoingTransaction;
-return {
-    ...rest,
-    dateObject: epochToDate(date)
-};
-        }) (),
-    incomingTransaction: (() => {
-        const { date, ...rest } = pair.incomingTransaction;
-        return {
-            ...rest,
-            dateObject: epochToDate(date)
-        };
-    })()
-// …remaining transform mappings…
-description: string;
-amount: number;
-balance: number;
-currency: string;
-accountId ?: string | null;
-transactionType ?: string | null;
-category ?: string | null;
-payee ?: string | null;
-memo ?: string | null;
-checkNumber ?: string | null;
-reference ?: string | null;
-status ?: string | null;
-debitOrCredit ?: string | null;
-importOrder ?: number | null;
-id ?: string | null;
-primaryCategoryId ?: string | null;
-categories ?: any[] | null;
-account ?: string | null;
-type ?: string | null;
-notes ?: string | null;
-isSplit ?: boolean | null;
-[key: string]: any; // Allow additional fields
+    date: number; // epoch timestamp from backend
+    dateObject?: Date; // transformed date object for frontend use
+    description: string;
+    amount: number;
+    balance: number;
+    currency: string;
+    accountId?: string | null;
+    transactionType?: string | null;
+    category?: string | null;
+    payee?: string | null;
+    memo?: string | null;
+    checkNumber?: string | null;
+    reference?: string | null;
+    status?: string | null;
+    debitOrCredit?: string | null;
+    importOrder?: number | null;
+    id?: string | null;
+    primaryCategoryId?: string | null;
+    categories?: any[] | null;
+    account?: string | null;
+    type?: string | null;
+    notes?: string | null;
+    isSplit?: boolean | null;
+    [key: string]: any; // Allow additional fields
 }
 
 export interface TransferPair {
@@ -219,18 +205,15 @@ const DetectedTransfersResponseSchema = z.object({
     progressTrackingWarning: z.string().optional()
 }).transform((data) => ({
     transfers: data.transfers.map(pair => {
-        const { date: outgoingDate, ...outgoingRest } = pair.outgoingTransaction;
-        const { date: incomingDate, ...incomingRest } = pair.incomingTransaction;
-
         return {
             ...pair,
             outgoingTransaction: {
-                ...outgoingRest,
-                dateObject: epochToDate(outgoingDate) // Create dateObject from epoch date
+                ...pair.outgoingTransaction,
+                dateObject: epochToDate(pair.outgoingTransaction.date) // Add dateObject while preserving original date
             },
             incomingTransaction: {
-                ...incomingRest,
-                dateObject: epochToDate(incomingDate) // Create dateObject from epoch date
+                ...pair.incomingTransaction,
+                dateObject: epochToDate(pair.incomingTransaction.date) // Add dateObject while preserving original date
             }
         };
     }),
