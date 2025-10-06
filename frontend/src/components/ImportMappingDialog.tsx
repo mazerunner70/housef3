@@ -10,7 +10,7 @@ interface ImportMappingDialogProps {
   csvHeaders?: string[];
   existingMapping?: ColumnMapping[];
   onCompleteImport: (
-    mappedData: TransactionRow[], 
+    mappedData: TransactionRow[],
     finalFieldMapToAssociate?: { id: string; name: string }
   ) => void;
   targetTransactionFields: { field: string; label: string; required?: boolean; regex?: string | string[] }[];
@@ -62,11 +62,6 @@ const ImportMappingDialog: React.FC<ImportMappingDialogProps> = ({
     }
   };
 
-  const handleDialogKeyDown = (e: React.KeyboardEvent) => {
-    // Prevent event from bubbling to overlay
-    e.stopPropagation();
-  };
-
   const handleCompleteImport = (mappedData: TransactionRow[], finalFieldMapToAssociate?: { id: string; name: string }) => {
     importStep2Props.onCompleteImport(mappedData, finalFieldMapToAssociate);
     // Note: Parent should handle closing the dialog after successful import
@@ -77,19 +72,20 @@ const ImportMappingDialog: React.FC<ImportMappingDialogProps> = ({
   };
 
   return (
-    <div 
-      className="import-mapping-dialog-overlay" 
+    <button
+      type="button"
+      className="import-mapping-dialog-overlay"
       onClick={handleOverlayClick}
-      tabIndex={0}
-      role="button"
-      aria-label="Close dialog"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
+          handleCancel();
+        }
+      }}
+      aria-label="Close dialog by clicking overlay"
     >
-      <div 
-        className="import-mapping-dialog" 
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={handleDialogKeyDown}
-        role="dialog"
-        aria-modal="true"
+      <dialog
+        className="import-mapping-dialog"
+        open
         aria-labelledby="dialog-title"
       >
         <div className="dialog-header">
@@ -98,7 +94,7 @@ const ImportMappingDialog: React.FC<ImportMappingDialogProps> = ({
             ×
           </button>
         </div>
-        
+
         <div className="dialog-content">
           <ImportStep2Preview
             {...importStep2Props}
@@ -106,8 +102,8 @@ const ImportMappingDialog: React.FC<ImportMappingDialogProps> = ({
             onCancel={handleCancel}
           />
         </div>
-      </div>
-    </div>
+      </dialog>
+    </button>
   );
 };
 

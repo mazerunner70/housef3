@@ -6,7 +6,7 @@ import FZIPRestoreList from '../components/FZIPRestoreList';
 import { FZIPRestoreSummary } from '../components/fzip/FZIPRestoreSummary';
 import { FZIPRestoreResults } from '../components/fzip/FZIPRestoreResults';
 import { FZIPRestoreError } from '../components/fzip/FZIPRestoreError';
-import { FZIPRestoreStatus } from '../../services/FZIPService';
+import { FZIPRestoreStatus } from '../services/FZIPService';
 import Button from '../components/Button';
 import './FZIPRestoreView.css';
 
@@ -37,107 +37,84 @@ const FZIPRestoreView: React.FC = () => {
     type: 'success' | 'error' | 'warning';
     message: string;
   } | null>(null);
-  
+
   // Enhanced state management for individual restore jobs
   const [activeRestoreId, setActiveRestoreId] = useState<string | null>(null);
   const [showRestoreModal, setShowRestoreModal] = useState(false);
-  
-  // Enhanced status polling for active restore
-  const { 
-    status: activeRestoreStatus, 
-    confirmRestore, 
-    retryRestore: retryActiveRestore, 
-    abortRestore,
-    clearError 
-    } = useFZIPRestoreStatus(activeRestoreId);
 
-  const handleUploaded = async () => {
-    setShowUpload(false);
-    
-    // Poll for the newly created restore job
-    const maxAttempts = 15; // 30 seconds max wait time
-    const pollInterval = 2000; // 2 seconds between polls
-    let attempts = 0;
-    let foundJob: any = null;
-    
-    // Get current job count for comparison
-    const currentJobCount = restoreJobs.length;
-    
-    // Show initial success message
+  // Enhanced status polling for active restore
+  const {
+    status: activeRestoreStatus,
+    confirmRestore,
+    retryRestore: retryActiveRestore,
+    abortRestore,
+    clearError
+  } = useFZIPRestoreStatus(activeRestoreId);
+
+  // Helper function to find new restore job
+  const findNewRestoreJob = (updatedJobs: any[], currentJobCount: number) => {
+    // Check if we have a new job that's awaiting user confirmation
+    const confirmationJob = updatedJobs.find(job =>
+      job.status === FZIPRestoreStatus.AWAITING_CONFIRMATION
+    );
+
+    if (confirmationJob) {
+      return confirmationJob;
+    }
+
+    // Also check if we simply have more jobs than before (any status)
+    if (updatedJobs.length > currentJobCount) {
+      return updatedJobs[0]; // Jobs should be sorted by creation date
+    }
+
+    return null;
+  };
+
+  // Helper function to perform a single polling attempt
+  const performPollingAttempt = async (attempts: number, maxAttempts: number, currentJobCount: number) => {
     setNotification({
       type: 'success',
-      message: 'Upload successful. Creating restore job...'
+      message: `Looking for restore job... (${attempts}/${maxAttempts})`
     });
-    
-    while (attempts < maxAttempts && !foundJob) {
-      attempts++;
-      
-      // Update notification with progress
-      setNotification({
-        type: 'success',
-        message: `Looking for restore job... (${attempts}/${maxAttempts})`
-      });
-      
-      try {
-        const updatedJobs = await refreshRestoreJobs();
-        
 
-        
-        // Check if we have a new job that's awaiting user confirmation
-        const confirmationJob = updatedJobs.find(job => 
-          job.status === FZIPRestoreStatus.AWAITING_CONFIRMATION
-        );
-        
-        if (confirmationJob) {
-          foundJob = confirmationJob;
-          break;
-        }
-        
-        // Also check if we simply have more jobs than before (any status)
-        if (updatedJobs.length > currentJobCount) {
-          const latestJob = updatedJobs[0]; // Jobs should be sorted by creation date
-          foundJob = latestJob;
-          break;
-        }
-        
-        if (attempts < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, pollInterval));
-        }
-      } catch (error) {
-        // Update notification to show error but continue polling
-        setNotification({
-          type: 'warning',
-          message: `Checking for restore job... (${attempts}/${maxAttempts}) - retrying...`
-        });
-        
-        if (attempts < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, pollInterval));
-        }
-      }
-    }
-    
-    if (foundJob) {
-      // If the job is ready for user confirmation, show appropriate message without auto-opening modal
-      if (foundJob.status === FZIPRestoreStatus.AWAITING_CONFIRMATION) {
-        setNotification({
-          type: 'success',
-          message: CONFIRMATION_READY_MESSAGE
-        });
-      } else {
-        // Job exists but isn't awaiting confirmation - show success message
-        setNotification({
-          type: 'success',
-          message: `Restore job created with status: ${foundJob.status}. Check the list below for updates.`
-        });
-      }
-    } else {
+    try {
+      const updatedJobs = await refreshRestoreJobs();
+      return { success: true, job: findNewRestoreJob(updatedJobs, currentJobCount) };
+    } catch (error) {
+      console.error('Error checking restore job:', error);
       setNotification({
         type: 'warning',
-        message: 'Upload completed but restore job creation is taking longer than expected. Please refresh to check status.'
+        message: `Checking for restore job... (${attempts}/${maxAttempts}) - retrying...`
+      });
+      return { success: false, job: null };
+    }
+  };
+
+  // Helper function to handle successful job discovery
+  const handleJobFound = (foundJob: any) => {
+    if (foundJob.status === FZIPRestoreStatus.AWAITING_CONFIRMATION) {
+      setNotification({
+        type: 'success',
+        message: CONFIRMATION_READY_MESSAGE
+      });
+    } else {
+      setNotification({
+        type: 'success',
+        message: `Restore job created with status: ${foundJob.status}. Check the list below for updates.`
       });
     }
-    
-    // Clear notification after 5 seconds (except for confirmation message)
+  };
+
+  // Helper function to handle polling failure
+  const handlePollingFailure = () => {
+    setNotification({
+      type: 'warning',
+      message: 'Upload completed but restore job creation is taking longer than expected. Please refresh to check status.'
+    });
+  };
+
+  // Helper function to schedule notification cleanup
+  const scheduleNotificationCleanup = () => {
     setTimeout(() => {
       setNotification(currentNotification => {
         if (currentNotification?.message !== CONFIRMATION_READY_MESSAGE) {
@@ -146,6 +123,46 @@ const FZIPRestoreView: React.FC = () => {
         return currentNotification;
       });
     }, 5000);
+  };
+
+  const handleUploaded = async () => {
+    setShowUpload(false);
+
+    const maxAttempts = 15; // 30 seconds max wait time
+    const pollInterval = 2000; // 2 seconds between polls
+    const currentJobCount = restoreJobs.length;
+
+    // Show initial success message
+    setNotification({
+      type: 'success',
+      message: 'Upload successful. Creating restore job...'
+    });
+
+    // Poll for the newly created restore job
+    let foundJob: any = null;
+    for (let attempts = 1; attempts <= maxAttempts && !foundJob; attempts++) {
+      const result = await performPollingAttempt(attempts, maxAttempts, currentJobCount);
+
+      if (result.success && result.job) {
+        foundJob = result.job;
+        break;
+      }
+
+      // Wait before next attempt (except on last attempt)
+      if (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+      }
+    }
+
+    // Handle the result
+    if (foundJob) {
+      handleJobFound(foundJob);
+    } else {
+      handlePollingFailure();
+    }
+
+    // Schedule notification cleanup
+    scheduleNotificationCleanup();
   };
 
   const handleDelete = async (restoreId: string) => {
@@ -174,6 +191,7 @@ const FZIPRestoreView: React.FC = () => {
       });
       setTimeout(() => setNotification(null), 2000);
     } catch (error) {
+      console.error('Error refreshing restore jobs:', error);
       setNotification({
         type: 'error',
         message: 'Failed to refresh restore jobs'
@@ -264,7 +282,7 @@ const FZIPRestoreView: React.FC = () => {
           <h1>Financial Profile Restore</h1>
           <p>Restore your complete financial profile from a FZIP backup file. Your current profile must be completely empty.</p>
         </div>
-        
+
         <div className="header-actions">
           <Button
             variant="secondary"
@@ -273,7 +291,7 @@ const FZIPRestoreView: React.FC = () => {
           >
             Refresh
           </Button>
-          
+
           {!showUpload && (
             <Button
               variant="primary"
@@ -293,8 +311,11 @@ const FZIPRestoreView: React.FC = () => {
         <div className={`notification notification--${notification.type}`}>
           <div className="notification-content">
             <span className="notification-icon">
-              {notification.type === 'success' ? '✓' : 
-               notification.type === 'warning' ? '⚠' : '⚠'}
+              {(() => {
+                if (notification.type === 'success') return '✓';
+                if (notification.type === 'warning') return '⚠';
+                return '⚠';
+              })()}
             </span>
             <span className="notification-message">{notification.message}</span>
             <button
@@ -348,7 +369,7 @@ const FZIPRestoreView: React.FC = () => {
                 </Button>
               )}
             </div>
-            
+
             <FZIPRestoreUpload
               onUploaded={handleUploaded}
               isLoading={isLoading}
@@ -371,7 +392,7 @@ const FZIPRestoreView: React.FC = () => {
               )}
             </div>
           </div>
-          
+
           <FZIPRestoreList
             restoreJobs={restoreJobs}
             isLoading={isLoading}
@@ -393,17 +414,17 @@ const FZIPRestoreView: React.FC = () => {
             <h4>Empty Profile Required</h4>
             <p>Restore operations require a completely empty financial profile to ensure clean restoration without conflicts.</p>
           </div>
-          
+
           <div className="info-item">
             <h4>Complete Restoration</h4>
             <p>All data from the backup is restored exactly as it was, including accounts, transactions, categories, and files.</p>
           </div>
-          
+
           <div className="info-item">
             <h4>Data Validation</h4>
             <p>Every restore includes comprehensive validation to ensure data integrity and schema compatibility.</p>
           </div>
-          
+
           <div className="info-item">
             <h4>Progress Tracking</h4>
             <p>Real-time progress updates show each phase of the restore process from validation to completion.</p>
@@ -424,142 +445,133 @@ const FZIPRestoreView: React.FC = () => {
 
       {/* Enhanced Restore Status Modal */}
       {showRestoreModal && activeRestoreStatus && (
-        <div 
-          className="restore-modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={
-            activeRestoreStatus.status === FZIPRestoreStatus.VALIDATION_PASSED ? "validation-modal-title" :
-            ![FZIPRestoreStatus.AWAITING_CONFIRMATION, FZIPRestoreStatus.VALIDATION_PASSED, FZIPRestoreStatus.COMPLETED, FZIPRestoreStatus.FAILED].includes(activeRestoreStatus.status) ? "progress-modal-title" :
-            "modal-content"
-          }
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              handleCloseModal();
-            }
-          }}
-        >
-          <div className="restore-modal">
-            {/* Summary View - for awaiting confirmation */}
-            {activeRestoreStatus.status === FZIPRestoreStatus.AWAITING_CONFIRMATION && 
-             activeRestoreStatus.summary && (
-              <FZIPRestoreSummary
-                summary={activeRestoreStatus.summary}
-                onConfirm={handleConfirmRestore}
-                onCancel={handleCloseModal}
-                isConfirming={false}
-              />
-            )}
+        <div className="restore-modal-overlay">
+          <dialog
+            className="restore-modal"
+            open
+            aria-labelledby="restore-modal-title"
+          >
+            <div className="restore-modal">
+              {/* Summary View - for awaiting confirmation */}
+              {activeRestoreStatus.status === FZIPRestoreStatus.AWAITING_CONFIRMATION &&
+                activeRestoreStatus.summary && (
+                  <FZIPRestoreSummary
+                    summary={activeRestoreStatus.summary}
+                    onConfirm={handleConfirmRestore}
+                    onCancel={handleCloseModal}
+                    isConfirming={false}
+                  />
+                )}
 
-            {/* Results View - for completed restores */}
-            {activeRestoreStatus.status === FZIPRestoreStatus.COMPLETED && 
-             activeRestoreStatus.restoreResults && (
-              <FZIPRestoreResults
-                results={activeRestoreStatus.restoreResults}
-                onClose={handleCloseModal}
-              />
-            )}
+              {/* Results View - for completed restores */}
+              {activeRestoreStatus.status === FZIPRestoreStatus.COMPLETED &&
+                activeRestoreStatus.restoreResults && (
+                  <FZIPRestoreResults
+                    results={activeRestoreStatus.restoreResults}
+                    onClose={handleCloseModal}
+                  />
+                )}
 
-            {/* Error View - for failed restores */}
-            {activeRestoreStatus.status === FZIPRestoreStatus.FAILED && 
-             activeRestoreStatus.error && (
-              <FZIPRestoreError
-                error={activeRestoreStatus.error}
-                onRetry={handleRetryRestore}
-                onAbort={handleAbortRestore}
-                isRetrying={false}
-              />
-            )}
+              {/* Error View - for failed restores */}
+              {activeRestoreStatus.status === FZIPRestoreStatus.FAILED &&
+                activeRestoreStatus.error && (
+                  <FZIPRestoreError
+                    error={activeRestoreStatus.error}
+                    onRetry={handleRetryRestore}
+                    onAbort={handleAbortRestore}
+                    isRetrying={false}
+                  />
+                )}
 
-            {/* Validation Passed View - ready to start restore */}
-            {activeRestoreStatus.status === FZIPRestoreStatus.VALIDATION_PASSED && (
-              <div className="restore-validation-passed-modal">
-                <div className="validation-header">
-                  <h3 id="validation-modal-title">✅ Restore File Validated</h3>
-                  <p>Your backup file has been validated and is ready to restore.</p>
+              {/* Validation Passed View - ready to start restore */}
+              {activeRestoreStatus.status === FZIPRestoreStatus.VALIDATION_PASSED && (
+                <div className="restore-validation-passed-modal">
+                  <div className="validation-header">
+                    <h3 id="validation-modal-title">✅ Restore File Validated</h3>
+                    <p>Your backup file has been validated and is ready to restore.</p>
+                  </div>
+
+                  <div className="validation-content">
+                    <div className="validation-info">
+                      <p><strong>Phase:</strong> {activeRestoreStatus.currentPhase}</p>
+                      <p><strong>Progress:</strong> {activeRestoreStatus.progress}%</p>
+                      {activeRestoreStatus.validationResults && (
+                        <div className="validation-results">
+                          <p><strong>Validation Results:</strong></p>
+                          <ul>
+                            <li>Profile Empty: {activeRestoreStatus.validationResults.profileEmpty ? '✅' : '❌'}</li>
+                            <li>Schema Valid: {activeRestoreStatus.validationResults.schemaValid ? '✅' : '❌'}</li>
+                            <li>Ready to Restore: {activeRestoreStatus.validationResults.ready ? '✅' : '❌'}</li>
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="validation-actions">
+                    <Button
+                      variant="primary"
+                      onClick={handleConfirmRestore}
+                    >
+                      Start Restore
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={handleCloseModal}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
                 </div>
-                
-                <div className="validation-content">
-                  <div className="validation-info">
-                    <p><strong>Phase:</strong> {activeRestoreStatus.currentPhase}</p>
-                    <p><strong>Progress:</strong> {activeRestoreStatus.progress}%</p>
-                    {activeRestoreStatus.validationResults && (
-                      <div className="validation-results">
-                        <p><strong>Validation Results:</strong></p>
-                        <ul>
-                          <li>Profile Empty: {activeRestoreStatus.validationResults.profileEmpty ? '✅' : '❌'}</li>
-                          <li>Schema Valid: {activeRestoreStatus.validationResults.schemaValid ? '✅' : '❌'}</li>
-                          <li>Ready to Restore: {activeRestoreStatus.validationResults.ready ? '✅' : '❌'}</li>
-                        </ul>
-                      </div>
+              )}
+
+              {/* Loading/Progress View - for other statuses */}
+              {![FZIPRestoreStatus.AWAITING_CONFIRMATION, FZIPRestoreStatus.VALIDATION_PASSED, FZIPRestoreStatus.COMPLETED, FZIPRestoreStatus.FAILED].includes(activeRestoreStatus.status) && (
+                <div className="restore-progress-modal">
+                  <div className="progress-header">
+                    <h3 id="progress-modal-title">Restore in Progress</h3>
+                    <p>Status: {activeRestoreStatus.status.replace('restore_', '').replace('_', ' ')}</p>
+                  </div>
+
+                  <div className="progress-content">
+                    <div className="progress-bar">
+                      <div
+                        className="progress-fill"
+                        style={{ width: `${activeRestoreStatus.progress}%` }}
+                      />
+                    </div>
+                    <span className="progress-text">{activeRestoreStatus.progress}%</span>
+
+                    {activeRestoreStatus.currentPhase && (
+                      <p className="current-phase">
+                        Current phase: {activeRestoreStatus.currentPhase}
+                      </p>
                     )}
                   </div>
-                </div>
-                
-                <div className="validation-actions">
-                  <Button 
-                    variant="primary" 
-                    onClick={handleConfirmRestore}
-                  >
-                    Start Restore
-                  </Button>
-                  <Button 
-                    variant="secondary" 
-                    onClick={handleCloseModal}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            )}
 
-            {/* Loading/Progress View - for other statuses */}
-            {![FZIPRestoreStatus.AWAITING_CONFIRMATION, FZIPRestoreStatus.VALIDATION_PASSED, FZIPRestoreStatus.COMPLETED, FZIPRestoreStatus.FAILED].includes(activeRestoreStatus.status) && (
-              <div className="restore-progress-modal">
-                <div className="progress-header">
-                  <h3 id="progress-modal-title">Restore in Progress</h3>
-                  <p>Status: {activeRestoreStatus.status.replace('restore_', '').replace('_', ' ')}</p>
-                </div>
-                
-                <div className="progress-content">
-                  <div className="progress-bar">
-                    <div 
-                      className="progress-fill" 
-                      style={{ width: `${activeRestoreStatus.progress}%` }}
-                    />
+                  <div className="progress-actions">
+                    <Button variant="secondary" onClick={handleCloseModal}>
+                      Close
+                    </Button>
                   </div>
-                  <span className="progress-text">{activeRestoreStatus.progress}%</span>
-                  
-                  {activeRestoreStatus.currentPhase && (
-                    <p className="current-phase">
-                      Current phase: {activeRestoreStatus.currentPhase}
-                    </p>
-                  )}
                 </div>
-                
-                <div className="progress-actions">
-                  <Button variant="secondary" onClick={handleCloseModal}>
-                    Close
-                  </Button>
-                </div>
-              </div>
-            )}
+              )}
 
-            {/* Close button for modal overlay */}
-            <button 
-              type="button"
-              role="button"
-              className="modal-close-overlay" 
-              onClick={handleCloseModal}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') {
-                  handleCloseModal();
-                }
-              }}
-              aria-label="Close modal"
-              tabIndex={0}
-            />
-          </div>
+              {/* Close button for modal overlay */}
+              <button
+                type="button"
+                className="modal-close-overlay"
+                onClick={handleCloseModal}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    handleCloseModal();
+                  }
+                }}
+                aria-label="Close modal"
+                tabIndex={0}
+              />
+            </div>
+          </dialog>
         </div>
       )}
     </div>

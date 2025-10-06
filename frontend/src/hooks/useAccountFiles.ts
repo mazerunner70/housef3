@@ -1,23 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-    ServiceFile, // Assuming this will be exported from FileService
-    listAssociatedFiles,
-    listUnlinkedFiles,
-    linkFileToAccount,
-    unlinkFileFromAccount
-} from '../../services/FileService'; // Correct path to services
+  ServiceFile, // Assuming this will be exported from FileService
+  listAssociatedFiles,
+  listUnlinkedFiles,
+  linkFileToAccount,
+  unlinkFileFromAccount
+} from '../services/FileService'; // Correct path to services
 
 // Placeholder types - these will need to align with actual backend API response
 // and potentially a FileService.ts
-interface ServiceTransactionFile {
-  // Assuming fields from docs/new_ui_accounts_view.md
-  fileId: string;
-  fileName: string;
-  uploadDate: string; // Or Date/number
-  status?: string; // e.g., "Processed", "Pending"
-  transactionCount?: number;
-  // Fields for unlinked files might be simpler
-}
+// Note: ServiceTransactionFile interface removed as it was unused
 
 export interface UIAssociatedFile {
   id: string;
@@ -37,7 +29,7 @@ export interface UIUnlinkedFile {
 const mapServiceFileToUIAssociatedFile = (serviceFile: ServiceFile): UIAssociatedFile => ({
   id: serviceFile.fileId,
   name: serviceFile.fileName,
-  uploadDate: serviceFile.uploadDate, // TODO: Format if necessary
+  uploadDate: new Date(serviceFile.uploadDate).toLocaleDateString(), // Format date for display
   status: serviceFile.status || 'N/A',
   transactionCount: serviceFile.transactionCount || 0,
 });
@@ -45,7 +37,7 @@ const mapServiceFileToUIAssociatedFile = (serviceFile: ServiceFile): UIAssociate
 const mapServiceFileToUIUnlinkedFile = (serviceFile: ServiceFile): UIUnlinkedFile => ({
   id: serviceFile.fileId,
   name: serviceFile.fileName,
-  uploadDate: serviceFile.uploadDate, // TODO: Format if necessary
+  uploadDate: new Date(serviceFile.uploadDate).toLocaleDateString(), // Format date for display
 });
 
 const useAccountFiles = (accountId: string | null) => {
@@ -55,18 +47,10 @@ const useAccountFiles = (accountId: string | null) => {
   const [error, setError] = useState<string | null>(null);
 
   const fetchFiles = useCallback(async () => {
-    if (!accountId) {
-      // If no accountId, we might still want to fetch unlinked files
-      // Or, if this hook is strictly for an account context, clear associated files
-      setAssociatedFiles([]); 
-      // Decide if unlinked files should be fetched when no accountId is active
-      // For now, let's fetch unlinked files regardless of a selected accountId, as they are user-specific.
-    } else {
-        // Clear associated files before fetching for a new accountId if it changes
-        setAssociatedFiles([]);
-    }
+    // Clear associated files when no accountId or when accountId changes
+    setAssociatedFiles([]);
     // Always fetch unlinked files as they are user-specific, not account-specific
-    setUnlinkedFiles([]); 
+    setUnlinkedFiles([]);
 
     setLoading(true);
     setError(null);
@@ -82,10 +66,10 @@ const useAccountFiles = (accountId: string | null) => {
       const [associatedResult, unlinkedResult] = await Promise.all(promises);
 
       if (accountId && associatedResult) {
-        setAssociatedFiles((associatedResult as ServiceFile[]).map(mapServiceFileToUIAssociatedFile));
+        setAssociatedFiles(associatedResult.map(mapServiceFileToUIAssociatedFile));
       }
       if (unlinkedResult) {
-        setUnlinkedFiles((unlinkedResult as ServiceFile[]).map(mapServiceFileToUIUnlinkedFile));
+        setUnlinkedFiles(unlinkedResult.map(mapServiceFileToUIUnlinkedFile));
       }
 
     } catch (err) {
@@ -102,8 +86,8 @@ const useAccountFiles = (accountId: string | null) => {
 
   const linkFile = useCallback(async (fileId: string, targetAccountId: string) => {
     if (!targetAccountId) {
-        setError('No account selected to link the file to.');
-        return;
+      setError('No account selected to link the file to.');
+      return;
     }
     setLoading(true);
     try {

@@ -4,8 +4,8 @@
  */
 
 import React, { useMemo, useCallback, useEffect, useRef } from 'react';
-import { useWorkflowTracking } from '../../../hooks/useWorkflowTracking';
-import { WorkflowStatus } from '../../../services/WorkflowTrackingService';
+import { useWorkflowTracking } from '../../hooks/useWorkflowTracking';
+import { WorkflowStatus, WorkflowStep } from '../../services/WorkflowTrackingService';
 import './WorkflowProgressModal.css';
 
 interface WorkflowProgressModalProps {
@@ -28,7 +28,7 @@ export const WorkflowProgressModal: React.FC<WorkflowProgressModalProps> = ({
   // Generate unique modal instance ID for logging - only once per component instance
   const modalInstanceId = useRef<string | null>(null);
   if (!modalInstanceId.current) {
-    modalInstanceId.current = `modal_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    modalInstanceId.current = `modal_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     console.log(`🎭 WorkflowProgressModal INITIALIZED (FIRST TIME)`, {
       modalInstanceId: modalInstanceId.current,
       workflowId,
@@ -149,14 +149,14 @@ export const WorkflowProgressModal: React.FC<WorkflowProgressModalProps> = ({
 
     return (
       <div className="step-indicator">
-        {progress.steps.map((step, index) => {
+        {progress.steps.map((step: WorkflowStep, index: number) => {
           const isActive = index === progress.currentStep;
           const isCompleted = index < progress.currentStep;
           const isFailed = progress.status === WorkflowStatus.FAILED && isActive;
 
           return (
             <div
-              key={index}
+              key={step.name || `step-${index}`}
               className={`step ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''} ${isFailed ? 'failed' : ''}`}
             >
               <div className="step-number">

@@ -43,13 +43,14 @@
   line-height: 1.5;
 }
 
-.restore-items {
-  divide-y: 1px solid #e5e7eb;
-}
-
 .restore-item {
   padding: 20px 24px;
   transition: background-color 0.15s ease-in-out;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.restore-item:last-child {
+  border-bottom: none;
 }
 
 .restore-item:hover {
@@ -261,47 +262,47 @@
   .restore-item {
     padding: 16px;
   }
-  
+
   .restore-item__header {
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
   }
-  
+
   .restore-status {
     margin-left: 0;
     align-self: flex-start;
   }
-  
+
   .restore-item__details {
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
   }
-  
+
   .restore-stats {
     flex-direction: column;
     gap: 4px;
   }
-  
+
   .restore-actions {
     justify-content: flex-start;
   }
-  
+
   .progress-info {
     flex-direction: column;
     align-items: stretch;
     gap: 4px;
   }
-  
+
   .progress-bar {
     width: 100%;
   }
-  
+
   .results-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .validation-checks {
     gap: 4px;
   }
@@ -311,12 +312,12 @@
   .restore-list-header {
     padding: 16px;
   }
-  
+
   .restore-actions {
     flex-direction: column;
     align-items: stretch;
   }
-  
+
   .restore-progress {
     flex-direction: column;
     gap: 8px;

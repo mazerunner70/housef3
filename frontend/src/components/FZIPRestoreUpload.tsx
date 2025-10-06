@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { getFZIPRestoreUploadUrl } from '../../services/FZIPService';
+import { getFZIPRestoreUploadUrl } from '../services/FZIPService';
 import Button from './Button';
 import './FZIPRestoreUpload.css';
 
@@ -58,7 +58,7 @@ const FZIPRestoreUpload: React.FC<FZIPRestoreUploadProps> = ({
     }
   };
 
-  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+  const handleDrop = (event: React.DragEvent<HTMLButtonElement>) => {
     event.preventDefault();
     setDragActive(false);
 
@@ -68,12 +68,12 @@ const FZIPRestoreUpload: React.FC<FZIPRestoreUploadProps> = ({
     }
   };
 
-  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+  const handleDragOver = (event: React.DragEvent<HTMLButtonElement>) => {
     event.preventDefault();
     setDragActive(true);
   };
 
-  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+  const handleDragLeave = (event: React.DragEvent<HTMLButtonElement>) => {
     event.preventDefault();
     setDragActive(false);
   };
@@ -90,7 +90,7 @@ const FZIPRestoreUpload: React.FC<FZIPRestoreUploadProps> = ({
 
       // Prepare form data
       const formData = new FormData();
-      Object.entries(fields).forEach(([key, value]) => formData.append(key, value));
+      Object.entries(fields).forEach(([key, value]) => formData.append(key, String(value)));
       formData.append('file', selectedFile);
 
       // Start upload with abort capability
@@ -173,7 +173,7 @@ const FZIPRestoreUpload: React.FC<FZIPRestoreUploadProps> = ({
             <h4>Profile Not Empty</h4>
             <p>Restore requires a completely empty financial profile. Your current profile contains:</p>
           </div>
-          
+
           <div className="profile-summary">
             <div className="profile-summary__grid">
               <div className="summary-item">
@@ -214,12 +214,14 @@ const FZIPRestoreUpload: React.FC<FZIPRestoreUploadProps> = ({
 
       {!profileError && (
         <div className="upload-section">
-          <div
+          <button
+            type="button"
             className={`file-drop-zone ${dragActive ? 'drag-active' : ''} ${selectedFile ? 'has-file' : ''}`}
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onClick={() => fileInputRef.current?.click()}
+            aria-label="Click or drag to upload FZIP file"
           >
             <input
               ref={fileInputRef}
@@ -264,7 +266,7 @@ const FZIPRestoreUpload: React.FC<FZIPRestoreUploadProps> = ({
                 </div>
               </div>
             )}
-          </div>
+          </button>
 
           {isUploading && (
             <div className="upload-progress">
@@ -273,7 +275,7 @@ const FZIPRestoreUpload: React.FC<FZIPRestoreUploadProps> = ({
                 <span>{uploadProgress}%</span>
               </div>
               <div className="progress-bar">
-                <div 
+                <div
                   className="progress-fill"
                   style={{ width: `${uploadProgress}%` }}
                 />

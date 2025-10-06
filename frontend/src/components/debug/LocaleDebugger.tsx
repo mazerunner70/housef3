@@ -48,6 +48,12 @@ const LocaleDebugger: React.FC = () => {
             <div style={{ marginBottom: '20px' }}>
                 <h3>Current Configuration</h3>
                 <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                    <thead>
+                        <tr>
+                            <th style={{ padding: '4px', textAlign: 'left', borderBottom: '1px solid #ccc' }}>Property</th>
+                            <th style={{ padding: '4px', textAlign: 'left', borderBottom: '1px solid #ccc' }}>Value</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         <tr>
                             <td style={{ padding: '4px', fontWeight: 'bold' }}>Active Locale:</td>
@@ -72,6 +78,12 @@ const LocaleDebugger: React.FC = () => {
             <div style={{ marginBottom: '20px' }}>
                 <h3>Sample Formatting</h3>
                 <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                    <thead>
+                        <tr>
+                            <th style={{ padding: '4px', textAlign: 'left', borderBottom: '1px solid #ccc' }}>Format Type</th>
+                            <th style={{ padding: '4px', textAlign: 'left', borderBottom: '1px solid #ccc' }}>Sample Output</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         <tr>
                             <td style={{ padding: '4px', fontWeight: 'bold' }}>Sample Date:</td>

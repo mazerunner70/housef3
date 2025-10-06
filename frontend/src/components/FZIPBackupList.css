@@ -43,13 +43,14 @@
   line-height: 1.5;
 }
 
-.backup-items {
-  divide-y: 1px solid #e5e7eb;
-}
-
 .backup-item {
   padding: 20px 24px;
   transition: background-color 0.15s ease-in-out;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.backup-item:last-child {
+  border-bottom: none;
 }
 
 .backup-item:hover {
@@ -229,39 +230,39 @@
   .backup-item {
     padding: 16px;
   }
-  
+
   .backup-item__header {
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
   }
-  
+
   .backup-status {
     margin-left: 0;
     align-self: flex-start;
   }
-  
+
   .backup-item__details {
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
   }
-  
+
   .backup-stats {
     flex-direction: column;
     gap: 4px;
   }
-  
+
   .backup-actions {
     justify-content: flex-start;
   }
-  
+
   .validation-summary {
     flex-direction: column;
     align-items: flex-start;
     gap: 6px;
   }
-  
+
   .validation-details {
     flex-direction: column;
     gap: 4px;
@@ -272,12 +273,12 @@
   .backup-list-header {
     padding: 16px;
   }
-  
+
   .backup-actions {
     flex-direction: column;
     align-items: stretch;
   }
-  
+
   .progress-bar {
     min-width: 100px;
   }
