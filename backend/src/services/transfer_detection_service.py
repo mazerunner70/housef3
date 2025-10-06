@@ -250,10 +250,11 @@ class TransferDetectionService:
         return all_transfer_pairs
 
     def _get_user_transactions_in_range(self, user_id: str, start_date_ts: int, end_date_ts: int) -> List[Transaction]:
-        """Get all user transactions within a specific date range."""
+        """Get uncategorized user transactions within a specific date range for transfer detection."""
         from utils.db_utils import list_user_transactions
         
-        # Get all transactions within the date range with pagination
+        # Get only uncategorized transactions within the date range with pagination
+        # This prevents detect from returning transactions that are already marked as transfers
         all_transactions = []
         last_evaluated_key = None
         consecutive_empty_batches = 0
@@ -266,7 +267,8 @@ class TransferDetectionService:
                 end_date_ts=end_date_ts,
                 last_evaluated_key=last_evaluated_key,
                 limit=1000,
-                ignore_dup=True  # Only consider non-duplicate transactions for transfer detection
+                ignore_dup=True,  # Only consider non-duplicate transactions for transfer detection
+                uncategorized_only=True  # Only get transactions without categories to avoid returning already marked transfers
             )
             
             all_transactions.extend(batch_result)

@@ -31,6 +31,27 @@ export interface Transaction {
     category?: string;
 }
 
+// Navigation context from URL parameters
+export interface NavigationContext {
+    // Core navigation context
+    view?: string;
+    fileId?: string;
+    transactionId?: string;
+
+    // UI state context
+    filter?: string;
+    sort?: string;
+    page?: string;
+
+    // Extended context
+    categoryId?: string;
+    tagId?: string;
+    dateRange?: string;
+
+    // Generic context for any additional parameters
+    [key: string]: string | undefined;
+}
+
 // Navigation state interface
 export interface NavigationState {
     currentView: ViewType;
@@ -39,6 +60,9 @@ export interface NavigationState {
     selectedTransaction?: Transaction;
     sidebarCollapsed: boolean;
     breadcrumb: BreadcrumbItem[];
+
+    // URL-derived context available to components
+    urlContext: NavigationContext;
 }
 
 // Navigation actions interface
@@ -53,6 +77,12 @@ export interface NavigationActions {
     setBreadcrumb: (breadcrumb: BreadcrumbItem[]) => void;
     toggleSidebar: () => void;
     setSidebarCollapsed: (collapsed: boolean) => void;
+
+    // URL context management
+    setUrlContext: (context: NavigationContext) => void;
+    updateUrlContext: (updates: Partial<NavigationContext>) => void;
+    getContextValue: (key: string) => string | undefined;
+    clearContext: (keys?: string[]) => void;
 }
 
 // Combined store interface
@@ -63,6 +93,7 @@ export const useNavigationStore = create<NavigationStore>((set, get) => ({
     // Initial state - start with just Home, let pages set their own breadcrumb
     currentView: 'account-list',
     sidebarCollapsed: false,
+    urlContext: {},
     breadcrumb: [
         { label: 'Home', action: () => get().goToHome(), level: 0 }
     ],
@@ -202,5 +233,40 @@ export const useNavigationStore = create<NavigationStore>((set, get) => ({
 
     setSidebarCollapsed: (collapsed: boolean) => {
         set({ sidebarCollapsed: collapsed });
+    },
+
+    // URL context management
+    setUrlContext: (context: NavigationContext) => {
+        set({ urlContext: { ...context } });
+    },
+
+    updateUrlContext: (updates: Partial<NavigationContext>) => {
+        set(state => ({
+            urlContext: { ...state.urlContext, ...updates }
+        }));
+    },
+
+    getContextValue: (key: string) => {
+        return get().urlContext[key];
+    },
+
+    clearContext: (keys?: string[]) => {
+        const { urlContext } = get();
+        if (keys) {
+            // Clear specific keys
+            const newContext = { ...urlContext };
+            keys.forEach(key => delete newContext[key]);
+            set({ urlContext: newContext });
+        } else {
+            // Clear all context except core navigation
+            const coreKeys = ['view', 'fileId', 'transactionId'];
+            const newContext: NavigationContext = {};
+            coreKeys.forEach(key => {
+                if (urlContext[key]) {
+                    newContext[key] = urlContext[key];
+                }
+            });
+            set({ urlContext: newContext });
+        }
     }
 }));

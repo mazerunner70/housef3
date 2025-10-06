@@ -1,5 +1,5 @@
 import React from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useSessionRouting } from '@/hooks/useSessionRouting';
 import { useNavigationStore } from '@/stores/navigationStore';
 import AccountListView from '@/new-ui/components/navigation/views/AccountListView';
@@ -27,9 +27,8 @@ import './AccountsPage.css';
  */
 const AccountsPage: React.FC = () => {
     const params = useParams();
-    const [searchParams] = useSearchParams();
     const { accounts } = useAccountsWithStore();
-    const { selectedAccount, selectedFile, selectedTransaction, goToAccountList } = useNavigationStore();
+    const { selectedAccount, selectedFile, selectedTransaction, urlContext, goToAccountList } = useNavigationStore();
 
     // Sync React Router with navigation store using session URL compression
     useSessionRouting();
@@ -37,8 +36,8 @@ const AccountsPage: React.FC = () => {
     // Set up correct breadcrumb when on accounts page
     React.useEffect(() => {
         const { accountId } = params;
-        const fileId = searchParams.get('fileId');
-        const transactionId = searchParams.get('transactionId');
+        const fileId = urlContext.fileId;
+        const transactionId = urlContext.transactionId;
 
         // If we're on the base accounts page (no specific account selected)
         if (!accountId && !fileId && !transactionId) {
