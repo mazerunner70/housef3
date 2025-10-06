@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
-import Login from './new-ui/components/Login';
-import NewUILayout from './new-ui/layouts/NewUILayout';
-import HomePage from './new-ui/pages/HomePage';
-import AccountsPage from './new-ui/pages/AccountsPage';
-import TransactionsPage from '@/new-ui/pages/TransactionsPage';
-import TransfersPage from '@/new-ui/pages/TransfersPage';
-import ImportTransactionsPage from '@/new-ui/pages/ImportTransactionsPage';
-import AccountFileUploadPage from '@/new-ui/pages/AccountFileUploadPage';
-import AnalyticsView from './new-ui/views/AnalyticsView';
-import FZIPManagementView from './new-ui/views/FZIPManagementView';
+import Login from '@/components/Login';
+import NewUILayout from '@/layouts/NewUILayout';
+import HomePage from '@/pages/HomePage';
+import AccountsPage from '@/pages/AccountsPage';
+import TransactionsPage from '@/pages/TransactionsPage';
+import TransfersPage from '@/components/domain/transfers/TransfersPage';
+import ImportTransactionsPage from '@/pages/ImportTransactionsPage';
+import AccountFileUploadPage from '@/pages/AccountFileUploadPage';
+import AnalyticsView from '@/views/AnalyticsView';
+import FZIPManagementView from '@/views/FZIPManagementView';
 import {
   CategoriesPage,
   CategoryDetailPage,
@@ -28,7 +28,7 @@ import {
   FileSummaryPage,
   FileProcessingLogPage,
   FileComparePage
-} from './new-ui/pages/PlaceholderPage';
+} from '@/pages/PlaceholderPage';
 import { getCurrentUser, isAuthenticated, refreshToken } from './services/AuthService';
 import './App.css'
 
