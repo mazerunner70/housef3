@@ -61,7 +61,7 @@ export const usePatternSuggestions = (transactionDescription: string, isOpen: bo
         CategoryService.getCategories()
       ]);
 
-      const sortedCategories = categoriesResponse.sort((a: Category, b: Category) =>
+      const sortedCategories = [...categoriesResponse].sort((a: Category, b: Category) =>
         a.name.localeCompare(b.name)
       );
 
@@ -84,7 +84,7 @@ export const usePatternSuggestions = (transactionDescription: string, isOpen: bo
       );
 
       // Sort by confidence (highest first)
-      const sortedPatterns = enhancedPatterns.sort((a, b) => b.confidence - a.confidence);
+      const sortedPatterns = [...enhancedPatterns].sort((a, b) => b.confidence - a.confidence);
 
       setState(prev => ({
         ...prev,

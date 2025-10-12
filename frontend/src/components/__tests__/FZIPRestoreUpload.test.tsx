@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import FZIPRestoreUpload from '../FZIPRestoreUpload';
@@ -32,7 +31,8 @@ describe('FZIPRestoreUpload component', () => {
     }
     const fetchMock = jest
       .spyOn(globalThis as any, 'fetch')
-      .mockImplementation(async (url: string) => {
+      .mockImplementation(async (...args: unknown[]) => {
+        const url = args[0] as string;
         if (url.startsWith('https://s3.amazonaws.com')) return s3Ok;
         return apiOk;
       });

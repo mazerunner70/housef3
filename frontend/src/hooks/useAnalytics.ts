@@ -8,7 +8,6 @@ import {
   AccountData,
   FinancialHealthData,
   AnalyticsStatusResponse,
-  TimeRange,
   AnalyticType,
   AnalyticsError,
   toDecimal
@@ -82,7 +81,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
   });
 
   // Filters with defaults
-  const [filters, setFiltersState] = useState<AnalyticsFilters>({
+  const [filtersState, setFiltersState] = useState<AnalyticsFilters>({
     timeRange: '12months',
     accountIds: undefined,
     categoryIds: undefined,
@@ -96,6 +95,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
   const refreshing = viewState.refreshing;
   const dataFreshness = viewState.dataFreshness;
   const lastUpdated = viewState.lastUpdated || null;
+  const filters = filtersState;
 
   // Update filters
   const setFilters = useCallback((newFilters: Partial<AnalyticsFilters>) => {
@@ -106,9 +106,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
   const handleError = useCallback((error: any) => {
     let errorMessage = 'An error occurred while fetching analytics data';
 
-    if (error instanceof AnalyticsError) {
-      errorMessage = error.message;
-    } else if (error?.message) {
+    if (error instanceof AnalyticsError || error?.message) {
       errorMessage = error.message;
     }
 
@@ -130,7 +128,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
   // Fetch overview data
   const fetchOverviewData = useCallback(async () => {
     try {
-      const data = await analyticsService.getOverviewData(filters);
+      const data = await analyticsService.getOverviewData(filtersState);
       setOverview({
         cashFlow: data.cashFlow,
         financialHealth: data.financialHealth
@@ -175,12 +173,12 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
       }
       throw error;
     }
-  }, [filters]);
+  }, [filtersState]);
 
   // Fetch categories data
   const fetchCategoriesData = useCallback(async () => {
     try {
-      const data = await analyticsService.getCategoriesData(filters);
+      const data = await analyticsService.getCategoriesData(filtersState);
       setCategories(data.categories);
     } catch (error) {
       // Set placeholder data for development
@@ -195,12 +193,12 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
       }
       throw error;
     }
-  }, [filters]);
+  }, [filtersState]);
 
   // Fetch accounts data
   const fetchAccountsData = useCallback(async () => {
     try {
-      const data = await analyticsService.getAccountsData(filters);
+      const data = await analyticsService.getAccountsData(filtersState);
       setAccounts(data.accounts);
     } catch (error) {
       // Set placeholder data for development
@@ -214,7 +212,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
       }
       throw error;
     }
-  }, [filters]);
+  }, [filtersState]);
 
   // Fetch analytics status
   const fetchStatus = useCallback(async () => {
@@ -250,7 +248,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
   }, [fetchOverviewData, fetchCategoriesData, fetchAccountsData, fetchStatus, handleError]);
 
   // Refresh data
-  const refreshData = useCallback(async (force: boolean = false) => {
+  const refreshData = useCallback(async () => {
     await fetchAllData();
   }, [fetchAllData]);
 

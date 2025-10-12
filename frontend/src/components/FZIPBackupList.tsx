@@ -128,10 +128,15 @@ const FZIPBackupList: React.FC<FZIPBackupListProps> = ({
     }
 
     const { validation } = backup;
-    const qualityColor =
-      validation.overall_quality === 'excellent' ? '#10b981' :
-        validation.overall_quality === 'good' ? '#f59e0b' :
-          validation.overall_quality === 'fair' ? '#f97316' : '#ef4444';
+    const getQualityColor = (quality: string) => {
+      switch (quality) {
+        case 'excellent': return '#10b981';
+        case 'good': return '#f59e0b';
+        case 'fair': return '#f97316';
+        default: return '#ef4444';
+      }
+    };
+    const qualityColor = getQualityColor(validation.overall_quality);
 
     return (
       <div className="backup-validation">
@@ -153,7 +158,7 @@ const FZIPBackupList: React.FC<FZIPBackupListProps> = ({
             <strong>Issues:</strong>
             <ul>
               {validation.issues.map((issue, index) => (
-                <li key={index}>{issue}</li>
+                <li key={`issue-${index}-${issue.slice(0, 20)}`}>{issue}</li>
               ))}
             </ul>
           </div>
@@ -291,8 +296,7 @@ const FZIPBackupList: React.FC<FZIPBackupListProps> = ({
       <ConfirmationModal
         isOpen={deleteConfirmation.isOpen}
         title="Delete Backup"
-        message={`Are you sure you want to delete this backup? ${deleteConfirmation.description ? `"${deleteConfirmation.description}"` : ''
-          } This action cannot be undone.`}
+        message={`Are you sure you want to delete this backup? ${deleteConfirmation.description || ''} This action cannot be undone.`}
         confirmButtonText="Delete"
         cancelButtonText="Cancel"
         onConfirm={handleDelete}

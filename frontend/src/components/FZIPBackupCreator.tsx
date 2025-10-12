@@ -115,7 +115,6 @@ const FZIPBackupCreator: React.FC<FZIPBackupCreatorProps> = ({
             variant="primary"
             onClick={handleCreateBackup}
             disabled={isFormDisabled}
-            loading={isCreating}
           >
             {isCreating ? 'Creating Backup...' : 'Create Backup'}
           </Button>

@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { CategoryRule, MatchCondition } from '../../types/Category';
+import { CategoryRule, MatchCondition } from '../types/Category';
 import { useRealTimeRuleTesting } from '../hooks/useRealTimeRuleTesting';
-import { Transaction } from '../services/TransactionService';
+import { Transaction } from '../schemas/Transaction';
 import './RuleBuilder.css';
 
 interface RuleBuilderProps {
@@ -178,11 +178,11 @@ const RuleBuilder: React.FC<RuleBuilderProps> = ({
                   value={localRule.value}
                   onChange={(e) => handleFieldChange('value', e.target.value)}
                   className="form-input"
-                  placeholder={
-                    isAmountCondition ? 'Enter amount...' :
-                      localRule.condition === 'regex' ? 'Enter regex pattern...' :
-                        'Enter text to match...'
-                  }
+                  placeholder={(() => {
+                    if (isAmountCondition) return 'Enter amount...';
+                    if (localRule.condition === 'regex') return 'Enter regex pattern...';
+                    return 'Enter text to match...';
+                  })()}
                 />
               )}
             </div>
@@ -225,7 +225,11 @@ const RuleBuilder: React.FC<RuleBuilderProps> = ({
           onClick={handleSave}
           disabled={isSaving || !isValidRuleForTesting(localRule)}
         >
-          {isSaving ? '💾 Saving...' : isNew ? '✅ Create Rule' : '💾 Save Changes'}
+          {(() => {
+            if (isSaving) return '💾 Saving...';
+            if (isNew) return '✅ Create Rule';
+            return '💾 Save Changes';
+          })()}
         </button>
       </div>
 
@@ -286,25 +290,28 @@ const TestResultsDialog: React.FC<TestResultsDialogProps> = ({
     }
   };
 
-  const handleDialogKeyDown = (e: React.KeyboardEvent) => {
-    e.stopPropagation();
-  };
 
   return (
-    <div
-      className="test-results-overlay"
-      onClick={onClose}
-      onKeyDown={handleOverlayKeyDown}
-      role="button"
-      tabIndex={0}
-      aria-label="Close dialog"
-    >
-      <div
+    <div className="test-results-overlay">
+      <button
+        className="overlay-close-button"
+        onClick={onClose}
+        onKeyDown={handleOverlayKeyDown}
+        aria-label="Close dialog"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer'
+        }}
+      />
+      <dialog
         className="test-results-dialog"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={handleDialogKeyDown}
-        role="dialog"
-        aria-modal="true"
+        open
         aria-labelledby="dialog-title"
       >
         <div className="dialog-header">
@@ -313,86 +320,102 @@ const TestResultsDialog: React.FC<TestResultsDialogProps> = ({
         </div>
 
         <div className="dialog-content">
-          {isLoading ? (
-            <div className="loading-state">
-              <div className="loading-spinner">🔄</div>
-              <p>Testing rule against transactions...</p>
-            </div>
-          ) : error ? (
-            <div className="error-state">
-              <div className="error-icon">❌</div>
-              <p>Error testing rule: {error}</p>
-            </div>
-          ) : (
-            <div className="results-content">
-              <div className="results-summary">
-                <strong>{transactions.length} matching transactions found</strong>
-                {results?.totalMatches !== undefined ? (
-                  <div style={{ fontSize: '0.9rem', marginTop: '8px', color: '#666' }}>
-                    API reported total matches: {results.totalMatches}
-                  </div>
-                ) : null}
-                {results?.averageConfidence !== undefined ? (
-                  <div style={{ fontSize: '0.9rem', marginTop: '4px', color: '#666' }}>
-                    Average confidence: {Math.round(results.averageConfidence * 100)}%
-                  </div>
-                ) : null}
-                {/* Debug info showing what rule was actually tested */}
-                <div style={{
-                  marginTop: '12px',
-                  padding: '8px',
-                  backgroundColor: '#f0f0f0',
-                  borderRadius: '4px',
-                  fontSize: '0.8rem',
-                  color: '#333'
-                }}>
-                  <strong>Rule tested:</strong> {rule.fieldToMatch} {rule.condition} "{rule.value || '(empty)'}"
-                  {rule.caseSensitive ? ' (case sensitive)' : ''}
-                  {rule.condition === 'amount_between' && rule.amountMin && rule.amountMax ?
-                    ` (between ${rule.amountMin} and ${rule.amountMax})` : ''}
-                  {!rule.value && rule.condition !== 'amount_between' ?
-                    ' ⚠️ Note: Empty value matches all transactions!' : ''}
+          {(() => {
+            if (isLoading) {
+              return (
+                <div className="loading-state">
+                  <div className="loading-spinner">🔄</div>
+                  <p>Testing rule against transactions...</p>
                 </div>
-              </div>
-
-              {transactions.length > 0 ? (
-                <div className="transactions-list">
-                  {transactions.slice(0, 50).map((transaction: Transaction, index: number) => (
-                    <div key={index} className="transaction-item">
-                      <div className="transaction-main">
-                        <span className="transaction-description">
-                          {transaction.description || 'No description'}
-                        </span>
-                        <span className="transaction-amount">
-                          ${Math.abs(Number(transaction.amount) || 0).toFixed(2)}
-                        </span>
-                      </div>
-                      {transaction.date ? (
-                        <div className="transaction-date">
-                          {new Date(transaction.date).toLocaleDateString()}
-                        </div>
-                      ) : null}
-                      {transaction.payee ? (
-                        <div className="transaction-payee">
-                          Payee: {transaction.payee}
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
-                  {transactions.length > 50 ? (
-                    <div className="more-results">
-                      And {transactions.length - 50} more transactions...
+              );
+            }
+            if (error) {
+              return (
+                <div className="error-state">
+                  <div className="error-icon">❌</div>
+                  <p>Error testing rule: {error}</p>
+                </div>
+              );
+            }
+            return (
+              <div className="results-content">
+                <div className="results-summary">
+                  <strong>{transactions.length} matching transactions found</strong>
+                  {results?.totalMatches !== undefined ? (
+                    <div style={{ fontSize: '0.9rem', marginTop: '8px', color: '#666' }}>
+                      API reported total matches: {results.totalMatches}
                     </div>
                   ) : null}
+                  {results?.averageConfidence !== undefined ? (
+                    <div style={{ fontSize: '0.9rem', marginTop: '4px', color: '#666' }}>
+                      Average confidence: {Math.round(results.averageConfidence * 100)}%
+                    </div>
+                  ) : null}
+                  {/* Debug info showing what rule was actually tested */}
+                  <div style={{
+                    marginTop: '12px',
+                    padding: '8px',
+                    backgroundColor: '#f0f0f0',
+                    borderRadius: '4px',
+                    fontSize: '0.8rem',
+                    color: '#333'
+                  }}>
+                    <strong>Rule tested:</strong> {rule.fieldToMatch} {rule.condition} "{rule.value || '(empty)'}"
+                    {rule.caseSensitive ? ' (case sensitive)' : ''}
+                    {(() => {
+                      if (rule.condition === 'amount_between' && rule.amountMin && rule.amountMax) {
+                        return ` (between ${rule.amountMin} and ${rule.amountMax})`;
+                      }
+                      return '';
+                    })()}
+                    {(() => {
+                      if (!rule.value && rule.condition !== 'amount_between') {
+                        return ' ⚠️ Note: Empty value matches all transactions!';
+                      }
+                      return '';
+                    })()}
+                  </div>
                 </div>
-              ) : (
-                <div className="no-matches">
-                  <p>No transactions match this rule.</p>
-                  <small>Try adjusting your matching criteria.</small>
-                </div>
-              )}
-            </div>
-          )}
+
+                {transactions.length > 0 ? (
+                  <div className="transactions-list">
+                    {transactions.slice(0, 50).map((transaction: Transaction, index: number) => (
+                      <div key={`transaction-${transaction.transactionId || index}`} className="transaction-item">
+                        <div className="transaction-main">
+                          <span className="transaction-description">
+                            {transaction.description || 'No description'}
+                          </span>
+                          <span className="transaction-amount">
+                            ${Math.abs(Number(transaction.amount) || 0).toFixed(2)}
+                          </span>
+                        </div>
+                        {transaction.date ? (
+                          <div className="transaction-date">
+                            {new Date(transaction.date).toLocaleDateString()}
+                          </div>
+                        ) : null}
+                        {transaction.payee ? (
+                          <div className="transaction-payee">
+                            Payee: {transaction.payee}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                    {transactions.length > 50 ? (
+                      <div className="more-results">
+                        And {transactions.length - 50} more transactions...
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="no-matches">
+                    <p>No transactions match this rule.</p>
+                    <small>Try adjusting your matching criteria.</small>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         <div className="dialog-actions">
@@ -400,7 +423,7 @@ const TestResultsDialog: React.FC<TestResultsDialogProps> = ({
             Close
           </button>
         </div>
-      </div>
+      </dialog>
     </div>
   );
 };

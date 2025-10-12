@@ -7,7 +7,6 @@ import {
   CategoryCreate,
   CategoryUpdate,
   CategoryRule,
-  CategoryHierarchy,
   TransactionCategoryAssignment,
   CategorySuggestionStrategy,
   RuleTestResponse,
@@ -16,8 +15,7 @@ import {
   RegexValidationResponse,
   CategoryManagementState,
   RuleTestingState,
-  SuggestionReviewState,
-  MatchCondition
+  SuggestionReviewState
 } from '../types/Category';
 import { CategoryService } from '../services/CategoryService';
 
