@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Transaction } from '../../services/TransactionService';
-import { Category, CategoryRule, CategorySuggestionStrategy } from '../../types/Category';
+import { Transaction } from '../schemas/Transaction';
+import { Category, CategoryRule, CategorySuggestionStrategy } from '../types/Category';
 import { useBulkOperations } from '../hooks/useCategories';
 import './BulkOperationsPanel.css';
 
@@ -106,13 +106,31 @@ const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
     }
   }, []);
 
+  // Helper function to find matching rules for a transaction
+  const findMatchingRules = useCallback((transaction: Transaction, ruleIds: string[]) => {
+    return ruleIds.filter(ruleId => {
+      const rule = availableRules.find(r => r.ruleId === ruleId);
+      if (!rule?.enabled) return false;
+      const fieldValue = getFieldValue(transaction, rule.fieldToMatch);
+      return testRuleMatch(fieldValue, rule);
+    });
+  }, [availableRules]);
+
+  // Helper function to format rule descriptions
+  const formatRuleDescriptions = useCallback((ruleIds: string[]) => {
+    return ruleIds.map(ruleId => {
+      const rule = availableRules.find(r => r.ruleId === ruleId);
+      return `${rule?.fieldToMatch || ''} ${rule?.condition || ''}`;
+    });
+  }, [availableRules]);
+
   const handlePreview = useCallback(async () => {
     setShowPreview(true);
     setPreviewResults([]);
 
     try {
       let results: any[] = [];
-      
+
       switch (selectedOperation) {
         case 'categorize':
           if (selectedCategory) {
@@ -129,22 +147,14 @@ const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
 
         case 'apply_rules':
           results = selectedTransactions.map(t => {
-            const matchingRules = Array.from(selectedRules).filter(ruleId => {
-              const rule = availableRules.find(r => r.ruleId === ruleId);
-              if (!rule || !rule.enabled) return false;
-              // Simplified rule matching for preview
-              const fieldValue = getFieldValue(t, rule.fieldToMatch);
-              return testRuleMatch(fieldValue, rule);
-            });
-            
+            const ruleIds = Array.from(selectedRules);
+            const matchingRules = findMatchingRules(t, ruleIds);
+
             return {
               transactionId: t.transactionId,
               description: t.description,
               matchingRules: matchingRules.length,
-              rules: matchingRules.map(ruleId => {
-                const rule = availableRules.find(r => r.ruleId === ruleId);
-                return rule?.fieldToMatch + ' ' + rule?.condition;
-              })
+              rules: formatRuleDescriptions(matchingRules)
             };
           });
           break;
@@ -152,22 +162,22 @@ const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
         case 'generate_suggestions':
           results = selectedTransactions
             .filter(t => !t.category) // Only uncategorized
-            .map((t, index) => ({
+            .map((t) => ({
               transactionId: t.transactionId,
               description: t.description,
               strategy: suggestionStrategy,
-              // Deterministic estimate based on description length and index
+              // Deterministic estimate based on description length
               estimatedSuggestions: Math.min(((t.description?.length || 10) % 3) + 1, 3)
             }));
           break;
 
         case 'confirm_suggestions':
           results = selectedTransactions
-            .filter(t => t.category && t.category.includes('pending')) // Mock pending check
-            .map((t, index) => ({
+            .filter(t => t.category?.includes('pending')) // Mock pending check
+            .map((t) => ({
               transactionId: t.transactionId,
               description: t.description,
-              // Deterministic estimate based on transaction amount and index
+              // Deterministic estimate based on transaction amount
               pendingSuggestions: Math.min(((Number(t.amount) || 0) % 2) + 1, 2)
             }));
           break;
@@ -230,7 +240,7 @@ const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
       // Refresh data and clear selection
       onTransactionUpdate();
       onClearSelection();
-      
+
       // Close panel on success
       setTimeout(() => {
         onClose();
@@ -363,7 +373,7 @@ const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
 
           {selectedOperation === 'apply_rules' && (
             <div className="config-section">
-              <label>Rules to Apply</label>
+              <div className="section-title">Rules to Apply</div>
               <div className="rules-selection">
                 {availableRules.filter(rule => rule.enabled).map(rule => (
                   <label key={rule.ruleId} className="rule-checkbox">
@@ -433,7 +443,7 @@ const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
                   </div>
                   <div className="results-list">
                     {previewResults.slice(0, 5).map((result, index) => (
-                      <div key={index} className="result-item">
+                      <div key={`result-${result.transactionId || index}`} className="result-item">
                         {selectedOperation === 'categorize' && (
                           <>
                             <span className="transaction-desc">{result.description}</span>
@@ -496,10 +506,10 @@ const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
                 </span>
               )}
             </div>
-            
+
             <div className="progress-bar-container">
               <div className="progress-bar">
-                <div 
+                <div
                   className="progress-fill"
                   style={{ width: `${(progress.completed / progress.total) * 100}%` }}
                 />
@@ -514,7 +524,7 @@ const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
                 <summary>❌ {progress.errors.length} Error{progress.errors.length !== 1 ? 's' : ''}</summary>
                 <div className="error-list">
                   {progress.errors.slice(0, 3).map((error, index) => (
-                    <div key={index} className="error-item">{error}</div>
+                    <div key={`error-${index}-${error.slice(0, 20)}`} className="error-item">{error}</div>
                   ))}
                   {progress.errors.length > 3 && (
                     <div className="more-errors">+{progress.errors.length - 3} more errors</div>
@@ -534,7 +544,7 @@ const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
         >
           Cancel
         </button>
-        
+
         <button
           className="execute-btn"
           onClick={handleExecute}
@@ -543,7 +553,7 @@ const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
           {isProcessing ? (
             <>
               <span className="loading-spinner">🔄</span>
-              Processing...
+              {' '}Processing...
             </>
           ) : (
             <>

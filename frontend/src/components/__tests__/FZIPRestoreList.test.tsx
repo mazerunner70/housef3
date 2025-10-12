@@ -1,17 +1,17 @@
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import FZIPRestoreList from '../../components/FZIPRestoreList';
+import FZIPRestoreList from '../FZIPRestoreList';
 
 // Mock AuthService to avoid import.meta in its implementation during tests
-jest.mock('../../../services/AuthService', () => ({
+jest.mock('../../services/AuthService', () => ({
   getCurrentUser: jest.fn(() => ({ token: 'Bearer test', refreshToken: 'r' })),
   refreshToken: jest.fn(async () => ({ token: 'Bearer test2', refreshToken: 'r' })),
   isAuthenticated: jest.fn(() => true),
 }));
 
-jest.mock('../../../services/FZIPService', () => {
-  const actual = jest.requireActual('../../../services/FZIPService');
+jest.mock('../../services/FZIPService', () => {
+  const actual = jest.requireActual('../../services/FZIPService');
   return {
     ...actual,
     listFZIPRestoreJobs: jest.fn(async () => ({
@@ -25,8 +25,8 @@ jest.mock('../../../services/FZIPService', () => {
         },
       ],
     })),
-    startFZIPRestoreProcessing: jest.fn(async () => {}),
-    cancelFZIPRestore: jest.fn(async () => {}),
+    startFZIPRestoreProcessing: jest.fn(async () => { }),
+    cancelFZIPRestore: jest.fn(async () => { }),
     formatRestoreStatus: (s: string) => {
       if (s === 'restore_validation_passed') return 'Validation Passed';
       return s;
@@ -46,9 +46,9 @@ describe('FZIPRestoreList component', () => {
       },
     ];
 
-    const onDelete = jest.fn(async () => {});
+    const onDelete = jest.fn(async () => { });
     const onRefreshStatus = jest.fn(async () => jobs[0] as any);
-    const onStartRestore = jest.fn(async () => {});
+    const onStartRestore = jest.fn(async () => { });
 
     render(
       <FZIPRestoreList

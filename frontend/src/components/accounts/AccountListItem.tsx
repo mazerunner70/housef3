@@ -1,6 +1,6 @@
 import { forwardRef } from 'react';
 import './AccountListItem.css';
-import { Account } from '../../../schemas/Account';
+import { Account } from '../../schemas/Account';
 import { CurrencyDisplay, DateCell } from '../ui';
 
 // This interface should align with UIAccount from types/UIAccount.ts
@@ -36,17 +36,14 @@ const AccountListItem = forwardRef<HTMLDivElement, AccountListItemProps>(({ acco
         <div ref={ref} className="account-list-item">
             <div className="account-info-section">
                 <div className="account-primary">
-                    <h3
+                    <button
                         onClick={handleViewDetailsClick}
-                        onKeyDown={(e) => e.key === 'Enter' && handleViewDetailsClick()}
-                        className="account-name"
+                        className="account-name account-name-button"
                         title="Click to view details"
-                        tabIndex={0}
-                        role="button"
                         aria-label={`View details for ${accountName} account`}
                     >
                         {accountName}
-                    </h3>
+                    </button>
                     <div className="account-type-bank">
                         <span className="account-type">
                             {accountType.charAt(0).toUpperCase() + accountType.slice(1).replace('_', ' ')}

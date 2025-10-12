@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FZIPRestoreJob, FZIPRestoreStatus, formatRestoreStatus } from '../../services/FZIPService';
+import { FZIPRestoreJob, FZIPRestoreStatus, formatRestoreStatus } from '../services/FZIPService';
 import Button from './Button';
 import ConfirmationModal from './ConfirmationModal';
 import StatusBadge from './ui/StatusBadge';

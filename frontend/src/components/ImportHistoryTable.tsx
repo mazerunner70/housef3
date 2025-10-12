@@ -16,8 +16,8 @@ import {
 } from './ui';
 import ImportMappingDialog from './ImportMappingDialog';
 import type { TransactionRow, ColumnMapping } from './ImportStep2Preview';
-import { parseFile } from '../../services/FileService';
-import { listFieldMaps, getFieldMap, createFieldMap, updateFieldMap } from '../../services/FileMapService';
+import { parseFile } from '../services/FileService';
+import { listFieldMaps, getFieldMap, createFieldMap, updateFieldMap } from '../services/FileMapService';
 
 // Types for the component
 export interface FileMetadata {
@@ -144,13 +144,13 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
   }, [availableFileMaps]);
 
   // Convert accounts and field maps to EditableCell options
-  const accountOptions = useMemo((): EditableCellOption[] => 
-    accounts.map(acc => ({ id: acc.id, name: acc.name })), 
+  const accountOptions = useMemo((): EditableCellOption[] =>
+    accounts.map(acc => ({ id: acc.id, name: acc.name })),
     [accounts]
   );
 
-  const fieldMapOptions = useMemo((): EditableCellOption[] => 
-    availableFileMaps.map(fm => ({ id: fm.id, name: fm.name })), 
+  const fieldMapOptions = useMemo((): EditableCellOption[] =>
+    availableFileMaps.map(fm => ({ id: fm.id, name: fm.name })),
     [availableFileMaps]
   );
 
@@ -166,13 +166,13 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
 
       // Handle different data types
       if (typeof aValue === 'string' && typeof bValue === 'string') {
-        return sortConfig.direction === 'ascending' 
+        return sortConfig.direction === 'ascending'
           ? aValue.localeCompare(bValue)
           : bValue.localeCompare(aValue);
       }
-      
+
       if (aValue instanceof Decimal && bValue instanceof Decimal) {
-        return sortConfig.direction === 'ascending' 
+        return sortConfig.direction === 'ascending'
           ? aValue.comparedTo(bValue)
           : bValue.comparedTo(aValue);
       }
@@ -186,7 +186,7 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
   // Handlers for sorting
   const handleSort = (key: keyof FileMetadata) => {
     if (!sortable) return;
-    
+
     let direction: 'ascending' | 'descending' = 'ascending';
     if (sortConfig.key === key && sortConfig.direction === 'ascending') {
       direction = 'descending';
@@ -306,7 +306,7 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
 
   // Handler for completing import from mapping dialog
   const handleCompleteImport = async (
-    mappedData: TransactionRow[], 
+    mappedData: TransactionRow[],
     finalFieldMapToAssociate?: { id: string; name: string }
   ) => {
     try {
@@ -427,7 +427,7 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
   // Row actions
   const getRowActions = (fileId: string): ActionConfig[] => {
     const actions: ActionConfig[] = [];
-    
+
     if (onDeleteFile) {
       actions.push({
         key: 'delete',
@@ -470,13 +470,13 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
           {helpText}
         </div>
       )}
-      
+
       <div className="import-history-table-wrapper">
         <table className="import-history-table">
           <thead>
             <tr>
               {showSelection && <th className="import-history-th">Select</th>}
-              <th 
+              <th
                 className={`import-history-th ${sortable ? 'sortable' : ''}`}
                 onClick={() => handleSort('fileName')}
                 onKeyDown={(e) => {
@@ -491,7 +491,7 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
               >
                 File Name{getSortIndicator('fileName')}
               </th>
-              <th 
+              <th
                 className={`import-history-th ${sortable ? 'sortable' : ''}`}
                 onClick={() => handleSort('accountName')}
                 onKeyDown={(e) => {
@@ -506,7 +506,7 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
               >
                 Account{getSortIndicator('accountName')}
               </th>
-              <th 
+              <th
                 className={`import-history-th ${sortable ? 'sortable' : ''}`}
                 onClick={() => handleSort('uploadDate')}
                 onKeyDown={(e) => {
@@ -523,7 +523,7 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
               </th>
               <th className="import-history-th">Mapping</th>
               <th className="import-history-th">Format</th>
-              <th 
+              <th
                 className={`import-history-th ${sortable ? 'sortable' : ''}`}
                 onClick={() => handleSort('processingStatus')}
                 onKeyDown={(e) => {
@@ -545,7 +545,7 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
           </thead>
           <tbody>
             {sortedHistory.map(file => (
-              <tr 
+              <tr
                 key={file.fileId}
                 className={`import-history-row ${selectedHistoryFileId === file.fileId ? 'selected' : ''}`}
                 onClick={onRowClick ? () => onRowClick(file.fileId) : undefined}
@@ -562,19 +562,19 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
               >
                 {showSelection && (
                   <td className="import-history-td">
-                    <input 
-                      type="radio" 
+                    <input
+                      type="radio"
                       checked={selectedHistoryFileId === file.fileId}
                       onChange={() => onRowClick && onRowClick(file.fileId)}
                       onClick={(e) => e.stopPropagation()}
                     />
                   </td>
                 )}
-                
+
                 <td className="import-history-td">
                   {file.fileName}
                 </td>
-                
+
                 <td className="import-history-td">
                   <EditableCell
                     value={file.accountId || ''}
@@ -588,11 +588,11 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
                     placeholder="Select account"
                   />
                 </td>
-                
+
                 <td className="import-history-td">
                   <DateCell date={file.uploadDate} />
                 </td>
-                
+
                 <td className="import-history-td">
                   <EditableCell
                     value={file.fieldMap?.fileMapId || ''}
@@ -605,7 +605,7 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
                       // Open custom mapping dialog instead of inline editing
                       let currentValue = file.fieldMap?.fileMapId || '';
                       let displayValue = '';
-                      
+
                       if (file.fieldMap?.fileMapId) {
                         // We have a field map ID, use it
                         displayValue = fieldMapsMap.get(file.fieldMap.fileMapId) || file.fieldMap.name || '';
@@ -620,22 +620,22 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
                           displayValue = file.fieldMap.name;
                         }
                       }
-                      
+
                       handleOpenMappingDialog(file.fileId, currentValue, displayValue);
                     }}
                     onEndEdit={handleEndEditMapping}
                     placeholder="Select mapping"
                   />
                 </td>
-                
+
                 <td className="import-history-td">
                   <FileFormatDisplay format={file.fileFormat || 'unknown'} />
                 </td>
-                
+
                 <td className="import-history-td">
                   <StatusBadge status={file.processingStatus || 'UNKNOWN'} />
                 </td>
-                
+
                 <td className="import-history-td">
                   <EditableCell
                     value={decimalToNumber(file.openingBalance)?.toString() || ''}
@@ -649,7 +649,7 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
                     step={0.01}
                   />
                 </td>
-                
+
                 <td className="import-history-td">
                   <EditableCell
                     value={decimalToNumber(file.closingBalance)?.toString() || ''}
@@ -663,7 +663,7 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
                     step={0.01}
                   />
                 </td>
-                
+
                 {showActions && (
                   <td className="import-history-td">
                     <RowActions
@@ -691,8 +691,8 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
               </div>
             </div>
           ) : mappingError ? (
-            <div 
-              className="import-mapping-dialog-overlay" 
+            <div
+              className="import-mapping-dialog-overlay"
               onClick={handleCloseMappingDialog}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') {
@@ -703,8 +703,8 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
               tabIndex={0}
               aria-label="Close dialog"
             >
-              <div 
-                className="import-mapping-dialog" 
+              <div
+                className="import-mapping-dialog"
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => e.stopPropagation()}
                 role="dialog"
@@ -734,9 +734,9 @@ const ImportHistoryTable: React.FC<ImportHistoryTableProps> = ({
               onCompleteImport={handleCompleteImport}
               targetTransactionFields={TARGET_TRANSACTION_FIELDS}
               availableFieldMaps={availableFileMaps}
-              initialFieldMapToLoad={mappingDialogCurrentValue ? { 
-                id: mappingDialogCurrentValue, 
-                name: mappingDialogDisplayValue || mappingDialogCurrentValue 
+              initialFieldMapToLoad={mappingDialogCurrentValue ? {
+                id: mappingDialogCurrentValue,
+                name: mappingDialogDisplayValue || mappingDialogCurrentValue
               } : undefined}
               onLoadFieldMapDetails={handleLoadFieldMapDetails}
               onSaveOrUpdateFieldMap={handleSaveOrUpdateFieldMap}

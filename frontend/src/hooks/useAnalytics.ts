@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import analyticsService from '../../services/AnalyticsService';
+import analyticsService from '../services/AnalyticsService';
 import {
   AnalyticsFilters,
   AnalyticsViewState,
@@ -8,11 +8,10 @@ import {
   AccountData,
   FinancialHealthData,
   AnalyticsStatusResponse,
-  TimeRange,
   AnalyticType,
   AnalyticsError,
   toDecimal
-} from '../../types/Analytics';
+} from '../types/Analytics';
 import { Decimal } from 'decimal.js';
 
 interface UseAnalyticsOptions {
@@ -30,23 +29,23 @@ export interface AnalyticsHookResult {
   categories: CategoryData | null;
   accounts: AccountData | null;
   status: AnalyticsStatusResponse | null;
-  
+
   // State
   loading: boolean;
   error: string | null;
   refreshing: boolean;
   dataFreshness: 'fresh' | 'stale' | 'very_stale';
   lastUpdated: string | null;
-  
+
   // Filters
   filters: AnalyticsFilters;
   setFilters: (filters: Partial<AnalyticsFilters>) => void;
-  
+
   // Actions
   refreshData: (force?: boolean) => Promise<void>;
   refreshAnalytics: (analyticTypes?: AnalyticType[], force?: boolean) => Promise<void>;
   clearError: () => void;
-  
+
   // Utilities
   formatCurrency: (amount: number | Decimal) => string;
   formatPercentage: (value: number | Decimal, total: number | Decimal) => string;
@@ -68,11 +67,11 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
     cashFlow: null,
     financialHealth: null
   });
-  
+
   const [categories, setCategories] = useState<CategoryData | null>(null);
   const [accounts, setAccounts] = useState<AccountData | null>(null);
   const [status, setStatus] = useState<AnalyticsStatusResponse | null>(null);
-  
+
   const [viewState, setViewState] = useState<AnalyticsViewState>({
     loading: false,
     error: undefined,
@@ -82,7 +81,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
   });
 
   // Filters with defaults
-  const [filters, setFiltersState] = useState<AnalyticsFilters>({
+  const [filtersState, setFiltersState] = useState<AnalyticsFilters>({
     timeRange: '12months',
     accountIds: undefined,
     categoryIds: undefined,
@@ -96,6 +95,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
   const refreshing = viewState.refreshing;
   const dataFreshness = viewState.dataFreshness;
   const lastUpdated = viewState.lastUpdated || null;
+  const filters = filtersState;
 
   // Update filters
   const setFilters = useCallback((newFilters: Partial<AnalyticsFilters>) => {
@@ -105,10 +105,8 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
   // Error handling
   const handleError = useCallback((error: any) => {
     let errorMessage = 'An error occurred while fetching analytics data';
-    
-    if (error instanceof AnalyticsError) {
-      errorMessage = error.message;
-    } else if (error?.message) {
+
+    if (error instanceof AnalyticsError || error?.message) {
       errorMessage = error.message;
     }
 
@@ -130,12 +128,12 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
   // Fetch overview data
   const fetchOverviewData = useCallback(async () => {
     try {
-      const data = await analyticsService.getOverviewData(filters);
+      const data = await analyticsService.getOverviewData(filtersState);
       setOverview({
         cashFlow: data.cashFlow,
         financialHealth: data.financialHealth
       });
-      
+
       setViewState(prev => ({
         ...prev,
         lastUpdated: data.lastUpdated,
@@ -175,12 +173,12 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
       }
       throw error;
     }
-  }, [filters]);
+  }, [filtersState]);
 
   // Fetch categories data
   const fetchCategoriesData = useCallback(async () => {
     try {
-      const data = await analyticsService.getCategoriesData(filters);
+      const data = await analyticsService.getCategoriesData(filtersState);
       setCategories(data.categories);
     } catch (error) {
       // Set placeholder data for development
@@ -195,12 +193,12 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
       }
       throw error;
     }
-  }, [filters]);
+  }, [filtersState]);
 
   // Fetch accounts data
   const fetchAccountsData = useCallback(async () => {
     try {
-      const data = await analyticsService.getAccountsData(filters);
+      const data = await analyticsService.getAccountsData(filtersState);
       setAccounts(data.accounts);
     } catch (error) {
       // Set placeholder data for development
@@ -214,7 +212,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
       }
       throw error;
     }
-  }, [filters]);
+  }, [filtersState]);
 
   // Fetch analytics status
   const fetchStatus = useCallback(async () => {
@@ -250,7 +248,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
   }, [fetchOverviewData, fetchCategoriesData, fetchAccountsData, fetchStatus, handleError]);
 
   // Refresh data
-  const refreshData = useCallback(async (force: boolean = false) => {
+  const refreshData = useCallback(async () => {
     await fetchAllData();
   }, [fetchAllData]);
 
@@ -263,7 +261,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
 
     try {
       await analyticsService.refreshAnalytics(analyticTypes, force);
-      
+
       // Wait a moment for computation to start, then refresh data
       setTimeout(() => {
         fetchAllData();
@@ -279,7 +277,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
   const checkFreshness = useCallback(async () => {
     try {
       const freshness = await analyticsService.checkDataFreshness();
-      
+
       let dataFreshness: 'fresh' | 'stale' | 'very_stale' = 'fresh';
       if (freshness.staleDays > 7) {
         dataFreshness = 'very_stale';
@@ -332,23 +330,23 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
     categories,
     accounts,
     status,
-    
+
     // State
     loading,
     error,
     refreshing,
     dataFreshness,
     lastUpdated,
-    
+
     // Filters
     filters,
     setFilters,
-    
+
     // Actions
     refreshData,
     refreshAnalytics,
     clearError,
-    
+
     // Utilities
     formatCurrency,
     formatPercentage,

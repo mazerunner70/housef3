@@ -7,7 +7,6 @@ import {
   CategoryCreate,
   CategoryUpdate,
   CategoryRule,
-  CategoryHierarchy,
   TransactionCategoryAssignment,
   CategorySuggestionStrategy,
   RuleTestResponse,
@@ -16,10 +15,9 @@ import {
   RegexValidationResponse,
   CategoryManagementState,
   RuleTestingState,
-  SuggestionReviewState,
-  MatchCondition
-} from '../../types/Category';
-import { CategoryService } from '../../services/CategoryService';
+  SuggestionReviewState
+} from '../types/Category';
+import { CategoryService } from '../services/CategoryService';
 
 // ===== Core Category Management Hook =====
 
@@ -35,7 +33,7 @@ export const useCategories = () => {
 
   const loadCategories = useCallback(async () => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
-    
+
     try {
       const [categories, hierarchy] = await Promise.all([
         CategoryService.getCategories(),
@@ -60,13 +58,13 @@ export const useCategories = () => {
 
   const createCategory = useCallback(async (categoryData: CategoryCreate): Promise<Category | null> => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
-    
+
     try {
       const newCategory = await CategoryService.createCategory(categoryData);
-      
+
       // Refresh categories and hierarchy
       await loadCategories();
-      
+
       return newCategory;
     } catch (error) {
       setState(prev => ({
@@ -80,20 +78,20 @@ export const useCategories = () => {
 
   const updateCategory = useCallback(async (categoryId: string, categoryData: CategoryUpdate): Promise<Category | null> => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
-    
+
     try {
       const updatedCategory = await CategoryService.updateCategory(categoryId, categoryData);
-      
+
       // Update local state
       setState(prev => ({
         ...prev,
-        categories: prev.categories.map(cat => 
+        categories: prev.categories.map(cat =>
           cat.categoryId === categoryId ? updatedCategory : cat
         ),
         selectedCategory: prev.selectedCategory?.categoryId === categoryId ? updatedCategory : prev.selectedCategory,
         isLoading: false
       }));
-      
+
       return updatedCategory;
     } catch (error) {
       setState(prev => ({
@@ -107,10 +105,10 @@ export const useCategories = () => {
 
   const deleteCategory = useCallback(async (categoryId: string): Promise<boolean> => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
-    
+
     try {
       await CategoryService.deleteCategory(categoryId);
-      
+
       // Remove from local state
       setState(prev => ({
         ...prev,
@@ -118,10 +116,10 @@ export const useCategories = () => {
         selectedCategory: prev.selectedCategory?.categoryId === categoryId ? null : prev.selectedCategory,
         isLoading: false
       }));
-      
+
       // Refresh hierarchy
       await loadCategories();
-      
+
       return true;
     } catch (error) {
       setState(prev => ({
@@ -173,7 +171,7 @@ export const useRuleTesting = () => {
 
   useEffect(() => {
     debouncedTestRef.current = CategoryService.createDebouncedRuleTest(500);
-    
+
     return () => {
       if (state.debounceTimer) {
         clearTimeout(state.debounceTimer);
@@ -183,7 +181,7 @@ export const useRuleTesting = () => {
 
   const testRule = useCallback(async (rule: CategoryRule): Promise<RuleTestResponse | null> => {
     setState(prev => ({ ...prev, isTestingRule: true, currentRule: rule }));
-    
+
     try {
       const results = await CategoryService.testRule(rule);
       setState(prev => ({
@@ -205,9 +203,9 @@ export const useRuleTesting = () => {
 
   const testRuleDebounced = useCallback((rule: CategoryRule) => {
     if (!debouncedTestRef.current) return;
-    
+
     setState(prev => ({ ...prev, currentRule: rule }));
-    
+
     debouncedTestRef.current(rule, (results: RuleTestResponse) => {
       setState(prev => ({
         ...prev,
@@ -248,7 +246,7 @@ export const useCategoryPreview = () => {
   const previewCategoryMatches = useCallback(async (categoryId: string, includeInherited: boolean = true) => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const results = await CategoryService.previewCategoryMatches(categoryId, includeInherited);
       setPreviewData(results);
@@ -282,12 +280,12 @@ export const usePatternGeneration = () => {
   const [error, setError] = useState<string | null>(null);
 
   const generatePattern = useCallback(async (
-    descriptions: string[], 
+    descriptions: string[],
     patternType: 'simple' | 'regex' = 'simple'
   ): Promise<PatternGenerationResponse | null> => {
     setIsGenerating(true);
     setError(null);
-    
+
     try {
       const result = await CategoryService.generatePattern(descriptions, patternType);
       setLastGenerated(result);
@@ -341,12 +339,12 @@ export const useSuggestionReview = () => {
   const loadSuggestions = useCallback(async (transactionId: string) => {
     try {
       const suggestions = await CategoryService.getTransactionCategorySuggestions(transactionId);
-      
+
       setState(prev => ({
         ...prev,
         pendingSuggestions: new Map(prev.pendingSuggestions.set(transactionId, suggestions))
       }));
-      
+
       return suggestions;
     } catch (error) {
       console.error('Error loading suggestions:', error);
@@ -361,12 +359,12 @@ export const useSuggestionReview = () => {
   ): Promise<boolean> => {
     try {
       await CategoryService.confirmCategorySuggestions(transactionId, confirmedCategoryIds, primaryCategoryId);
-      
+
       // Remove from pending suggestions
       setState(prev => {
         const newPendingSuggestions = new Map(prev.pendingSuggestions);
         newPendingSuggestions.delete(transactionId);
-        
+
         return {
           ...prev,
           pendingSuggestions: newPendingSuggestions,
@@ -374,7 +372,7 @@ export const useSuggestionReview = () => {
           currentTransactionId: null
         };
       });
-      
+
       return true;
     } catch (error) {
       console.error('Error confirming suggestions:', error);
@@ -385,25 +383,25 @@ export const useSuggestionReview = () => {
   const rejectSuggestion = useCallback(async (transactionId: string, categoryId: string): Promise<boolean> => {
     try {
       await CategoryService.rejectCategorySuggestion(transactionId, categoryId);
-      
+
       // Update local suggestions
       setState(prev => {
         const suggestions = prev.pendingSuggestions.get(transactionId) || [];
         const updatedSuggestions = suggestions.filter(s => s.categoryId !== categoryId);
-        
+
         const newPendingSuggestions = new Map(prev.pendingSuggestions);
         if (updatedSuggestions.length > 0) {
           newPendingSuggestions.set(transactionId, updatedSuggestions);
         } else {
           newPendingSuggestions.delete(transactionId);
         }
-        
+
         return {
           ...prev,
           pendingSuggestions: newPendingSuggestions
         };
       });
-      
+
       return true;
     } catch (error) {
       console.error('Error rejecting suggestion:', error);
@@ -435,7 +433,7 @@ export const useSuggestionReview = () => {
     if (transactionId) {
       return state.pendingSuggestions.get(transactionId)?.length || 0;
     }
-    
+
     return Array.from(state.pendingSuggestions.values()).reduce((total, suggestions) => total + suggestions.length, 0);
   }, [state.pendingSuggestions]);
 

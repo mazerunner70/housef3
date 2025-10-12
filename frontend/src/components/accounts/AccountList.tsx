@@ -1,7 +1,7 @@
 import { useRef, useImperativeHandle, forwardRef } from 'react';
 import AccountListItem from './AccountListItem'; // Import AccountListItem
 import './AccountList.css'; // Import the CSS file
-import { Account } from '../../../schemas/Account'; // Import Account type
+import { Account } from '../../schemas/Account'; // Import Account type
 
 // REMOVE LOCAL ACCOUNT DEFINITION
 // interface Account {

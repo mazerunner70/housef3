@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react';
-import { signIn } from '../../services/AuthService';
+import { signIn } from '../services/AuthService';
 import './Login.css';
 
 interface LoginProps {
@@ -14,15 +14,15 @@ const Login = ({ onLoginSuccess }: LoginProps) => {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    
+
     if (!username || !password) {
       setError('Please enter both username and password');
       return;
     }
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       await signIn(username, password);
       onLoginSuccess();
@@ -47,7 +47,7 @@ const Login = ({ onLoginSuccess }: LoginProps) => {
             disabled={loading}
           />
         </div>
-        
+
         <div className="form-group">
           <label htmlFor="password">Password</label>
           <input
@@ -58,9 +58,9 @@ const Login = ({ onLoginSuccess }: LoginProps) => {
             disabled={loading}
           />
         </div>
-        
+
         {error && <div className="error-message">{error}</div>}
-        
+
         <button type="submit" className="login-button" disabled={loading}>
           {loading ? 'Signing in...' : 'Sign In'}
         </button>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { AnalyticsHookResult } from '../hooks/useAnalytics';
-import { fromDecimal, toDecimal } from '../../types/Analytics';
+import { fromDecimal, toDecimal } from '../types/Analytics';
 
 interface OverallAnalyticsTabProps {
   analytics: AnalyticsHookResult;
@@ -17,7 +17,7 @@ const OverallAnalyticsTab: React.FC<OverallAnalyticsTabProps> = ({ analytics }) 
   console.log("overall score", financialHealth?.overallScore);
   console.log("component scores", financialHealth?.componentScores);
 
-  
+
   // Helper function to safely format currency with fallback
   const safeCurrencyFormat = (value: any) => {
     try {
@@ -27,7 +27,7 @@ const OverallAnalyticsTab: React.FC<OverallAnalyticsTabProps> = ({ analytics }) 
       return '$-.--';
     }
   };
-  
+
   // Helper function to safely convert from decimal with fallback
   const safeFromDecimal = (value: any) => {
     try {
@@ -49,7 +49,7 @@ const OverallAnalyticsTab: React.FC<OverallAnalyticsTabProps> = ({ analytics }) 
           </div>
           <small>This period</small>
         </div>
-        
+
         <div className="analytics-card">
           <h3>Total Expenses</h3>
           <div className="analytics-metric negative">
@@ -57,7 +57,7 @@ const OverallAnalyticsTab: React.FC<OverallAnalyticsTabProps> = ({ analytics }) 
           </div>
           <small>This period</small>
         </div>
-        
+
         <div className="analytics-card">
           <h3>Net Cash Flow</h3>
           <div className={`analytics-metric ${cashFlow && cashFlow.netCashFlow && safeFromDecimal(cashFlow.netCashFlow) >= 0 ? 'positive' : 'negative'}`}>
@@ -65,7 +65,7 @@ const OverallAnalyticsTab: React.FC<OverallAnalyticsTabProps> = ({ analytics }) 
           </div>
           <small>Income - Expenses</small>
         </div>
-        
+
         <div className="analytics-card">
           <h3>Financial Health Score</h3>
           <div className="analytics-metric">
@@ -123,13 +123,13 @@ const OverallAnalyticsTab: React.FC<OverallAnalyticsTabProps> = ({ analytics }) 
               <div className="analytics-metric">{Math.round(safeFromDecimal(financialHealth.componentScores.cashFlowScore || toDecimal(0)))}/100</div>
               <small>Income vs Expenses</small>
             </div>
-            
+
             <div className="analytics-card">
               <h4>Expense Stability</h4>
               <div className="analytics-metric">{Math.round(safeFromDecimal(financialHealth.componentScores.expenseStabilityScore || toDecimal(0)))}/100</div>
               <small>Spending Consistency</small>
             </div>
-            
+
             <div className="analytics-card">
               <h4>Emergency Fund</h4>
               <div className="analytics-metric">{Math.round(safeFromDecimal(financialHealth.componentScores.emergencyFundScore || toDecimal(0)))}/100</div>
@@ -184,7 +184,7 @@ const OverallAnalyticsTab: React.FC<OverallAnalyticsTabProps> = ({ analytics }) 
                 </ul>
               </div>
             )}
-            
+
             {financialHealth.riskFactors && financialHealth.riskFactors.length > 0 && (
               <div className="analytics-card">
                 <h4>⚠️ Risk Factors</h4>
