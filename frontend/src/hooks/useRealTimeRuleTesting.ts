@@ -8,30 +8,30 @@ import {
   PatternGenerationResponse,
   RegexValidationResponse,
   MatchCondition
-} from '../../types/Category';
-import { CategoryService } from '../../services/CategoryService';
+} from '../types/Category';
+import { CategoryService } from '../services/CategoryService';
 
 export interface RealTimeTestingState {
   // Rule being tested
   currentRule: Partial<CategoryRule> | null;
-  
+
   // Test results
   testResults: RuleTestResponse | null;
   isTestingRule: boolean;
   lastTestTime: number | null;
-  
+
   // Live preview settings
   isLivePreviewEnabled: boolean;
   debounceDelay: number;
-  
+
   // Pattern validation
   validationResult: RegexValidationResponse | null;
   isValidatingPattern: boolean;
-  
+
   // Smart suggestions
   smartSuggestions: PatternGenerationResponse | null;
   isGeneratingSuggestions: boolean;
-  
+
   // Error handling
   error: string | null;
 }
@@ -73,7 +73,7 @@ export const useRealTimeRuleTesting = (options: UseRealTimeRuleTestingOptions = 
   // Initialize debounced test function
   useEffect(() => {
     debouncedTestFnRef.current = CategoryService.createDebouncedRuleTest(debounceDelay);
-    
+
     return () => {
       if (testDebounceRef.current) {
         clearTimeout(testDebounceRef.current);
@@ -88,17 +88,17 @@ export const useRealTimeRuleTesting = (options: UseRealTimeRuleTestingOptions = 
 
   const testRuleImmediate = useCallback(async (rule: CategoryRule): Promise<RuleTestResponse | null> => {
     setState(prev => ({ ...prev, isTestingRule: true, error: null }));
-    
+
     try {
       const results = await CategoryService.testRule(rule, maxPreviewResults);
-      
+
       setState(prev => ({
         ...prev,
         testResults: results,
         isTestingRule: false,
         lastTestTime: Date.now()
       }));
-      
+
       return results;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to test rule';
@@ -117,11 +117,11 @@ export const useRealTimeRuleTesting = (options: UseRealTimeRuleTestingOptions = 
       return;
     }
 
-    setState(prev => ({ 
-      ...prev, 
+    setState(prev => ({
+      ...prev,
       currentRule: rule,
       isTestingRule: true,
-      error: null 
+      error: null
     }));
 
     // Clear existing timeout
@@ -155,13 +155,13 @@ export const useRealTimeRuleTesting = (options: UseRealTimeRuleTestingOptions = 
 
     try {
       const validation = await CategoryService.validateRegexPattern(pattern);
-      
+
       setState(prev => ({
         ...prev,
         validationResult: validation,
         isValidatingPattern: false
       }));
-      
+
       return validation;
     } catch (error) {
       setState(prev => ({
@@ -197,7 +197,7 @@ export const useRealTimeRuleTesting = (options: UseRealTimeRuleTestingOptions = 
   // ===== Smart Pattern Generation =====
 
   const generateSmartSuggestions = useCallback(async (
-    descriptions: string[], 
+    descriptions: string[],
     patternType: 'simple' | 'regex' = 'simple'
   ): Promise<PatternGenerationResponse | null> => {
     if (!descriptions.length) return null;
@@ -206,13 +206,13 @@ export const useRealTimeRuleTesting = (options: UseRealTimeRuleTestingOptions = 
 
     try {
       const suggestions = await CategoryService.generatePattern(descriptions, patternType);
-      
+
       setState(prev => ({
         ...prev,
         smartSuggestions: suggestions,
         isGeneratingSuggestions: false
       }));
-      
+
       return suggestions;
     } catch (error) {
       setState(prev => ({
@@ -243,7 +243,7 @@ export const useRealTimeRuleTesting = (options: UseRealTimeRuleTestingOptions = 
     if (field === 'value' || field === 'condition') {
       const condition = field === 'condition' ? value : updatedRule.condition;
       const pattern = field === 'value' ? value : updatedRule.value;
-      
+
       if (condition && pattern) {
         validatePatternDebounced(pattern, condition);
       }
@@ -267,7 +267,7 @@ export const useRealTimeRuleTesting = (options: UseRealTimeRuleTestingOptions = 
 
   const toggleLivePreview = useCallback((enabled: boolean) => {
     setState(prev => ({ ...prev, isLivePreviewEnabled: enabled }));
-    
+
     // If enabling and we have a valid rule, test it
     if (enabled && state.currentRule && isValidCategoryRule(state.currentRule)) {
       testRuleDebounced(state.currentRule);
@@ -297,7 +297,7 @@ export const useRealTimeRuleTesting = (options: UseRealTimeRuleTestingOptions = 
 
   const getConfidenceLevel = useCallback((): 'high' | 'medium' | 'low' | null => {
     if (!state.testResults) return null;
-    
+
     const confidence = state.testResults.confidence;
     if (confidence >= 0.8) return 'high';
     if (confidence >= 0.6) return 'medium';
@@ -355,33 +355,33 @@ export const useRealTimeRuleTesting = (options: UseRealTimeRuleTestingOptions = 
   return {
     // State
     ...state,
-    
+
     // Core testing
     testRuleImmediate,
     testRuleDebounced,
-    
+
     // Pattern validation
     validatePattern,
     validatePatternDebounced,
     isPatternValid,
     getValidationMessage,
-    
+
     // Smart suggestions
     generateSmartSuggestions,
     getSuggestionText,
     getSuggestionConfidence,
-    
+
     // Rule management
     updateRuleField,
     setRule,
     createDefaultRule,
     buildRuleFromSuggestion,
-    
+
     // Controls
     toggleLivePreview,
     clearResults,
     clearError,
-    
+
     // Utility
     getMatchCount,
     getConfidenceLevel,
@@ -440,7 +440,7 @@ export const useRuleFormWithRealTimeTesting = (initialRule?: Partial<CategoryRul
   const getFormValidation = useCallback(() => {
     const rule = realTimeTesting.currentRule;
     if (!rule) return { isValid: false, errors: ['No rule specified'] };
-    
+
     return CategoryService.validateRule(rule);
   }, [realTimeTesting.currentRule]);
 

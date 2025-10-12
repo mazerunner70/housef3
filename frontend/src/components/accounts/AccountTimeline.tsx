@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Account } from '../../../schemas/Account';
+import { Account } from '../../schemas/Account';
 import './AccountTimeline.css';
 
 interface AccountTimelineProps {

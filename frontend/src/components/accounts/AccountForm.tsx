@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './AccountForm.css'; // Import the CSS file
-import { AccountCreate } from '../../../schemas/Account'; // Import updated type
-import { AccountType, Currency } from '../../../schemas/Account';
+import { AccountCreate } from '../../schemas/Account'; // Import updated type
+import { AccountType, Currency } from '../../schemas/Account';
 import { Decimal } from 'decimal.js';
 
 // Form now uses AccountCreate directly from schemas/Account.ts

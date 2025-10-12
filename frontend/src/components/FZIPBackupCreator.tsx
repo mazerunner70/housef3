@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FZIPBackupType, InitiateFZIPBackupRequest } from '../../services/FZIPService';
+import { FZIPBackupType, InitiateFZIPBackupRequest } from '../services/FZIPService';
 import Button from './Button';
 import './FZIPBackupCreator.css';
 
@@ -31,7 +31,7 @@ const FZIPBackupCreator: React.FC<FZIPBackupCreatorProps> = ({
       };
 
       await onCreateBackup(request);
-      
+
       // Reset form after successful creation
       setDescription('');
     } catch (error) {
@@ -133,7 +133,7 @@ const FZIPBackupCreator: React.FC<FZIPBackupCreatorProps> = ({
             <li><strong>Transaction Files:</strong> Original transaction files and metadata</li>
             <li><strong>Relationships:</strong> All data relationships and referential integrity</li>
           </ul>
-          
+
           <div className="backup-requirements">
             <h4>Backup Requirements:</h4>
             <ul>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { CategoryService } from '../../services/CategoryService';
-import { Category } from '../../types/Category';
+import { CategoryService } from '../services/CategoryService';
+import { Category } from '../types/Category';
 
 export interface PatternSuggestionItem {
   pattern: string;
@@ -51,9 +51,9 @@ export const usePatternSuggestions = (transactionDescription: string, isOpen: bo
 
   const loadSuggestions = async () => {
     if (!transactionDescription) return;
-    
+
     setState(prev => ({ ...prev, isLoading: true, error: null }));
-    
+
     try {
       // Load both suggestions and categories in parallel
       const [categoryResponse, categoriesResponse] = await Promise.all([
@@ -61,7 +61,7 @@ export const usePatternSuggestions = (transactionDescription: string, isOpen: bo
         CategoryService.getCategories()
       ]);
 
-      const sortedCategories = categoriesResponse.sort((a: Category, b: Category) => 
+      const sortedCategories = categoriesResponse.sort((a: Category, b: Category) =>
         a.name.localeCompare(b.name)
       );
 
@@ -71,7 +71,7 @@ export const usePatternSuggestions = (transactionDescription: string, isOpen: bo
         patterns.map(async (pattern) => {
           try {
             const matchPreview = await CategoryService.previewPatternMatches(
-              pattern.pattern, 
+              pattern.pattern,
               pattern.field,
               pattern.condition
             );
@@ -96,9 +96,9 @@ export const usePatternSuggestions = (transactionDescription: string, isOpen: bo
 
     } catch (error) {
       console.error('Error loading pattern suggestions:', error);
-      setState(prev => ({ 
-        ...prev, 
-        isLoading: false, 
+      setState(prev => ({
+        ...prev,
+        isLoading: false,
         error: error instanceof Error ? error.message : 'Unknown error'
       }));
     }

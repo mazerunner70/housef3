@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FZIPBackupJob, FZIPBackupStatus, formatBackupStatus } from '../../services/FZIPService';
+import { FZIPBackupJob, FZIPBackupStatus, formatBackupStatus } from '../services/FZIPService';
 import Button from './Button';
 import ConfirmationModal from './ConfirmationModal';
 import StatusBadge from './ui/StatusBadge';
@@ -39,7 +39,7 @@ const FZIPBackupList: React.FC<FZIPBackupListProps> = ({
       FZIPBackupStatus.BUILDING_FZIP_PACKAGE,
       FZIPBackupStatus.UPLOADING
     ];
-    
+
     const processingIds = backups
       .filter(backup => processingStatuses.includes(backup.status))
       .map(backup => backup.backupId);
@@ -51,8 +51,8 @@ const FZIPBackupList: React.FC<FZIPBackupListProps> = ({
         for (const backupId of processingIds) {
           try {
             const updatedBackup = await onRefreshStatus(backupId);
-            if (updatedBackup.status === FZIPBackupStatus.COMPLETED || 
-                updatedBackup.status === FZIPBackupStatus.FAILED) {
+            if (updatedBackup.status === FZIPBackupStatus.COMPLETED ||
+              updatedBackup.status === FZIPBackupStatus.FAILED) {
               setProcessingBackups(prev => {
                 const newSet = new Set(prev);
                 newSet.delete(backupId);
@@ -89,16 +89,16 @@ const FZIPBackupList: React.FC<FZIPBackupListProps> = ({
 
   const formatFileSize = (bytes?: number): string => {
     if (!bytes) return 'Unknown';
-    
+
     const units = ['B', 'KB', 'MB', 'GB'];
     let size = bytes;
     let unitIndex = 0;
-    
+
     while (size >= 1024 && unitIndex < units.length - 1) {
       size /= 1024;
       unitIndex++;
     }
-    
+
     return `${size.toFixed(1)} ${units[unitIndex]}`;
   };
 
@@ -128,26 +128,26 @@ const FZIPBackupList: React.FC<FZIPBackupListProps> = ({
     }
 
     const { validation } = backup;
-    const qualityColor = 
+    const qualityColor =
       validation.overall_quality === 'excellent' ? '#10b981' :
-      validation.overall_quality === 'good' ? '#f59e0b' :
-      validation.overall_quality === 'fair' ? '#f97316' : '#ef4444';
+        validation.overall_quality === 'good' ? '#f59e0b' :
+          validation.overall_quality === 'fair' ? '#f97316' : '#ef4444';
 
     return (
       <div className="backup-validation">
         <div className="validation-summary">
-          <span 
+          <span
             className="quality-badge"
             style={{ backgroundColor: qualityColor }}
           >
             {validation.overall_quality.toUpperCase()}
           </span>
           <span className="validation-scores">
-            Integrity: {validation.data_integrity_score}% | 
+            Integrity: {validation.data_integrity_score}% |
             Completeness: {validation.completeness_score}%
           </span>
         </div>
-        
+
         {validation.issues.length > 0 && (
           <div className="validation-issues">
             <strong>Issues:</strong>
@@ -158,7 +158,7 @@ const FZIPBackupList: React.FC<FZIPBackupListProps> = ({
             </ul>
           </div>
         )}
-        
+
         <div className="validation-details">
           <span>Files: {validation.files_processed - validation.files_failed}/{validation.files_processed}</span>
           <span>Compression: {validation.compression_ratio.toFixed(1)}%</span>
@@ -205,9 +205,9 @@ const FZIPBackupList: React.FC<FZIPBackupListProps> = ({
                   )}
                 </div>
               </div>
-              
+
               <div className="backup-status">
-                <StatusBadge 
+                <StatusBadge
                   status={formatBackupStatus(backup.status)}
                   variant={getStatusVariant(backup.status)}
                 />
@@ -217,7 +217,7 @@ const FZIPBackupList: React.FC<FZIPBackupListProps> = ({
             {processingBackups.has(backup.backupId) && (
               <div className="backup-progress">
                 <div className="progress-bar">
-                  <div 
+                  <div
                     className="progress-fill"
                     style={{ width: `${backup.progress}%` }}
                   />
@@ -258,7 +258,7 @@ const FZIPBackupList: React.FC<FZIPBackupListProps> = ({
                     Download
                   </Button>
                 )}
-                
+
                 <Button
                   variant="danger"
                   size="compact"
@@ -291,9 +291,8 @@ const FZIPBackupList: React.FC<FZIPBackupListProps> = ({
       <ConfirmationModal
         isOpen={deleteConfirmation.isOpen}
         title="Delete Backup"
-        message={`Are you sure you want to delete this backup? ${
-          deleteConfirmation.description ? `"${deleteConfirmation.description}"` : ''
-        } This action cannot be undone.`}
+        message={`Are you sure you want to delete this backup? ${deleteConfirmation.description ? `"${deleteConfirmation.description}"` : ''
+          } This action cannot be undone.`}
         confirmButtonText="Delete"
         cancelButtonText="Cancel"
         onConfirm={handleDelete}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Transaction } from '../../services/TransactionService';
+import { Transaction } from '../services/TransactionService';
 import { Category, TransactionCategoryAssignment, CategorySuggestionStrategy } from '../../types/Category';
 import { useSuggestionReview } from '../hooks/useCategories';
 import './CategorySuggestionReviewModal.css';
@@ -37,7 +37,7 @@ const CategorySuggestionReviewModal: React.FC<CategorySuggestionReviewModalProps
       // Sort suggestions by confidence (highest first)
       const sortedSuggestions = [...categorySuggestions].sort((a, b) => b.confidence - a.confidence);
       const highest = sortedSuggestions[0];
-      
+
       setPrimaryCategory(highest.categoryId);
       setConfirmedCategories(new Set([highest.categoryId]));
       setRejectedCategories(new Set());
@@ -94,7 +94,7 @@ const CategorySuggestionReviewModal: React.FC<CategorySuggestionReviewModalProps
   const handleRejectSuggestion = useCallback(async (categoryId: string) => {
     try {
       await onRejectSuggestion(categoryId);
-      
+
       // Update local state
       setRejectedCategories(prev => new Set(prev).add(categoryId));
       setConfirmedCategories(prev => {
@@ -102,7 +102,7 @@ const CategorySuggestionReviewModal: React.FC<CategorySuggestionReviewModalProps
         newSet.delete(categoryId);
         return newSet;
       });
-      
+
       if (primaryCategory === categoryId) {
         const remaining = Array.from(confirmedCategories).filter(id => id !== categoryId);
         setPrimaryCategory(remaining.length > 0 ? remaining[0] : '');
@@ -115,7 +115,7 @@ const CategorySuggestionReviewModal: React.FC<CategorySuggestionReviewModalProps
   const handleConfirmAll = useCallback(() => {
     const highConfidenceSuggestions = categorySuggestions.filter(s => s.confidence >= 0.8);
     const categoryIds = highConfidenceSuggestions.map(s => s.categoryId);
-    
+
     setConfirmedCategories(new Set(categoryIds));
     if (categoryIds.length > 0 && !categoryIds.includes(primaryCategory)) {
       setPrimaryCategory(categoryIds[0]);
@@ -183,7 +183,7 @@ const CategorySuggestionReviewModal: React.FC<CategorySuggestionReviewModalProps
             ✕
           </button>
         </div>
-        
+
         <div className="modal-content">
           {/* Transaction Summary */}
           <div className="transaction-summary">
@@ -196,7 +196,7 @@ const CategorySuggestionReviewModal: React.FC<CategorySuggestionReviewModalProps
                 {showDetails ? '👁️ Hide' : '👁️‍🗨️ Show'} Details
               </button>
             </div>
-            
+
             <div className="transaction-info">
               <div className="info-row primary">
                 <span className="info-label">Description:</span>
@@ -212,7 +212,7 @@ const CategorySuggestionReviewModal: React.FC<CategorySuggestionReviewModalProps
                 <span className="info-label">Date:</span>
                 <span className="info-value">{formatDate(transaction.date)}</span>
               </div>
-              
+
               {showDetails && (
                 <>
                   {transaction.payee && (
@@ -235,7 +235,7 @@ const CategorySuggestionReviewModal: React.FC<CategorySuggestionReviewModalProps
               )}
             </div>
           </div>
-          
+
           {/* Quick Actions */}
           <div className="quick-actions">
             <button
@@ -262,7 +262,7 @@ const CategorySuggestionReviewModal: React.FC<CategorySuggestionReviewModalProps
                 Select categories to confirm. Multiple categories can be assigned to one transaction.
               </p>
             </div>
-            
+
             {visibleSuggestions.length === 0 ? (
               <div className="no-suggestions">
                 <span className="no-suggestions-icon">🚫</span>
@@ -277,10 +277,10 @@ const CategorySuggestionReviewModal: React.FC<CategorySuggestionReviewModalProps
                   const confidenceColor = getConfidenceColor(suggestion.confidence);
                   const isConfirmed = confirmedCategories.has(suggestion.categoryId);
                   const isPrimary = primaryCategory === suggestion.categoryId;
-                  
+
                   return (
-                    <div 
-                      key={suggestion.categoryId} 
+                    <div
+                      key={suggestion.categoryId}
                       className={`suggestion-option ${isConfirmed ? 'confirmed' : ''} ${isPrimary ? 'primary' : ''}`}
                     >
                       <div className="option-main">
@@ -291,17 +291,17 @@ const CategorySuggestionReviewModal: React.FC<CategorySuggestionReviewModalProps
                             onChange={() => handleCategoryToggle(suggestion.categoryId)}
                             disabled={isProcessing}
                           />
-                          
+
                           <div className="category-details">
                             <div className="category-header">
-                              <span 
+                              <span
                                 className="category-name"
                                 style={{ borderLeftColor: categoryColor }}
                               >
                                 {categoryName}
                               </span>
                               <div className="confidence-indicator">
-                                <span 
+                                <span
                                   className={`confidence-badge ${confidenceLevel}`}
                                   style={{ backgroundColor: confidenceColor }}
                                 >
@@ -310,7 +310,7 @@ const CategorySuggestionReviewModal: React.FC<CategorySuggestionReviewModalProps
                                 <span className="confidence-level">{confidenceLevel}</span>
                               </div>
                             </div>
-                            
+
                             <div className="suggestion-metadata">
                               <span className="suggestion-status">
                                 Status: {suggestion.status}
@@ -324,7 +324,7 @@ const CategorySuggestionReviewModal: React.FC<CategorySuggestionReviewModalProps
                                 <span className="manual-indicator">Manual</span>
                               )}
                             </div>
-                            
+
                             {suggestion.assignedAt && (
                               <div className="suggestion-timing">
                                 Suggested: {formatDate(suggestion.assignedAt)}
@@ -332,7 +332,7 @@ const CategorySuggestionReviewModal: React.FC<CategorySuggestionReviewModalProps
                             )}
                           </div>
                         </label>
-                        
+
                         <div className="option-actions">
                           {isConfirmed && (
                             <label className="primary-radio">
@@ -346,7 +346,7 @@ const CategorySuggestionReviewModal: React.FC<CategorySuggestionReviewModalProps
                               <span className="radio-label">Primary</span>
                             </label>
                           )}
-                          
+
                           <button
                             className="reject-suggestion-btn"
                             onClick={() => handleRejectSuggestion(suggestion.categoryId)}
@@ -387,19 +387,19 @@ const CategorySuggestionReviewModal: React.FC<CategorySuggestionReviewModalProps
             </div>
           )}
         </div>
-        
+
         {/* Modal Actions */}
         <div className="modal-actions">
-          <button 
-            className="cancel-btn" 
+          <button
+            className="cancel-btn"
             onClick={onClose}
             disabled={isProcessing}
           >
             Cancel
           </button>
-          
-          <button 
-            className="confirm-btn" 
+
+          <button
+            className="confirm-btn"
             onClick={handleConfirmSuggestions}
             disabled={isProcessing || confirmedCategories.size === 0 || !primaryCategory}
           >

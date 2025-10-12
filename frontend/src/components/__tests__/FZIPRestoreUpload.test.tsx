@@ -1,10 +1,10 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import FZIPRestoreUpload from '../../components/FZIPRestoreUpload';
+import FZIPRestoreUpload from '../FZIPRestoreUpload';
 
 // Mock service calls used by the component
-jest.mock('../../../services/FZIPService', () => ({
+jest.mock('../../services/FZIPService', () => ({
   getFZIPRestoreUploadUrl: jest.fn(async () => ({
     restoreId: 'rid',
     url: 'https://s3.amazonaws.com/bucket',
@@ -33,9 +33,9 @@ describe('FZIPRestoreUpload component', () => {
     const fetchMock = jest
       .spyOn(globalThis as any, 'fetch')
       .mockImplementation(async (url: string) => {
-      if (url.startsWith('https://s3.amazonaws.com')) return s3Ok;
-      return apiOk;
-    });
+        if (url.startsWith('https://s3.amazonaws.com')) return s3Ok;
+        return apiOk;
+      });
 
     // Click Start Restore to trigger upload
     fireEvent.click(screen.getByText(/start restore/i));

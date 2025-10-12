@@ -10,7 +10,7 @@ import {
   startFZIPRestoreProcessing,
   getFZIPRestoreUploadUrl,
   cancelFZIPRestore
-} from '../../services/FZIPService';
+} from '../services/FZIPService';
 
 export interface UseFZIPRestoreResult {
   restoreJobs: FZIPRestoreJob[];
@@ -43,14 +43,14 @@ export const useFZIPRestore = (): UseFZIPRestoreResult => {
 
   const loadRestoreJobs = useCallback(async (reset: boolean = false) => {
     if (isLoading) return;
-    
+
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const currentKey = reset ? undefined : lastEvaluatedKey;
       const response = await listFZIPRestoreJobs(limit, currentKey);
-      
+
       // Defensive check for response structure
       if (response && response.restoreJobs && Array.isArray(response.restoreJobs)) {
         if (reset) {
@@ -58,7 +58,7 @@ export const useFZIPRestore = (): UseFZIPRestoreResult => {
         } else {
           setRestoreJobs(prev => [...prev, ...response.restoreJobs]);
         }
-        
+
         setLastEvaluatedKey(response.nextEvaluatedKey);
         setHasMore(!!response.nextEvaluatedKey);
       } else {
@@ -81,14 +81,14 @@ export const useFZIPRestore = (): UseFZIPRestoreResult => {
 
   const refreshRestoreJobs = useCallback(async (): Promise<FZIPRestoreJob[]> => {
     if (isLoading) return restoreJobs;
-    
+
     setIsLoading(true);
     setError(null);
     setLastEvaluatedKey(undefined);
-    
+
     try {
       const response = await listFZIPRestoreJobs(limit, undefined);
-      
+
       // Defensive check for response structure
       if (response && response.restoreJobs && Array.isArray(response.restoreJobs)) {
         setRestoreJobs(response.restoreJobs);
@@ -162,7 +162,7 @@ export const useFZIPRestore = (): UseFZIPRestoreResult => {
 
   const deleteRestoreJob = useCallback(async (restoreId: string): Promise<void> => {
     setError(null);
-    
+
     try {
       await deleteFZIPRestoreJob(restoreId);
       setRestoreJobs(prev => prev.filter(job => job.jobId !== restoreId));
@@ -175,17 +175,17 @@ export const useFZIPRestore = (): UseFZIPRestoreResult => {
 
   const getRestoreStatus = useCallback(async (restoreId: string): Promise<FZIPRestoreJob> => {
     setError(null);
-    
+
     try {
       const updatedJob = await getFZIPRestoreStatus(restoreId);
-      
+
       // Update the restore job in our local state
       setRestoreJobs(prev =>
         prev.map(job =>
           job.jobId === restoreId ? updatedJob : job
         )
       );
-      
+
       return updatedJob;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to get restore status';
@@ -196,10 +196,10 @@ export const useFZIPRestore = (): UseFZIPRestoreResult => {
 
   const startRestoreProcessing = useCallback(async (restoreId: string): Promise<void> => {
     setError(null);
-    
+
     try {
       await startFZIPRestoreProcessing(restoreId);
-      
+
       // Update the restore job status to processing
       setRestoreJobs(prev =>
         prev.map(job =>

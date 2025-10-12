@@ -1,6 +1,6 @@
 import { forwardRef } from 'react';
 import './AccountListItem.css';
-import { Account } from '../../../schemas/Account';
+import { Account } from '../../schemas/Account';
 import { CurrencyDisplay, DateCell } from '../ui';
 
 // This interface should align with UIAccount from types/UIAccount.ts

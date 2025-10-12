@@ -7,8 +7,8 @@ import {
   TransactionViewItem,
   CategoryInfo,
   TransactionListResponse,
-} from '../../services/TransactionService';
-import { listAccounts, Account } from '../../services/AccountService';
+} from '../services/TransactionService';
+import { listAccounts, Account } from '../services/AccountService';
 import { Decimal } from 'decimal.js';
 
 // Transform the response to match TransactionViewItem format
@@ -22,20 +22,20 @@ const transformAccountTransactions = (response: TransactionListResponse, categor
       type: (tx.debitOrCredit === 'DEBIT' ? 'expense' : 'income') as 'income' | 'expense' | 'transfer',
     })) || [];
   }
-  
+
   // Create a map of category IDs to category info
   const categoriesMap = new Map<string, CategoryInfo>();
   categories.forEach(cat => {
     categoriesMap.set(cat.categoryId, cat);
   });
-  
+
   // Transform transactions to include full category info
   return response.transactions.map(tx => {
     let category: CategoryInfo | undefined = undefined;
     if (tx.category) {
       category = categoriesMap.get(tx.category);
     }
-    
+
     return {
       ...tx,
       id: tx.transactionId,

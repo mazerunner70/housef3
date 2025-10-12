@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Transaction } from '../../services/TransactionService';
+import { Transaction } from '../services/TransactionService';
 import { Category, CategoryRule, CategorySuggestionStrategy } from '../../types/Category';
 import { useBulkOperations } from '../hooks/useCategories';
 import './BulkOperationsPanel.css';
@@ -112,7 +112,7 @@ const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
 
     try {
       let results: any[] = [];
-      
+
       switch (selectedOperation) {
         case 'categorize':
           if (selectedCategory) {
@@ -136,7 +136,7 @@ const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
               const fieldValue = getFieldValue(t, rule.fieldToMatch);
               return testRuleMatch(fieldValue, rule);
             });
-            
+
             return {
               transactionId: t.transactionId,
               description: t.description,
@@ -230,7 +230,7 @@ const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
       // Refresh data and clear selection
       onTransactionUpdate();
       onClearSelection();
-      
+
       // Close panel on success
       setTimeout(() => {
         onClose();
@@ -496,10 +496,10 @@ const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
                 </span>
               )}
             </div>
-            
+
             <div className="progress-bar-container">
               <div className="progress-bar">
-                <div 
+                <div
                   className="progress-fill"
                   style={{ width: `${(progress.completed / progress.total) * 100}%` }}
                 />
@@ -534,7 +534,7 @@ const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
         >
           Cancel
         </button>
-        
+
         <button
           className="execute-btn"
           onClick={handleExecute}

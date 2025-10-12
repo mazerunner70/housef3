@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  FZIPRestoreJob, 
-  FZIPRestoreStatus, 
+import {
+  FZIPRestoreJob,
+  FZIPRestoreStatus,
   getFZIPRestoreStatus,
   confirmRestoreStart,
   retryRestore,
-  deleteFZIPRestoreJob 
-} from '../../services/FZIPService';
+  deleteFZIPRestoreJob
+} from '../services/FZIPService';
 
 export interface UseFZIPRestoreStatusResult {
   status: FZIPRestoreJob | null;
@@ -33,12 +33,12 @@ const getPollingInterval = (status: FZIPRestoreStatus, elapsedTime: number): num
   };
 
   const baseInterval = intervals[status] || 5000;
-  
+
   // Slow down after 1 minute of processing to avoid overwhelming the server
   if (status === FZIPRestoreStatus.PROCESSING && elapsedTime > 60000) {
     return Math.min(baseInterval * 2, 2000);
   }
-  
+
   return baseInterval;
 };
 
@@ -159,7 +159,7 @@ export const useFZIPRestoreStatus = (restoreId: string | null): UseFZIPRestoreSt
 
         const elapsedTime = Date.now() - startTime;
         const nextInterval = getPollingInterval(response.status, elapsedTime);
-        
+
         if (nextInterval > 0 && isMounted) {
           intervalId = window.setTimeout(poll, nextInterval);
         } else {

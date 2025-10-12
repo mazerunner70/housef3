@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { CategoryRule, MatchCondition } from '../../types/Category';
 import { useRealTimeRuleTesting } from '../hooks/useRealTimeRuleTesting';
-import { Transaction } from '../../services/TransactionService';
+import { Transaction } from '../services/TransactionService';
 import './RuleBuilder.css';
 
 interface RuleBuilderProps {
@@ -57,9 +57,9 @@ const RuleBuilder: React.FC<RuleBuilderProps> = ({
     setShowTestResults(true);
   }, [localRule, testRuleImmediate]);
 
-  const isAmountCondition = localRule.condition === 'amount_greater' || 
-                           localRule.condition === 'amount_less' || 
-                           localRule.condition === 'amount_between';
+  const isAmountCondition = localRule.condition === 'amount_greater' ||
+    localRule.condition === 'amount_less' ||
+    localRule.condition === 'amount_between';
 
   const conditionOptions = [
     { value: 'contains', label: 'Contains', description: 'Text contains the specified value' },
@@ -103,7 +103,7 @@ const RuleBuilder: React.FC<RuleBuilderProps> = ({
           {/* Rule Configuration */}
           <div className="form-section">
             <h4>📋 Rule Configuration</h4>
-            
+
             <div className="form-row">
               <div className="form-group">
                 <label htmlFor="rule-field">Field to Match</label>
@@ -149,7 +149,7 @@ const RuleBuilder: React.FC<RuleBuilderProps> = ({
               <label htmlFor="rule-value">
                 {isAmountCondition ? 'Amount Value' : 'Pattern Value'}
               </label>
-              
+
               {localRule.condition === 'amount_between' ? (
                 <div className="amount-range-inputs">
                   <input
@@ -180,8 +180,8 @@ const RuleBuilder: React.FC<RuleBuilderProps> = ({
                   className="form-input"
                   placeholder={
                     isAmountCondition ? 'Enter amount...' :
-                    localRule.condition === 'regex' ? 'Enter regex pattern...' :
-                    'Enter text to match...'
+                      localRule.condition === 'regex' ? 'Enter regex pattern...' :
+                        'Enter text to match...'
                   }
                 />
               )}
@@ -198,7 +198,7 @@ const RuleBuilder: React.FC<RuleBuilderProps> = ({
                 {isTestingRule ? '🔄 Testing...' : '🧪 Test'}
               </button>
               <small className="form-help">
-                {!isValidRuleForTesting(localRule) 
+                {!isValidRuleForTesting(localRule)
                   ? 'Enter a value or amount to test the rule'
                   : 'Test this rule against existing transactions'
                 }
@@ -218,7 +218,7 @@ const RuleBuilder: React.FC<RuleBuilderProps> = ({
         >
           Cancel
         </button>
-        
+
         <button
           type="button"
           className="save-btn"
@@ -291,16 +291,16 @@ const TestResultsDialog: React.FC<TestResultsDialogProps> = ({
   };
 
   return (
-    <div 
-      className="test-results-overlay" 
+    <div
+      className="test-results-overlay"
       onClick={onClose}
       onKeyDown={handleOverlayKeyDown}
       role="button"
       tabIndex={0}
       aria-label="Close dialog"
     >
-      <div 
-        className="test-results-dialog" 
+      <div
+        className="test-results-dialog"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleDialogKeyDown}
         role="dialog"
@@ -311,7 +311,7 @@ const TestResultsDialog: React.FC<TestResultsDialogProps> = ({
           <h3 id="dialog-title">🧪 Test Results</h3>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
-        
+
         <div className="dialog-content">
           {isLoading ? (
             <div className="loading-state">
@@ -328,33 +328,33 @@ const TestResultsDialog: React.FC<TestResultsDialogProps> = ({
               <div className="results-summary">
                 <strong>{transactions.length} matching transactions found</strong>
                 {results?.totalMatches !== undefined ? (
-                  <div style={{fontSize: '0.9rem', marginTop: '8px', color: '#666'}}>
+                  <div style={{ fontSize: '0.9rem', marginTop: '8px', color: '#666' }}>
                     API reported total matches: {results.totalMatches}
                   </div>
                 ) : null}
                 {results?.averageConfidence !== undefined ? (
-                  <div style={{fontSize: '0.9rem', marginTop: '4px', color: '#666'}}>
+                  <div style={{ fontSize: '0.9rem', marginTop: '4px', color: '#666' }}>
                     Average confidence: {Math.round(results.averageConfidence * 100)}%
                   </div>
                 ) : null}
                 {/* Debug info showing what rule was actually tested */}
                 <div style={{
-                  marginTop: '12px', 
-                  padding: '8px', 
-                  backgroundColor: '#f0f0f0', 
+                  marginTop: '12px',
+                  padding: '8px',
+                  backgroundColor: '#f0f0f0',
                   borderRadius: '4px',
                   fontSize: '0.8rem',
                   color: '#333'
                 }}>
                   <strong>Rule tested:</strong> {rule.fieldToMatch} {rule.condition} "{rule.value || '(empty)'}"
                   {rule.caseSensitive ? ' (case sensitive)' : ''}
-                  {rule.condition === 'amount_between' && rule.amountMin && rule.amountMax ? 
+                  {rule.condition === 'amount_between' && rule.amountMin && rule.amountMax ?
                     ` (between ${rule.amountMin} and ${rule.amountMax})` : ''}
-                  {!rule.value && rule.condition !== 'amount_between' ? 
+                  {!rule.value && rule.condition !== 'amount_between' ?
                     ' ⚠️ Note: Empty value matches all transactions!' : ''}
                 </div>
               </div>
-              
+
               {transactions.length > 0 ? (
                 <div className="transactions-list">
                   {transactions.slice(0, 50).map((transaction: Transaction, index: number) => (
@@ -394,7 +394,7 @@ const TestResultsDialog: React.FC<TestResultsDialogProps> = ({
             </div>
           )}
         </div>
-        
+
         <div className="dialog-actions">
           <button className="close-dialog-btn" onClick={onClose}>
             Close

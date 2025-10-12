@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import analyticsService from '../../services/AnalyticsService';
+import analyticsService from '../services/AnalyticsService';
 import {
   AnalyticsFilters,
   AnalyticsViewState,
@@ -12,7 +12,7 @@ import {
   AnalyticType,
   AnalyticsError,
   toDecimal
-} from '../../types/Analytics';
+} from '../types/Analytics';
 import { Decimal } from 'decimal.js';
 
 interface UseAnalyticsOptions {
@@ -30,23 +30,23 @@ export interface AnalyticsHookResult {
   categories: CategoryData | null;
   accounts: AccountData | null;
   status: AnalyticsStatusResponse | null;
-  
+
   // State
   loading: boolean;
   error: string | null;
   refreshing: boolean;
   dataFreshness: 'fresh' | 'stale' | 'very_stale';
   lastUpdated: string | null;
-  
+
   // Filters
   filters: AnalyticsFilters;
   setFilters: (filters: Partial<AnalyticsFilters>) => void;
-  
+
   // Actions
   refreshData: (force?: boolean) => Promise<void>;
   refreshAnalytics: (analyticTypes?: AnalyticType[], force?: boolean) => Promise<void>;
   clearError: () => void;
-  
+
   // Utilities
   formatCurrency: (amount: number | Decimal) => string;
   formatPercentage: (value: number | Decimal, total: number | Decimal) => string;
@@ -68,11 +68,11 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
     cashFlow: null,
     financialHealth: null
   });
-  
+
   const [categories, setCategories] = useState<CategoryData | null>(null);
   const [accounts, setAccounts] = useState<AccountData | null>(null);
   const [status, setStatus] = useState<AnalyticsStatusResponse | null>(null);
-  
+
   const [viewState, setViewState] = useState<AnalyticsViewState>({
     loading: false,
     error: undefined,
@@ -105,7 +105,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
   // Error handling
   const handleError = useCallback((error: any) => {
     let errorMessage = 'An error occurred while fetching analytics data';
-    
+
     if (error instanceof AnalyticsError) {
       errorMessage = error.message;
     } else if (error?.message) {
@@ -135,7 +135,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
         cashFlow: data.cashFlow,
         financialHealth: data.financialHealth
       });
-      
+
       setViewState(prev => ({
         ...prev,
         lastUpdated: data.lastUpdated,
@@ -263,7 +263,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
 
     try {
       await analyticsService.refreshAnalytics(analyticTypes, force);
-      
+
       // Wait a moment for computation to start, then refresh data
       setTimeout(() => {
         fetchAllData();
@@ -279,7 +279,7 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
   const checkFreshness = useCallback(async () => {
     try {
       const freshness = await analyticsService.checkDataFreshness();
-      
+
       let dataFreshness: 'fresh' | 'stale' | 'very_stale' = 'fresh';
       if (freshness.staleDays > 7) {
         dataFreshness = 'very_stale';
@@ -332,23 +332,23 @@ export const useAnalytics = (options: UseAnalyticsOptions = {}): AnalyticsHookRe
     categories,
     accounts,
     status,
-    
+
     // State
     loading,
     error,
     refreshing,
     dataFreshness,
     lastUpdated,
-    
+
     // Filters
     filters,
     setFilters,
-    
+
     // Actions
     refreshData,
     refreshAnalytics,
     clearError,
-    
+
     // Utilities
     formatCurrency,
     formatPercentage,

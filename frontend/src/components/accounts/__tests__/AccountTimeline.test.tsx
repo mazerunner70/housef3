@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import AccountTimeline from '../AccountTimeline';
-import { Account } from '../../../../schemas/Account';
+import { Account } from '../../../schemas/Account';
 import Decimal from 'decimal.js';
 
 describe('AccountTimeline', () => {

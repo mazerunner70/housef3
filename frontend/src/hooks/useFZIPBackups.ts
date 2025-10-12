@@ -9,7 +9,7 @@ import {
   listFZIPBackups,
   deleteFZIPBackup,
   downloadFZIPBackup
-} from '../../services/FZIPService';
+} from '../services/FZIPService';
 
 export interface UseFZIPBackupsResult {
   backups: FZIPBackupJob[];
@@ -34,14 +34,14 @@ export const useFZIPBackups = (): UseFZIPBackupsResult => {
 
   const loadBackups = useCallback(async (reset: boolean = false) => {
     if (isLoading) return;
-    
+
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const currentOffset = reset ? 0 : offset;
       const response = await listFZIPBackups(limit, currentOffset);
-      
+
       // Defensive check for response structure
       if (response && response.backups && Array.isArray(response.backups)) {
         if (reset) {
@@ -51,7 +51,7 @@ export const useFZIPBackups = (): UseFZIPBackupsResult => {
           setBackups(prev => [...prev, ...response.backups]);
           setOffset(prev => prev + response.backups.length);
         }
-        
+
         setHasMore(response.hasMore || false);
       } else {
         // Handle malformed response
@@ -84,15 +84,15 @@ export const useFZIPBackups = (): UseFZIPBackupsResult => {
 
   const createBackup = useCallback(async (request: InitiateFZIPBackupRequest = {}): Promise<string> => {
     setError(null);
-    
+
     try {
       const response = await initiateFZIPBackup(request);
-      
+
       // Defensive check for response
       if (!response || !response.backupId) {
         throw new Error('Invalid response from backup service');
       }
-      
+
       // Add new backup to the beginning of the list with initial status
       const newBackup: FZIPBackupJob = {
         backupId: response.backupId,
@@ -102,7 +102,7 @@ export const useFZIPBackups = (): UseFZIPBackupsResult => {
         progress: 0,
         description: request.description
       };
-      
+
       setBackups(prev => [newBackup, ...prev]);
       return response.backupId;
     } catch (err) {
@@ -121,7 +121,7 @@ export const useFZIPBackups = (): UseFZIPBackupsResult => {
 
   const deleteBackup = useCallback(async (backupId: string): Promise<void> => {
     setError(null);
-    
+
     try {
       await deleteFZIPBackup(backupId);
       setBackups(prev => prev.filter(backup => backup.backupId !== backupId));
@@ -134,7 +134,7 @@ export const useFZIPBackups = (): UseFZIPBackupsResult => {
 
   const downloadBackup = useCallback(async (backupId: string, filename?: string): Promise<void> => {
     setError(null);
-    
+
     try {
       await downloadFZIPBackup(backupId, filename);
     } catch (err) {
@@ -146,17 +146,17 @@ export const useFZIPBackups = (): UseFZIPBackupsResult => {
 
   const getBackupStatus = useCallback(async (backupId: string): Promise<FZIPBackupJob> => {
     setError(null);
-    
+
     try {
       const updatedBackup = await getFZIPBackupStatus(backupId);
-      
+
       // Update the backup in our local state
-      setBackups(prev => 
-        prev.map(backup => 
+      setBackups(prev =>
+        prev.map(backup =>
           backup.backupId === backupId ? updatedBackup : backup
         )
       );
-      
+
       return updatedBackup;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to get backup status';

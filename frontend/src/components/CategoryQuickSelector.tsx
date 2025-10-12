@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { CategoryService } from '../../services/CategoryService';
+import { CategoryService } from '../services/CategoryService';
 import { Category, MatchCondition } from '../../types/Category';
 import './CategoryQuickSelector.css';
 
@@ -87,7 +87,7 @@ const CategoryQuickSelector: React.FC<CategoryQuickSelectorProps> = ({
 
   const loadQuickSuggestions = async () => {
     if (!transactionDescription) return;
-    
+
     setIsLoadingSuggestions(true);
     try {
       const suggestions = await CategoryService.getQuickCategorySuggestions(transactionDescription);
@@ -109,7 +109,7 @@ const CategoryQuickSelector: React.FC<CategoryQuickSelectorProps> = ({
     if (!category) return;
 
     setSelectedCategoryForRule(categoryId);
-    
+
     // Check if we should offer rule creation
     if (!category.rules || category.rules.length === 0) {
       // Suggest creating a rule for this category
@@ -138,7 +138,7 @@ const CategoryQuickSelector: React.FC<CategoryQuickSelectorProps> = ({
       if (suggestions.suggestedPatterns.length > 0) {
         const bestPattern = suggestions.suggestedPatterns[0];
         setSuggestedPattern(bestPattern.pattern);
-        
+
         // Get match count preview
         const matchPreview = await CategoryService.previewPatternMatches(bestPattern.pattern, 'description');
         setPatternMatchCount(matchPreview.matchCount);
@@ -162,7 +162,7 @@ const CategoryQuickSelector: React.FC<CategoryQuickSelectorProps> = ({
     try {
       // First assign the category
       onCategorySelect(transactionId, selectedCategoryForRule);
-      
+
       // Then create the rule
       await CategoryService.addRuleToCategory(selectedCategoryForRule, {
         fieldToMatch: 'description',
@@ -214,29 +214,29 @@ const CategoryQuickSelector: React.FC<CategoryQuickSelectorProps> = ({
             <div className="rule-creation-panel">
               <div className="rule-creation-header">
                 <h4>Create Rule for Category</h4>
-                <button 
+                <button
                   className="close-button"
                   onClick={() => setShowRuleCreation(false)}
                 >
                   ✕
                 </button>
               </div>
-              
+
               <div className="suggested-rule">
                 <p><strong>Suggested Pattern:</strong> "{suggestedPattern}"</p>
                 <p className="match-count">
                   This pattern will match {patternMatchCount} existing transactions
                 </p>
               </div>
-              
+
               <div className="rule-actions">
-                <button 
+                <button
                   className="create-rule-button"
                   onClick={handleCreateWithRule}
                 >
                   Assign & Create Rule
                 </button>
-                <button 
+                <button
                   className="just-assign-button"
                   onClick={handleJustAssign}
                 >
@@ -251,7 +251,7 @@ const CategoryQuickSelector: React.FC<CategoryQuickSelectorProps> = ({
                   <span className="loading-spinner">⏳</span> Loading suggestions...
                 </div>
               )}
-              
+
               {quickSuggestion && !currentCategoryId && (
                 <div className="quick-suggestion">
                   <div className="suggestion-header">
@@ -268,7 +268,7 @@ const CategoryQuickSelector: React.FC<CategoryQuickSelectorProps> = ({
                       const existingCategory = availableCategories.find(
                         cat => cat.name.toLowerCase() === quickSuggestion.suggestedCategory.name.toLowerCase()
                       );
-                      
+
                       if (existingCategory) {
                         handleCategoryClick(existingCategory.categoryId);
                       } else {
@@ -280,7 +280,7 @@ const CategoryQuickSelector: React.FC<CategoryQuickSelectorProps> = ({
                   </button>
                 </div>
               )}
-              
+
               <div className="category-list">
                 {availableCategories.length === 0 ? (
                   <div className="no-categories-message">
@@ -304,7 +304,7 @@ const CategoryQuickSelector: React.FC<CategoryQuickSelectorProps> = ({
                   ))
                 )}
               </div>
-              
+
               <div className="create-new-section">
                 <button
                   className="create-new-button"
