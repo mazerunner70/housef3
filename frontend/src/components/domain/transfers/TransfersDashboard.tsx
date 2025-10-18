@@ -11,8 +11,7 @@ import { updateTransferPreferences } from '@/services/UserPreferencesService';
 import { AccountInfo } from '@/schemas/Transaction';
 import {
     Alert,
-    LoadingState,
-    DateRange
+    LoadingState
 } from '@/components/ui';
 import Button from '@/components/Button';
 import CurrencyDisplay from '@/components/ui/CurrencyDisplay';
@@ -29,18 +28,9 @@ const getTransferPairKey = (pair: TransferPair): string => {
     return `${outgoingId}-${incomingId}`;
 };
 
-// Helper function to check if a date is an epoch date (1970)
-const isEpochDate = (date: Date): boolean => {
-    return date.getFullYear() === 1970;
-};
+// Removed isEpochDate - no longer needed with simplified date range approach
 
-// Helper function to check if a checked date range is valid (not epoch)
-const isValidCheckedDateRange = (checkedDateRange: any): boolean => {
-    if (!checkedDateRange) return false;
-    const startDate = new Date(checkedDateRange.startDate);
-    const endDate = new Date(checkedDateRange.endDate);
-    return !isEpochDate(startDate) && !isEpochDate(endDate);
-};
+// Removed isValidCheckedDateRange - no longer needed with simplified date range approach
 
 interface TransfersDashboardProps { }
 
@@ -63,13 +53,7 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
     const [recommendedRange, setRecommendedRange] = useState<any>(null);
 
     // Date range management - will be set from preferences in loadAllInitialData
-    const [currentDateRange, setCurrentDateRange] = useState<DateRange>(() => {
-        // Initialize with a default range, but this will be overridden by preferences
-        const endDate = new Date();
-        const startDate = new Date();
-        startDate.setDate(endDate.getDate() - 7);
-        return { startDate, endDate };
-    });
+    // Removed currentDateRange - now only use recommendedRange and checked range from backend
 
 
     // Load initial data
@@ -97,42 +81,9 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
     }, [urlContext.autoScan, detectLoading, loading]);
 
 
-    /**
-     * Determine date range from URL parameters
-     */
-    const getDateRangeFromUrlParams = (): DateRange | null => {
-        const startDateParam = urlContext.startDate;
-        const endDateParam = urlContext.endDate;
+    // Removed URL and preference date range functions - scanning now only uses recommendedRange from the intelligent algorithm
 
-        if (!startDateParam || !endDateParam) return null;
-
-        const startDate = new Date(startDateParam);
-        const endDate = new Date(endDateParam);
-
-        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return null;
-
-        return { startDate, endDate };
-    };
-
-    /**
-     * Determine date range from user preferences
-     */
-    const getDateRangeFromPreferences = (progressData: any): DateRange | null => {
-        const checkedRange = progressData?.progress?.checkedDateRange;
-        if (!checkedRange || !isValidCheckedDateRange(checkedRange)) return null;
-
-        return {
-            startDate: new Date(checkedRange.startDate),
-            endDate: new Date(checkedRange.endDate)
-        };
-    };
-
-    /**
-     * Get fallback date range (current default)
-     */
-    const getFallbackDateRange = (): DateRange => {
-        return currentDateRange;
-    };
+    // Removed getFallbackDateRange - no fallback needed, use only recommendedRange
 
     const loadAllInitialData = async () => {
         setLoading(true);
@@ -143,13 +94,8 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
             setTransferProgress(progressAndRecommendation.progress);
             setRecommendedRange(progressAndRecommendation.recommendedRange);
 
-            // Determine the date range to use - prioritize in order: URL params, preferences, fallback
-            const urlRange = getDateRangeFromUrlParams();
-            const prefRange = getDateRangeFromPreferences(progressAndRecommendation);
-            const dateRange = urlRange || prefRange || getFallbackDateRange();
-
-            // Update the current date range state
-            setCurrentDateRange(dateRange);
+            // Note: Scanning always uses recommendedRange from the intelligent algorithm
+            // URL params and preferences are only used for specific user-requested ranges
 
             // Load remaining data in parallel
             const [totalCount, accountsData] = await Promise.all([
@@ -170,13 +116,16 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
         setDetectLoading(true);
         setError(null);
         try {
-            // Use recommended range if available, otherwise fall back to current range
-            const scanRange = recommendedRange ? {
+            // Only scan if we have a recommended range from the algorithm
+            // No fallback - if no recommendation, all data has been processed
+            if (!recommendedRange) {
+                setError('No more date ranges to scan. All available data has been processed.');
+                return;
+            }
+
+            const scanRange = {
                 startDate: recommendedRange.startDate,
                 endDate: recommendedRange.endDate
-            } : {
-                startDate: currentDateRange.startDate.getTime(),
-                endDate: currentDateRange.endDate.getTime()
             };
 
             // Use date range API with DateRange object
@@ -197,14 +146,7 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
             // Track if we had transfers to process
             setHadTransfersToProcess(detected.transfers.length > 0);
 
-            // Update current date range to match what was actually scanned
-            if (recommendedRange) {
-                const newRange = {
-                    startDate: new Date(recommendedRange.startDate),
-                    endDate: new Date(recommendedRange.endDate)
-                };
-                setCurrentDateRange(newRange);
-            }
+            // No need to update any state - the scanned range is already tracked in recommendedRange
 
             // If no candidates were found, immediately complete the review cycle
             // to update the checked range via API and auto-load the next chunk
@@ -377,22 +319,28 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
      */
     const completeReviewCycle = useCallback(async () => {
         try {
+            // Only complete review cycle if we have a recommended range that was scanned
+            if (!recommendedRange) {
+                console.log('No recommended range to complete - all data processed');
+                return;
+            }
+
             console.log('Completing review cycle for range:', {
-                start: currentDateRange.startDate.toISOString().split('T')[0],
-                end: currentDateRange.endDate.toISOString().split('T')[0]
+                start: new Date(recommendedRange.startDate).toISOString().split('T')[0],
+                end: new Date(recommendedRange.endDate).toISOString().split('T')[0]
             });
 
-            // 1. Update checked range to include current range
-            const currentStartMs = currentDateRange.startDate.getTime();
-            const currentEndMs = currentDateRange.endDate.getTime();
+            // 1. Update checked range to include the range that was just scanned
+            const scannedStartMs = recommendedRange.startDate;
+            const scannedEndMs = recommendedRange.endDate;
 
-            // Validate current date range to catch bugs where start/end might be the same timestamp
-            if (currentStartMs === currentEndMs) {
-                console.error('BUG DETECTED: currentDateRange has same start and end timestamp:', {
-                    startMs: currentStartMs,
-                    endMs: currentEndMs,
-                    startDate: currentDateRange.startDate.toISOString(),
-                    endDate: currentDateRange.endDate.toISOString()
+            // Validate scanned date range
+            if (scannedStartMs === scannedEndMs) {
+                console.error('BUG DETECTED: scanned range has same start and end timestamp:', {
+                    startMs: scannedStartMs,
+                    endMs: scannedEndMs,
+                    startDate: new Date(scannedStartMs).toISOString(),
+                    endDate: new Date(scannedEndMs).toISOString()
                 });
                 // Don't update preferences with invalid range
                 return;
@@ -400,11 +348,11 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
 
             const updateData = {
                 checkedDateRangeStart: transferProgress?.checkedDateRange?.startDate
-                    ? Math.min(transferProgress.checkedDateRange.startDate, currentStartMs)
-                    : currentStartMs,
+                    ? Math.min(transferProgress.checkedDateRange.startDate, scannedStartMs)
+                    : scannedStartMs,
                 checkedDateRangeEnd: transferProgress?.checkedDateRange?.endDate
-                    ? Math.max(transferProgress.checkedDateRange.endDate, currentEndMs)
-                    : currentEndMs
+                    ? Math.max(transferProgress.checkedDateRange.endDate, scannedEndMs)
+                    : scannedEndMs
             };
 
             await updateTransferPreferences(updateData);
@@ -428,14 +376,8 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
             setTransferProgress(progressAndRecommendation.progress);
             setRecommendedRange(progressAndRecommendation.recommendedRange);
 
-            // 4. If there's a next range, set it and load
+            // 4. If there's a next range, auto-scan it
             if (progressAndRecommendation.recommendedRange) {
-                const nextRange = {
-                    startDate: new Date(progressAndRecommendation.recommendedRange.startDate),
-                    endDate: new Date(progressAndRecommendation.recommendedRange.endDate)
-                };
-                setCurrentDateRange(nextRange);
-
                 // Auto-scan next chunk
                 const nextChunk = await detectPotentialTransfers({
                     startDate: new Date(progressAndRecommendation.recommendedRange.startDate),
@@ -448,7 +390,7 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
                 setHadTransfersToProcess(nextChunk.transfers.length > 0);
 
                 console.log('Review cycle completed, moved to next chunk:', {
-                    nextRange: `${nextRange.startDate.toISOString().split('T')[0]} to ${nextRange.endDate.toISOString().split('T')[0]}`,
+                    nextRange: `${new Date(progressAndRecommendation.recommendedRange.startDate).toISOString().split('T')[0]} to ${new Date(progressAndRecommendation.recommendedRange.endDate).toISOString().split('T')[0]}`,
                     candidatesFound: nextChunk.transfers.length
                 });
             } else {
@@ -464,7 +406,7 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
             console.error('Failed to complete review cycle:', error);
             setError(error instanceof Error ? error.message : 'Failed to complete review cycle');
         }
-    }, [currentDateRange, transferProgress]);
+    }, [recommendedRange, transferProgress]);
 
     // Watch for completion of transfer processing
     useEffect(() => {
@@ -582,19 +524,20 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
                             {recommendedRange ? (
                                 `${formatDate(recommendedRange.startDate, { month: 'short', day: 'numeric' })} - ${formatDate(recommendedRange.endDate, { month: 'short', day: 'numeric', year: 'numeric' })}`
                             ) : (
-                                `${formatDate(currentDateRange.startDate.getTime(), { month: 'short', day: 'numeric' })} - ${formatDate(currentDateRange.endDate.getTime(), { month: 'short', day: 'numeric', year: 'numeric' })}`
+                                '✅ All data processed'
                             )}
                         </span>
                     </div>
                     <Button
                         variant="primary"
                         onClick={handleDetectTransfers}
-                        disabled={detectLoading || visibleDetectedTransfers.length > 0}
+                        disabled={detectLoading || visibleDetectedTransfers.length > 0 || !recommendedRange}
                         className="scan-button-compact"
                     >
                         {(() => {
                             if (detectLoading) return '⚡ Scanning...';
                             if (visibleDetectedTransfers.length > 0) return '⏸️ Review Pending';
+                            if (!recommendedRange) return '✅ Complete';
                             return '🎯 Scan Next Chunk';
                         })()}
                     </Button>
