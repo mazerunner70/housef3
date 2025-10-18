@@ -22,7 +22,7 @@
     "decimal.js": "^10.6.0",
     "react": "^19.1.1",
     "react-apexcharts": "^1.7.0",
-    "zod": "^4.1.9",
+    "zod": "^4.1.11",
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.9.1",
     "zustand": "^5.0.8"
