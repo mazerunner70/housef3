@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import FZIPRestoreList from '../FZIPRestoreList';
+import FZIPRestoreList from '../domain/fzip/components/FZIPRestoreList';
 
 // Mock AuthService to avoid import.meta in its implementation during tests
 jest.mock('../../services/AuthService', () => ({

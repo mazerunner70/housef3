@@ -10,7 +10,7 @@ import {
   startFZIPRestoreProcessing,
   getFZIPRestoreUploadUrl,
   cancelFZIPRestore
-} from '../services/FZIPService';
+} from '@/services/FZIPService';
 
 export interface UseFZIPRestoreResult {
   restoreJobs: FZIPRestoreJob[];

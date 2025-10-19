@@ -50,15 +50,15 @@ export const FZIPBackupJobSchema = z.object({
     status: FZIPBackupStatusSchema,
     backupType: FZIPBackupTypeSchema,
     requestedAt: z.number(),
-    completedAt: z.number().optional(),
+    completedAt: z.number().nullish(),
     progress: z.number(),
-    downloadUrl: z.string().optional(),
-    expiresAt: z.number().optional(),
-    packageSize: z.number().optional(),
-    description: z.string().optional(),
-    validation: FZIPValidationSchema.optional(),
-    manifest_checksums: z.record(z.string(), z.string()).optional(),
-    error: z.string().optional(),
+    downloadUrl: z.string().nullish(),
+    expiresAt: z.number().nullish(),
+    packageSize: z.number().nullish(),
+    description: z.string().nullish(),
+    validation: FZIPValidationSchema.nullish(),
+    manifest_checksums: z.record(z.string(), z.string()).nullish(),
+    error: z.string().nullish(),
 });
 
 // FZIP Restore Summary Schemas
@@ -142,15 +142,15 @@ export const FZIPRestoreJobSchema = z.object({
     jobId: z.string(),
     status: FZIPRestoreStatusSchema,
     createdAt: z.number(),
-    completedAt: z.number().optional(),
+    completedAt: z.number().nullish(),
     progress: z.number(),
     currentPhase: z.string(),
-    packageSize: z.number().optional(),
-    updatedAt: z.number().optional(),
-    summary: FZIPRestoreSummarySchema.optional(),
-    validationResults: FZIPRestoreValidationResultsSchema.optional(),
-    restoreResults: FZIPRestoreResultsSchema.optional(),
-    error: z.string().optional(),
+    packageSize: z.number().nullish(),
+    updatedAt: z.number().nullish(),
+    summary: FZIPRestoreSummarySchema.nullish(),
+    validationResults: FZIPRestoreValidationResultsSchema.nullish(),
+    restoreResults: FZIPRestoreResultsSchema.nullish(),
+    error: z.string().nullish(),
 });
 
 // API Request Schemas
@@ -168,8 +168,7 @@ export const CreateFZIPRestoreRequestSchema = z.object({
 export const InitiateFZIPBackupResponseSchema = z.object({
     backupId: z.string(),
     status: FZIPBackupStatusSchema,
-    estimatedSize: z.string().optional(),
-    estimatedCompletion: z.string().optional(),
+    estimatedCompletion: z.string().nullish(),
 });
 
 export const FZIPBackupListResponseSchema = z.object({
@@ -188,15 +187,15 @@ export const CreateFZIPRestoreResponseSchema = z.object({
     uploadUrl: z.object({
         url: z.string(),
         fields: z.record(z.string(), z.string()),
-    }).optional(),
+    }).nullish(),
     profileSummary: z.object({
         accounts_count: z.number(),
         transactions_count: z.number(),
         categories_count: z.number(),
         file_maps_count: z.number(),
         transaction_files_count: z.number(),
-    }).optional(),
-    suggestion: z.string().optional(),
+    }).nullish(),
+    suggestion: z.string().nullish(),
 });
 
 export const FZIPRestoreListResponseSchema = z.object({

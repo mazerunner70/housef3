@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { FZIPBackupJob, FZIPBackupStatus, formatBackupStatus } from '../services/FZIPService';
-import Button from './Button';
-import ConfirmationModal from './ConfirmationModal';
-import StatusBadge from './ui/StatusBadge';
+import { FZIPBackupJob, FZIPBackupStatus, formatBackupStatus } from '@/services/FZIPService';
+import Button from '@/components/Button';
+import ConfirmationModal from '@/components/ConfirmationModal';
+import StatusBadge from '@/components/ui/StatusBadge';
 import './FZIPBackupList.css';
 
 interface FZIPBackupListProps {

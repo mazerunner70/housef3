@@ -9,95 +9,365 @@ alwaysApply: false
 ## Architecture Principles
 
 ### Component Hierarchy
+
+**Two-Tier Page Architecture**:
+
 ```
 App.tsx (Router Setup)
-├── NewUILayout (Overall Layout with <Outlet />)
-    └── Pages (React Router driven - route-level containers)
-        └── Business Components (Domain-specific features)
-            └── UI Components (Reusable, domain-agnostic)
+├── layouts/NewUILayout (Overall Layout with <Outlet />)
+    ├── pages/ (Multi-feature & app-level pages)
+    │   ├── TransactionsPage (manages tabs → domain components)
+    │   ├── AccountsPage (coordinates views)
+    │   └── HomePage (app landing)
+    │
+    └── components/domain/ (Single-feature pages co-located)
+        └── transfers/
+            ├── TransfersPage (thin entry point)
+            └── TransfersDashboard (thick implementation)
 ```
 
+**Route Examples**:
+```
+/transactions       → pages/TransactionsPage (tabs)
+/transfers          → domain/transfers/TransfersPage (direct)
+/accounts           → pages/AccountsPage (routing coordinator)
+/home               → pages/HomePage (app-level)
+```
+
+**Responsibility by Layer**:
+- **pages/ Folder**: Multi-feature coordination, tabs, app-level pages (medium thickness)
+- **domain/{feature}/*Page.tsx**: Single-feature entry points (very thin, 5-15 lines)
+- **Views/Domain**: Feature logic and UI (thick - the real implementation)
+- **Business**: Shared domain logic across features
+- **UI**: Generic reusable components
+
+**Key Insight**: Pages folder serves orchestration; domain pages serve direct access. Both are needed!
+
 ### Layer Responsibilities
-1. **Layout**: `NewUILayout` provides app shell with navigation and `<Outlet />` for router content
-2. **Pages**: Route-level containers that compose business components, follow `{Feature}Page.tsx` naming
-3. **Views**: Complex feature components that implement complete workflows by merging layout + hooks logic (see frontend-view-conventions.mdc)
-4. **Business Components**: Domain-specific, can use domain terminology, not reusable across domains
-5. **UI Components**: Domain-agnostic, reusable, no business terminology, composable only with other UI components
+1. **Layouts**: `layouts/NewUILayout` provides app shell with navigation and `<Outlet />` for router content
+2. **Pages**: Route-level containers in `pages/` that compose views or domain components, follow `{Feature}Page.tsx` naming
+3. **Views**: Complex feature components in `views/` that implement complete workflows by merging layout + hooks logic (see frontend-view-conventions.mdc)
+4. **Domain Components**: In `components/domain/{feature}/`, domain-specific, can use domain terminology, not reusable across domains. Should include their own hooks and utilities when not reused elsewhere.
+5. **Business Components**: In `components/business/{domain}/`, shared business logic components used across multiple features
+6. **UI Components**: In `components/ui/`, domain-agnostic, reusable, no business terminology, composable only with other UI components
 
 ## File Structure
-- frontend/src/components/ - OLD components (no new files)
-- frontend/src/new-ui/ - NEW modern UI components
-  - new-ui/layouts/ - App-level layouts (NewUILayout)
-  - new-ui/pages/ - Route-level page components (AccountsPage, TransactionsPage, etc.)
-  - new-ui/components/
-    - business/ - Domain-specific components organized by domain
-      - accounts/ - Account management components
-      - transactions/ - Transaction-related components  
-      - categories/ - Category management components
-      - fzip/ - Backup/restore components
-    - ui/ - Reusable, domain-agnostic components
-  - new-ui/hooks/ - Custom React hooks
-  - new-ui/styles/ - Global styles/themes
-  - new-ui/utils/ - UI-specific utility functions
-  - new-ui/views/ - Complex view components (see frontend-view-conventions.mdc for organization patterns)
-- frontend/src/services/ - API clients and external service integrations
-  - Service classes for backend API communication
+- **frontend/src/layouts/** - App-level layouts
+  - `NewUILayout.tsx` - Main app shell with navigation and `<Outlet />`
+  
+- **frontend/src/pages/** - Multi-feature and app-level pages
+  - **Use for**: Pages that manage tabs, coordinate multiple features, or serve app-level functions
+  - Examples:
+    - `TransactionsPage.tsx` - Manages tabs for List/Categories/Imports/Transfers
+    - `AccountsPage.tsx` - Complex routing coordinator for account views
+    - `HomePage.tsx` - App landing page
+  - **Do NOT use for**: Single-feature domain entry points (those go in domain folders)
+  
+- **frontend/src/views/** - Complex feature components
+  - Multi-step workflows and substantial state management
+  - See frontend-view-conventions.mdc for organization patterns
+  
+- **frontend/src/components/** - Component library organized by type
+  - **domain/{feature}/** - Feature-specific components with no reuse elsewhere
+    - Each domain folder is self-contained with standardized structure:
+      - `{DomainName}Page.tsx` - **ENTRY POINT** - routing jump off for this domain
+      - `{DomainName}Dashboard.tsx` (or main component) - feature implementation
+      - `hooks/` - Domain-specific hooks (when not reused elsewhere)
+      - `utils/` - Domain-specific utilities (when not reused elsewhere)
+      - `types/` - Domain-specific types (when not reused elsewhere)
+      - `sidebar/` - Domain-specific sidebar content (optional)
+    - Example: `components/domain/transfers/TransfersPage.tsx` is the entry point
+  - **business/{domain}/** - Shared business components used across features
+    - `categories/` - Category management components
+    - `import/` - Import workflow components  
+    - `transactions/` - Transaction-related shared components
+    - Used by multiple pages or views
+  - **ui/** - Reusable, domain-agnostic components
+    - Examples: Button, DateCell, CurrencyDisplay, StatusBadge, Alert, LoadingState
+    - Must be domain-agnostic (no business terminology)
+    - Can only compose other UI components
+  - **navigation/** - Navigation-specific components
+    - Contextual sidebar, breadcrumbs, sidebar content configurations
+    - See frontend-sidebar-conventions.mdc for patterns
+  - **Legacy folders at root** (accounts/, fzip/) - Being migrated to domain/ structure
+    
+- **frontend/src/hooks/** - Shared React hooks used across multiple features
+  - Only hooks that are reused across different domains
+  - Domain-specific hooks should live in `components/domain/{feature}/hooks/` instead
+  - Examples: `useLocale`, `useTableSort`, `useSessionRouting`
+  
+- **frontend/src/services/** - API clients and external service integrations
+  - **Functional exports** for backend API communication (not classes)
   - Authentication service, account service, transaction service, etc.
-  - HTTP client configuration and error handling
+  - HTTP client configuration and error handling via ApiClient utility
   - Service layer abstracts API details from components
-- frontend/src/types/ - TypeScript type definitions
-  - Domain model types (Account, Transaction, Category, etc.)
+  - **See frontend-services-conventions.mdc for detailed patterns**
+  - Services are typically shared across app; domain-specific API calls can live in domain folders
+  
+- **frontend/src/types/** - Shared TypeScript type definitions
+  - Domain model types used across features (Account, Transaction, Category)
   - API response/request types
-  - Component prop types
+  - Component prop types for shared components
   - Utility types and type guards
-- frontend/src/schemas/ - Zod validation schemas
+  
+- **frontend/src/schemas/** - Zod validation schemas
   - Input validation schemas for forms
   - API response validation schemas
   - Data transformation and parsing schemas
   - Corresponds to backend models for consistency
-- frontend/src/stores/ - State management (Zustand stores)
+  
+- **frontend/src/stores/** - State management (Zustand stores)
   - Global application state
-  - Domain-specific stores (transactionsStore, etc.)
+  - Domain-specific stores (transactionsStore, accountsStore, navigationStore)
   - State persistence and hydration logic
-- frontend/src/utils/ - General utility functions
+  - See frontend-store-conventions.mdc for patterns
+  
+- **frontend/src/styles/** - Global styles/themes
+  - `theme.ts` - Theme configuration
+  - `global.css` - Global CSS styles
+  
+- **frontend/src/utils/** - General utility functions
   - Date formatting, currency formatting
   - Data transformation helpers
   - Common validation functions
   - Pure functions with no side effects
-- frontend/src/hooks/ - Global custom React hooks (if any)
-  - Cross-domain hooks that don't fit in new-ui/hooks/
-  - Prefer domain-specific hooks in new-ui/hooks/ when possible
+
+## Organization Principles
+
+### Code Colocation
+**Key Principle**: Keep code as close as possible to where it's used. Only promote code to shared locations when there's actual reuse across multiple features.
+
+**Decision Tree for Placement**:
+1. **Is it used by only one feature?** → Place in `components/domain/{feature}/`
+   - Includes: components, hooks, utilities, types, constants, sidebar content
+   - **Entry point**: Always use `{DomainName}Page.tsx` as the routing jump off
+   - Example: Transfer-specific hooks go in `components/domain/transfers/hooks/`
+   - Example: Routing entry is `components/domain/transfers/TransfersPage.tsx`
+   
+2. **Is it used by multiple features in the same domain?** → Place in `components/business/{domain}/`
+   - Example: Category selector used by transactions and rules
+   
+3. **Is it used across the entire app?** → Place in top-level shared folders
+   - `hooks/` for shared hooks (e.g., `useLocale`, `useTableSort`)
+   - `utils/` for shared utilities (e.g., `dateUtils`, `csvParser`)
+   - `types/` for shared types (e.g., `Account`, `Transaction`)
+   - `services/` for API clients (e.g., `AccountService`, `TransactionService`)
+   - Note: Domain-specific API calls can live in `domain/{feature}/services/` if not reused
+
+**Anti-pattern**: Don't create "shared" hooks or utilities prematurely. Start in the domain folder and only move to shared locations when actual reuse occurs.
+
+**Progressive Enhancement Philosophy:**
+- Start simple and explicit (easier to understand)
+- Abstract only when patterns emerge (DRY principle)
+- Prefer duplication over wrong abstraction
+- "Rule of Three": Abstract after third similar instance
 
 ## Component Rules
 
+### Relationship Example: Pages vs Domain Components
+
+**Pattern 1: Multi-Feature Page (Tab Container)**:
+```typescript
+// pages/TransactionsPage.tsx - MULTI-FEATURE ROUTING CONTAINER
+// Route: /transactions
+// Role: Manages tabs for multiple related features
+const TransactionsPage = () => {
+  const [activeTab, setActiveTab] = useState('TRANSACTIONS_LIST');
+  
+  return (
+    <div>
+      <TabButtons />  {/* Page-level UI */}
+      {activeTab === 'TRANSFERS' && 
+        <TransfersDashboard />  {/* Domain component */}
+      }
+    </div>
+  );
+};
+```
+
+**Pattern 2: Single-Feature Page (Domain Entry Point) - DEEP LINKING**:
+```typescript
+// components/domain/transfers/TransfersPage.tsx - DOMAIN ENTRY POINT
+// Route: /transfers (deep link directly to this domain)
+// Role: "Jump off" for transfers domain - sets context, renders main component
+// Naming: {DomainName}Page.tsx makes it easy to find the entry point
+const TransfersPage = () => {
+  const { goToTransfers } = useNavigationStore();
+  
+  useEffect(() => {
+    goToTransfers(); // Set breadcrumbs/context
+  }, []);
+  
+  return <TransfersDashboard />; // Render main domain component
+};
+
+// components/domain/transfers/TransfersDashboard.tsx - MAIN FEATURE COMPONENT
+// Not directly routed - rendered by TransfersPage OR TransactionsPage tab
+const TransfersDashboard = () => {
+  const { transfers, detectTransfers } = useTransferDetection();
+  // All business logic here
+};
+```
+
+**Key Differences**:
+- **Pattern 1**: Page manages multiple features (tabs), routes at `/transactions`
+- **Pattern 2**: Page is optional wrapper for single feature, routes at `/transfers`
+- **Domain Component**: Thick business logic, can be rendered by EITHER page
+- **Deep Linking**: Allows `/transfers` to work directly, OR accessed via `/transactions` → Transfers tab
+
+**Decision Guide**:
+- Need tabs/grouping? → Use Pattern 1 (multi-feature page in `pages/`)
+- Want deep linking to single domain? → Use Pattern 2 (`{DomainName}Page.tsx` in domain folder)
+- **Recommendation**: Always create `{DomainName}Page.tsx` as the entry point, even if thin
+
+**Why Always Use a Page Entry Point?**:
+- ✅ Predictable location for maintainers
+- ✅ Clear separation: routing vs business logic
+- ✅ Easy to add context/setup later without refactoring routes
+- ✅ Consistent pattern across all domains
+- ✅ `{DomainName}Page.tsx` naming makes entry point obvious
+
+**Pattern 3 (Not Recommended)**: Direct routing to domain components without a page wrapper loses the benefits above.
+
+### Domain Components
+- Located in `components/domain/{feature}/`
+- **Role**: Feature implementation layer with optional routing entry point
+- **Use for feature-specific code with no reuse elsewhere**
+- Self-contained: all related code lives together in the domain folder
+- Can use domain-specific terminology
+- Can include hooks, utilities, types, and sidebar content specific to this feature
+- **Principle**: If it's only used by one feature, keep it in that feature's domain folder
+
+**Domain Folder Structure with Page Entry Point**:
+```
+components/domain/transfers/
+├── TransfersPage.tsx           ← ENTRY POINT/JUMP OFF (routable container)
+├── TransfersDashboard.tsx      ← Main feature component
+├── TransferFilters.tsx         ← Supporting components
+├── hooks/
+│   └── useTransferDetection.ts
+├── utils/
+│   └── transferCalculations.ts
+├── types/
+│   └── TransferTypes.ts
+└── sidebar/
+    └── TransfersSidebarContent.tsx
+```
+
+**Naming Convention**: `{DomainName}Page.tsx` in the domain folder
+- **Purpose**: Acts as the routing "jump off" point for that domain
+- **Role**: Thin container that sets up context (breadcrumbs) and renders main component(s)
+- **Benefits**: 
+  - Maintainers immediately know where the entry point is
+  - Clear separation: `*Page.tsx` = routing, other files = feature logic
+  - Standardized location for routable components
+  - Easy to scan domain folders - the Page file is always the entry point
+- **Example**: `TransfersPage.tsx` renders `TransfersDashboard.tsx`
+
+**Visual: Finding the Entry Point**
+```
+components/domain/transfers/
+├── TransfersPage.tsx           ← 👈 Look here first! This is the jump off
+├── TransfersDashboard.tsx
+├── TransferFilters.tsx
+└── hooks/
+```
+
+When you open a domain folder, `{DomainName}Page.tsx` tells you immediately:
+1. This domain is routable
+2. This is where routing starts
+3. This is where context (breadcrumbs) gets set up
+
 ### Business Components
-- Located in `new-ui/components/business/{domain}/`
+- Located in `components/business/{domain}/`
+- **Use for shared business logic components used by multiple features**
 - Can use domain-specific terminology (Account, Transaction, Category, etc.)
-- Not reusable across different business domains
-- Can compose other business components from same domain OR ui components
+- Reusable across different features within the same business domain
+- Can compose other business components OR ui components
 - Should handle domain-specific logic and state
+- Examples: `components/business/categories/`, `components/business/import/`
 
 ### UI Components  
-- Located in `new-ui/components/ui/`
+- Located in `components/ui/`
 - Must be domain-agnostic (no business terminology)
 - Reusable across the entire application
 - Can only compose other UI components
 - Should be pure presentation components with minimal logic
-- Examples: Button, DateCell, CurrencyDisplay, StatusBadge
+- Examples: Button, DateCell, CurrencyDisplay, StatusBadge, Alert, LoadingState
 
 ### Pages
-- Located in `new-ui/pages/`
-- Follow `{Feature}Page.tsx` naming convention (AccountsPage, TransactionsPage, etc.)
-- Should be thin containers that primarily compose business components
-- Handle routing-level concerns and page-level state
-- Minimal direct UI logic - delegate to business components
-- Directly referenced by React Router routes
+
+**Two Locations with Distinct Purposes**:
+
+#### 1. `pages/` Folder - Multi-Feature & App-Level Pages
+**Use when:**
+- ✅ Managing tabs/grouping multiple features
+- ✅ Coordinating complex routing between views
+- ✅ App-level pages (home, settings, etc.)
+
+**Examples:**
+- `TransactionsPage.tsx` - Manages tabs for List/Categories/Imports/Transfers
+- `AccountsPage.tsx` - Routes between AccountListView/DetailView/FileView
+- `HomePage.tsx` - App landing page
+
+**Characteristics:**
+- Can be medium thickness (tab management, routing logic)
+- Compose multiple domain/business components
+- Handle cross-feature concerns
+
+**Naming Consideration:**
+When a page composes multiple domains, use names that reflect the composition:
+- `TransactionsPage` → Composes 4 domains (transactions, categories, imports, transfers)
+- Better: `FinancialManagementPage`, `TransactionsHubPage`, or `TransactionWorkspacePage`
+- **Naming patterns for coordinators:**
+  - `*ManagementPage` - Manages/coordinates multiple related domains
+  - `*HubPage` - Central hub for multiple related features
+  - `*WorkspacePage` - Workspace containing multiple tools/features
+- **Key**: Name should clearly indicate if it's a multi-domain coordinator vs single domain
+
+**Abstraction Strategy:**
+- Start with explicit pages (easier to understand, debug)
+- If you have 5+ similar tab/composition structures, consider abstracting to config-driven approach
+- Premature abstraction adds indirection without clear benefit
+
+#### 2. `components/domain/{feature}/` - Single-Feature Entry Points
+**Use when:**
+- ✅ Direct entry point to ONE domain feature
+- ✅ Want deep linking to specific feature
+- ✅ Thin wrapper for context setup only
+
+**Naming:** `{DomainName}Page.tsx`
+
+**Examples:**
+- `components/domain/transfers/TransfersPage.tsx` - Direct jump off to transfers
+- `components/domain/portfolios/PortfoliosPage.tsx` - Direct jump off to portfolios
+
+**Characteristics:**
+- Very thin (5-15 lines typical)
+- Sets breadcrumbs/context, renders main component
+- Co-located with the domain it serves
+
+**Decision Guide:**
+```
+Does page manage MULTIPLE features or complex routing?
+  → YES: Put in pages/ folder
+  → NO: Continue...
+
+Is it app-level (home, settings)?
+  → YES: Put in pages/ folder
+  → NO: Continue...
+
+Is it direct entry to ONE domain?
+  → YES: Put in components/domain/{feature}/ as {DomainName}Page.tsx
+```
+
+**Both folders are needed!** They serve different purposes.
 
 ### Views
-- Located in `new-ui/views/`
+- Located in `views/`
 - Complex feature components that implement complete workflows
 - Merge layout structure with hooks-based state management
-- Sit between Pages (route containers) and Business Components (domain UI)
+- Sit between Pages (route containers) and Domain/Business Components
 - Should be decomposed using four-layer pattern: Custom Hooks, Layout Components, Business Components, Modal Components
 - Handle multi-step processes, substantial state management, and modal orchestration
 - **See frontend-view-conventions.mdc for detailed organization patterns and decomposition strategies**
@@ -160,16 +430,20 @@ App.tsx (Router Setup)
 
 ## UI Standards
 - Follow modern UI design patterns
-- Use the established theme system in new-ui/styles/
+- Use the established theme system in `styles/theme.ts`
 - Ensure responsive design
-- Maintain consistent styling across new-ui components
+- Maintain consistent styling across components
 - Each component should have its own CSS file when needed
+- Use global styles from `styles/global.css` for app-wide styling
 
 ## Import Ordering
 - All imports must start with external libraries first, then internal imports
 - Use consistent import grouping and ordering for maintainability
 - Use path aliases for internal imports: `@/` maps to `src/` (configured in tsconfig.app.json)
-- Example: `import { Button } from '@/new-ui/components/ui/Button'`
+- Examples:
+  - `import { Button } from '@/components/ui/Button'`
+  - `import { TransfersDashboard } from '@/components/domain/transfers/TransfersDashboard'`
+  - `import { useLocale } from '@/hooks/useLocale'`
 
 ## Contextual Sidebar System
 - Route-aware navigation that adapts based on current page context

@@ -6,6 +6,7 @@ import TransactionsSidebarContent from './sidebar-content/TransactionsSidebarCon
 import CategoriesSidebarContent from './sidebar-content/CategoriesSidebarContent';
 import ImportSidebarContent from './sidebar-content/ImportSidebarContent';
 import TransfersSidebarContent from '@/components/domain/transfers/sidebar/TransfersSidebarContent';
+import FZIPSidebarContent from '@/components/domain/fzip/sidebar/FZIPSidebarContent';
 import DefaultSidebarContent from './sidebar-content/DefaultSidebarContent';
 import './ContextualSidebar.css';
 
@@ -33,6 +34,9 @@ const ContextualSidebar: React.FC<ContextualSidebarProps> = ({ className = '' })
                 return <CategoriesSidebarContent sidebarCollapsed={sidebarCollapsed} />;
             case 'import':
                 return <ImportSidebarContent sidebarCollapsed={sidebarCollapsed} />;
+            case 'fzip':
+            case 'backup':
+                return <FZIPSidebarContent sidebarCollapsed={sidebarCollapsed} />;
             case 'files':
                 // For now, files can use the default content, but could have its own component later
                 return <DefaultSidebarContent sidebarCollapsed={sidebarCollapsed} />;

@@ -8,3 +8,6 @@
 
 // Transfers domain
 export * from './transfers';
+
+// FZIP domain
+export * from './fzip';

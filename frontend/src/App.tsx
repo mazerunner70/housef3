@@ -9,7 +9,7 @@ import TransfersPage from '@/components/domain/transfers/TransfersPage';
 import ImportTransactionsPage from '@/pages/ImportTransactionsPage';
 import AccountFileUploadPage from '@/pages/AccountFileUploadPage';
 import AnalyticsView from '@/views/AnalyticsView';
-import FZIPManagementView from '@/views/FZIPManagementView';
+import FZIPPage from '@/components/domain/fzip/FZIPPage';
 import {
   CategoriesPage,
   CategoryDetailPage,
@@ -151,7 +151,8 @@ function App() {
 
         {/* Other routes */}
         <Route path="analytics" element={<AnalyticsView />} />
-        <Route path="backup" element={<FZIPManagementView />} />
+        <Route path="fzip" element={<FZIPPage />} />
+        <Route path="backup" element={<FZIPPage />} /> {/* Legacy route - redirects to /fzip */}
         <Route path="*" element={<div><p>Page Not Found</p></div>} />
       </Route>
     </Routes>

@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { getFZIPRestoreUploadUrl } from '../services/FZIPService';
-import Button from './Button';
+import { getFZIPRestoreUploadUrl } from '@/services/FZIPService';
+import Button from '@/components/Button';
 import './FZIPRestoreUpload.css';
 
 interface FZIPRestoreUploadProps {
@@ -58,7 +58,7 @@ const FZIPRestoreUpload: React.FC<FZIPRestoreUploadProps> = ({
     }
   };
 
-  const handleDrop = (event: React.DragEvent<HTMLButtonElement>) => {
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setDragActive(false);
 
@@ -68,12 +68,12 @@ const FZIPRestoreUpload: React.FC<FZIPRestoreUploadProps> = ({
     }
   };
 
-  const handleDragOver = (event: React.DragEvent<HTMLButtonElement>) => {
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setDragActive(true);
   };
 
-  const handleDragLeave = (event: React.DragEvent<HTMLButtonElement>) => {
+  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setDragActive(false);
   };
@@ -214,13 +214,20 @@ const FZIPRestoreUpload: React.FC<FZIPRestoreUploadProps> = ({
 
       {!profileError && (
         <div className="upload-section">
-          <button
-            type="button"
+          <div
             className={`file-drop-zone ${dragActive ? 'drag-active' : ''} ${selectedFile ? 'has-file' : ''}`}
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
+            role="button"
+            tabIndex={0}
             aria-label="Click or drag to upload FZIP file"
           >
             <input
@@ -266,7 +273,7 @@ const FZIPRestoreUpload: React.FC<FZIPRestoreUploadProps> = ({
                 </div>
               </div>
             )}
-          </button>
+          </div>
 
           {isUploading && (
             <div className="upload-progress">

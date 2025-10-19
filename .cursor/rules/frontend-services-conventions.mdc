@@ -6,6 +6,10 @@ alwaysApply: false
 
 # Frontend Services Conventions
 
+**See Also**: [frontend-conventions.mdc](./frontend-conventions.mdc) for overall architecture patterns
+
+This document covers service layer conventions. Services are functional modules that handle backend API communication and abstract API details from components.
+
 ## Core Principles
 
 ### Service Architecture
@@ -13,6 +17,8 @@ alwaysApply: false
 - **Functional Exports**: Prefer named function exports over class-based services
 - **Type Safety**: All functions must have proper TypeScript types for parameters and returns
 - **Centralized API**: All HTTP requests must go through the ApiClient utility
+- **Code Colocation**: Follow frontend-conventions.mdc colocation principles - domain-specific services can live in domain folders
+- **Progressive Enhancement**: Start simple, abstract when patterns emerge (see frontend-conventions.mdc)
 
 ## ApiClient Usage
 
@@ -187,6 +193,36 @@ export const getAccount = async (accountId: string): Promise<Account> => {
 - ✅ **Type safety** - Safe error handling for any thrown value
 - ❌ **Avoid manual console.error** - Use structured logging instead
 
+## Service Location Strategy
+
+### When to Place Services
+
+Following the **code colocation principle** from frontend-conventions.mdc:
+
+1. **Is the API call used by only ONE feature?** → Place in `components/domain/{feature}/services/`
+   ```
+   components/domain/transfers/
+   ├── TransfersPage.tsx
+   ├── TransfersDashboard.tsx
+   ├── hooks/
+   ├── services/
+   │   └── transferApi.ts    ← Transfer-specific API calls
+   └── utils/
+   ```
+
+2. **Is the API call used by MULTIPLE features?** → Place in `src/services/`
+   ```
+   src/services/
+   ├── AccountService.ts     ← Used across accounts, transactions, transfers
+   ├── TransactionService.ts ← Used across multiple features
+   └── AuthService.ts        ← App-wide authentication
+   ```
+
+**Decision Rule:**
+- Start with domain-specific services
+- Move to `src/services/` when actual reuse occurs (Rule of Three)
+- Most services end up in `src/services/` because API clients are typically reused
+
 ## File Organization
 
 ### Service File Structure with Efficient Logging
@@ -266,11 +302,19 @@ export const deleteItem = async (id: string): Promise<void> => {
 };
 ```
 
-### Naming
-- Service files: `{Domain}Service.ts` (e.g., `AccountService.ts`, `UserPreferencesService.ts`)
-- Use PascalCase for service file names
-- Use camelCase for function names
-- Use PascalCase for interfaces and types
+### Naming Conventions
+- **Service files**: `{Domain}Service.ts` (e.g., `AccountService.ts`, `UserPreferencesService.ts`)
+- **Domain-specific API files**: `{domain}Api.ts` (e.g., `transfersApi.ts`, `portfolioApi.ts`)
+- Use **PascalCase** for service file names in `src/services/`
+- Use **camelCase** for domain API file names in `domain/{feature}/services/`
+- Use **camelCase** for function names
+- Use **PascalCase** for interfaces and types
+
+**Examples:**
+```
+src/services/TransactionService.ts       ← Shared across app
+components/domain/transfers/services/transfersApi.ts  ← Domain-specific
+```
 
 ## Testing Considerations
 
@@ -314,8 +358,9 @@ export const getTransactions = async (params: TransactionRequestParams): Promise
 
 ### Caching Strategy
 - Let React Query handle caching at the component level
-- Services should be stateless and not implement their own caching
+- Services should be **stateless** and not implement their own caching
 - Use React Query's `staleTime` and `cacheTime` for performance optimization
+- Services are **pure API clients** - no state, no side effects beyond API calls
 
 ## Security Considerations
 

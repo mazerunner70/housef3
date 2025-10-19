@@ -1,12 +1,11 @@
 /**
- * Configuration for Default/Home page sidebar content
- * Replaces DefaultSidebarContent.tsx with declarative configuration
+ * Configuration for FZIP Backup & Restore sidebar content
  */
 
-import { SidebarContentConfig } from '../types';
-import { createNavItem, createFilterItem, createActionItem } from '../SidebarConfigFactory';
+import { SidebarContentConfig } from '@/components/navigation/sidebar-content/types';
+import { createNavItem } from '@/components/navigation/sidebar-content/SidebarConfigFactory';
 
-export const defaultConfig: SidebarContentConfig = {
+export const fzipConfig: SidebarContentConfig = {
     sections: [
         {
             type: 'navigation',
@@ -66,51 +65,20 @@ export const defaultConfig: SidebarContentConfig = {
         },
         {
             type: 'context',
-            title: 'Quick Stats',
+            title: 'FZIP Operations',
             items: [
                 createNavItem(
-                    'total-accounts',
-                    'View All Accounts',
-                    '/accounts',
-                    '📊'
-                ),
-                createFilterItem(
-                    'recent-transactions',
-                    'Recent Transactions',
-                    '/transactions',
-                    { filter: 'recent' },
-                    '🕒'
-                ),
-                createFilterItem(
-                    'uncategorized',
-                    'Uncategorized Items',
-                    '/transactions',
-                    { filter: 'uncategorized' },
-                    '❓'
+                    'fzip-info',
+                    'About FZIP',
+                    '/fzip',
+                    'ℹ️'
                 )
             ],
             collapsible: true,
             collapsed: false
-        },
-        {
-            type: 'actions',
-            title: 'Quick Actions',
-            items: [
-                createActionItem(
-                    'add-account',
-                    'Add Account',
-                    () => alert('Add Account functionality to be implemented'),
-                    '➕'
-                ),
-                createNavItem(
-                    'import-transactions',
-                    'Import Transactions',
-                    '/import',
-                    '📥',
-                    (pathname) => pathname.startsWith('/import')
-                )
-            ],
-            collapsible: false
         }
     ]
 };
+
+
+

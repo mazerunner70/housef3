@@ -6,8 +6,14 @@ alwaysApply: false
 
 # View Component Organization Conventions
 
+**See Also**: [frontend-conventions.mdc](./frontend-conventions.mdc) for overall architecture patterns
+
+This document defines patterns for organizing View components to improve maintainability, readability, and testability. Views are complex feature components that implement complete workflows.
+
 ## Overview
 This document defines patterns for organizing View components to improve maintainability, readability, and testability. Views are complex feature components that implement complete workflows and should be decomposed into logical, focused sections.
+
+**Integration with Architecture**: Views sit between Pages (route containers) and Domain/Business Components in the hierarchy defined in frontend-conventions.mdc.
 
 ## View Component Architecture
 
@@ -23,8 +29,9 @@ Views sit between Pages (route containers) and Business Components (domain-speci
 ### 1. Custom Hooks Layer (State Management)
 Extract complex state logic into focused custom hooks that handle specific concerns.
 
-**Location**: `/frontend/src/new-ui/hooks/`
+**Location**: `/frontend/src/hooks/` (if shared) or `/frontend/src/components/domain/{feature}/hooks/` (if domain-specific)
 **Naming**: `use{FeatureName}{Concern}.ts`
+**Colocation**: Follow frontend-conventions.mdc - start in domain folder, move to shared when reused
 
 #### State Management Hook
 ```typescript
@@ -65,8 +72,9 @@ const useFileUploadLogic = () => {
 ### 2. Layout Components Layer (Visual Structure)
 Handle overall page structure, responsive design, and visual organization.
 
-**Location**: `/frontend/src/new-ui/components/business/{feature}/`
+**Location**: `/frontend/src/components/business/{feature}/` (if shared) or `/frontend/src/components/domain/{feature}/` (if domain-specific)
 **Naming**: `{Feature}ViewLayout.tsx`, `{Feature}Header.tsx`, `{Feature}MainContent.tsx`
+**Colocation**: Follow frontend-conventions.mdc - domain-specific layout components stay in domain folder
 
 #### View Layout Component
 ```typescript
@@ -145,8 +153,9 @@ const ImportMainContent: React.FC<ImportMainContentProps> = ({
 ### 3. Business Components Layer (Feature-Specific UI)
 Handle domain-specific UI elements and interactions.
 
-**Location**: `/frontend/src/new-ui/components/business/{feature}/`
+**Location**: `/frontend/src/components/business/{feature}/` (if shared across features) or `/frontend/src/components/domain/{feature}/` (if feature-specific)
 **Naming**: Follow existing business component conventions
+**Colocation**: Follow frontend-conventions.mdc - start in domain folder, promote to business/ when reused
 
 ```typescript
 // CompactAccountsList.tsx
@@ -168,8 +177,9 @@ interface CompactAccountItemProps {
 ### 4. Modal Components Layer (Dialog Management)
 Manage all modals, dialogs, and overlay components for the feature.
 
-**Location**: `/frontend/src/new-ui/components/business/{feature}/`
+**Location**: `/frontend/src/components/domain/{feature}/` or `/frontend/src/components/business/{feature}/`
 **Naming**: `{Feature}Modals.tsx`
+**Colocation**: Follow frontend-conventions.mdc - domain-specific modals stay in domain folder
 
 ```typescript
 // ImportModals.tsx
@@ -259,22 +269,46 @@ const ImportTransactionsView: React.FC = () => {
 
 ## File Organization Structure
 
+### Option A: Feature-Specific (Colocation Pattern)
 ```
-frontend/src/new-ui/
-├── views/
-│   └── ImportTransactionsView.tsx          # Main view component (50-100 lines)
+components/domain/import/
+├── ImportPage.tsx                          # Route entry point
+├── ImportView.tsx                          # Main view component (50-100 lines)
 ├── hooks/
 │   ├── useImportState.ts                   # State management hook
 │   ├── useAccountsData.ts                  # Data fetching hook
 │   └── useFileUploadLogic.ts               # Feature logic hook
-└── components/business/import/
-    ├── ImportViewLayout.tsx                # Layout structure
-    ├── ImportHeader.tsx                    # Header component
-    ├── ImportMainContent.tsx               # Main content area
-    ├── ImportModals.tsx                    # Modal management
-    ├── CompactAccountsList.tsx             # Business component
-    └── CompactAccountItem.tsx              # Business component
+├── ImportViewLayout.tsx                    # Layout structure
+├── ImportHeader.tsx                        # Header component
+├── ImportMainContent.tsx                   # Main content area
+├── ImportModals.tsx                        # Modal management
+├── CompactAccountsList.tsx                 # Feature-specific component
+└── CompactAccountItem.tsx                  # Feature-specific component
 ```
+
+### Option B: Shared Components (When Reused)
+```
+views/
+└── ImportTransactionsView.tsx              # Main view component
+
+hooks/                                       # Shared across features
+├── useImportState.ts
+├── useAccountsData.ts
+└── useFileUploadLogic.ts
+
+components/business/import/                  # Shared across features
+├── ImportViewLayout.tsx
+├── ImportHeader.tsx
+├── ImportMainContent.tsx
+├── ImportModals.tsx
+├── CompactAccountsList.tsx
+└── CompactAccountItem.tsx
+```
+
+**Decision Rule** (from frontend-conventions.mdc):
+- Start with Option A (colocation in domain folder)
+- Move to Option B when components/hooks are reused by other features
+- Apply "Rule of Three": abstract after third similar instance
 
 ## Benefits of This Structure
 
