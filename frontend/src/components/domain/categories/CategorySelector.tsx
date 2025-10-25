@@ -1,6 +1,6 @@
 import React from 'react';
-import { Category } from '../../types/Category';
-import { CategorySuggestion } from '../hooks/usePatternSuggestions';
+import { Category } from '@/types/Category';
+import { CategorySuggestion } from '@/hooks/usePatternSuggestions';
 import './CategorySelector.css';
 
 interface CategorySelectorProps {
@@ -40,7 +40,7 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
   };
 
   // Sort categories alphabetically
-  const sortedCategories = [...existingCategories].sort((a, b) => 
+  const sortedCategories = [...existingCategories].sort((a, b) =>
     a.name.localeCompare(b.name)
   );
 

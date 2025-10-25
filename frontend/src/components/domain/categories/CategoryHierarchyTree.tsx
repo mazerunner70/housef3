@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Category, CategoryHierarchy } from '../../types/Category';
+import { Category, CategoryHierarchy } from '@/types/Category';
 import './CategoryHierarchyTree.css';
 
 interface CategoryHierarchyTreeProps {
@@ -50,11 +50,11 @@ const CategoryHierarchyTree: React.FC<CategoryHierarchyTreeProps> = ({
   const handleDrop = useCallback((e: React.DragEvent, targetCategoryId: string | null) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     if (draggedCategory && draggedCategory !== targetCategoryId && onMoveCategory) {
       onMoveCategory(draggedCategory, targetCategoryId);
     }
-    
+
     setDraggedCategory(null);
   }, [draggedCategory, onMoveCategory]);
 
@@ -130,12 +130,12 @@ const CategoryHierarchyTree: React.FC<CategoryHierarchyTreeProps> = ({
                 <span className="expand-icon">▶</span>
               </button>
             )}
-            
+
             {/* Category Icon */}
             <span className="category-icon">
               {category.icon || (category.type === 'INCOME' ? '💰' : '💸')}
             </span>
-            
+
             {/* Category Name */}
             <span className="category-name">
               {category.name}
@@ -145,10 +145,10 @@ const CategoryHierarchyTree: React.FC<CategoryHierarchyTreeProps> = ({
             <span className={`category-type-badge ${category.type.toLowerCase()}`}>
               {category.type}
             </span>
-            
+
             {/* Rule Count */}
             <div className="category-stats">
-              <span 
+              <span
                 className="rule-count"
                 title={`${ownRulesCount} own rules${inheritedRulesCount > 0 ? ` + ${inheritedRulesCount} inherited` : ''}`}
               >
@@ -161,11 +161,11 @@ const CategoryHierarchyTree: React.FC<CategoryHierarchyTreeProps> = ({
                 </span>
               )}
             </div>
-            
+
             {/* Suggestion Indicator */}
             {showSuggestions && suggestionCount > 0 && (
-              <span 
-                className="suggestion-indicator" 
+              <span
+                className="suggestion-indicator"
                 title={`${suggestionCount} unconfirmed suggestion${suggestionCount !== 1 ? 's' : ''}`}
               >
                 📋 {suggestionCount}
@@ -188,7 +188,7 @@ const CategoryHierarchyTree: React.FC<CategoryHierarchyTreeProps> = ({
               )}
             </div>
           </div>
-          
+
           {/* Category Path */}
           <div className="category-path">
             {node.fullPath}
@@ -196,13 +196,13 @@ const CategoryHierarchyTree: React.FC<CategoryHierarchyTreeProps> = ({
 
           {/* Depth indicator line */}
           {depth > 0 && (
-            <div 
-              className="depth-indicator" 
+            <div
+              className="depth-indicator"
               style={{ left: `${(depth - 1) * 20}px` }}
             />
           )}
         </div>
-        
+
         {/* Children */}
         {hasChildren && isExpanded && (
           <div className="category-children">
@@ -247,7 +247,7 @@ const CategoryHierarchyTree: React.FC<CategoryHierarchyTreeProps> = ({
       <div className="tree-header">
         <h3>Categories</h3>
         {onCreateCategory && (
-          <button 
+          <button
             className="add-category-btn primary"
             onClick={handleCreateRootCategory}
           >
@@ -255,8 +255,8 @@ const CategoryHierarchyTree: React.FC<CategoryHierarchyTreeProps> = ({
           </button>
         )}
       </div>
-      
-      <div 
+
+      <div
         className="tree-content"
         onDragOver={handleDragOver}
         onDrop={handleDropOnEmptySpace}
@@ -269,7 +269,7 @@ const CategoryHierarchyTree: React.FC<CategoryHierarchyTreeProps> = ({
             <h4>No Categories Yet</h4>
             <p>Create your first category to start organizing transactions.</p>
             {onCreateCategory && (
-              <button 
+              <button
                 className="add-category-btn secondary"
                 onClick={handleCreateRootCategory}
               >

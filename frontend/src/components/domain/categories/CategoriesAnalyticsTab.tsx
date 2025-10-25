@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AnalyticsHookResult } from '../hooks/useAnalytics';
+import { AnalyticsHookResult } from '@/hooks/useAnalytics';
 
 interface CategoriesAnalyticsTabProps {
   analytics: AnalyticsHookResult;
@@ -19,9 +19,9 @@ const CategoriesAnalyticsTab: React.FC<CategoriesAnalyticsTabProps> = ({ analyti
     amount: cat.totalAmount,
     percentage: totalAmount > 0 ? ((cat.totalAmount / totalAmount) * 100) : 0,
     transactions: cat.transactionCount,
-    trend: cat.trend === 'increasing' ? `+${cat.growthRate.toFixed(1)}%` : 
-           cat.trend === 'decreasing' ? `-${cat.growthRate.toFixed(1)}%` : 
-           `${cat.growthRate.toFixed(1)}%`
+    trend: cat.trend === 'increasing' ? `+${cat.growthRate.toFixed(1)}%` :
+      cat.trend === 'decreasing' ? `-${cat.growthRate.toFixed(1)}%` :
+        `${cat.growthRate.toFixed(1)}%`
   }));
 
   return (
@@ -30,8 +30,8 @@ const CategoriesAnalyticsTab: React.FC<CategoriesAnalyticsTabProps> = ({ analyti
       <div className="analytics-chart-container">
         <div className="analytics-chart-header">
           <h3 className="analytics-chart-title">Category Spending Analysis</h3>
-          <select 
-            value={selectedPeriod} 
+          <select
+            value={selectedPeriod}
             onChange={(e) => {
               const newTimeRange = e.target.value as any;
               setSelectedPeriod(newTimeRange);
@@ -45,7 +45,7 @@ const CategoriesAnalyticsTab: React.FC<CategoriesAnalyticsTabProps> = ({ analyti
             <option value="12months">Last 12 Months</option>
           </select>
         </div>
-        
+
         {/* Category Pie Chart Placeholder */}
         <div className="analytics-placeholder">
           {analytics.loading ? (
@@ -75,7 +75,7 @@ const CategoriesAnalyticsTab: React.FC<CategoriesAnalyticsTabProps> = ({ analyti
         <div className="analytics-chart-header">
           <h3 className="analytics-chart-title">Category Breakdown</h3>
         </div>
-        
+
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '2px solid #dee2e6' }}>
@@ -91,12 +91,12 @@ const CategoriesAnalyticsTab: React.FC<CategoriesAnalyticsTabProps> = ({ analyti
               <tr key={index} style={{ borderBottom: '1px solid #e9ecef' }}>
                 <td style={{ padding: '12px 8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div 
-                      style={{ 
-                        width: '12px', 
-                        height: '12px', 
-                        borderRadius: '50%', 
-                        backgroundColor: `hsl(${index * 50}, 70%, 60%)` 
+                    <div
+                      style={{
+                        width: '12px',
+                        height: '12px',
+                        borderRadius: '50%',
+                        backgroundColor: `hsl(${index * 50}, 70%, 60%)`
                       }}
                     ></div>
                     {category.name}
@@ -111,8 +111,8 @@ const CategoriesAnalyticsTab: React.FC<CategoriesAnalyticsTabProps> = ({ analyti
                 <td style={{ textAlign: 'right', padding: '12px 8px' }}>
                   {category.transactions}
                 </td>
-                <td style={{ 
-                  textAlign: 'right', 
+                <td style={{
+                  textAlign: 'right',
                   padding: '12px 8px',
                   color: category.trend.startsWith('+') ? '#28a745' : '#dc3545',
                   fontWeight: 500
@@ -148,39 +148,39 @@ const CategoriesAnalyticsTab: React.FC<CategoriesAnalyticsTabProps> = ({ analyti
             {transformedCategoryData.length > 0 ? `${transformedCategoryData[0].name} (${transformedCategoryData[0].percentage.toFixed(1)}%)` : 'No data'}
           </small>
         </div>
-        
+
         <div className="analytics-card">
           <h3>Fastest Growing</h3>
           <div className="analytics-metric positive">
-            {transformedCategoryData.length > 0 ? 
-              transformedCategoryData.find(cat => cat.trend.startsWith('+'))?.trend || 'N/A' : 
+            {transformedCategoryData.length > 0 ?
+              transformedCategoryData.find(cat => cat.trend.startsWith('+'))?.trend || 'N/A' :
               'N/A'
             }
           </div>
           <small>
-            {transformedCategoryData.length > 0 ? 
+            {transformedCategoryData.length > 0 ?
               transformedCategoryData.find(cat => cat.trend.startsWith('+'))?.name || 'No growth trends' :
               'No data'
             }
           </small>
         </div>
-        
+
         <div className="analytics-card">
           <h3>Most Transactions</h3>
           <div className="analytics-metric">
-            {transformedCategoryData.length > 0 ? 
-              Math.max(...transformedCategoryData.map(cat => cat.transactions)) : 
+            {transformedCategoryData.length > 0 ?
+              Math.max(...transformedCategoryData.map(cat => cat.transactions)) :
               0
             }
           </div>
           <small>
-            {transformedCategoryData.length > 0 ? 
+            {transformedCategoryData.length > 0 ?
               transformedCategoryData.find(cat => cat.transactions === Math.max(...transformedCategoryData.map(c => c.transactions)))?.name || 'No data' :
               'No data'
             }
           </small>
         </div>
-        
+
         <div className="analytics-card">
           <h3>Average per Category</h3>
           <div className="analytics-metric">

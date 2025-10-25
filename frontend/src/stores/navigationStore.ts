@@ -74,6 +74,7 @@ export interface NavigationActions {
     goToAccountList: () => void;
     goToHome: () => void;
     goToTransfers: () => void;
+    goToCategories: () => void;
     setBreadcrumb: (breadcrumb: BreadcrumbItem[]) => void;
     toggleSidebar: () => void;
     setSidebarCollapsed: (collapsed: boolean) => void;
@@ -219,6 +220,19 @@ export const useNavigationStore = create<NavigationStore>((set, get) => ({
             breadcrumb: [
                 { label: 'Home', action: () => get().goToHome(), level: 0 },
                 { label: 'Transfers', action: () => get().goToTransfers(), level: 1 }
+            ]
+        });
+    },
+
+    goToCategories: () => {
+        set({
+            currentView: 'account-list', // This doesn't really matter for categories
+            selectedAccount: undefined,
+            selectedFile: undefined,
+            selectedTransaction: undefined,
+            breadcrumb: [
+                { label: 'Home', action: () => get().goToHome(), level: 0 },
+                { label: 'Categories', action: () => get().goToCategories(), level: 1 }
             ]
         });
     },

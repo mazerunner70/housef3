@@ -12,6 +12,7 @@ export default {
   },
   testRegex: '(/__tests__/.*|(\\.|/)(test|spec))\\.(tsx?|jsx?)$',
   moduleNameMapper: {
+    '^@/utils/logger$': '<rootDir>/src/utils/__mocks__/logger.ts',
     '^@/(.*)$': '<rootDir>/src/$1',
     '^(.*/)?utils/env$': '<rootDir>/src/utils/__mocks__/env.ts',
     '\\.(css|less|sass|scss)$': 'identity-obj-proxy',

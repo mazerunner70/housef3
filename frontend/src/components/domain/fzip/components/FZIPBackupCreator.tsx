@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { FZIPBackupType, InitiateFZIPBackupRequest } from '../services/FZIPService';
-import Button from './Button';
+import { FZIPBackupType, InitiateFZIPBackupRequest } from '@/services/FZIPService';
+import Button from '@/components/Button';
 import './FZIPBackupCreator.css';
 
 interface FZIPBackupCreatorProps {

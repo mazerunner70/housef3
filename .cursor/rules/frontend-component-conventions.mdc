@@ -1,0 +1,1076 @@
+---
+description: Frontend Component Development Patterns and Conventions
+globs: frontend/src/components/**
+alwaysApply: false
+---
+
+# Frontend Component Conventions
+
+**See Also**: 
+- [frontend-conventions.mdc](./frontend-conventions.mdc) for overall architecture
+- [frontend-domain-conventions.mdc](./frontend-domain-conventions.mdc) for domain organization
+
+This document defines conventions for creating and organizing React components, including UI components, business components, and domain components.
+
+## Component Types
+
+### 1. UI Components (`components/ui/`)
+
+**Purpose:** Generic, reusable, domain-agnostic components
+
+**Characteristics:**
+- ✅ **Domain-agnostic** - No business terminology or domain concepts
+- ✅ **Highly reusable** - Used across entire application
+- ✅ **Composable** - Can only compose other UI components
+- ✅ **Pure presentation** - Minimal logic, focused on rendering
+- ✅ **Prop-driven** - Behavior controlled entirely by props
+
+**Examples:**
+```typescript
+// components/ui/Button.tsx
+// components/ui/DateCell.tsx
+// components/ui/CurrencyDisplay.tsx
+// components/ui/StatusBadge.tsx
+// components/ui/Alert.tsx
+// components/ui/LoadingState.tsx
+```
+
+**Template:**
+```typescript
+// components/ui/Button.tsx
+import React from 'react';
+import './Button.css';
+
+export interface ButtonProps {
+    variant?: 'primary' | 'secondary' | 'danger';
+    size?: 'small' | 'medium' | 'large';
+    disabled?: boolean;
+    onClick?: () => void;
+    children: React.ReactNode;
+    className?: string;
+}
+
+const Button: React.FC<ButtonProps> = ({
+    variant = 'primary',
+    size = 'medium',
+    disabled = false,
+    onClick,
+    children,
+    className = ''
+}) => {
+    return (
+        <button
+            className={`btn btn-${variant} btn-${size} ${className}`}
+            disabled={disabled}
+            onClick={onClick}
+        >
+            {children}
+        </button>
+    );
+};
+
+export default Button;
+```
+
+### 2. Business Components (`components/business/{domain}/`)
+
+**Purpose:** Shared domain-specific components used by multiple features
+
+**Characteristics:**
+- ✅ **Domain-specific** - Can use business terminology
+- ✅ **Reusable across features** - Used by 3+ features
+- ✅ **Business logic** - Contains domain-specific behavior
+- ✅ **Composable** - Can compose business components + UI components
+- ✅ **Data-aware** - Often connects to services/stores
+
+**Examples:**
+```typescript
+// components/business/categories/CategorySelector.tsx
+// components/business/transactions/TransactionTable.tsx
+// components/business/import/FileUploadDialog.tsx
+```
+
+**Template:**
+```typescript
+// components/business/categories/CategorySelector.tsx
+import React from 'react';
+import { Category } from '@/types/Category';
+import { useCategories } from '@/hooks/useCategories';
+import './CategorySelector.css';
+
+export interface CategorySelectorProps {
+    selectedCategoryId?: string;
+    onSelect: (categoryId: string) => void;
+    placeholder?: string;
+    disabled?: boolean;
+}
+
+const CategorySelector: React.FC<CategorySelectorProps> = ({
+    selectedCategoryId,
+    onSelect,
+    placeholder = 'Select a category',
+    disabled = false
+}) => {
+    const { categories, isLoading } = useCategories();
+    
+    return (
+        <select
+            className="category-selector"
+            value={selectedCategoryId}
+            onChange={(e) => onSelect(e.target.value)}
+            disabled={disabled || isLoading}
+        >
+            <option value="">{placeholder}</option>
+            {categories.map(category => (
+                <option key={category.id} value={category.id}>
+                    {category.name}
+                </option>
+            ))}
+        </select>
+    );
+};
+
+export default CategorySelector;
+```
+
+### 3. Domain Components (`components/domain/{feature}/`)
+
+**Purpose:** Feature-specific components not reused elsewhere
+
+**Characteristics:**
+- ✅ **Feature-specific** - Only used by one feature
+- ✅ **Self-contained** - All related code colocated
+- ✅ **Not reusable** - Not shared with other features
+- ✅ **Full business logic** - Contains feature-specific logic
+- ✅ **Can compose all types** - Domain, business, and UI components
+
+**Examples:**
+```typescript
+// components/domain/transfers/TransfersDashboard.tsx
+// components/domain/transfers/TransferList.tsx
+// components/domain/transfers/TransferItem.tsx
+```
+
+**Template:**
+```typescript
+// components/domain/transfers/TransfersDashboard.tsx
+import React, { useState, useEffect } from 'react';
+import { useTransferData } from './hooks/useTransferData';
+import { Button } from '@/components/ui';
+import TransferList from './TransferList';
+import './TransfersDashboard.css';
+
+const TransfersDashboard: React.FC = () => {
+    const { transfers, isLoading, detectTransfers } = useTransferData();
+    
+    return (
+        <div className="transfers-dashboard">
+            <header>
+                <h2>Transfer Detection</h2>
+                <Button onClick={detectTransfers} disabled={isLoading}>
+                    Scan for Transfers
+                </Button>
+            </header>
+            
+            <TransferList transfers={transfers} isLoading={isLoading} />
+        </div>
+    );
+};
+
+export default TransfersDashboard;
+```
+
+## Component Organization Rules
+
+### Composition Rules
+
+**UI Components:**
+```typescript
+// ✅ CAN compose other UI components
+import { Button } from '@/components/ui/Button';
+import { Icon } from '@/components/ui/Icon';
+
+// ❌ CANNOT compose business or domain components
+import { CategorySelector } from '@/components/business/categories'; // NO!
+```
+
+**Business Components:**
+```typescript
+// ✅ CAN compose UI components
+import { Button } from '@/components/ui/Button';
+
+// ✅ CAN compose other business components
+import { CategoryHierarchy } from '@/components/business/categories';
+
+// ❌ CANNOT compose domain components
+import { TransferList } from '@/components/domain/transfers'; // NO!
+```
+
+**Domain Components:**
+```typescript
+// ✅ CAN compose everything
+import { Button } from '@/components/ui/Button';
+import { CategorySelector } from '@/components/business/categories';
+import { TransferItem } from './TransferItem'; // Other domain components
+```
+
+### Dependency Flow
+
+```
+Domain Components (top)
+    ↓ can use
+Business Components (middle)
+    ↓ can use
+UI Components (bottom)
+
+❌ NEVER flow upward!
+```
+
+### Location Decision Tree
+
+```
+Is component used by ONLY ONE feature?
+  → components/domain/{feature}/
+
+Is component domain-specific but used by 2 features?
+  → Tolerate duplication for now
+
+Is component domain-specific and used by 3+ features?
+  → components/business/{domain}/
+
+Is component generic and domain-agnostic?
+  → components/ui/
+```
+
+## Component Structure
+
+### File Organization
+
+**Single Component:**
+```
+ComponentName/
+├── ComponentName.tsx        # Component implementation
+├── ComponentName.css        # Component styles
+├── ComponentName.test.tsx   # Component tests
+└── index.ts                 # Optional barrel export
+```
+
+**Or flat (simpler):**
+```
+ComponentName.tsx
+ComponentName.css
+ComponentName.test.tsx
+```
+
+**Complex Component with Sub-components:**
+```
+ComponentName/
+├── ComponentName.tsx        # Main component
+├── ComponentName.css
+├── ComponentName.test.tsx
+├── SubComponent1.tsx        # Internal sub-components
+├── SubComponent2.tsx
+└── index.ts
+```
+
+### Component File Structure
+
+```typescript
+// 1. Imports
+import React, { useState, useEffect, useCallback } from 'react';
+import { externalLibrary } from 'external-library';
+import { InternalComponent } from '@/components/ui';
+import { useCustomHook } from '@/hooks/useCustomHook';
+import { ServiceFunction } from '@/services/ServiceName';
+import { TypeDefinition } from '@/types/TypeName';
+import './ComponentName.css';
+
+// 2. Type Definitions
+export interface ComponentNameProps {
+    requiredProp: string;
+    optionalProp?: number;
+    callback?: (value: string) => void;
+    children?: React.ReactNode;
+}
+
+interface InternalState {
+    value: string;
+    isActive: boolean;
+}
+
+// 3. Constants
+const DEFAULT_VALUE = 'default';
+const MAX_ITEMS = 100;
+
+// 4. Component Definition
+const ComponentName: React.FC<ComponentNameProps> = ({
+    requiredProp,
+    optionalProp = 42,
+    callback,
+    children
+}) => {
+    // 4a. State
+    const [state, setState] = useState<InternalState>({
+        value: DEFAULT_VALUE,
+        isActive: false
+    });
+    
+    // 4b. Hooks
+    const { data, isLoading } = useCustomHook();
+    
+    // 4c. Effects
+    useEffect(() => {
+        // Effect logic
+    }, [/* dependencies */]);
+    
+    // 4d. Event Handlers
+    const handleClick = useCallback(() => {
+        // Handler logic
+        callback?.(state.value);
+    }, [state.value, callback]);
+    
+    // 4e. Render Helpers (if complex)
+    const renderItem = (item: any) => {
+        return <div key={item.id}>{item.name}</div>;
+    };
+    
+    // 4f. Early Returns
+    if (isLoading) {
+        return <LoadingState />;
+    }
+    
+    // 4g. Main Render
+    return (
+        <div className="component-name">
+            {/* Component JSX */}
+        </div>
+    );
+};
+
+// 5. Export
+export default ComponentName;
+```
+
+## Props Conventions
+
+### Prop Interface Pattern
+
+```typescript
+// ✅ GOOD: Named interface exported
+export interface ButtonProps {
+    variant: 'primary' | 'secondary';
+    onClick: () => void;
+    children: React.ReactNode;
+}
+
+const Button: React.FC<ButtonProps> = ({ variant, onClick, children }) => {
+    // ...
+};
+
+// ❌ BAD: Inline props
+const Button = ({ variant, onClick, children }: {
+    variant: string;
+    onClick: () => void;
+    children: React.ReactNode;
+}) => {
+    // ...
+};
+```
+
+### Prop Naming
+
+```typescript
+export interface ComponentProps {
+    // Data props - nouns
+    user: User;
+    items: Item[];
+    totalCount: number;
+    
+    // Boolean props - is/has/can/should
+    isLoading: boolean;
+    hasError: boolean;
+    canEdit: boolean;
+    shouldAutoFocus: boolean;
+    
+    // Event handlers - on{Event}
+    onClick: () => void;
+    onSubmit: (data: FormData) => void;
+    onValueChange: (value: string) => void;
+    
+    // Render props - render{What}
+    renderHeader?: () => React.ReactNode;
+    renderItem?: (item: Item) => React.ReactNode;
+    
+    // Children
+    children?: React.ReactNode;
+    
+    // Styling
+    className?: string;
+    style?: React.CSSProperties;
+}
+```
+
+### Optional vs Required Props
+
+```typescript
+export interface FormProps {
+    // Required - no default value needed
+    onSubmit: (data: FormData) => void;
+    fieldName: string;
+    
+    // Optional - provide default in destructuring
+    variant?: 'default' | 'compact';
+    disabled?: boolean;
+    placeholder?: string;
+}
+
+const Form: React.FC<FormProps> = ({
+    onSubmit,
+    fieldName,
+    variant = 'default',     // Default in destructuring
+    disabled = false,         // Default in destructuring
+    placeholder = 'Enter value'  // Default in destructuring
+}) => {
+    // ...
+};
+```
+
+### Prop Spreading (Use Sparingly)
+
+```typescript
+// ✅ GOOD: Explicit props
+const Button: React.FC<ButtonProps> = ({ onClick, children, disabled }) => {
+    return (
+        <button onClick={onClick} disabled={disabled}>
+            {children}
+        </button>
+    );
+};
+
+// ⚠️ OK: Spreading for HTML attributes
+const Input: React.FC<InputProps> = ({ onChange, ...htmlProps }) => {
+    return <input onChange={onChange} {...htmlProps} />;
+};
+
+// ❌ BAD: Blind spreading loses type safety
+const Component = ({ ...props }) => {
+    return <div {...props} />;  // What props does this accept?
+};
+```
+
+## State Management
+
+### Local State (useState)
+
+```typescript
+// ✅ GOOD: Single state object for related values
+const [formState, setFormState] = useState({
+    name: '',
+    email: '',
+    isValid: false
+});
+
+// ✅ GOOD: Separate state for independent values
+const [name, setName] = useState('');
+const [isSubmitting, setIsSubmitting] = useState(false);
+
+// ❌ BAD: Too many separate states for related data
+const [firstName, setFirstName] = useState('');
+const [lastName, setLastName] = useState('');
+const [email, setEmail] = useState('');
+const [phone, setPhone] = useState('');
+// ... 10 more setState calls
+// Should be: one formData state object
+```
+
+### Derived State (useMemo)
+
+```typescript
+const Component = ({ items }) => {
+    // ✅ GOOD: Compute expensive derived values with useMemo
+    const sortedItems = useMemo(() => {
+        return items.sort((a, b) => a.date.localeCompare(b.date));
+    }, [items]);
+    
+    const totalValue = useMemo(() => {
+        return items.reduce((sum, item) => sum + item.value, 0);
+    }, [items]);
+    
+    // ❌ BAD: Compute in render (expensive operation on every render)
+    const sortedItems = items.sort(...);  // Runs every render!
+};
+```
+
+### Callbacks (useCallback)
+
+```typescript
+const ParentComponent = () => {
+    const [count, setCount] = useState(0);
+    
+    // ✅ GOOD: Stable callback reference
+    const handleClick = useCallback(() => {
+        setCount(c => c + 1);
+    }, []);  // Empty deps - callback never changes
+    
+    // Pass to child - won't cause unnecessary re-renders
+    return <ChildComponent onClick={handleClick} />;
+};
+
+// ❌ BAD: New function on every render
+const ParentComponent = () => {
+    const [count, setCount] = useState(0);
+    
+    const handleClick = () => {  // New function every render
+        setCount(count + 1);
+    };
+    
+    return <ChildComponent onClick={handleClick} />;  // Child re-renders unnecessarily
+};
+```
+
+## Component Patterns
+
+### Controlled vs Uncontrolled Components
+
+**Controlled (Recommended for most cases):**
+```typescript
+// ✅ Parent controls the value
+const ControlledInput: React.FC<{
+    value: string;
+    onChange: (value: string) => void;
+}> = ({ value, onChange }) => {
+    return (
+        <input
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+        />
+    );
+};
+
+// Usage
+const Parent = () => {
+    const [value, setValue] = useState('');
+    return <ControlledInput value={value} onChange={setValue} />;
+};
+```
+
+**Uncontrolled (Use for simple forms):**
+```typescript
+// Component manages its own state
+const UncontrolledInput: React.FC<{
+    defaultValue?: string;
+    onSubmit: (value: string) => void;
+}> = ({ defaultValue = '', onSubmit }) => {
+    const inputRef = useRef<HTMLInputElement>(null);
+    
+    const handleSubmit = () => {
+        if (inputRef.current) {
+            onSubmit(inputRef.current.value);
+        }
+    };
+    
+    return (
+        <div>
+            <input ref={inputRef} defaultValue={defaultValue} />
+            <button onClick={handleSubmit}>Submit</button>
+        </div>
+    );
+};
+```
+
+### Compound Components
+
+```typescript
+// Parent provides context, children consume it
+interface TabsContextValue {
+    activeTab: string;
+    setActiveTab: (tab: string) => void;
+}
+
+const TabsContext = React.createContext<TabsContextValue | null>(null);
+
+const Tabs: React.FC<{ children: React.ReactNode }> & {
+    Tab: typeof Tab;
+    Panel: typeof Panel;
+} = ({ children }) => {
+    const [activeTab, setActiveTab] = useState('');
+    
+    return (
+        <TabsContext.Provider value={{ activeTab, setActiveTab }}>
+            <div className="tabs">{children}</div>
+        </TabsContext.Provider>
+    );
+};
+
+const Tab: React.FC<{ id: string; children: React.ReactNode }> = ({ id, children }) => {
+    const context = useContext(TabsContext);
+    return (
+        <button
+            className={context?.activeTab === id ? 'active' : ''}
+            onClick={() => context?.setActiveTab(id)}
+        >
+            {children}
+        </button>
+    );
+};
+
+const Panel: React.FC<{ id: string; children: React.ReactNode }> = ({ id, children }) => {
+    const context = useContext(TabsContext);
+    if (context?.activeTab !== id) return null;
+    return <div>{children}</div>;
+};
+
+Tabs.Tab = Tab;
+Tabs.Panel = Panel;
+
+// Usage
+<Tabs>
+    <Tabs.Tab id="one">Tab One</Tabs.Tab>
+    <Tabs.Tab id="two">Tab Two</Tabs.Tab>
+    <Tabs.Panel id="one">Content One</Tabs.Panel>
+    <Tabs.Panel id="two">Content Two</Tabs.Panel>
+</Tabs>
+```
+
+### Render Props
+
+```typescript
+interface ListProps<T> {
+    items: T[];
+    renderItem: (item: T, index: number) => React.ReactNode;
+    renderEmpty?: () => React.ReactNode;
+}
+
+function List<T>({ items, renderItem, renderEmpty }: ListProps<T>) {
+    if (items.length === 0) {
+        return <>{renderEmpty?.() || <div>No items</div>}</>;
+    }
+    
+    return (
+        <div className="list">
+            {items.map((item, index) => (
+                <div key={index} className="list-item">
+                    {renderItem(item, index)}
+                </div>
+            ))}
+        </div>
+    );
+}
+
+// Usage
+<List
+    items={users}
+    renderItem={(user) => <UserCard user={user} />}
+    renderEmpty={() => <EmptyState message="No users found" />}
+/>
+```
+
+## Performance Optimization
+
+### React.memo
+
+```typescript
+// ✅ GOOD: Memoize expensive pure components
+const ExpensiveComponent = React.memo<ExpensiveProps>(({ data }) => {
+    // Expensive rendering logic
+    return <div>{/* Complex UI */}</div>;
+});
+
+// ⚠️ OPTIONAL: Custom comparison
+const CustomMemoComponent = React.memo(
+    ({ user }) => <UserCard user={user} />,
+    (prevProps, nextProps) => {
+        // Only re-render if user ID changes
+        return prevProps.user.id === nextProps.user.id;
+    }
+);
+
+// ❌ DON'T: Memoize everything (premature optimization)
+const SimpleComponent = React.memo(({ text }) => <div>{text}</div>);
+// Not worth it for simple components
+```
+
+### Code Splitting
+
+```typescript
+// ✅ GOOD: Lazy load heavy components
+const HeavyChart = React.lazy(() => import('./HeavyChart'));
+
+const Dashboard = () => {
+    return (
+        <Suspense fallback={<LoadingSpinner />}>
+            <HeavyChart data={data} />
+        </Suspense>
+    );
+};
+
+// ✅ GOOD: Lazy load route components
+const AnalyticsPage = React.lazy(() => import('@/pages/AnalyticsPage'));
+
+<Route path="/analytics" element={
+    <Suspense fallback={<LoadingState />}>
+        <AnalyticsPage />
+    </Suspense>
+} />
+```
+
+## Styling Conventions
+
+### Component-Level Styles
+
+```typescript
+// Component: Button.tsx
+import './Button.css';  // Import component styles
+
+const Button = ({ children }) => {
+    return <button className="btn">{children}</button>;
+};
+```
+
+```css
+/* Button.css - Component-specific styles */
+.btn {
+    padding: 8px 16px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-primary {
+    background-color: var(--color-primary);
+    color: white;
+}
+
+.btn-secondary {
+    background-color: var(--color-secondary);
+    color: white;
+}
+```
+
+### Class Name Conventions
+
+```typescript
+// ✅ GOOD: BEM-like naming
+<div className="transfer-dashboard">
+    <header className="transfer-dashboard__header">
+        <h2 className="transfer-dashboard__title">Transfers</h2>
+    </header>
+    <div className="transfer-dashboard__content">
+        <div className="transfer-dashboard__item transfer-dashboard__item--active">
+            Item
+        </div>
+    </div>
+</div>
+
+// ✅ GOOD: Conditional classes
+<button
+    className={`btn btn-${variant} ${isActive ? 'btn--active' : ''} ${className}`}
+    disabled={disabled}
+>
+    {children}
+</button>
+
+// ✅ BETTER: Use classnames library for complex conditions
+import classNames from 'classnames';
+
+<button
+    className={classNames('btn', {
+        [`btn-${variant}`]: variant,
+        'btn--active': isActive,
+        'btn--disabled': disabled
+    }, className)}
+>
+    {children}
+</button>
+```
+
+## Accessibility
+
+### Semantic HTML
+
+```typescript
+// ✅ GOOD: Use semantic elements
+<nav>
+    <ul>
+        <li><a href="/home">Home</a></li>
+        <li><a href="/about">About</a></li>
+    </ul>
+</nav>
+
+<article>
+    <header>
+        <h1>Article Title</h1>
+    </header>
+    <section>
+        <p>Content...</p>
+    </section>
+</article>
+
+// ❌ BAD: Generic divs everywhere
+<div className="nav">
+    <div className="nav-list">
+        <div className="nav-item">Home</div>
+    </div>
+</div>
+```
+
+### ARIA Attributes
+
+```typescript
+// ✅ GOOD: Proper ARIA attributes
+<button
+    aria-label="Close dialog"
+    aria-pressed={isPressed}
+    onClick={handleClick}
+>
+    <CloseIcon aria-hidden="true" />
+</button>
+
+<input
+    type="text"
+    aria-label="Search transactions"
+    aria-describedby="search-help"
+    aria-invalid={hasError}
+/>
+<span id="search-help">Enter transaction description</span>
+
+// ✅ GOOD: Role for custom widgets
+<div
+    role="tablist"
+    aria-label="Account tabs"
+>
+    <button
+        role="tab"
+        aria-selected={isSelected}
+        aria-controls="panel-1"
+    >
+        Tab 1
+    </button>
+</div>
+```
+
+### Keyboard Navigation
+
+```typescript
+// ✅ GOOD: Keyboard support
+const Modal = ({ onClose }) => {
+    useEffect(() => {
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                onClose();
+            }
+        };
+        
+        globalThis.addEventListener('keydown', handleEscape);
+        return () => globalThis.removeEventListener('keydown', handleEscape);
+    }, [onClose]);
+    
+    return (
+        <div role="dialog" aria-modal="true">
+            {/* Modal content */}
+        </div>
+    );
+};
+
+// ✅ GOOD: Clickable non-button elements need keyboard support
+<div
+    role="button"
+    tabIndex={0}
+    onClick={handleClick}
+    onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            handleClick();
+        }
+    }}
+>
+    Click me
+</div>
+```
+
+## Error Handling
+
+### Error Boundaries
+
+```typescript
+// ErrorBoundary.tsx
+import React, { Component, ErrorInfo, ReactNode } from 'react';
+
+interface Props {
+    children: ReactNode;
+    fallback?: ReactNode;
+}
+
+interface State {
+    hasError: boolean;
+    error?: Error;
+}
+
+class ErrorBoundary extends Component<Props, State> {
+    constructor(props: Props) {
+        super(props);
+        this.state = { hasError: false };
+    }
+    
+    static getDerivedStateFromError(error: Error): State {
+        return { hasError: true, error };
+    }
+    
+    componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+        console.error('Error caught by boundary:', error, errorInfo);
+    }
+    
+    render() {
+        if (this.state.hasError) {
+            return this.props.fallback || (
+                <div className="error-boundary">
+                    <h2>Something went wrong</h2>
+                    <p>{this.state.error?.message}</p>
+                </div>
+            );
+        }
+        
+        return this.props.children;
+    }
+}
+
+// Usage
+<ErrorBoundary fallback={<ErrorPage />}>
+    <FeatureComponent />
+</ErrorBoundary>
+```
+
+### Component Error Handling
+
+```typescript
+// ✅ GOOD: Handle errors in component
+const DataComponent = () => {
+    const [data, setData] = useState(null);
+    const [error, setError] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+    
+    useEffect(() => {
+        const fetchData = async () => {
+            setIsLoading(true);
+            setError(null);
+            
+            try {
+                const result = await fetchDataFromAPI();
+                setData(result);
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'Failed to fetch data');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        
+        fetchData();
+    }, []);
+    
+    if (isLoading) return <LoadingState />;
+    if (error) return <ErrorState message={error} />;
+    if (!data) return <EmptyState />;
+    
+    return <DataDisplay data={data} />;
+};
+```
+
+## Testing
+
+### Component Testing Template
+
+```typescript
+// ComponentName.test.tsx
+import { render, screen, fireEvent } from '@testing-library/react';
+import { ComponentName } from './ComponentName';
+
+describe('ComponentName', () => {
+    it('should render with required props', () => {
+        render(<ComponentName requiredProp="value" />);
+        
+        expect(screen.getByText('Expected Text')).toBeInTheDocument();
+    });
+    
+    it('should handle user interactions', () => {
+        const handleClick = jest.fn();
+        render(<ComponentName onClick={handleClick} />);
+        
+        const button = screen.getByRole('button');
+        fireEvent.click(button);
+        
+        expect(handleClick).toHaveBeenCalledTimes(1);
+    });
+    
+    it('should show loading state', () => {
+        render(<ComponentName isLoading={true} />);
+        
+        expect(screen.getByTestId('loading-spinner')).toBeInTheDocument();
+    });
+    
+    it('should show error state', () => {
+        render(<ComponentName error="Error message" />);
+        
+        expect(screen.getByText('Error message')).toBeInTheDocument();
+    });
+});
+```
+
+## Best Practices Summary
+
+### DO ✅
+
+1. **Use TypeScript** - All props and state should be typed
+2. **Export prop interfaces** - Makes components reusable and testable
+3. **Keep components small** - Single responsibility principle
+4. **Use semantic HTML** - Improves accessibility
+5. **Add ARIA attributes** - Support screen readers
+6. **Handle keyboard navigation** - Support keyboard-only users
+7. **Memoize expensive computations** - Use useMemo for performance
+8. **Use useCallback for event handlers** - Prevent unnecessary re-renders
+9. **Write component tests** - Test behavior, not implementation
+10. **Keep styles scoped** - Component-specific CSS files
+
+### DON'T ❌
+
+1. **Don't violate composition rules** - UI can't use business components
+2. **Don't spread props blindly** - Loses type safety
+3. **Don't put business logic in UI components** - Keep them pure
+4. **Don't create mega-components** - Break into smaller pieces
+5. **Don't forget error handling** - Always handle loading/error states
+6. **Don't skip accessibility** - ARIA and keyboard support required
+7. **Don't optimize prematurely** - Profile before memoizing
+8. **Don't inline styles everywhere** - Use CSS files
+9. **Don't forget PropTypes** - TypeScript props are required
+10. **Don't test implementation details** - Test user behavior
+
+## Summary
+
+**Component Organization:**
+- UI components → Generic, reusable, domain-agnostic
+- Business components → Domain-specific, shared across 3+ features
+- Domain components → Feature-specific, not reused
+
+**Key Principles:**
+1. **Composition over inheritance** - Build complex UIs from simple pieces
+2. **Props down, events up** - Data flows down, events flow up
+3. **Single responsibility** - Each component does one thing well
+4. **Explicit over implicit** - Clear props and interfaces
+5. **Accessible by default** - ARIA, keyboard, semantic HTML
+
+**Decision Tree:**
+```
+Creating new component?
+  ↓
+Is it domain-agnostic?
+  YES → components/ui/
+  NO → Continue...
+  ↓
+Used by only 1 feature?
+  YES → components/domain/{feature}/
+  NO → Continue...
+  ↓
+Used by 3+ features?
+  YES → components/business/{domain}/
+  NO → Wait for Rule of Three
+```
+
+This convention ensures components remain organized, maintainable, and follow consistent patterns across the entire frontend codebase.

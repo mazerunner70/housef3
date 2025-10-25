@@ -6,12 +6,12 @@ import HomePage from '@/pages/HomePage';
 import AccountsPage from '@/pages/AccountsPage';
 import TransactionsPage from '@/pages/TransactionsPage';
 import TransfersPage from '@/components/domain/transfers/TransfersPage';
+import CategoriesPage from '@/components/domain/categories/CategoriesPage';
 import ImportTransactionsPage from '@/pages/ImportTransactionsPage';
 import AccountFileUploadPage from '@/pages/AccountFileUploadPage';
 import AnalyticsView from '@/views/AnalyticsView';
-import FZIPManagementView from '@/views/FZIPManagementView';
+import FZIPPage from '@/components/domain/fzip/FZIPPage';
 import {
-  CategoriesPage,
   CategoryDetailPage,
   CategoryTransactionsPage,
   CategoryAccountsPage,
@@ -151,7 +151,8 @@ function App() {
 
         {/* Other routes */}
         <Route path="analytics" element={<AnalyticsView />} />
-        <Route path="backup" element={<FZIPManagementView />} />
+        <Route path="fzip" element={<FZIPPage />} />
+        <Route path="backup" element={<FZIPPage />} /> {/* Legacy route - redirects to /fzip */}
         <Route path="*" element={<div><p>Page Not Found</p></div>} />
       </Route>
     </Routes>
