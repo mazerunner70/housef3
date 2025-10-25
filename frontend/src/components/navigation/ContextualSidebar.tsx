@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { useNavigationStore } from '@/stores/navigationStore';
 import AccountsSidebarContent from './sidebar-content/AccountsSidebarContent';
 import TransactionsSidebarContent from './sidebar-content/TransactionsSidebarContent';
-import CategoriesSidebarContent from './sidebar-content/CategoriesSidebarContent';
+import CategoriesSidebarContent from '@/components/domain/categories/sidebar/CategoriesSidebarContent';
 import ImportSidebarContent from './sidebar-content/ImportSidebarContent';
 import TransfersSidebarContent from '@/components/domain/transfers/sidebar/TransfersSidebarContent';
 import FZIPSidebarContent from '@/components/domain/fzip/sidebar/FZIPSidebarContent';

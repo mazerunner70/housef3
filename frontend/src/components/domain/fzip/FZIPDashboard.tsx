@@ -440,7 +440,7 @@ const FZIPDashboard: React.FC = () => {
                                     ) : (
                                         <Button
                                             variant="secondary"
-                                            size="small"
+                                            size="compact"
                                             onClick={handleRefreshBackups}
                                         >
                                             Try Again
@@ -459,7 +459,7 @@ const FZIPDashboard: React.FC = () => {
                                         <h2>Create New Backup</h2>
                                         <Button
                                             variant="secondary"
-                                            size="small"
+                                            size="compact"
                                             onClick={() => setShowBackupCreator(false)}
                                         >
                                             Cancel
@@ -478,11 +478,11 @@ const FZIPDashboard: React.FC = () => {
                                 <div className="section-header">
                                     <h2>Your Backups</h2>
                                     <div className="section-info">
-                                        {backups.length === 1 ? (
-                                            <span className="backup-count">1 backup</span>
-                                        ) : backups.length > 1 ? (
-                                            <span className="backup-count">{backups.length} backups</span>
-                                        ) : null}
+                                        {backups.length > 0 && (
+                                            <span className="backup-count">
+                                                {backups.length} {backups.length === 1 ? 'backup' : 'backups'}
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
 
@@ -615,11 +615,11 @@ const FZIPDashboard: React.FC = () => {
                                 <div className="section-header">
                                     <h2>Restore Jobs</h2>
                                     <div className="section-info">
-                                        {restoreJobs.length === 1 ? (
-                                            <span className="job-count">1 job</span>
-                                        ) : restoreJobs.length > 1 ? (
-                                            <span className="job-count">{restoreJobs.length} jobs</span>
-                                        ) : null}
+                                        {restoreJobs.length > 0 && (
+                                            <span className="job-count">
+                                                {restoreJobs.length} {restoreJobs.length === 1 ? 'job' : 'jobs'}
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
 
@@ -840,36 +840,39 @@ const FZIPDashboard: React.FC = () => {
                             )}
 
                             {/* Loading/Progress View */}
-                            {![FZIPRestoreStatus.AWAITING_CONFIRMATION, FZIPRestoreStatus.VALIDATION_PASSED, FZIPRestoreStatus.COMPLETED, FZIPRestoreStatus.FAILED].includes(activeRestoreStatus.status) && (
-                                <div className="restore-progress-modal">
-                                    <div className="progress-header">
-                                        <h3 id="progress-modal-title">Restore in Progress</h3>
-                                        <p>Status: {activeRestoreStatus.status.replace('restore_', '').replace('_', ' ')}</p>
-                                    </div>
-
-                                    <div className="progress-content">
-                                        <div className="progress-bar">
-                                            <div
-                                                className="progress-fill"
-                                                style={{ width: `${activeRestoreStatus.progress}%` }}
-                                            />
+                            {(activeRestoreStatus.status !== FZIPRestoreStatus.AWAITING_CONFIRMATION &&
+                                activeRestoreStatus.status !== FZIPRestoreStatus.VALIDATION_PASSED &&
+                                activeRestoreStatus.status !== FZIPRestoreStatus.COMPLETED &&
+                                activeRestoreStatus.status !== FZIPRestoreStatus.FAILED) && (
+                                    <div className="restore-progress-modal">
+                                        <div className="progress-header">
+                                            <h3 id="progress-modal-title">Restore in Progress</h3>
+                                            <p>Status: {activeRestoreStatus.status.replace('restore_', '').replace('_', ' ')}</p>
                                         </div>
-                                        <span className="progress-text">{activeRestoreStatus.progress}%</span>
 
-                                        {activeRestoreStatus.currentPhase && (
-                                            <p className="current-phase">
-                                                Current phase: {activeRestoreStatus.currentPhase}
-                                            </p>
-                                        )}
-                                    </div>
+                                        <div className="progress-content">
+                                            <div className="progress-bar">
+                                                <div
+                                                    className="progress-fill"
+                                                    style={{ width: `${activeRestoreStatus.progress}%` }}
+                                                />
+                                            </div>
+                                            <span className="progress-text">{activeRestoreStatus.progress}%</span>
 
-                                    <div className="progress-actions">
-                                        <Button variant="secondary" onClick={handleCloseModal}>
-                                            Close
-                                        </Button>
+                                            {activeRestoreStatus.currentPhase && (
+                                                <p className="current-phase">
+                                                    Current phase: {activeRestoreStatus.currentPhase}
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        <div className="progress-actions">
+                                            <Button variant="secondary" onClick={handleCloseModal}>
+                                                Close
+                                            </Button>
+                                        </div>
                                     </div>
-                                </div>
-                            )}
+                                )}
 
                             {/* Close button */}
                             <button

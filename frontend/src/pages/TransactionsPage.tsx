@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import TransactionsListTab from '@/components/business/transactions/TransactionsListTab';
-import CategoryManagementTab from '@/components/business/categories/CategoryManagementTab';
+import CategoriesDashboard from '@/components/domain/categories/CategoriesDashboard';
 import StatementsImportsTab from '@/components/business/transactions/StatementsImportsTab';
 import TransfersDashboard from '@/components/domain/transfers/TransfersDashboard';
 import './TransactionsPage.css'; // Main CSS file for the page, should contain tab styles
@@ -15,7 +15,7 @@ const TransactionsPage: React.FC = () => {
             case 'TRANSACTIONS_LIST':
                 return <TransactionsListTab />;
             case 'CATEGORY_MANAGEMENT':
-                return <CategoryManagementTab />;
+                return <CategoriesDashboard />;
             case 'STATEMENTS_IMPORTS':
                 return <StatementsImportsTab />;
             case 'TRANSFERS':

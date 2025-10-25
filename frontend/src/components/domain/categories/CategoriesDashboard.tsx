@@ -3,12 +3,12 @@ import { Category, CategorySuggestionStrategy, CategoryRule, MatchCondition, Cat
 import { useCategories, useCategoryRules } from '@/hooks/useCategories';
 import { useRealTimeRuleTesting } from '@/hooks/useRealTimeRuleTesting';
 import { CategoryService } from '@/services/CategoryService';
-import CategoryHierarchyTree from '@/components/CategoryHierarchyTree';
+import CategoryHierarchyTree from './CategoryHierarchyTree';
 import RuleBuilder from '@/components/RuleBuilder';
 import ConfirmationModal from '@/components/ConfirmationModal';
-import './CategoryManagementTab.css';
+import './CategoriesDashboard.css';
 
-interface CategoryManagementTabProps {
+interface CategoriesDashboardProps {
   // Deep-linking support for pre-populated category creation
   initialCategoryData?: {
     suggestedName?: string;
@@ -20,7 +20,7 @@ interface CategoryManagementTabProps {
   onCategoryCreated?: (category: Category) => void;
 }
 
-const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
+const CategoriesDashboard: React.FC<CategoriesDashboardProps> = ({
   initialCategoryData,
   onCategoryCreated
 }) => {
@@ -725,7 +725,7 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
 
         const response = await CategoryService.createWithRule(
           formData.name,
-          formData.type,
+          formData.type as 'INCOME' | 'EXPENSE',
           selectedPattern,
           selectedPatternData?.field || 'description', // Default to 'description' field
           selectedPatternData?.condition || 'contains' // Default to 'contains' condition
@@ -959,4 +959,4 @@ const CreateCategoryModal: React.FC<CreateCategoryModalProps> = ({
   );
 };
 
-export default CategoryManagementTab; 
+export default CategoriesDashboard; 
