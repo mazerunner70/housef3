@@ -20,7 +20,7 @@
     "apexcharts": "^4.7.0",
     "consola": "^3.4.2",
     "decimal.js": "^10.6.0",
-    "react": "^19.1.1",
+    "react": "^19.2.0",
     "react-apexcharts": "^1.7.0",
     "zod": "^4.1.11",
     "react-dom": "^19.1.1",
