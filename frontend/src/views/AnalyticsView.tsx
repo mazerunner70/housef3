@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import OverallAnalyticsTab from './OverallAnalyticsTab';
-import CategoriesAnalyticsTab from './CategoriesAnalyticsTab';
+import CategoriesAnalyticsTab from '../components/domain/categories/CategoriesAnalyticsTab';
 import AccountsAnalyticsTab from './AccountsAnalyticsTab';
 import useAnalytics from '../hooks/useAnalytics';
 import './AnalyticsView.css';
@@ -52,7 +52,7 @@ const AnalyticsView: React.FC = () => {
     <div className="analytics-view">
       <header className="analytics-view-header">
         <h1>Analytics</h1>
-        
+
         {/* Data Status Indicator */}
         <div className="analytics-status">
           {analytics.loading && (
@@ -62,8 +62,8 @@ const AnalyticsView: React.FC = () => {
             <span className="status-refreshing">Refreshing...</span>
           )}
           {analytics.error && (
-            <span 
-              className="status-error" 
+            <span
+              className="status-error"
               onClick={analytics.clearError}
               onKeyDown={(e) => e.key === 'Enter' && analytics.clearError()}
               tabIndex={0}
@@ -84,8 +84,8 @@ const AnalyticsView: React.FC = () => {
         </div>
 
         <div className="analytics-view-actions">
-          <button 
-            className="analytics-action-button" 
+          <button
+            className="analytics-action-button"
             onClick={handleRefreshAnalytics}
             disabled={analytics.refreshing}
           >
