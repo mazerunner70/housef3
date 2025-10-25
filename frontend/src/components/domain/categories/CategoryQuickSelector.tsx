@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { CategoryService } from '../services/CategoryService';
-import { Category, MatchCondition } from '../../types/Category';
+import { CategoryService } from '@/services/CategoryService';
+import { Category, MatchCondition } from '@/types/Category';
 import './CategoryQuickSelector.css';
 
 interface CategoryQuickSelectorProps {

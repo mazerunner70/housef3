@@ -9,7 +9,7 @@ import {
   listFZIPBackups,
   deleteFZIPBackup,
   downloadFZIPBackup
-} from '../services/FZIPService';
+} from '@/services/FZIPService';
 
 export interface UseFZIPBackupsResult {
   backups: FZIPBackupJob[];

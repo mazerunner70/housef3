@@ -1,0 +1,789 @@
+---
+description: Frontend Domain Component Organization Patterns and Conventions
+globs: frontend/src/components/domain/**
+alwaysApply: false
+---
+
+# Frontend Domain Component Conventions
+
+**See Also**: [frontend-conventions.mdc](./frontend-conventions.mdc) for overall architecture patterns
+
+This document defines conventions for organizing domain-specific features using the domain folder pattern. Domains are self-contained feature folders that encapsulate all code specific to a single feature.
+
+## What is a Domain?
+
+### Definition
+A **domain** is a self-contained folder in `components/domain/{feature}/` that contains all code specific to a single business feature that is not reused by other features.
+
+**Key Characteristics:**
+- ✅ **Single feature focus** - Serves one specific business capability
+- ✅ **Self-contained** - Includes all related code (components, hooks, utils, types, etc.)
+- ✅ **Not reused** - Code is not shared with other features
+- ✅ **Routable** - Has a routing entry point (`{DomainName}Page.tsx`)
+
+**Examples from your codebase:**
+- `components/domain/transfers/` - Transfer detection and management
+- `components/domain/portfolios/` - Portfolio management (future example)
+- `components/domain/analytics/` - Analytics dashboard (future example)
+
+### When to Create a Domain
+
+Create a domain folder when **ALL** of these are true:
+
+1. ✅ **Feature has its own route** - Users can navigate directly to it (e.g., `/transfers`)
+2. ✅ **Feature is self-contained** - Doesn't need to be embedded in multiple places
+3. ✅ **Feature has substantial logic** - More than just a simple component
+4. ✅ **Feature code won't be reused** - Other features don't need this code
+
+**Examples:**
+```
+✅ YES - Create domain for:
+- Transfer detection system (/transfers)
+- Portfolio management (/portfolios)
+- Analytics dashboard (/analytics)
+- Report generator (/reports)
+
+❌ NO - Don't create domain for:
+- Category selector (reused by multiple features)
+- Date picker (generic UI component)
+- Transaction table (reused across features)
+- Small modal dialogs (part of larger feature)
+```
+
+### When NOT to Create a Domain
+
+**Don't create a domain if:**
+- ❌ Code is reused by multiple features → Use `components/business/{domain}/`
+- ❌ Code is generic/reusable → Use `components/ui/`
+- ❌ Feature is just a tab in another page → Part of that page's domain
+- ❌ Feature is tiny (< 5 files) → Consider if it's really a "domain"
+
+## Standard Domain Folder Structure
+
+### Complete Structure
+```
+components/domain/{feature}/
+├── {DomainName}Page.tsx        ← ENTRY POINT - Routing jump off (required)
+├── {DomainName}Dashboard.tsx   ← Main feature component (typical)
+├── {DomainName}View.tsx        ← Alternative to Dashboard for complex views
+│
+├── hooks/                      ← Domain-specific React hooks (optional)
+│   ├── use{Feature}State.ts
+│   ├── use{Feature}Data.ts
+│   └── use{Feature}Logic.ts
+│
+├── utils/                      ← Domain-specific utilities (optional)
+│   ├── {feature}Calculations.ts
+│   ├── {feature}Validators.ts
+│   └── {feature}Formatters.ts
+│
+├── types/                      ← Domain-specific TypeScript types (optional)
+│   └── {Feature}Types.ts
+│
+├── services/                   ← Domain-specific API calls (optional)
+│   └── {feature}Api.ts
+│
+├── stores/                     ← Domain-specific state (optional)
+│   └── {feature}Store.ts
+│
+├── sidebar/                    ← Domain-specific sidebar content (optional)
+│   ├── {Feature}SidebarContent.tsx
+│   └── {feature}SidebarConfig.ts
+│
+├── components/                 ← Supporting components (optional)
+│   ├── {Feature}Header.tsx
+│   ├── {Feature}List.tsx
+│   ├── {Feature}Item.tsx
+│   └── {Feature}Modals.tsx
+│
+└── *.css                       ← Component-specific styles
+```
+
+### Required vs Optional
+
+**Required:**
+- ✅ `{DomainName}Page.tsx` - Every domain MUST have a routing entry point
+- ✅ At least one main component (Dashboard, View, or similar)
+
+**Optional (add only when needed):**
+- `hooks/` - Only if you have domain-specific hooks
+- `utils/` - Only if you have domain-specific utilities
+- `types/` - Only if you have domain-specific types
+- `services/` - Only if you have domain-specific API calls
+- `stores/` - Only if you have domain-specific state
+- `sidebar/` - Only if you have domain-specific sidebar
+- `components/` - Only if you have multiple supporting components
+
+**Principle: Start minimal, add as needed!**
+
+## The {DomainName}Page.tsx Pattern
+
+### Purpose
+The `{DomainName}Page.tsx` file is the **routing entry point** for the domain. It serves as the "jump off" point that:
+- Sets up routing context (breadcrumbs, navigation state)
+- Renders the main domain component
+- Provides a predictable entry point for maintainers
+
+### Naming Convention
+**Pattern:** `{DomainName}Page.tsx` where `{DomainName}` is PascalCase
+
+**Examples:**
+- `TransfersPage.tsx` (not `transfersPage.tsx` or `TransferPage.tsx`)
+- `PortfoliosPage.tsx` (not `PortfolioPage.tsx`)
+- `AnalyticsPage.tsx`
+- `ReportsPage.tsx`
+
+### Template
+```typescript
+// components/domain/transfers/TransfersPage.tsx
+import React, { useEffect } from 'react';
+import { useNavigationStore } from '@/stores/navigationStore';
+import TransfersDashboard from './TransfersDashboard';
+import './TransfersPage.css';
+
+/**
+ * TransfersPage - Entry point for the transfers domain
+ * 
+ * Role: Routing jump off point that sets up context and renders main component
+ * Route: /transfers
+ */
+const TransfersPage: React.FC = () => {
+    const { goToTransfers } = useNavigationStore();
+
+    // Set up breadcrumbs/navigation context
+    useEffect(() => {
+        goToTransfers();
+    }, [goToTransfers]);
+
+    return (
+        <div className="transfers-page">
+            <TransfersDashboard />
+        </div>
+    );
+};
+
+export default TransfersPage;
+```
+
+### Characteristics
+- ✅ Very thin (5-20 lines typical)
+- ✅ Sets up context (breadcrumbs)
+- ✅ Renders main component
+- ✅ No business logic
+- ✅ Can add page-level layout/chrome if needed
+
+## Code Colocation in Domains
+
+### Decision Tree
+
+```
+Is this code used by ONLY this one feature?
+  → YES: Keep it in the domain folder
+  → NO: Continue...
+
+Is this code used by 2 features?
+  → Tolerate duplication (might be coincidence)
+  → Keep in both domain folders for now
+
+Is this code used by 3+ features?
+  → Apply "Rule of Three" - time to extract!
+  → Move to shared location:
+     - hooks/ for shared hooks
+     - utils/ for shared utilities
+     - components/business/ for shared business components
+     - services/ for shared API clients
+```
+
+### What Belongs in a Domain Folder
+
+**Components:**
+- ✅ Main feature component (Dashboard, View, etc.)
+- ✅ Supporting components only used by this feature
+- ✅ Modals/dialogs specific to this feature
+- ✅ Layout components specific to this feature
+
+**Hooks:**
+- ✅ State management hooks (`use{Feature}State`)
+- ✅ Data fetching hooks (`use{Feature}Data`)
+- ✅ Business logic hooks (`use{Feature}Logic`)
+- ❌ Generic hooks used elsewhere → Move to `src/hooks/`
+
+**Utilities:**
+- ✅ Calculations specific to this feature
+- ✅ Validators specific to this feature
+- ✅ Formatters specific to this feature
+- ❌ Generic utilities → Move to `src/utils/`
+
+**Types:**
+- ✅ Interfaces/types only used by this feature
+- ❌ Types shared across features → Move to `src/types/`
+
+**Services:**
+- ✅ API calls only used by this feature
+- ❌ API calls used by multiple features → Move to `src/services/`
+
+**Stores:**
+- ✅ State only used by this feature
+- ❌ State used by multiple features → Move to `src/stores/`
+
+**Sidebar:**
+- ✅ Sidebar content only shown for this feature
+- ❌ Shared sidebar content → Move to `components/navigation/`
+
+### Progressive Promotion Pattern
+
+**Stage 1: Start in Domain (1 feature using it)**
+```
+components/domain/transfers/
+├── hooks/useTransferCalculations.ts    ← Only transfers uses this
+└── utils/transferValidation.ts         ← Only transfers uses this
+```
+
+**Stage 2: Tolerate Duplication (2 features)**
+```
+components/domain/transfers/
+└── utils/amountValidation.ts           ← Transfers uses this
+
+components/domain/portfolios/
+└── utils/amountValidation.ts           ← Similar code, might be coincidence
+```
+
+**Stage 3: Extract to Shared (3+ features)**
+```
+src/utils/
+└── amountValidation.ts                 ← Now shared by transfers, portfolios, reports
+
+components/domain/transfers/
+└── (removed - imports from src/utils/)
+
+components/domain/portfolios/
+└── (removed - imports from src/utils/)
+```
+
+## Domain Organization Patterns
+
+### Small Domain (< 10 files)
+**Example: Simple feature with minimal complexity**
+
+```
+components/domain/notifications/
+├── NotificationsPage.tsx              # Entry point
+├── NotificationsDashboard.tsx         # Main component
+├── NotificationItem.tsx               # Supporting component
+├── useNotifications.ts                # Single hook (not in hooks/)
+├── notificationUtils.ts               # Single util (not in utils/)
+└── NotificationsDashboard.css         # Styles
+```
+
+**Pattern:**
+- No nested folders for hooks/utils (only 1-2 files)
+- Files at root of domain folder
+- Simple, flat structure
+
+### Medium Domain (10-30 files)
+**Example: Moderate feature with some complexity**
+
+```
+components/domain/transfers/
+├── TransfersPage.tsx                  # Entry point
+├── TransfersDashboard.tsx             # Main component
+├── TransferFilters.tsx                # Supporting components
+├── TransferList.tsx
+├── TransferItem.tsx
+├── TransferModals.tsx
+├── hooks/                             # Organized into folders
+│   ├── useTransferState.ts
+│   ├── useTransferDetection.ts
+│   └── useTransferActions.ts
+├── utils/
+│   ├── transferCalculations.ts
+│   └── transferValidators.ts
+├── types/
+│   └── TransferTypes.ts
+└── *.css                              # Multiple style files
+```
+
+**Pattern:**
+- Organized into subfolders (hooks/, utils/, types/)
+- Multiple supporting components
+- Clear separation of concerns
+
+### Large/Complex Domain (30+ files)
+**Example: Complex feature with substantial logic**
+
+```
+components/domain/analytics/
+├── AnalyticsPage.tsx                  # Entry point
+├── AnalyticsView.tsx                  # Complex view component
+│
+├── hooks/                             # Many domain-specific hooks
+│   ├── useAnalyticsState.ts
+│   ├── useAnalyticsData.ts
+│   ├── useChartConfiguration.ts
+│   ├── useDataAggregation.ts
+│   └── useExportLogic.ts
+│
+├── components/                        # Many supporting components
+│   ├── layouts/
+│   │   ├── AnalyticsLayout.tsx
+│   │   └── AnalyticsHeader.tsx
+│   ├── charts/
+│   │   ├── LineChart.tsx
+│   │   ├── BarChart.tsx
+│   │   └── PieChart.tsx
+│   ├── filters/
+│   │   ├── DateRangeFilter.tsx
+│   │   ├── CategoryFilter.tsx
+│   │   └── AccountFilter.tsx
+│   └── export/
+│       ├── ExportModal.tsx
+│       └── ExportPreview.tsx
+│
+├── utils/
+│   ├── dataAggregation.ts
+│   ├── chartCalculations.ts
+│   └── exportFormatters.ts
+│
+├── types/
+│   ├── AnalyticsTypes.ts
+│   ├── ChartTypes.ts
+│   └── ExportTypes.ts
+│
+├── services/
+│   └── analyticsApi.ts
+│
+├── stores/
+│   └── analyticsStore.ts
+│
+└── sidebar/
+    ├── AnalyticsSidebarContent.tsx
+    └── analyticsSidebarConfig.ts
+```
+
+**Pattern:**
+- Deep organization with nested folders
+- Components organized by category
+- Substantial supporting infrastructure
+- Consider if some parts should be extracted to shared
+
+**Warning:** If domain gets this large, consider:
+1. Is this really multiple domains that should be split?
+2. Are some components actually reusable (should be business/)?
+3. Should some logic be extracted to shared utilities?
+
+## Routing Integration
+
+### App.tsx Configuration
+```typescript
+// App.tsx
+import TransfersPage from '@/components/domain/transfers/TransfersPage';
+import PortfoliosPage from '@/components/domain/portfolios/PortfoliosPage';
+
+<Routes>
+  <Route path="/*" element={<NewUILayout />}>
+    {/* Domain routes - direct to domain entry points */}
+    <Route path="transfers" element={<TransfersPage />} />
+    <Route path="portfolios" element={<PortfoliosPage />} />
+    <Route path="analytics" element={<AnalyticsPage />} />
+    
+    {/* Multi-feature coordinator pages still in pages/ */}
+    <Route path="transactions" element={<TransactionsPage />} />
+  </Route>
+</Routes>
+```
+
+### Domain as Tab vs Direct Route
+
+**Pattern A: Direct Route (Domain Entry)**
+```typescript
+// Route directly to domain
+/transfers → TransfersPage → TransfersDashboard
+```
+
+**Pattern B: Tab in Multi-Feature Page**
+```typescript
+// Domain component used as tab
+/transactions → TransactionsPage → [Transfers Tab] → TransfersDashboard
+```
+
+**Both patterns can coexist!** The same domain component can be:
+- Accessed directly via its own route
+- Embedded as a tab in a multi-feature page
+
+## Examples from Your Codebase
+
+### Transfers Domain (Well-Organized)
+
+**Structure:**
+```
+components/domain/transfers/
+├── TransfersPage.tsx                  # Entry point (15 lines)
+├── TransfersDashboard.tsx             # Main component (679 lines)
+├── TransferService.ts                 # API calls
+├── hooks/
+│   └── useTransferDetection.ts
+├── utils/
+│   └── transferCalculations.ts
+└── types/
+    └── TransferTypes.ts
+```
+
+**What makes it good:**
+- ✅ Clear entry point (`TransfersPage.tsx`)
+- ✅ Organized into logical folders
+- ✅ Self-contained (all transfer logic in one place)
+- ✅ Can be routed directly (`/transfers`)
+- ✅ Can be used as tab (in TransactionsPage)
+
+**Route Configuration:**
+```typescript
+// Direct route
+<Route path="transfers" element={<TransfersPage />} />
+
+// Also used as tab in TransactionsPage
+<Tab id="TRANSFERS">
+  <TransfersDashboard />
+</Tab>
+```
+
+## Creating a New Domain
+
+### Step-by-Step Guide
+
+#### 1. Determine if Domain is Appropriate
+- [ ] Feature has its own route?
+- [ ] Feature is self-contained?
+- [ ] Feature has substantial logic?
+- [ ] Code won't be reused by other features?
+
+If all YES → proceed with domain. If NO → consider alternatives.
+
+#### 2. Create Folder Structure
+```bash
+# Create minimal domain folder
+mkdir -p components/domain/{feature}
+cd components/domain/{feature}
+
+# Create entry point
+touch {DomainName}Page.tsx
+touch {DomainName}Dashboard.tsx
+touch {DomainName}Page.css
+```
+
+#### 3. Implement Entry Point
+Use the template provided in "{DomainName}Page.tsx Pattern" section above.
+
+#### 4. Implement Main Component
+Create the dashboard or main view component with feature logic.
+
+#### 5. Add Supporting Files as Needed
+Only add folders (hooks/, utils/, etc.) when you actually need them:
+- First hook? → Create hooks/ folder
+- First util? → Create utils/ folder
+- Don't create empty folders "just in case"
+
+#### 6. Configure Routing
+Add route in `App.tsx`:
+```typescript
+import {DomainName}Page from '@/components/domain/{feature}/{DomainName}Page';
+
+<Route path="{feature}" element={<{DomainName}Page />} />
+```
+
+#### 7. Update Navigation (if needed)
+Add to sidebar, menu, or other navigation as appropriate.
+
+### Quick Start Template
+```bash
+# 1. Create folder
+mkdir components/domain/example
+
+# 2. Create files
+cat > components/domain/example/ExamplePage.tsx << 'EOF'
+import React, { useEffect } from 'react';
+import { useNavigationStore } from '@/stores/navigationStore';
+import ExampleDashboard from './ExampleDashboard';
+
+const ExamplePage: React.FC = () => {
+    const { goToExample } = useNavigationStore();
+    
+    useEffect(() => {
+        goToExample();
+    }, [goToExample]);
+    
+    return <ExampleDashboard />;
+};
+
+export default ExamplePage;
+EOF
+
+# 3. Add main component
+touch components/domain/example/ExampleDashboard.tsx
+
+# 4. Add route in App.tsx
+```
+
+## Migration Patterns
+
+### From Monolithic Component to Domain
+
+**Before: Single large component**
+```
+components/
+└── TransferManager.tsx  (1000+ lines)
+```
+
+**After: Organized domain**
+```
+components/domain/transfers/
+├── TransfersPage.tsx
+├── TransfersDashboard.tsx
+├── TransferList.tsx
+├── TransferItem.tsx
+├── hooks/
+│   ├── useTransferState.ts
+│   └── useTransferData.ts
+└── utils/
+    └── transferCalculations.ts
+```
+
+**Steps:**
+1. Create domain folder
+2. Move main component to domain
+3. Extract hooks from component
+4. Extract utilities from component
+5. Split large component into smaller pieces
+6. Create entry point page
+
+### From Shared Component to Domain
+
+**When:** Component is only used by one feature (not actually shared)
+
+**Before:**
+```
+components/business/shared/
+└── TransferManager.tsx  (used only by TransactionsPage)
+```
+
+**After:**
+```
+components/domain/transfers/
+├── TransfersPage.tsx
+└── TransfersDashboard.tsx
+```
+
+**Steps:**
+1. Verify truly only one feature uses it
+2. Create domain folder
+3. Move component to domain
+4. Update imports
+5. Create entry point if routable
+
+### From Domain to Shared
+
+**When:** Component is now used by 3+ features (Rule of Three)
+
+**Before:**
+```
+components/domain/transfers/
+└── utils/amountValidation.ts  (now used by 3 features)
+```
+
+**After:**
+```
+src/utils/
+└── amountValidation.ts
+
+components/domain/transfers/
+└── (imports from src/utils/)
+```
+
+**Steps:**
+1. Identify code used by 3+ features
+2. Move to appropriate shared location
+3. Update imports in all using features
+4. Document which features use it
+
+## Best Practices
+
+### DO ✅
+
+1. **Start minimal**
+   ```
+   # Just these files initially
+   {DomainName}Page.tsx
+   {DomainName}Dashboard.tsx
+   
+   # Add others only when needed
+   ```
+
+2. **Use clear naming**
+   ```
+   TransfersPage.tsx       ← Not TransferPage or transfersPage
+   TransfersDashboard.tsx  ← Not TransfersComponent or TransfersView
+   ```
+
+3. **Keep entry point thin**
+   ```typescript
+   // 5-20 lines typical
+   const TransfersPage = () => {
+     useEffect(() => { goToTransfers(); }, []);
+     return <TransfersDashboard />;
+   };
+   ```
+
+4. **Organize with folders once you have 3+ files of same type**
+   ```
+   # 1-2 hooks → root of domain
+   # 3+ hooks → hooks/ folder
+   ```
+
+5. **Apply Rule of Three for extraction**
+   ```
+   1 feature uses it → domain folder
+   2 features use it → tolerate duplication
+   3+ features use it → extract to shared
+   ```
+
+### DON'T ❌
+
+1. **Create empty folders "just in case"**
+   ```
+   ❌ Don't create hooks/, utils/, types/ until you need them
+   ```
+
+2. **Make page component do business logic**
+   ```typescript
+   ❌ const TransfersPage = () => {
+     const [transfers, setTransfers] = useState([]);
+     // 200 lines of logic...
+   };
+   
+   ✅ const TransfersPage = () => {
+     return <TransfersDashboard />;  // Logic in Dashboard
+   };
+   ```
+
+3. **Create domains for tiny features**
+   ```
+   ❌ domain/simple-modal/  (just use a component)
+   ❌ domain/button-handler/ (too small)
+   ```
+
+4. **Keep code in domain when it's reused**
+   ```
+   ❌ domain/transfers/utils/validation.ts  (used by 5 features)
+   ✅ src/utils/validation.ts
+   ```
+
+5. **Use inconsistent naming**
+   ```
+   ❌ TransferPage.tsx, TransfersDashboard.tsx  (inconsistent)
+   ✅ TransfersPage.tsx, TransfersDashboard.tsx (consistent)
+   ```
+
+## Naming Conventions Summary
+
+| Item | Pattern | Example |
+|------|---------|---------|
+| Domain folder | lowercase | `transfers/`, `portfolios/` |
+| Entry point | `{DomainName}Page.tsx` | `TransfersPage.tsx` |
+| Main component | `{DomainName}Dashboard.tsx` | `TransfersDashboard.tsx` |
+| Supporting components | `{Feature}{Type}.tsx` | `TransferList.tsx` |
+| Hooks | `use{Feature}{Purpose}.ts` | `useTransferState.ts` |
+| Utils | `{feature}{Purpose}.ts` | `transferCalculations.ts` |
+| Types | `{Feature}Types.ts` | `TransferTypes.ts` |
+| Services | `{feature}Api.ts` | `transfersApi.ts` |
+| Stores | `{feature}Store.ts` | `transfersStore.ts` |
+
+## Validation Checklist
+
+Use this to verify a domain is well-organized:
+
+### ✅ Structure
+- [ ] Has `{DomainName}Page.tsx` entry point
+- [ ] Entry point is thin (< 30 lines)
+- [ ] Main component has clear purpose
+- [ ] Folders only exist when needed (not empty)
+- [ ] Similar files are grouped (3+ hooks → hooks/ folder)
+
+### ✅ Naming
+- [ ] Entry point follows `{DomainName}Page.tsx` pattern
+- [ ] Main component follows `{DomainName}Dashboard.tsx` pattern
+- [ ] All naming is consistent within domain
+- [ ] Folder name is lowercase
+
+### ✅ Colocation
+- [ ] All code is domain-specific (not reused)
+- [ ] No code from other domains mixed in
+- [ ] Imports use `@/` alias for shared code
+- [ ] Relative imports within domain
+
+### ✅ Routing
+- [ ] Route configured in `App.tsx`
+- [ ] Navigation updated (if needed)
+- [ ] Breadcrumbs/context set up in page
+- [ ] Deep linking works
+
+### ✅ Organization
+- [ ] Code follows size-appropriate pattern (small/medium/large)
+- [ ] No premature folder creation
+- [ ] Clear separation of concerns
+- [ ] Ready to extract shared code when Rule of Three applies
+
+## Common Pitfalls
+
+### 1. Creating Domain Too Early
+**Problem:** Making a domain for something that's just a component
+
+**Solution:** Wait until you have:
+- Own route
+- Substantial logic
+- Multiple files
+
+### 2. Not Extracting Shared Code
+**Problem:** Code is duplicated across 3+ domains
+
+**Solution:** Apply Rule of Three - extract after third use
+
+### 3. Making Page Too Complex
+**Problem:** Business logic in the page component
+
+**Solution:** Keep page thin - just context setup and rendering
+
+### 4. Inconsistent Naming
+**Problem:** `TransferPage.tsx` + `TransfersDashboard.tsx`
+
+**Solution:** Be consistent - `TransfersPage.tsx` + `TransfersDashboard.tsx`
+
+### 5. Empty Folders
+**Problem:** Creating `hooks/`, `utils/`, etc. before you need them
+
+**Solution:** Add folders only when you have 3+ files of that type
+
+## Summary
+
+**Domain Pattern in One Sentence:**
+> A domain is a self-contained folder for a single feature that includes a `{DomainName}Page.tsx` entry point and all feature-specific code, following the principle of keeping code as close to where it's used as possible.
+
+**Three Key Rules:**
+1. **Every domain has `{DomainName}Page.tsx`** - Predictable entry point
+2. **Start minimal, add as needed** - No empty folders
+3. **Apply Rule of Three** - Extract to shared after third use
+
+**Decision Tree:**
+```
+New feature to implement?
+  ↓
+Does it need its own route?
+  YES → Create domain folder
+  NO → Just a component
+  ↓
+Start with minimal files
+  ↓
+Add folders as needed (3+ files)
+  ↓
+Extract to shared when reused 3+ times
+```
+
+This convention ensures domains remain organized, maintainable, and follow consistent patterns across the entire frontend codebase.

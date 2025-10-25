@@ -1,5 +1,6 @@
 import { getCurrentUser, refreshToken, isAuthenticated } from './AuthService';
 import { apiEndpoint } from '../utils/env';
+import { withServiceLogging, createLogger } from '@/utils/logger';
 import {
   // Schemas for validation
   FZIPBackupJobSchema,
@@ -12,25 +13,25 @@ import {
   FZIPRestoreListResponseSchema,
   FZIPRestoreUploadUrlResponseSchema,
   BackendFZIPBackupResponseSchema,
-  // Types (inferred from schemas)
-  FZIPBackupJob,
-  FZIPRestoreJob,
-  FZIPRestoreSummary,
-  FZIPRestoreResults,
-  InitiateFZIPBackupRequest,
-  InitiateFZIPBackupResponse,
-  FZIPBackupListResponse,
-  CreateFZIPRestoreRequest,
-  CreateFZIPRestoreResponse,
-  FZIPRestoreListResponse,
-  FZIPRestoreUploadUrlResponse,
+  // Types (inferred from schemas) - needed for internal use
+  type FZIPBackupJob,
+  type FZIPRestoreJob,
+  type FZIPRestoreSummary,
+  type FZIPRestoreResults,
+  type InitiateFZIPBackupRequest,
+  type InitiateFZIPBackupResponse,
+  type FZIPBackupListResponse,
+  type CreateFZIPRestoreRequest,
+  type CreateFZIPRestoreResponse,
+  type FZIPRestoreListResponse,
+  type FZIPRestoreUploadUrlResponse,
   // Enums (for backward compatibility)
   FZIPBackupStatus,
   FZIPBackupType,
   FZIPRestoreStatus,
 } from '../schemas/FZIP';
 
-// Re-export all types for external use
+// Re-export types and enums for external use
 export type {
   FZIPBackupJob,
   FZIPRestoreJob,
@@ -45,21 +46,22 @@ export type {
   FZIPRestoreUploadUrlResponse,
 };
 
-// Re-export enums for external use
 export { FZIPBackupStatus, FZIPBackupType, FZIPRestoreStatus };
 
 // Get API endpoint from centralized env util
 const API_ENDPOINT = apiEndpoint;
 
+// Create logger for FZIPService
+const logger = createLogger('FZIPService');
+
 // Helper function to handle validation errors
 const handleValidationError = (error: any, context: string): never => {
   if (error?.name === 'ZodError') {
-    // Log detailed error to console for debugging
-    console.error(`Zod validation failed in ${context}:`, {
+    // Log detailed error with structured logging
+    logger.error(`Zod validation failed in ${context}`, {
       context,
-      issues: error.issues || error.errors || [],
-      message: error.message,
-      fullError: error
+      issues: JSON.stringify(error.issues || error.errors || []),
+      message: error.message
     });
 
     // Throw user-friendly error message
@@ -72,7 +74,7 @@ const handleValidationError = (error: any, context: string): never => {
 const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
   const currentUser = getCurrentUser();
 
-  if (!currentUser || !currentUser.token) {
+  if (!currentUser?.token) {
     throw new Error('User not authenticated');
   }
 
@@ -85,7 +87,7 @@ const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
 
     // Get the user again after potential refresh
     const user = getCurrentUser();
-    if (!user || !user.token) {
+    if (!user?.token) {
       throw new Error('Authentication failed');
     }
 
@@ -127,7 +129,7 @@ const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
 
         return retryResponse;
       } catch (refreshError) {
-        console.error('Error refreshing token:', refreshError);
+        logger.error('Error refreshing token', { error: refreshError instanceof Error ? refreshError.message : String(refreshError) });
         throw new Error('Session expired. Please log in again.');
       }
     }
@@ -138,7 +140,7 @@ const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
 
     return response;
   } catch (error) {
-    console.error('Error with authenticated request:', error);
+    logger.error('Error with authenticated request', { error: error instanceof Error ? error.message : String(error) });
     throw error;
   }
 };
@@ -146,52 +148,77 @@ const authenticatedRequest = async (url: string, options: RequestInit = {}) => {
 // ========== BACKUP OPERATIONS ==========
 
 // Initiate FZIP backup
-export const initiateFZIPBackup = async (
+export const initiateFZIPBackup = (
   request: InitiateFZIPBackupRequest = {}
-): Promise<InitiateFZIPBackupResponse> => {
-  try {
-    // Validate request data
-    const validatedRequest = InitiateFZIPBackupRequestSchema.parse(request);
+) => withServiceLogging(
+  'FZIPService',
+  'initiateFZIPBackup',
+  async (): Promise<InitiateFZIPBackupResponse> => {
+    try {
+      // Validate request data
+      const validatedRequest = InitiateFZIPBackupRequestSchema.parse(request);
 
-    const response = await authenticatedRequest(`${API_ENDPOINT}/fzip/backup`, {
-      method: 'POST',
-      body: JSON.stringify(validatedRequest)
-    });
+      const response = await authenticatedRequest(`${API_ENDPOINT}/fzip/backup`, {
+        method: 'POST',
+        body: JSON.stringify(validatedRequest)
+      });
 
-    const backendData = await response.json();
+      const backendData = await response.json();
 
-    // Map backend response fields to frontend format
-    const mappedData = {
-      backupId: backendData.jobId,
-      status: backendData.status,
-      estimatedSize: backendData.estimatedSize,
-      estimatedCompletion: backendData.estimatedCompletion
-    };
+      // Map backend response fields to frontend format
+      // Backend returns: jobId, jobType, status, packageFormat, message, estimatedCompletion, uploadUrl
+      const mappedData = {
+        backupId: backendData.jobId,
+        status: backendData.status,
+        estimatedCompletion: backendData.estimatedCompletion
+      };
 
-    // Validate response data
-    const validatedResponse = InitiateFZIPBackupResponseSchema.parse(mappedData);
-    return validatedResponse;
-  } catch (error) {
-    console.error('Error initiating FZIP backup:', error);
-    return handleValidationError(error, 'initiateFZIPBackup');
+      // Validate response data
+      const validatedResponse = InitiateFZIPBackupResponseSchema.parse(mappedData);
+      return validatedResponse;
+    } catch (error) {
+      return handleValidationError(error, 'initiateFZIPBackup');
+    }
+  },
+  {
+    logArgs: () => ({
+      backupType: request.backupType || 'complete',
+      includeAnalytics: request.includeAnalytics || false,
+      hasDescription: !!request.description
+    }),
+    logResult: (result) => ({
+      backupId: result.backupId,
+      status: result.status
+    })
   }
-};
+)();
 
 // Get FZIP backup status
-export const getFZIPBackupStatus = async (backupId: string): Promise<FZIPBackupJob> => {
-  try {
-    const response = await authenticatedRequest(`${API_ENDPOINT}/fzip/backup/${backupId}/status`);
-    const backendData = await response.json();
-    const convertedData = convertBackupResponseToFrontend(backendData);
+export const getFZIPBackupStatus = (backupId: string) => withServiceLogging(
+  'FZIPService',
+  'getFZIPBackupStatus',
+  async (): Promise<FZIPBackupJob> => {
+    try {
+      const response = await authenticatedRequest(`${API_ENDPOINT}/fzip/backup/${backupId}/status`);
+      const backendData = await response.json();
+      const convertedData = convertBackupResponseToFrontend(backendData);
 
-    // Validate the converted response
-    const validatedData = FZIPBackupJobSchema.parse(convertedData);
-    return validatedData;
-  } catch (error) {
-    console.error(`Error getting FZIP backup status for ${backupId}:`, error);
-    return handleValidationError(error, 'getFZIPBackupStatus');
+      // Validate the converted response
+      const validatedData = FZIPBackupJobSchema.parse(convertedData);
+      return validatedData;
+    } catch (error) {
+      return handleValidationError(error, 'getFZIPBackupStatus');
+    }
+  },
+  {
+    logArgs: () => ({ backupId }),
+    logResult: (result) => ({
+      backupId: result.backupId,
+      status: result.status,
+      progress: result.progress
+    })
   }
-};
+)();
 
 // Get FZIP backup download URL
 export const getFZIPBackupDownloadUrl = async (backupId: string): Promise<string> => {
@@ -217,7 +244,10 @@ export const getFZIPBackupDownloadUrl = async (backupId: string): Promise<string
     const data = await response.json();
     return data.downloadUrl || data.url;
   } catch (error) {
-    console.error(`Error getting FZIP backup download URL for ${backupId}:`, error);
+    logger.error(`Error getting FZIP backup download URL for ${backupId}`, {
+      backupId,
+      error: error instanceof Error ? error.message : String(error)
+    });
     throw error;
   }
 };
@@ -238,12 +268,12 @@ const convertBackupResponseToFrontend = (backendBackup: any): FZIPBackupJob => {
     if (typeof value === 'string') {
       // Try parsing as ISO string first
       const date = new Date(value);
-      if (!isNaN(date.getTime())) {
+      if (!Number.isNaN(date.getTime())) {
         return date.getTime();
       }
       // Try parsing as string number
-      const num = parseInt(value);
-      return isNaN(num) ? undefined : num;
+      const num = Number.parseInt(value, 10);
+      return Number.isNaN(num) ? undefined : num;
     }
     return undefined;
   };
@@ -301,7 +331,9 @@ export const listFZIPBackups = async (
     const validatedResponse = FZIPBackupListResponseSchema.parse(mappedData);
     return validatedResponse;
   } catch (error) {
-    console.error('Error listing FZIP backups:', error);
+    logger.error('Error listing FZIP backups', {
+      error: error instanceof Error ? error.message : String(error)
+    });
     throw error;
   }
 };
@@ -313,7 +345,10 @@ export const deleteFZIPBackup = async (backupId: string): Promise<void> => {
       method: 'DELETE'
     });
   } catch (error) {
-    console.error(`Error deleting FZIP backup ${backupId}:`, error);
+    logger.error(`Error deleting FZIP backup ${backupId}`, {
+      backupId,
+      error: error instanceof Error ? error.message : String(error)
+    });
     throw error;
   }
 };
@@ -327,7 +362,10 @@ export const startFZIPRestoreProcessing = async (restoreId: string): Promise<voi
       method: 'POST'
     });
   } catch (error) {
-    console.error(`Error starting FZIP restore processing for ${restoreId}:`, error);
+    logger.error(`Error starting FZIP restore processing for ${restoreId}`, {
+      restoreId,
+      error: error instanceof Error ? error.message : String(error)
+    });
     throw error;
   }
 };
@@ -339,7 +377,10 @@ export const confirmRestoreStart = async (restoreId: string): Promise<void> => {
       method: 'POST'
     });
   } catch (error) {
-    console.error(`Error confirming restore start for ${restoreId}:`, error);
+    logger.error(`Error confirming restore start for ${restoreId}`, {
+      restoreId,
+      error: error instanceof Error ? error.message : String(error)
+    });
     throw error;
   }
 };
@@ -351,7 +392,10 @@ export const retryRestore = async (restoreId: string): Promise<void> => {
       method: 'POST'
     });
   } catch (error) {
-    console.error(`Error retrying restore for ${restoreId}:`, error);
+    logger.error(`Error retrying restore for ${restoreId}`, {
+      restoreId,
+      error: error instanceof Error ? error.message : String(error)
+    });
     throw error;
   }
 };
@@ -368,7 +412,9 @@ export const getFZIPRestoreUploadUrl = async (): Promise<FZIPRestoreUploadUrlRes
     const validatedData = FZIPRestoreUploadUrlResponseSchema.parse(rawData);
     return validatedData;
   } catch (error) {
-    console.error('Error getting FZIP restore upload URL:', error);
+    logger.error('Error getting FZIP restore upload URL', {
+      error: error instanceof Error ? error.message : String(error)
+    });
     throw error;
   }
 };
@@ -392,7 +438,6 @@ export const createFZIPRestoreJob = async (
     const validatedResponse = CreateFZIPRestoreResponseSchema.parse(rawData);
     return validatedResponse;
   } catch (error) {
-    console.error('Error creating FZIP restore job:', error);
     return handleValidationError(error, 'createFZIPRestoreJob');
   }
 };
@@ -407,7 +452,10 @@ export const getFZIPRestoreStatus = async (restoreId: string): Promise<FZIPResto
     const validatedData = FZIPRestoreJobSchema.parse(rawData);
     return validatedData;
   } catch (error) {
-    console.error(`Error getting FZIP restore status for ${restoreId}:`, error);
+    logger.error(`Error getting FZIP restore status for ${restoreId}`, {
+      restoreId,
+      error: error instanceof Error ? error.message : String(error)
+    });
     throw error;
   }
 };
@@ -433,7 +481,23 @@ export const listFZIPRestoreJobs = async (
     const validatedData = FZIPRestoreListResponseSchema.parse(rawData);
     return validatedData;
   } catch (error) {
-    console.error('Error listing FZIP restore jobs:', error);
+    // Enhanced error handling for schema validation issues
+    if (error instanceof Error && error.name === 'ZodError') {
+      logger.error('FZIP Restore List Schema Validation Error', {
+        errorName: error.name,
+        message: error.message
+      });
+
+      // Return safe default to prevent UI breakage
+      return {
+        restoreJobs: [],
+        packageFormat: 'fzip-1.0'
+      };
+    }
+
+    logger.error('Error listing FZIP restore jobs', {
+      error: error instanceof Error ? error.message : String(error)
+    });
     throw error;
   }
 };
@@ -445,7 +509,10 @@ export const deleteFZIPRestoreJob = async (restoreId: string): Promise<void> => 
       method: 'DELETE'
     });
   } catch (error) {
-    console.error(`Error deleting FZIP restore job ${restoreId}:`, error);
+    logger.error(`Error deleting FZIP restore job ${restoreId}`, {
+      restoreId,
+      error: error instanceof Error ? error.message : String(error)
+    });
     throw error;
   }
 };
@@ -457,7 +524,10 @@ export const cancelFZIPRestore = async (restoreId: string): Promise<void> => {
       method: 'POST'
     });
   } catch (error) {
-    console.error(`Error canceling FZIP restore ${restoreId}:`, error);
+    logger.error(`Error canceling FZIP restore ${restoreId}`, {
+      restoreId,
+      error: error instanceof Error ? error.message : String(error)
+    });
     throw error;
   }
 };
@@ -473,9 +543,9 @@ export const uploadFZIPPackage = async (
     const formData = new FormData();
 
     // Add S3 fields first
-    Object.entries(uploadUrl.fields).forEach(([key, value]) => {
+    for (const [key, value] of Object.entries(uploadUrl.fields)) {
       formData.append(key, value);
-    });
+    }
 
     // Add file last (required by S3)
     formData.append('file', file);
@@ -496,7 +566,10 @@ export const uploadFZIPPackage = async (
     });
 
   } catch (error) {
-    console.error(`Error uploading FZIP package for restore ${restoreId}:`, error);
+    logger.error(`Error uploading FZIP package for restore ${restoreId}`, {
+      restoreId,
+      error: error instanceof Error ? error.message : String(error)
+    });
     throw error;
   }
 };
@@ -519,14 +592,20 @@ export const downloadFZIPBackup = async (backupId: string, filename?: string): P
       link.rel = 'noopener noreferrer';
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
+      link.remove();
     } catch (linkError) {
       // Fallback: Open in new window if link approach fails
-      console.warn('Link download failed, falling back to window.open:', linkError);
+      logger.warn('Link download failed, falling back to window.open', {
+        backupId,
+        error: linkError instanceof Error ? linkError.message : String(linkError)
+      });
       window.open(downloadUrl, '_blank');
     }
   } catch (error) {
-    console.error(`Error downloading FZIP backup ${backupId}:`, error);
+    logger.error(`Error downloading FZIP backup ${backupId}`, {
+      backupId,
+      error: error instanceof Error ? error.message : String(error)
+    });
     throw error;
   }
 };

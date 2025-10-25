@@ -1,5 +1,5 @@
 import React from 'react';
-import { FZIPRestoreResults as ResultsData } from '../../../services/FZIPService';
+import { FZIPRestoreResults as ResultsData } from '@/services/FZIPService';
 import './FZIPRestoreResults.css';
 
 interface Props {
@@ -70,7 +70,7 @@ export const FZIPRestoreResults: React.FC<Props> = ({ results, onClose }) => {
 
       <div className="success-message">
         <p>
-          🎉 Your FZIP restore is complete! You can now navigate to the appropriate sections 
+          🎉 Your FZIP restore is complete! You can now navigate to the appropriate sections
           to view your restored data.
         </p>
       </div>
