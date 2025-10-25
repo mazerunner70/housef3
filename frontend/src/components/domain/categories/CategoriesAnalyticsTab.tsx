@@ -5,24 +5,41 @@ interface CategoriesAnalyticsTabProps {
   analytics: AnalyticsHookResult;
 }
 
+// Helper function to format trend display
+const formatTrend = (trend: 'increasing' | 'decreasing' | 'stable', growthRate: any): string => {
+  const rate = typeof growthRate === 'number' ? growthRate : Number(growthRate);
+  if (trend === 'increasing') {
+    return `+${rate.toFixed(1)}%`;
+  } else if (trend === 'decreasing') {
+    return `-${Math.abs(rate).toFixed(1)}%`;
+  } else {
+    return `${rate.toFixed(1)}%`;
+  }
+};
+
 const CategoriesAnalyticsTab: React.FC<CategoriesAnalyticsTabProps> = ({ analytics }) => {
-  const { categories, formatCurrency, formatPercentage, filters, setFilters } = analytics;
+  const { categories, formatCurrency, filters, setFilters } = analytics;
   const [selectedPeriod, setSelectedPeriod] = useState(filters.timeRange);
 
   // Calculate total for percentages with proper null checks
   const categoryData = categories?.categories || [];
-  const totalAmount = categoryData.reduce((sum, cat) => sum + cat.totalAmount, 0);
+  const totalAmount = categoryData.reduce((sum, cat) => {
+    const amount = typeof cat.totalAmount === 'number' ? cat.totalAmount : Number(cat.totalAmount);
+    return sum + amount;
+  }, 0);
 
   // Transform category data for display
-  const transformedCategoryData = categoryData.map(cat => ({
-    name: cat.categoryName,
-    amount: cat.totalAmount,
-    percentage: totalAmount > 0 ? ((cat.totalAmount / totalAmount) * 100) : 0,
-    transactions: cat.transactionCount,
-    trend: cat.trend === 'increasing' ? `+${cat.growthRate.toFixed(1)}%` :
-      cat.trend === 'decreasing' ? `-${cat.growthRate.toFixed(1)}%` :
-        `${cat.growthRate.toFixed(1)}%`
-  }));
+  const transformedCategoryData = categoryData.map(cat => {
+    const amount = typeof cat.totalAmount === 'number' ? cat.totalAmount : Number(cat.totalAmount);
+    return {
+      id: cat.categoryId,
+      name: cat.categoryName,
+      amount,
+      percentage: totalAmount > 0 ? ((amount / totalAmount) * 100) : 0,
+      transactions: cat.transactionCount,
+      trend: formatTrend(cat.trend, cat.growthRate)
+    };
+  });
 
   return (
     <div className="categories-analytics-tab">
@@ -48,19 +65,21 @@ const CategoriesAnalyticsTab: React.FC<CategoriesAnalyticsTabProps> = ({ analyti
 
         {/* Category Pie Chart Placeholder */}
         <div className="analytics-placeholder">
-          {analytics.loading ? (
+          {analytics.loading && (
             <>
               🔄 Loading category breakdown...
               <br />
               <small>Analyzing your spending by category</small>
             </>
-          ) : transformedCategoryData.length > 0 ? (
+          )}
+          {!analytics.loading && transformedCategoryData.length > 0 && (
             <>
               🥧 Category data available for {transformedCategoryData.length} categories
               <br />
               <small>Chart visualization coming soon - data is ready for display</small>
             </>
-          ) : (
+          )}
+          {!analytics.loading && transformedCategoryData.length === 0 && (
             <>
               📊 No category data available yet
               <br />
@@ -88,7 +107,7 @@ const CategoriesAnalyticsTab: React.FC<CategoriesAnalyticsTabProps> = ({ analyti
           </thead>
           <tbody>
             {transformedCategoryData.map((category, index) => (
-              <tr key={index} style={{ borderBottom: '1px solid #e9ecef' }}>
+              <tr key={category.id} style={{ borderBottom: '1px solid #e9ecef' }}>
                 <td style={{ padding: '12px 8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <div
