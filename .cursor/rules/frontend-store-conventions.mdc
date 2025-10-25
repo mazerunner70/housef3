@@ -6,6 +6,10 @@ alwaysApply: false
 
 # Zustand Store Conventions
 
+**See Also**: [frontend-conventions.mdc](./frontend-conventions.mdc) for overall architecture patterns
+
+This document covers Zustand store conventions. Stores provide global state management using Zustand, a lightweight alternative to Redux.
+
 ## Architecture Principles
 
 ### Store Organization
@@ -13,17 +17,53 @@ alwaysApply: false
 - **Single subscription pattern**: Use one store subscription per component to avoid React render conflicts
 - **Explicit TypeScript types**: Always provide explicit return types for selector hooks
 - **Persist critical data**: Use Zustand persist middleware for data that should survive page refreshes
+- **Code Colocation**: Follow frontend-conventions.mdc colocation principles - domain-specific stores can live in domain folders
+- **Progressive Enhancement**: Start simple, extract to shared stores only when reused across features
+
+## Store Location Strategy
+
+### When to Place Stores
+
+Following the **code colocation principle** from frontend-conventions.mdc:
+
+1. **Is the state used by only ONE feature?** → Place in `components/domain/{feature}/stores/`
+   ```
+   components/domain/transfers/
+   ├── TransfersPage.tsx
+   ├── TransfersDashboard.tsx
+   ├── hooks/
+   ├── stores/
+   │   └── transfersStore.ts    ← Transfer-specific state
+   └── utils/
+   ```
+
+2. **Is the state used by MULTIPLE features?** → Place in `src/stores/`
+   ```
+   src/stores/
+   ├── accountsStore.ts         ← Used across accounts, transactions, transfers
+   ├── transactionsStore.ts     ← Used across multiple features
+   ├── navigationStore.ts       ← App-wide navigation state
+   └── sessionUrlStore.ts       ← App-wide session management
+   ```
+
+**Decision Rule:**
+- Start with domain-specific stores
+- Move to `src/stores/` when actual reuse occurs (Rule of Three)
+- Most stores end up in `src/stores/` because state is typically shared
 
 ## Store Structure
 
 ### File Organization
 ```
-frontend/src/stores/
-├── accountsStore.ts          # Main store definition
-├── useAccountsStore.ts       # Custom hook wrapper
-├── transactionsStore.ts      # Domain-specific store
-├── useTransactionsStore.ts   # Custom hook wrapper
-└── README.md                 # Store documentation
+src/stores/                        # Shared stores
+├── accountsStore.ts              # Main store definition
+├── useAccountsStore.ts           # Custom hook wrapper
+├── transactionsStore.ts          # Domain-specific store
+├── useTransactionsStore.ts       # Custom hook wrapper
+└── README.md                     # Store documentation
+
+components/domain/{feature}/stores/  # Domain-specific stores (if not reused)
+└── {feature}Store.ts
 ```
 
 ### Store Interface Pattern

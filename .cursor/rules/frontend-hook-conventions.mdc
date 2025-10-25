@@ -1,0 +1,939 @@
+---
+description: Frontend Custom React Hook Patterns and Conventions
+globs: frontend/src/hooks/**, frontend/src/components/domain/**/hooks/**
+alwaysApply: false
+---
+
+# Frontend Hook Conventions
+
+**See Also**:
+- [frontend-conventions.mdc](./frontend-conventions.mdc) for overall architecture
+- [frontend-domain-conventions.mdc](./frontend-domain-conventions.mdc) for domain organization
+
+This document defines conventions for creating and organizing custom React hooks, including naming, structure, testing, and when to create hooks vs other abstractions.
+
+## What is a Custom Hook?
+
+### Definition
+A custom hook is a JavaScript function that:
+- ✅ Name starts with `use`
+- ✅ May call other hooks (useState, useEffect, other custom hooks)
+- ✅ Encapsulates reusable stateful logic
+- ✅ Returns values and/or functions
+- ✅ Follows Rules of Hooks
+
+**Purpose:** Extract and reuse stateful logic across components without changing component hierarchy.
+
+## Hook Organization
+
+### Location Strategy
+
+Following the **code colocation principle** from frontend-conventions.mdc:
+
+```
+Is the hook used by ONLY ONE feature?
+  → components/domain/{feature}/hooks/
+
+Is the hook used by 2 features?
+  → Tolerate duplication
+
+Is the hook used by 3+ features?
+  → src/hooks/
+
+Is the hook generic/framework-level?
+  → src/hooks/
+```
+
+### File Structure
+
+**Shared Hooks (`src/hooks/`):**
+```
+src/hooks/
+├── useLocale.ts              # Localization
+├── useTableSort.ts           # Table sorting logic
+├── useSessionRouting.ts      # Session-based routing
+├── useDebounce.ts            # Generic debounce
+└── useWindowSize.ts          # Window size tracking
+```
+
+**Domain-Specific Hooks (`components/domain/{feature}/hooks/`):**
+```
+components/domain/transfers/hooks/
+├── useTransferState.ts        # Transfer state management
+├── useTransferDetection.ts    # Transfer detection logic
+└── useTransferActions.ts      # Transfer action handlers
+```
+
+## Naming Conventions
+
+### Pattern: `use{What}{Purpose}`
+
+```typescript
+// ✅ GOOD: Clear, descriptive names
+useAccountsData()         // Fetches account data
+useTransferState()        // Manages transfer state
+useFormValidation()       # Validates form data
+useDebounce()             // Debounces a value
+useLocalStorage()         // Manages localStorage
+
+// ❌ BAD: Unclear names
+useData()                 // What data?
+useState()                // Too generic (conflicts with React)
+useState2()               // Numbered variants
+useStuff()                // Vague
+```
+
+### Common Naming Patterns
+
+| Pattern | Purpose | Example |
+|---------|---------|---------|
+| `use{Entity}Data` | Fetch/manage entity data | `useAccountsData`, `useTransactionData` |
+| `use{Feature}State` | Manage feature state | `useImportState`, `useTransferState` |
+| `use{Feature}Actions` | Handle feature actions | `useAccountActions`, `useFileActions` |
+| `use{Feature}Logic` | Business logic | `useFileUploadLogic`, `useValidationLogic` |
+| `use{Utility}` | Generic utilities | `useDebounce`, `useLocalStorage` |
+| `use{What}` | Simple hooks | `useWindowSize`, `useMediaQuery` |
+
+## Hook Categories
+
+### 1. Data Fetching Hooks
+
+**Purpose:** Fetch and manage server data
+
+```typescript
+// src/hooks/useAccountsData.ts
+import { useState, useEffect } from 'react';
+import { getAccounts } from '@/services/AccountService';
+import { Account } from '@/types/Account';
+
+export const useAccountsData = () => {
+    const [accounts, setAccounts] = useState<Account[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    
+    useEffect(() => {
+        const fetchAccounts = async () => {
+            setIsLoading(true);
+            setError(null);
+            
+            try {
+                const data = await getAccounts();
+                setAccounts(data);
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'Failed to fetch accounts');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        
+        fetchAccounts();
+    }, []);
+    
+    const refetch = useCallback(async () => {
+        // Refetch logic
+    }, []);
+    
+    return { accounts, isLoading, error, refetch };
+};
+```
+
+### 2. State Management Hooks
+
+**Purpose:** Encapsulate complex state logic
+
+```typescript
+// components/domain/import/hooks/useImportState.ts
+import { useState, useCallback } from 'react';
+
+interface ImportState {
+    currentStep: number;
+    isImporting: boolean;
+    errorMessage: string | null;
+    successMessage: string | null;
+}
+
+export const useImportState = () => {
+    const [state, setState] = useState<ImportState>({
+        currentStep: 1,
+        isImporting: false,
+        errorMessage: null,
+        successMessage: null
+    });
+    
+    const startImport = useCallback(() => {
+        setState(prev => ({ ...prev, isImporting: true, errorMessage: null }));
+    }, []);
+    
+    const completeImport = useCallback((message: string) => {
+        setState(prev => ({
+            ...prev,
+            isImporting: false,
+            successMessage: message
+        }));
+    }, []);
+    
+    const setError = useCallback((error: string) => {
+        setState(prev => ({
+            ...prev,
+            isImporting: false,
+            errorMessage: error
+        }));
+    }, []);
+    
+    const nextStep = useCallback(() => {
+        setState(prev => ({ ...prev, currentStep: prev.currentStep + 1 }));
+    }, []);
+    
+    const clearMessages = useCallback(() => {
+        setState(prev => ({ ...prev, errorMessage: null, successMessage: null }));
+    }, []);
+    
+    return {
+        ...state,
+        startImport,
+        completeImport,
+        setError,
+        nextStep,
+        clearMessages
+    };
+};
+```
+
+### 3. Business Logic Hooks
+
+**Purpose:** Encapsulate business rules and calculations
+
+```typescript
+// components/domain/transfers/hooks/useTransferDetection.ts
+import { useState, useCallback } from 'react';
+import { detectPotentialTransfers } from '@/services/TransferService';
+import { TransferPair } from '@/types/Transfer';
+
+export const useTransferDetection = (dateRange: DateRange) => {
+    const [transfers, setTransfers] = useState<TransferPair[]>([]);
+    const [isDetecting, setIsDetecting] = useState(false);
+    
+    const detectTransfers = useCallback(async () => {
+        setIsDetecting(true);
+        
+        try {
+            const detected = await detectPotentialTransfers(dateRange);
+            
+            // Business logic: Auto-select high-confidence matches
+            const autoSelected = detected.transfers
+                .filter(pair => pair.dateDifference <= 1)
+                .map(pair => pair.id);
+            
+            setTransfers(detected.transfers);
+            return autoSelected;
+        } catch (error) {
+            console.error('Failed to detect transfers:', error);
+            return [];
+        } finally {
+            setIsDetecting(false);
+        }
+    }, [dateRange]);
+    
+    return { transfers, isDetecting, detectTransfers };
+};
+```
+
+### 4. Side Effect Hooks
+
+**Purpose:** Handle side effects (localStorage, document title, etc.)
+
+```typescript
+// src/hooks/useLocalStorage.ts
+import { useState, useEffect } from 'react';
+
+export const useLocalStorage = <T>(key: string, initialValue: T) => {
+    const [value, setValue] = useState<T>(() => {
+        try {
+            const item = localStorage.getItem(key);
+            return item ? JSON.parse(item) : initialValue;
+        } catch (error) {
+            console.error(`Error reading localStorage key "${key}":`, error);
+            return initialValue;
+        }
+    });
+    
+    useEffect(() => {
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+        } catch (error) {
+            console.error(`Error setting localStorage key "${key}":`, error);
+        }
+    }, [key, value]);
+    
+    return [value, setValue] as const;
+};
+
+// Usage
+const [theme, setTheme] = useLocalStorage('theme', 'light');
+```
+
+### 5. Event Listener Hooks
+
+**Purpose:** Manage event listeners safely
+
+```typescript
+// src/hooks/useWindowSize.ts
+import { useState, useEffect } from 'react';
+
+interface WindowSize {
+    width: number;
+    height: number;
+}
+
+export const useWindowSize = () => {
+    const [windowSize, setWindowSize] = useState<WindowSize>({
+        width: globalThis.innerWidth,
+        height: globalThis.innerHeight
+    });
+    
+    useEffect(() => {
+        const handleResize = () => {
+            setWindowSize({
+                width: globalThis.innerWidth,
+                height: globalThis.innerHeight
+            });
+        };
+        
+        globalThis.addEventListener('resize', handleResize);
+        
+        // Cleanup
+        return () => {
+            globalThis.removeEventListener('resize', handleResize);
+        };
+    }, []);
+    
+    return windowSize;
+};
+```
+
+### 6. Utility Hooks
+
+**Purpose:** Generic reusable utilities
+
+```typescript
+// src/hooks/useDebounce.ts
+import { useState, useEffect } from 'react';
+
+export const useDebounce = <T>(value: T, delay: number): T => {
+    const [debouncedValue, setDebouncedValue] = useState<T>(value);
+    
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedValue(value);
+        }, delay);
+        
+        return () => {
+            clearTimeout(handler);
+        };
+    }, [value, delay]);
+    
+    return debouncedValue;
+};
+
+// Usage
+const SearchComponent = () => {
+    const [searchTerm, setSearchTerm] = useState('');
+    const debouncedSearchTerm = useDebounce(searchTerm, 500);
+    
+    useEffect(() => {
+        if (debouncedSearchTerm) {
+            performSearch(debouncedSearchTerm);
+        }
+    }, [debouncedSearchTerm]);
+};
+```
+
+## Hook Structure
+
+### Standard Hook Pattern
+
+```typescript
+// 1. Imports
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { externalDependency } from 'external-library';
+import { ServiceFunction } from '@/services/ServiceName';
+import { TypeDefinition } from '@/types/TypeName';
+
+// 2. Type Definitions
+interface HookState {
+    data: DataType[];
+    isLoading: boolean;
+    error: string | null;
+}
+
+interface HookOptions {
+    autoFetch?: boolean;
+    cacheTime?: number;
+}
+
+export interface UseDataReturn {
+    data: DataType[];
+    isLoading: boolean;
+    error: string | null;
+    refetch: () => Promise<void>;
+    clearError: () => void;
+}
+
+// 3. Constants
+const DEFAULT_OPTIONS: HookOptions = {
+    autoFetch: true,
+    cacheTime: 5 * 60 * 1000
+};
+
+// 4. Hook Function
+export const useData = (options: HookOptions = {}): UseDataReturn => {
+    const mergedOptions = { ...DEFAULT_OPTIONS, ...options };
+    
+    // 4a. State
+    const [state, setState] = useState<HookState>({
+        data: [],
+        isLoading: false,
+        error: null
+    });
+    
+    // 4b. Refs (if needed)
+    const cacheRef = useRef<Map<string, CacheEntry>>(new Map());
+    
+    // 4c. Internal functions
+    const fetchData = useCallback(async () => {
+        setState(prev => ({ ...prev, isLoading: true, error: null }));
+        
+        try {
+            const result = await ServiceFunction();
+            setState(prev => ({
+                ...prev,
+                data: result,
+                isLoading: false
+            }));
+        } catch (error) {
+            setState(prev => ({
+                ...prev,
+                error: error instanceof Error ? error.message : 'Unknown error',
+                isLoading: false
+            }));
+        }
+    }, []);
+    
+    // 4d. Effects
+    useEffect(() => {
+        if (mergedOptions.autoFetch) {
+            fetchData();
+        }
+    }, [mergedOptions.autoFetch, fetchData]);
+    
+    // 4e. Memoized values
+    const sortedData = useMemo(() => {
+        return [...state.data].sort((a, b) => a.name.localeCompare(b.name));
+    }, [state.data]);
+    
+    // 4f. Callback functions
+    const refetch = useCallback(() => {
+        return fetchData();
+    }, [fetchData]);
+    
+    const clearError = useCallback(() => {
+        setState(prev => ({ ...prev, error: null }));
+    }, []);
+    
+    // 4g. Return object
+    return {
+        data: sortedData,
+        isLoading: state.isLoading,
+        error: state.error,
+        refetch,
+        clearError
+    };
+};
+```
+
+### Return Value Patterns
+
+**Object Return (Preferred for multiple values):**
+```typescript
+export const useFeature = () => {
+    // ...
+    return {
+        data,
+        isLoading,
+        error,
+        refetch,
+        clearError
+    };
+};
+
+// Usage - destructure what you need
+const { data, isLoading, refetch } = useFeature();
+```
+
+**Tuple Return (For simple 2-3 values):**
+```typescript
+export const useToggle = (initialValue = false) => {
+    const [value, setValue] = useState(initialValue);
+    const toggle = useCallback(() => setValue(v => !v), []);
+    
+    return [value, toggle] as const;
+};
+
+// Usage - array destructuring
+const [isOpen, toggleOpen] = useToggle(false);
+```
+
+**Single Value Return (For simple utilities):**
+```typescript
+export const useDebounce = <T>(value: T, delay: number): T => {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+    // ...
+    return debouncedValue;
+};
+
+// Usage - direct value
+const debouncedSearch = useDebounce(searchTerm, 500);
+```
+
+## Hook Composition
+
+### Composing Hooks
+
+```typescript
+// Low-level hooks
+const useAPI = (endpoint: string) => {
+    const [data, setData] = useState(null);
+    const [isLoading, setIsLoading] = useState(false);
+    // ... fetch logic
+    return { data, isLoading };
+};
+
+const useLocalCache = (key: string) => {
+    const [cached, setCached] = useState(() => {
+        return localStorage.getItem(key);
+    });
+    // ... cache logic
+    return { cached, setCached };
+};
+
+// High-level hook composing low-level hooks
+export const useAccountsWithCache = () => {
+    const { data, isLoading } = useAPI('/accounts');
+    const { cached, setCached } = useLocalCache('accounts');
+    
+    useEffect(() => {
+        if (data) {
+            setCached(JSON.stringify(data));
+        }
+    }, [data, setCached]);
+    
+    return {
+        accounts: data || (cached ? JSON.parse(cached) : []),
+        isLoading
+    };
+};
+```
+
+### Hook Dependencies
+
+```typescript
+// ✅ GOOD: Clear dependency chain
+export const useFilteredData = (filterCriteria: FilterCriteria) => {
+    const { data, isLoading } = useData();
+    
+    const filteredData = useMemo(() => {
+        return data.filter(item => matchesCriteria(item, filterCriteria));
+    }, [data, filterCriteria]);
+    
+    return { filteredData, isLoading };
+};
+
+// ❌ BAD: Hidden dependencies
+export const useFilteredData = () => {
+    const { data } = useData();
+    const filterCriteria = useStore(state => state.filterCriteria);  // Hidden!
+    // Now hook depends on store state without it being in parameters
+};
+```
+
+## TypeScript Patterns
+
+### Generic Hooks
+
+```typescript
+// Generic data fetching hook
+export const useFetch = <T>(url: string) => {
+    const [data, setData] = useState<T | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+    
+    useEffect(() => {
+        const fetchData = async () => {
+            setIsLoading(true);
+            try {
+                const response = await fetch(url);
+                const json = await response.json();
+                setData(json as T);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        
+        fetchData();
+    }, [url]);
+    
+    return { data, isLoading };
+};
+
+// Usage with type inference
+const { data: users } = useFetch<User[]>('/api/users');
+const { data: account } = useFetch<Account>('/api/account/123');
+```
+
+### Type-Safe Return Values
+
+```typescript
+// ✅ GOOD: Explicit return type
+export const useCounter = (initialValue = 0): {
+    count: number;
+    increment: () => void;
+    decrement: () => void;
+    reset: () => void;
+} => {
+    const [count, setCount] = useState(initialValue);
+    
+    const increment = useCallback(() => setCount(c => c + 1), []);
+    const decrement = useCallback(() => setCount(c => c - 1), []);
+    const reset = useCallback(() => setCount(initialValue), [initialValue]);
+    
+    return { count, increment, decrement, reset };
+};
+
+// ✅ BETTER: Named interface
+export interface UseCounterReturn {
+    count: number;
+    increment: () => void;
+    decrement: () => void;
+    reset: () => void;
+}
+
+export const useCounter = (initialValue = 0): UseCounterReturn => {
+    // ... implementation
+};
+```
+
+### Const Assertions for Tuples
+
+```typescript
+// ✅ GOOD: Const assertion for tuple return
+export const useToggle = (initialValue = false) => {
+    const [value, setValue] = useState(initialValue);
+    const toggle = useCallback(() => setValue(v => !v), []);
+    
+    return [value, toggle] as const;  // Type: readonly [boolean, () => void]
+};
+
+// ❌ BAD: Without const assertion
+export const useToggle = (initialValue = false) => {
+    const [value, setValue] = useState(initialValue);
+    const toggle = useCallback(() => setValue(v => !v), []);
+    
+    return [value, toggle];  // Type: (boolean | (() => void))[]
+};
+```
+
+## Performance Considerations
+
+### Memoization
+
+```typescript
+export const useExpensiveCalculation = (data: DataType[]) => {
+    // ✅ GOOD: Memoize expensive calculations
+    const processedData = useMemo(() => {
+        return data
+            .map(item => expensiveTransform(item))
+            .filter(item => expensiveFilter(item))
+            .sort((a, b) => expensiveCompare(a, b));
+    }, [data]);
+    
+    return processedData;
+};
+
+// ❌ BAD: Expensive calculation on every render
+export const useExpensiveCalculation = (data: DataType[]) => {
+    const processedData = data
+        .map(item => expensiveTransform(item))  // Runs every render!
+        .filter(item => expensiveFilter(item))
+        .sort((a, b) => expensiveCompare(a, b));
+    
+    return processedData;
+};
+```
+
+### Stable References
+
+```typescript
+export const useStableCallbacks = () => {
+    const [count, setCount] = useState(0);
+    
+    // ✅ GOOD: Stable callback reference
+    const increment = useCallback(() => {
+        setCount(c => c + 1);  // Updater function - no dependency on count
+    }, []);  // Never changes
+    
+    // ❌ BAD: New callback on every render
+    const incrementBad = () => {
+        setCount(count + 1);  // Depends on count - new function every render
+    };
+    
+    return { count, increment };
+};
+```
+
+## Error Handling
+
+```typescript
+export const useDataWithErrorHandling = () => {
+    const [data, setData] = useState(null);
+    const [error, setError] = useState<Error | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+    
+    const fetchData = useCallback(async () => {
+        setIsLoading(true);
+        setError(null);
+        
+        try {
+            const result = await fetchFromAPI();
+            setData(result);
+        } catch (err) {
+            // Proper error handling
+            const error = err instanceof Error
+                ? err
+                : new Error('An unknown error occurred');
+            
+            setError(error);
+            console.error('useDataWithErrorHandling: fetch failed', error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+    
+    // Retry function
+    const retry = useCallback(() => {
+        setError(null);
+        return fetchData();
+    }, [fetchData]);
+    
+    return { data, error, isLoading, refetch: fetchData, retry };
+};
+```
+
+## Testing Hooks
+
+### Hook Testing with @testing-library/react-hooks
+
+```typescript
+// useCounter.test.ts
+import { renderHook, act } from '@testing-library/react-hooks';
+import { useCounter } from './useCounter';
+
+describe('useCounter', () => {
+    it('should initialize with default value', () => {
+        const { result } = renderHook(() => useCounter());
+        
+        expect(result.current.count).toBe(0);
+    });
+    
+    it('should initialize with custom value', () => {
+        const { result } = renderHook(() => useCounter(10));
+        
+        expect(result.current.count).toBe(10);
+    });
+    
+    it('should increment count', () => {
+        const { result } = renderHook(() => useCounter());
+        
+        act(() => {
+            result.current.increment();
+        });
+        
+        expect(result.current.count).toBe(1);
+    });
+    
+    it('should decrement count', () => {
+        const { result } = renderHook(() => useCounter(5));
+        
+        act(() => {
+            result.current.decrement();
+        });
+        
+        expect(result.current.count).toBe(4);
+    });
+    
+    it('should reset to initial value', () => {
+        const { result } = renderHook(() => useCounter(10));
+        
+        act(() => {
+            result.current.increment();
+            result.current.increment();
+        });
+        
+        expect(result.current.count).toBe(12);
+        
+        act(() => {
+            result.current.reset();
+        });
+        
+        expect(result.current.count).toBe(10);
+    });
+});
+```
+
+### Testing Hooks with Async Operations
+
+```typescript
+// useData.test.ts
+import { renderHook, waitFor } from '@testing-library/react-hooks';
+import { useData } from './useData';
+import * as ServiceModule from '@/services/DataService';
+
+jest.mock('@/services/DataService');
+
+describe('useData', () => {
+    it('should fetch data successfully', async () => {
+        const mockData = [{ id: 1, name: 'Test' }];
+        jest.spyOn(ServiceModule, 'fetchData').mockResolvedValue(mockData);
+        
+        const { result } = renderHook(() => useData());
+        
+        expect(result.current.isLoading).toBe(true);
+        
+        await waitFor(() => {
+            expect(result.current.isLoading).toBe(false);
+        });
+        
+        expect(result.current.data).toEqual(mockData);
+        expect(result.current.error).toBeNull();
+    });
+    
+    it('should handle errors', async () => {
+        const mockError = new Error('Fetch failed');
+        jest.spyOn(ServiceModule, 'fetchData').mockRejectedValue(mockError);
+        
+        const { result } = renderHook(() => useData());
+        
+        await waitFor(() => {
+            expect(result.current.isLoading).toBe(false);
+        });
+        
+        expect(result.current.data).toEqual([]);
+        expect(result.current.error).toBe('Fetch failed');
+    });
+});
+```
+
+## Best Practices
+
+### DO ✅
+
+1. **Name hooks starting with `use`** - Required by React
+2. **Return object for multiple values** - Easy to extend
+3. **Use TypeScript** - Type safety for inputs and outputs
+4. **Memoize expensive operations** - Use useMemo/useCallback
+5. **Handle errors properly** - Return error state
+6. **Clean up side effects** - Return cleanup from useEffect
+7. **Make hooks reusable** - Generic and flexible
+8. **Document complex hooks** - JSDoc comments
+9. **Test hooks independently** - Use testing library
+10. **Follow Rules of Hooks** - Only call at top level
+
+### DON'T ❌
+
+1. **Don't call hooks conditionally** - Breaks Rules of Hooks
+2. **Don't create hooks for everything** - Sometimes a function is enough
+3. **Don't make hooks do too much** - Single responsibility
+4. **Don't forget dependencies** - Causes stale closures
+5. **Don't return unstable references** - Use useCallback/useMemo
+6. **Don't ignore cleanup** - Causes memory leaks
+7. **Don't make hooks domain-specific if they're reusable** - Extract to shared
+8. **Don't test implementation details** - Test behavior
+9. **Don't forget error handling** - Always handle errors
+10. **Don't create god hooks** - Break into smaller hooks
+
+## When to Create a Hook vs Other Abstractions
+
+### Create a Custom Hook When:
+- ✅ Logic uses other hooks (useState, useEffect, etc.)
+- ✅ Logic is stateful
+- ✅ Logic is reused in multiple components
+- ✅ Logic involves side effects that need cleanup
+
+### Use a Regular Function When:
+- ✅ Logic is pure (no state, no side effects)
+- ✅ Logic doesn't use hooks
+- ✅ Logic is just calculations/transformations
+
+### Use a Component When:
+- ✅ Logic includes rendering
+- ✅ Logic requires its own UI
+- ✅ Logic is a visual pattern
+
+**Example:**
+```typescript
+// ❌ DON'T: Hook for pure calculation
+const useCalculateTotal = (items: Item[]) => {
+    return items.reduce((sum, item) => sum + item.price, 0);
+};
+
+// ✅ DO: Regular function for pure calculation
+const calculateTotal = (items: Item[]) => {
+    return items.reduce((sum, item) => sum + item.price, 0);
+};
+
+// ✅ DO: Hook for stateful logic
+const useShoppingCart = () => {
+    const [items, setItems] = useState<Item[]>([]);
+    const total = useMemo(() => calculateTotal(items), [items]);
+    
+    const addItem = useCallback((item: Item) => {
+        setItems(prev => [...prev, item]);
+    }, []);
+    
+    return { items, total, addItem };
+};
+```
+
+## Summary
+
+**Hook Organization:**
+- Domain-specific hooks → `components/domain/{feature}/hooks/`
+- Shared hooks → `src/hooks/`
+- Apply "Rule of Three" for promotion
+
+**Naming Convention:**
+- `use{What}{Purpose}` - Clear and descriptive
+- Examples: `useAccountsData`, `useTransferState`, `useDebounce`
+
+**Key Principles:**
+1. **Follow Rules of Hooks** - Only call at top level, only in React functions
+2. **Single responsibility** - Each hook does one thing well
+3. **Explicit dependencies** - All dependencies in useEffect/useCallback deps array
+4. **Type safety** - TypeScript for all inputs and outputs
+5. **Error handling** - Always return error state
+6. **Testability** - Write tests for complex hooks
+
+**Decision Tree:**
+```
+Need stateful logic?
+  ↓
+Does it use React hooks?
+  YES → Create custom hook
+  NO → Use regular function
+  ↓
+Used by 1 feature?
+  → components/domain/{feature}/hooks/
+  
+Used by 3+ features?
+  → src/hooks/
+```
+
+This convention ensures hooks remain organized, maintainable, and follow consistent patterns across the entire frontend codebase.

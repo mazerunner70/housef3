@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import FZIPRestoreUpload from '../FZIPRestoreUpload';
+import FZIPRestoreUpload from '../domain/fzip/components/FZIPRestoreUpload';
 
 // Mock service calls used by the component
 jest.mock('../../services/FZIPService', () => ({

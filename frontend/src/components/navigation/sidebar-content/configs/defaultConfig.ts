@@ -5,58 +5,11 @@
 
 import { SidebarContentConfig } from '../types';
 import { createNavItem, createFilterItem, createActionItem } from '../SidebarConfigFactory';
+import { mainNavigationSection } from './sharedNavigation';
 
 export const defaultConfig: SidebarContentConfig = {
     sections: [
-        {
-            type: 'navigation',
-            title: 'Main Navigation',
-            items: [
-                createNavItem(
-                    'home',
-                    'Portfolio Overview',
-                    '/',
-                    '🏠',
-                    (pathname) => pathname === '/' || pathname === '/home'
-                ),
-                createNavItem(
-                    'accounts',
-                    'Accounts',
-                    '/accounts',
-                    '🏦',
-                    (pathname) => pathname.startsWith('/accounts')
-                ),
-                createNavItem(
-                    'transactions',
-                    'Transactions',
-                    '/transactions',
-                    '📋',
-                    (pathname) => pathname.startsWith('/transactions')
-                ),
-                createNavItem(
-                    'categories',
-                    'Categories',
-                    '/categories',
-                    '🏷️',
-                    (pathname) => pathname.startsWith('/categories')
-                ),
-                createNavItem(
-                    'files',
-                    'Files',
-                    '/files',
-                    '📁',
-                    (pathname) => pathname.startsWith('/files')
-                ),
-                createNavItem(
-                    'import',
-                    'Import Transactions',
-                    '/import',
-                    '📥',
-                    (pathname) => pathname.startsWith('/import')
-                )
-            ],
-            collapsible: false
-        },
+        mainNavigationSection,
         {
             type: 'context',
             title: 'Quick Stats',

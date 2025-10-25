@@ -6,7 +6,7 @@ import {
   confirmRestoreStart,
   retryRestore,
   deleteFZIPRestoreJob
-} from '../services/FZIPService';
+} from '@/services/FZIPService';
 
 export interface UseFZIPRestoreStatusResult {
   status: FZIPRestoreJob | null;

@@ -171,7 +171,9 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
         // Add selected transfers to ignored set
         setIgnoredTransfers(prev => {
             const newIgnored = new Set(prev);
-            selectedDetectedTransfers.forEach(pairKey => newIgnored.add(pairKey));
+            for (const pairKey of selectedDetectedTransfers) {
+                newIgnored.add(pairKey);
+            }
             return newIgnored;
         });
 
@@ -230,13 +232,13 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
                 // Remove from selection
                 setSelectedDetectedTransfers(prev => {
                     const newSelected = new Set(prev);
-                    detectedTransfers.forEach(pair => {
+                    for (const pair of detectedTransfers) {
                         const outgoingId = (pair.outgoingTransaction.transactionId || (pair.outgoingTransaction as any).id) as string;
                         const incomingId = (pair.incomingTransaction.transactionId || (pair.incomingTransaction as any).id) as string;
                         if (successfulIds.has(outgoingId) || successfulIds.has(incomingId)) {
                             newSelected.delete(getTransferPairKey(pair));
                         }
-                    });
+                    }
                     return newSelected;
                 });
             }
@@ -479,8 +481,8 @@ const TransfersDashboard: React.FC<TransfersDashboardProps> = () => {
             }
         };
 
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
+        globalThis.addEventListener('keydown', handleKeyDown);
+        return () => globalThis.removeEventListener('keydown', handleKeyDown);
     }, [detectedTransfers, ignoredTransfers, selectedDetectedTransfers, handleBulkMarkTransfers, handleBulkIgnoreTransfers]);
 
     if (loading) {

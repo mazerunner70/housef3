@@ -1,5 +1,5 @@
 import React from 'react';
-import { FZIPRestoreSummary as SummaryData } from '../../../services/FZIPService';
+import { FZIPRestoreSummary as SummaryData } from '@/services/FZIPService';
 import './FZIPRestoreSummary.css';
 
 interface Props {
@@ -9,11 +9,11 @@ interface Props {
   isConfirming?: boolean;
 }
 
-export const FZIPRestoreSummary: React.FC<Props> = ({ 
-  summary, 
-  onConfirm, 
-  onCancel, 
-  isConfirming = false 
+export const FZIPRestoreSummary: React.FC<Props> = ({
+  summary,
+  onConfirm,
+  onCancel,
+  isConfirming = false
 }) => {
   return (
     <div className="fzip-restore-summary">
@@ -60,7 +60,7 @@ export const FZIPRestoreSummary: React.FC<Props> = ({
               <ul className="item-list">
                 {summary.categories.items.slice(0, 5).map((category, index) => (
                   <li key={index}>
-                    <span className="item-name" style={{marginLeft: `${category.level * 12}px`}}>
+                    <span className="item-name" style={{ marginLeft: `${category.level * 12}px` }}>
                       {category.name}
                     </span>
                     {category.children > 0 && (
@@ -125,20 +125,20 @@ export const FZIPRestoreSummary: React.FC<Props> = ({
       </div>
 
       <div className="summary-warning">
-        <p>⚠️ <strong>Important:</strong> This restore operation will add data to your account. 
-        Existing data will not be modified or deleted.</p>
+        <p>⚠️ <strong>Important:</strong> This restore operation will add data to your account.
+          Existing data will not be modified or deleted.</p>
       </div>
 
       <div className="summary-actions">
-        <button 
-          className="btn-secondary" 
+        <button
+          className="btn-secondary"
           onClick={onCancel}
           disabled={isConfirming}
         >
           Cancel
         </button>
-        <button 
-          className="btn-primary" 
+        <button
+          className="btn-primary"
           onClick={onConfirm}
           disabled={isConfirming}
         >

@@ -6,8 +6,14 @@ alwaysApply: false
 
 # Contextual Sidebar System
 
+**See Also**: [frontend-conventions.mdc](./frontend-conventions.mdc) for overall architecture patterns
+
+This document covers contextual sidebar conventions. The sidebar system provides route-aware navigation that adapts based on the current page context using a configuration-driven approach.
+
 ## Architecture
 The contextual sidebar system provides route-aware navigation that adapts based on the current page context. It uses a configuration-driven approach to eliminate code duplication and ensure consistency.
+
+**Integration with Domain Structure**: Sidebars follow the code colocation principle - domain-specific sidebars live in `components/domain/{feature}/sidebar/`, shared sidebars in `components/navigation/`.
 
 ## Core Components
 - **`ContextualSidebar.tsx`** - Main container that routes to appropriate sidebar content based on current route
@@ -63,8 +69,10 @@ const DynamicSidebarContent: React.FC<Props> = ({ sidebarCollapsed }) => {
 ```
 
 ## File Organization
+
+### Shared Sidebar Components (Used Across App)
 ```
-new-ui/components/navigation/
+components/navigation/
 ├── ContextualSidebar.tsx          # Main routing component
 ├── sidebar-content/
 │   ├── types.ts                   # TypeScript interfaces
@@ -78,8 +86,22 @@ new-ui/components/navigation/
 │   ├── TransactionsSidebarContent.tsx
 │   └── ImportSidebarContent.tsx
 ├── SidebarSection.tsx             # Section rendering component
-└── SidebarItem.tsx               # Individual item component
+└── SidebarItem.tsx                # Individual item component
 ```
+
+### Domain-Specific Sidebar Content
+```
+components/domain/{feature}/
+├── {DomainName}Page.tsx
+├── {DomainName}Dashboard.tsx
+└── sidebar/
+    ├── {Feature}SidebarContent.tsx    # Domain-specific sidebar
+    └── {feature}SidebarConfig.ts      # Domain-specific config
+```
+
+**When to Use Each:**
+- **Shared** (`components/navigation/`): Sidebars used by multiple features/routes
+- **Domain** (`components/domain/{feature}/sidebar/`): Sidebars used only by one feature
 
 ## Naming Conventions
 - Sidebar content components: `{Context}SidebarContent.tsx`

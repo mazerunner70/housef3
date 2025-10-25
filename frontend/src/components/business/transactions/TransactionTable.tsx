@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import './TransactionTable.css';
 import LoadMore from '@/components/Pagination'; // Import LoadMore (renamed from Pagination)
-import CategoryQuickSelector from '@/components/CategoryQuickSelector';
+import CategoryQuickSelector from '@/components/domain/categories/CategoryQuickSelector';
 import PatternSuggestionModal from '@/components/PatternSuggestionModal';
 import { TransactionViewItem, CategoryInfo } from '@/schemas/Transaction'; // IMPORT SERVICE TYPES
 import { Account as AccountDetail } from '@/schemas/Account'; // IMPORT ACCOUNT SERVICE
