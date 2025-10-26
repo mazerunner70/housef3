@@ -1,5 +1,5 @@
 import React from 'react';
-import { AccountForImport } from '@/hooks/useAccountsData';
+import { AccountForImport } from '@/components/domain/accounts/hooks/useAccountsData';
 import './AccountUploadHeader.css';
 
 interface AccountUploadHeaderProps {
@@ -80,7 +80,7 @@ const AccountUploadHeader: React.FC<AccountUploadHeaderProps> = ({
             <div className="account-upload-header-content">
                 <div className="account-upload-title-section">
                     <div className="account-info">
-                        <span className="account-icon" role="img" aria-label={`${formatAccountType(account.accountType)} account`}>
+                        <span className="account-icon" aria-label={`${formatAccountType(account.accountType)} account`}>
                             {getAccountTypeIcon(account.accountType)}
                         </span>
                         <div className="account-details">

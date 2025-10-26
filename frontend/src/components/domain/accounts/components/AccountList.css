@@ -1,0 +1,59 @@
+.account-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-m);
+    margin-top: var(--spacing-l);
+}
+
+.no-accounts-message {
+    font-style: italic;
+    color: var(--color-text-secondary);
+    padding: var(--spacing-xl);
+    text-align: center;
+    border: 2px dashed var(--color-borders-dividers);
+    border-radius: var(--border-radius-medium);
+    background-color: var(--color-background-subtle);
+    width: 100%;
+    /* Take full width */
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .account-list {
+        gap: var(--spacing-s);
+    }
+}
+
+@media (max-width: 480px) {
+    .account-list {
+        gap: var(--spacing-xs);
+    }
+}
+
+/* Scroll highlight animation for clicked timeline items */
+.account-list-item.scroll-highlight {
+    background: linear-gradient(135deg,
+            var(--color-primary-brand) 0%,
+            var(--color-secondary-brand) 100%);
+    background-size: 200% 200%;
+    animation: scroll-highlight-pulse 2s ease-out;
+    border-color: var(--color-primary-brand);
+    box-shadow: 0 4px 12px rgba(63, 81, 181, 0.3);
+}
+
+@keyframes scroll-highlight-pulse {
+    0% {
+        background-position: 0% 50%;
+        transform: scale(1.02);
+    }
+
+    50% {
+        background-position: 100% 50%;
+        transform: scale(1.01);
+    }
+
+    100% {
+        background-position: 0% 50%;
+        transform: scale(1);
+    }
+}

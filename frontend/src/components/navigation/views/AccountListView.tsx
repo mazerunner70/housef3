@@ -1,7 +1,7 @@
 import React from 'react';
-import AccountList from '@/components/accounts/AccountList';
-import AccountTimeline from '@/components/accounts/AccountTimeline';
-import useAccountsWithStore from '@/stores/useAccountsStore';
+import AccountList from '@/components/domain/accounts/components/AccountList';
+import AccountTimeline from '@/components/domain/accounts/components/AccountTimeline';
+import useAccountsWithStore from '@/components/domain/accounts/stores/useAccountsStore';
 import { useNavigationStore } from '@/stores/navigationStore';
 import './AccountListView.css';
 
@@ -22,24 +22,29 @@ const AccountListView: React.FC = () => {
         }
     };
 
-    const handleEditAccount = (account: any) => {
-        // TODO: Implement edit account functionality
-        console.log('Edit account:', account);
+    const handleEditAccount = (account: { accountId: string;[key: string]: unknown }) => {
+        // Navigate to account edit page
+        globalThis.location.href = `/accounts/${account.accountId}?action=edit`;
     };
 
     const handleDeleteAccount = (accountId: string) => {
-        // TODO: Implement delete account functionality
-        console.log('Delete account:', accountId);
+        // Navigate to account delete confirmation page
+        globalThis.location.href = `/accounts/${accountId}?action=delete`;
     };
 
     const handleViewTransactions = (accountId: string) => {
-        // TODO: Implement view transactions functionality
-        console.log('View transactions for account:', accountId);
+        // Navigate to transactions page for this account
+        globalThis.location.href = `/transactions?account=${accountId}`;
     };
 
     const handleTimelineAccountClick = (accountId: string) => {
-        // TODO: Implement timeline account click (scroll to account)
-        console.log('Timeline account click:', accountId);
+        // Scroll to account in the list or navigate to account detail
+        const accountElement = document.getElementById(`account-${accountId}`);
+        if (accountElement) {
+            accountElement.scrollIntoView({ behavior: 'smooth' });
+        } else {
+            globalThis.location.href = `/accounts/${accountId}`;
+        }
     };
 
     if (isLoading) {
@@ -76,7 +81,7 @@ const AccountListView: React.FC = () => {
             <div className="account-list-header">
                 <h1>My Accounts</h1>
                 <p className="account-summary">
-                    {accounts.length} account{accounts.length !== 1 ? 's' : ''} total
+                    {accounts.length} account{accounts.length === 1 ? '' : 's'} total
                 </p>
             </div>
 

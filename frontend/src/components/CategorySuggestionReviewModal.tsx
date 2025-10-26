@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Transaction } from '../services/TransactionService';
 import { Category, TransactionCategoryAssignment, CategorySuggestionStrategy } from '../../types/Category';
-import { useSuggestionReview } from '../hooks/useCategories';
 import './CategorySuggestionReviewModal.css';
 
 interface CategorySuggestionReviewModalProps {
@@ -405,8 +404,7 @@ const CategorySuggestionReviewModal: React.FC<CategorySuggestionReviewModalProps
           >
             {isProcessing ? (
               <>
-                <span className="loading-spinner">🔄</span>
-                Processing...
+                <span className="loading-spinner">🔄</span> Processing...
               </>
             ) : (
               <>

@@ -1,12 +1,12 @@
 import React from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useSessionRouting } from '@/hooks/useSessionRouting';
 import { useNavigationStore } from '@/stores/navigationStore';
 import AccountListView from '@/components/navigation/views/AccountListView';
 import AccountDetailView from '@/components/navigation/views/AccountDetailView';
 import FileTransactionsView from '@/components/navigation/views/FileTransactionsView';
 import TransactionDetailView from '@/components/navigation/views/TransactionDetailView';
-import useAccountsWithStore from '@/stores/useAccountsStore';
+import useAccountsWithStore from '@/components/domain/accounts/stores/useAccountsStore';
 import './AccountsPage.css';
 
 /**
@@ -27,6 +27,7 @@ import './AccountsPage.css';
  */
 const AccountsPage: React.FC = () => {
     const params = useParams();
+    const [searchParams] = useSearchParams();
     const { accounts } = useAccountsWithStore();
     const { selectedAccount, selectedFile, selectedTransaction, urlContext, goToAccountList } = useNavigationStore();
 
@@ -43,7 +44,7 @@ const AccountsPage: React.FC = () => {
         if (!accountId && !fileId && !transactionId) {
             goToAccountList();
         }
-    }, [params, searchParams, goToAccountList]);
+    }, [params, urlContext, goToAccountList]);
 
     // Determine which view to render based on URL params
     const renderContent = () => {

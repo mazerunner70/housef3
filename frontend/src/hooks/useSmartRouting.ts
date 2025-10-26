@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 import { useNavigationStore, NavigationContext } from '@/stores/navigationStore';
-import useAccountsWithStore from '@/stores/useAccountsStore';
+import useAccountsWithStore from '@/components/domain/accounts/stores/useAccountsStore';
 
 /**
  * Smart routing strategy that handles URL depth growth gracefully
@@ -97,7 +97,7 @@ export const useSmartRouting = () => {
         if (selectedAccount && selectedTransaction) {
             if (selectedFile) {
                 // This would exceed depth, use query params
-                const url = new URL(`/accounts/${selectedAccount.accountId}`, window.location.origin);
+                const url = new URL(`/accounts/${selectedAccount.accountId}`, globalThis.location.origin);
                 url.searchParams.set('view', 'transaction');
                 url.searchParams.set('fileId', selectedFile.fileId);
                 url.searchParams.set('transactionId', selectedTransaction.transactionId);
@@ -111,7 +111,7 @@ export const useSmartRouting = () => {
 
     const generateDeepUrl = useCallback(() => {
         const baseUrl = selectedAccount ? `/accounts/${selectedAccount.accountId}` : '/accounts';
-        const url = new URL(baseUrl, window.location.origin);
+        const url = new URL(baseUrl, globalThis.location.origin);
 
         // Add context via query parameters
         if (currentView !== 'account-list' && currentView !== 'account-detail') {
@@ -127,11 +127,11 @@ export const useSmartRouting = () => {
         }
 
         // Preserve other context
-        Object.entries(navigationContext).forEach(([key, value]) => {
+        for (const [key, value] of Object.entries(navigationContext)) {
             if (value && !['view', 'fileId', 'transactionId'].includes(key)) {
                 url.searchParams.set(key, value);
             }
-        });
+        }
 
         return url.pathname + url.search;
     }, [currentView, selectedAccount, selectedFile, selectedTransaction, navigationContext]);
@@ -236,13 +236,13 @@ export const useSmartRouting = () => {
         // Helper to add context without full navigation
         addContext: (context: Partial<NavigationContext>) => {
             const newSearchParams = new URLSearchParams(searchParams);
-            Object.entries(context).forEach(([key, value]) => {
+            for (const [key, value] of Object.entries(context)) {
                 if (value) {
                     newSearchParams.set(key, value);
                 } else {
                     newSearchParams.delete(key);
                 }
-            });
+            }
             setSearchParams(newSearchParams);
         },
 
@@ -250,12 +250,14 @@ export const useSmartRouting = () => {
         clearContext: (keys?: string[]) => {
             const newSearchParams = new URLSearchParams(searchParams);
             if (keys) {
-                keys.forEach(key => newSearchParams.delete(key));
+                for (const key of keys) {
+                    newSearchParams.delete(key);
+                }
             } else {
                 // Clear all context except core navigation
-                ['filter', 'sort', 'page', 'categoryId', 'tagId', 'dateRange'].forEach(key => {
+                for (const key of ['filter', 'sort', 'page', 'categoryId', 'tagId', 'dateRange']) {
                     newSearchParams.delete(key);
-                });
+                }
             }
             setSearchParams(newSearchParams);
         }

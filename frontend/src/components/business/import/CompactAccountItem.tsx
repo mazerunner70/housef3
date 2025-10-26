@@ -1,5 +1,5 @@
 import React from 'react';
-import { AccountForImport } from '@/hooks/useAccountsData';
+import { AccountForImport } from '@/components/domain/accounts/hooks/useAccountsData';
 import CurrencyAmount from '@/components/ui/CurrencyAmount';
 import DateCell from '@/components/ui/DateCell';
 import StatusBadge from '@/components/ui/StatusBadge';
@@ -93,12 +93,10 @@ const CompactAccountItem: React.FC<CompactAccountItemProps> = ({
     };
 
     return (
-        <div
+        <button
             className="compact-account-item"
             onClick={handleAccountRowClick}
             onKeyDown={(e) => handleKeyDown(e, () => onAccountClick(account.accountId))}
-            tabIndex={0}
-            role="button"
             aria-label={`Account: ${account.accountName}. Click to view details.`}
         >
             {/* Left Section: Account Info */}
@@ -175,7 +173,7 @@ const CompactAccountItem: React.FC<CompactAccountItemProps> = ({
                     <span className="import-text">Import</span>
                 </button>
             </div>
-        </div>
+        </button>
     );
 };
 

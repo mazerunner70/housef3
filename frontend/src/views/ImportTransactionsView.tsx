@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import ImportViewLayout from '@/components/business/import/ImportViewLayout';
 import ImportHeader from '@/components/business/import/ImportHeader';
 import CompactAccountsList from '@/components/business/import/CompactAccountsList';
-import useAccountsData from '@/hooks/useAccountsData';
+import useAccountsData from '@/components/domain/accounts/hooks/useAccountsData';
 import useImportState from '@/hooks/useImportState';
 import './ImportTransactionsView.css';
 
@@ -45,10 +45,8 @@ const ImportTransactionsView: React.FC = () => {
     console.log('Account clicked:', accountId, accountName);
     console.log('🏦 This will navigate to account detail page');
 
-    // TODO: Implement navigation to account detail page
-    // This could use React Router navigation or the existing navigation store
-    // For now, show a helpful message
-    alert(`Account Details\n\nAccount: ${accountName}\nType: ${account?.accountType || 'Unknown'}\nInstitution: ${account?.institution || 'Unknown'}\n\nAccount detail navigation coming soon!`);
+    // Navigate to account detail page
+    globalThis.location.href = `/accounts/${accountId}`;
   }, [accountsData.accounts]);
 
   const handleUploadClick = useCallback(() => {
@@ -120,7 +118,7 @@ const ImportTransactionsView: React.FC = () => {
                 )}
               </button>
               <button
-                onClick={() => window.location.reload()}
+                onClick={() => globalThis.location.reload()}
                 className="retry-button secondary"
               >
                 <span>↻</span>

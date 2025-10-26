@@ -1,5 +1,5 @@
 import React from 'react';
-import { AccountForImport } from '@/hooks/useAccountsData';
+import { AccountForImport } from '@/components/domain/accounts/hooks/useAccountsData';
 import CompactAccountItem from './CompactAccountItem';
 import LoadingState from '@/components/ui/LoadingState';
 import './CompactAccountsList.css';
@@ -55,8 +55,7 @@ const CompactAccountsList: React.FC<CompactAccountsListProps> = ({
                     <button
                         className="create-account-button"
                         onClick={() => {
-                            // TODO: Implement account creation navigation
-                            console.log('Navigate to account creation');
+                            globalThis.location.href = '/accounts?action=create';
                         }}
                     >
                         Create Your First Account
@@ -99,21 +98,20 @@ const CompactAccountsList: React.FC<CompactAccountsListProps> = ({
             </div>
 
             {/* Accounts List */}
-            <div
+            <ul
                 className="compact-accounts-list"
-                role="list"
                 aria-label="Accounts available for import"
             >
                 {accounts.map((account) => (
-                    <div key={account.accountId} role="listitem">
+                    <li key={account.accountId}>
                         <CompactAccountItem
                             account={account}
                             onImportClick={onImportClick}
                             onAccountClick={onAccountClick}
                         />
-                    </div>
+                    </li>
                 ))}
-            </div>
+            </ul>
 
             {/* Footer Info */}
             {accounts.length > 0 && (
@@ -129,7 +127,7 @@ const CompactAccountsList: React.FC<CompactAccountsListProps> = ({
                     {accountsWithImports.length > 0 && (
                         <div className="import-stats">
                             <span className="import-stats-text">
-                                {accountsWithImports.length} account{accountsWithImports.length !== 1 ? 's' : ''}
+                                {accountsWithImports.length} account{accountsWithImports.length === 1 ? '' : 's'}
                                 {' '}with existing imports
                             </span>
                         </div>

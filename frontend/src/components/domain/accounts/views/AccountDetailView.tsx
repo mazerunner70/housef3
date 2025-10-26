@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import AccountFilesTab from '../components/domain/accounts/components/AccountFilesTab';
-import AccountTransactionsTab from '../components/domain/accounts/components/AccountTransactionsTab'; // Import the new tab
-import { Account } from '../../schemas/Account'; // Import Account type
+import AccountFilesTab from '../components/AccountFilesTab';
+import AccountTransactionsTab from '../components/AccountTransactionsTab'; // Import the new tab
+import { Account } from '@/schemas/Account'; // Import Account type
 import './AccountDetailView.css'; // Import the CSS file
 
 interface AccountDetailViewProps {

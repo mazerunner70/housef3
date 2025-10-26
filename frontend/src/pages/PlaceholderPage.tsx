@@ -71,12 +71,7 @@ const PlaceholderPage: React.FC<PlaceholderPageProps> = ({ title, description })
 };
 
 // Specific placeholder components for different entity types
-export const CategoriesPage: React.FC = () => (
-    <PlaceholderPage
-        title="Categories"
-        description="Browse and manage transaction categories across all accounts"
-    />
-);
+// Note: CategoriesPage is now a real implementation in /components/domain/categories/CategoriesPage.tsx
 
 export const CategoryDetailPage: React.FC = () => (
     <PlaceholderPage

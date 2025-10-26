@@ -1,13 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import AccountList, { AccountListRef } from '../components/domain/accounts/components/AccountList';
-import AccountForm from '../components/domain/accounts/components/AccountForm';
-import ConfirmationModal from '../components/domain/accounts/components/ConfirmationModal';
-import AccountTimeline from '../components/domain/accounts/components/AccountTimeline';
+import AccountList, { AccountListRef } from '../components/AccountList';
+import AccountForm from '../components/AccountForm';
+import ConfirmationModal from '../components/ConfirmationModal';
+import AccountTimeline from '../components/AccountTimeline';
 import AccountDetailView from './AccountDetailView';
-import TransactionFilesDialog from '../components/domain/accounts/components/TransactionFilesDialog';
+import TransactionFilesDialog from '../components/TransactionFilesDialog';
 import './AccountsView.css';
 import useAccountsWithStore from '@/components/domain/accounts/stores/useAccountsStore';
-import { Account, AccountCreate } from '../../schemas/Account';
+import { Account, AccountCreate } from '@/schemas/Account';
 
 // AccountFormData in AccountsView should match AccountCreate from the hook for create/update operations
 // The main `Account` type from schemas/Account.ts is used for the list display.

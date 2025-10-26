@@ -1,23 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
-import AccountList, { AccountListRef } from '../components/domain/accounts/components/AccountList';
-import AccountForm from '../components/domain/accounts/components/AccountForm';
-import ConfirmationModal from '../components/domain/accounts/components/ConfirmationModal';
-import AccountTimeline from '../components/domain/accounts/components/AccountTimeline';
-import AccountDetailView from './AccountDetailView';
-import TransactionFilesDialog from '../components/domain/accounts/components/TransactionFilesDialog';
-import './AccountsView.css';
+import AccountList, { AccountListRef } from './components/AccountList';
+import AccountForm from './components/AccountForm';
+import ConfirmationModal from './components/ConfirmationModal';
+import AccountTimeline from './components/AccountTimeline';
+import AccountDetailView from './views/AccountDetailView';
+import TransactionFilesDialog from './components/TransactionFilesDialog';
+import './AccountsDashboard.css';
 import useAccountsWithStore from '@/components/domain/accounts/stores/useAccountsStore';
-import { Account, AccountCreate } from '../../schemas/Account';
+import { Account, AccountCreate } from '@/schemas/Account';
 
-// AccountFormData in AccountsView should match AccountCreate from the hook for create/update operations
-// The main `Account` type from schemas/Account.ts is used for the list display.
-
-const AccountsView: React.FC = () => {
+const AccountsDashboard: React.FC = () => {
     const {
         accounts,
         isLoading,
         error,
-        fetchAccounts, // Now we handle fetching at component level
+        fetchAccounts,
         createAccount,
         updateAccount,
         deleteAccount,
@@ -26,8 +23,6 @@ const AccountsView: React.FC = () => {
 
     const accountListRef = useRef<AccountListRef>(null);
     const [showAccountForm, setShowAccountForm] = useState(false);
-    // editingAccount will store the full Account object for pre-filling form,
-    // but we'll map it to AccountCreate before submitting for an update.
     const [editingAccount, setEditingAccount] = useState<Account | null>(null);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null);
@@ -42,7 +37,7 @@ const AccountsView: React.FC = () => {
     // Fetch accounts on component mount with intelligent caching
     useEffect(() => {
         fetchAccountsRef.current();
-    }, []); // Empty deps - only run once on mount
+    }, []);
 
     const handleAddAccount = () => {
         setEditingAccount(null);
@@ -103,9 +98,7 @@ const AccountsView: React.FC = () => {
         if (success) {
             setShowAccountForm(false);
             setEditingAccount(null);
-            // accounts list is updated by the hook
         }
-        // If not successful, error is set by the hook and will be displayed
     };
 
     const handleDeleteConfirm = async () => {
@@ -115,17 +108,14 @@ const AccountsView: React.FC = () => {
             if (success) {
                 setShowDeleteModal(false);
                 setDeletingAccountId(null);
-                // accounts list is updated by the hook
             }
-            // If not successful, error is set by the hook and will be displayed
         }
     };
 
     // Prepare initialData for AccountForm, mapping from Account to AccountCreate if editingAccount exists
     const getFormInitialData = (): AccountCreate | undefined => {
-        if (!editingAccount) return undefined; // For new account, no initial data for form (defaults are in AccountForm)
+        if (!editingAccount) return undefined;
 
-        // For editing existing account:
         return {
             accountName: editingAccount.accountName,
             accountType: editingAccount.accountType,
@@ -138,19 +128,19 @@ const AccountsView: React.FC = () => {
 
     if (selectedAccount) {
         return (
-            <div className="accounts-view-container">
+            <div className="accounts-dashboard-container">
                 <button onClick={handleCloseDetailView} className="back-button">Back to Accounts List</button>
                 <AccountDetailView account={selectedAccount} />
             </div>
         );
     }
 
-
-
     return (
-        <div className="accounts-view-container">
-            <h1>My Accounts</h1>
-            <button onClick={handleAddAccount} className="add-account-button">Add New Account</button>
+        <div className="accounts-dashboard-container">
+            <div className="accounts-header">
+                <h1>My Accounts</h1>
+                <button onClick={handleAddAccount} className="add-account-button">Add New Account</button>
+            </div>
 
             {isLoading && <p className="accounts-loading">Loading accounts...</p>}
             {error && (
@@ -221,4 +211,4 @@ const AccountsView: React.FC = () => {
     );
 };
 
-export default AccountsView; 
+export default AccountsDashboard;

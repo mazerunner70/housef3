@@ -1,0 +1,5 @@
+.accounts-page {
+    padding: 20px;
+    min-height: 100vh;
+    background-color: var(--color-background, #ffffff);
+}

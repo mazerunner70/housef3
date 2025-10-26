@@ -8,7 +8,7 @@ interface FileTransactionsViewProps {
     file: TransactionFile;
 }
 
-const FileTransactionsView: React.FC<FileTransactionsViewProps> = ({ account, file }) => {
+const FileTransactionsView: React.FC<FileTransactionsViewProps> = ({ account: _, file }) => {
     return (
         <div className="file-transactions-view">
             <div className="file-header">
@@ -29,12 +29,10 @@ const FileTransactionsView: React.FC<FileTransactionsViewProps> = ({ account, fi
 
                 <div className="file-actions">
                     <button className="action-button secondary">
-                        <span className="button-icon">📥</span>
-                        Download
+                        <span className="button-icon">📥</span> Download
                     </button>
                     <button className="action-button danger">
-                        <span className="button-icon">🗑️</span>
-                        Remove
+                        <span className="button-icon">🗑️</span> Remove
                     </button>
                 </div>
             </div>
