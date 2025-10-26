@@ -4,9 +4,12 @@ import { Account, AccountCreate } from '@/schemas/Account';
 import {
     listAccounts as serviceListAccounts,
     createAccount as serviceCreateAccount,
-    updateAccount as serviceUpdateAccount,
+    updateAccount,
     deleteAccount as serviceDeleteAccount
 } from '../services/AccountService';
+
+// Type-safe alias with proper typing
+const serviceUpdateAccount = updateAccount as (accountId: string, accountData: Partial<Account>) => Promise<{ account: Account }>;
 
 // --- MAPPING FUNCTIONS ---
 
@@ -209,7 +212,7 @@ export const useAccountsStore = create<AccountsState>()(
                         // Map AccountCreate to service input
                         const serviceInput = mapAccountCreateToServiceInput(accountData);
 
-                        const response = await serviceUpdateAccount(accountId, serviceInput)();
+                        const response = await serviceUpdateAccount(accountId, serviceInput);
 
                         // Use account directly - no mapping needed
                         const updatedAccount = response.account;

@@ -5,7 +5,7 @@ import {
   getCategories,
   quickUpdateTransactionCategory,
 } from '@/services/TransactionService';
-import { listAccounts } from '@/services/AccountService';
+import { listAccounts } from '@/components/domain/accounts/services/AccountService';
 import { TransactionViewItem, CategoryInfo, TransactionRequestParams } from '@/schemas/Transaction';
 import { Account } from '@/schemas/Account';
 import TransactionFilters, { FilterValues as ComponentFilterValues } from './TransactionFilters';
@@ -17,7 +17,7 @@ import { useTransactionsUIStore } from '@/stores/transactionsStore';
 const parseDateString = (dateStr: string | undefined): Date | null => {
   if (!dateStr) return null;
   const date = new Date(dateStr);
-  return isNaN(date.getTime()) ? null : date;
+  return Number.isNaN(date.getTime()) ? null : date;
 };
 
 const TransactionsListTab: React.FC = () => {
@@ -129,7 +129,7 @@ const TransactionsListTab: React.FC = () => {
   const handleQuickCategoryChange = async (transactionId: string, newCategoryId: string) => {
     setIsQuickUpdating(true);
     try {
-      await quickUpdateTransactionCategory(transactionId, newCategoryId);
+      await (quickUpdateTransactionCategory as (transactionId: string, categoryId: string) => Promise<any>)(transactionId, newCategoryId);
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
     } catch (err) {
       console.error("Error updating category:", err);

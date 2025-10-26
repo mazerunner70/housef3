@@ -1,5 +1,5 @@
 import { Account } from '@/schemas/Account';
-import { listAccounts } from './AccountService';
+import { listAccounts } from '../components/domain/accounts/services/AccountService';
 import { getTransferProgressAndRecommendation } from './TransferService';
 import { createLogger } from '@/utils/logger';
 

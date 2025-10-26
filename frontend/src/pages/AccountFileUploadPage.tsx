@@ -1,27 +1,18 @@
 import React from 'react';
 import { useParams } from 'react-router-dom';
-import AccountFileUploadView from '@/views/AccountFileUploadView';
+import { AccountFileUploadView } from '@/components/domain/accounts';
 
 /**
- * AccountFileUploadPage - Route-level container for account file upload
- * 
- * This page component handles:
- * - Route parameter extraction (accountId)
- * - Minimal logic - delegates to view component
- * - Navigation integration
- * 
- * Route: /import/account/:accountId
+ * AccountFileUploadPage - Page wrapper for account-specific file upload
+ *
+ * This is a thin routing wrapper that extracts the accountId from URL params
+ * and passes it to the domain AccountFileUploadView component.
  */
 const AccountFileUploadPage: React.FC = () => {
     const { accountId } = useParams<{ accountId: string }>();
 
     if (!accountId) {
-        return (
-            <div className="account-file-upload-error">
-                <h1>Invalid Account</h1>
-                <p>No account ID provided in the URL.</p>
-            </div>
-        );
+        return <div>Account ID not provided</div>;
     }
 
     return <AccountFileUploadView accountId={accountId} />;

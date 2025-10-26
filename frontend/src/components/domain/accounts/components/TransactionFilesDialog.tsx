@@ -30,12 +30,6 @@ const TransactionFilesDialog: React.FC<TransactionFilesDialogProps> = ({
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (isOpen && accountId) {
-            fetchTransactionFiles();
-        }
-    }, [isOpen, accountId, fetchTransactionFiles]);
-
     const fetchTransactionFiles = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -72,36 +66,26 @@ const TransactionFilesDialog: React.FC<TransactionFilesDialogProps> = ({
         }
     }, [accountId]);
 
-    const handleBackdropClick = (e: React.MouseEvent) => {
-        if (e.target === e.currentTarget) {
-            onClose();
+    useEffect(() => {
+        if (isOpen && accountId) {
+            fetchTransactionFiles();
         }
-    };
+    }, [isOpen, accountId, fetchTransactionFiles]);
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Escape') {
-            onClose();
-        }
-        // Support Enter and Space for backdrop button role
-        if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
-            e.preventDefault();
-            onClose();
-        }
-    };
 
     if (!isOpen) {
         return null;
     }
 
     return (
-        <div
-            className="transaction-files-dialog-backdrop"
-            onClick={handleBackdropClick}
-            onKeyDown={handleKeyDown}
-            tabIndex={0}
-            aria-label="Close dialog"
-        >
-            <dialog className="transaction-files-dialog" open aria-modal="true" aria-labelledby="dialog-title">
+        <div className="transaction-files-dialog-backdrop">
+            <dialog
+                className="transaction-files-dialog"
+                open={isOpen}
+                onClose={onClose}
+                aria-modal="true"
+                aria-labelledby="dialog-title"
+            >
                 <div className="dialog-header">
                     <h2 id="dialog-title">Transaction Files for {accountName}</h2>
                     <button
@@ -185,8 +169,8 @@ const TransactionFilesDialog: React.FC<TransactionFilesDialogProps> = ({
                         Close
                     </button>
                 </div>
+            </dialog>
         </div>
-        </div >
     );
 };
 

@@ -67,8 +67,8 @@ const addPaginationParams = (query: URLSearchParams, params: TransactionRequestP
   if (params.lastEvaluatedKey) {
     const processedKey = { ...params.lastEvaluatedKey };
     if (processedKey.date && typeof processedKey.date === 'string') {
-      const dateNum = parseInt(processedKey.date, 10);
-      if (!isNaN(dateNum)) {
+      const dateNum = Number.parseInt(processedKey.date, 10);
+      if (!Number.isNaN(dateNum)) {
         processedKey.date = dateNum;
       }
     }
@@ -290,7 +290,7 @@ export const getAccountTransactions = (accountId: string, limit: number = 50) =>
 export const getUserTransactions = listTransactions;
 export const getCategories = listCategories;
 export const getAccounts = listAccounts;
-export const quickUpdateTransactionCategory = updateTransactionCategory;
+export const quickUpdateTransactionCategory: (transactionId: string, categoryId: string) => Promise<any> = updateTransactionCategory;
 
 // Default export
 export default {

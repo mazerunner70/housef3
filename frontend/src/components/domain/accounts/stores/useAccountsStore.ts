@@ -81,6 +81,13 @@ export const useInvalidateAccountsCache = () => {
 };
 
 /**
+ * Hook to get accounts data directly (for services that need to access accounts without triggering fetches)
+ */
+export const useAccountsData = (): Account[] => {
+    return useAccountsStore(state => state.accounts);
+};
+
+/**
  * Hook for advanced cache management
  */
 export const useAccountsCacheManagement = () => {

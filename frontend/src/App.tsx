@@ -3,7 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 import Login from '@/components/Login';
 import NewUILayout from '@/layouts/NewUILayout';
 import HomePage from '@/pages/HomePage';
-import AccountsPage from '@/pages/AccountsPage';
+import AccountsPage from '@/components/domain/accounts/AccountsPage';
 import TransactionsPage from '@/pages/TransactionsPage';
 import TransfersPage from '@/components/domain/transfers/TransfersPage';
 import CategoriesPage from '@/components/domain/categories/CategoriesPage';
@@ -29,7 +29,7 @@ import {
   FileProcessingLogPage,
   FileComparePage
 } from '@/pages/PlaceholderPage';
-import { getCurrentUser, isAuthenticated, refreshToken } from './services/AuthService';
+import { getCurrentUser, isAuthenticated, refreshToken } from '@/services/AuthService';
 import './App.css'
 
 function App() {

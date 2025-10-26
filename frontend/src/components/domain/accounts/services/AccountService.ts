@@ -1,4 +1,4 @@
-import { FileMetadata } from '@/services/FileService';
+import { FileMetadata } from '../../../../services/FileService';
 import {
   Account,
   AccountSchema,
@@ -237,14 +237,13 @@ export const createAccount = withServiceLogging(
   }
 );
 
-// Update an existing account - with automatic API logging
-export const updateAccount = (accountId: string, accountData: Partial<Account>) => withApiLogging(
+// Update an existing account - with service logging
+export const updateAccount: (accountId: string, accountData: Partial<Account>) => Promise<{ account: Account }> = withServiceLogging(
   'AccountService',
-  `${API_ENDPOINT}/${accountId}`,
-  'PUT',
-  async (url) => {
+  'updateAccount',
+  async (accountId: string, accountData: Partial<Account>) => {
     return validateApiResponse(
-      () => ApiClient.putJson<any>(url, accountData),
+      () => ApiClient.putJson<any>(`${API_ENDPOINT}/${accountId}`, accountData),
       (rawData) => {
         const validatedAccount = AccountSchema.parse(rawData.account);
         return { account: validatedAccount };
@@ -254,12 +253,16 @@ export const updateAccount = (accountId: string, accountData: Partial<Account>) 
     );
   },
   {
-    operationName: `updateAccount:${accountId}`,
-    successData: (result) => ({
+    logArgs: ([accountId, accountData]) => ({
       accountId,
-      accountName: result.account.accountName,
-      accountType: result.account.accountType,
+      accountName: accountData.accountName,
+      accountType: accountData.accountType,
       updatedFields: Object.keys(accountData)
+    }),
+    logResult: (result) => ({
+      accountId: result.account.accountId,
+      accountName: result.account.accountName,
+      accountType: result.account.accountType
     })
   }
 );

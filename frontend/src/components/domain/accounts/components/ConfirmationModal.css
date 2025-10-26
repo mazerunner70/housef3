@@ -8,7 +8,8 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 1050; /* Ensure it's on top of other elements like AccountForm */
+    z-index: 1050;
+    /* Ensure it's on top of other elements like AccountForm */
 }
 
 .confirmation-modal-content {
@@ -17,7 +18,8 @@
     border-radius: 8px;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
     width: 100%;
-    max-width: 400px; /* Max modal width */
+    max-width: 400px;
+    /* Max modal width */
     font-family: 'Arial', sans-serif;
     text-align: center;
 }
@@ -38,7 +40,8 @@
 
 .confirmation-modal-actions {
     display: flex;
-    justify-content: center; /* Center buttons */
+    justify-content: center;
+    /* Center buttons */
     gap: 15px;
 }
 
@@ -52,7 +55,8 @@
 }
 
 .confirm-button {
-    background-color: #dc3545; /* Red for confirm delete */
+    background-color: #dc3545;
+    /* Red for confirm delete */
     color: white;
 }
 
@@ -61,7 +65,8 @@
 }
 
 .cancel-button-modal {
-    background-color: #6c757d; /* Gray for cancel */
+    background-color: #6c757d;
+    /* Gray for cancel */
     color: white;
 }
 
