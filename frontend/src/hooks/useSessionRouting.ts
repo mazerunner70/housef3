@@ -2,7 +2,173 @@ import { useEffect, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useNavigationStore } from '@/stores/navigationStore';
 import { useSessionUrlStore, NavigationSessionState } from '@/stores/sessionUrlStore';
-import useAccountsWithStore from '@/stores/useAccountsStore';
+import useAccountsWithStore from '@/components/domain/accounts/stores/useAccountsStore';
+import { Account } from '@/schemas/Account';
+
+// Helper function to find account by ID
+const findAccountById = (accounts: Account[], accountId: string): Account | undefined => {
+    return accounts.find(acc => acc.accountId === accountId);
+};
+
+// Helper function to create mock file object
+const createMockFile = (fileId: string) => ({
+    fileId,
+    fileName: `File ${fileId}`,
+    uploadDate: Date.now(),
+    startDate: Date.now(),
+    endDate: Date.now(),
+    transactionCount: 0
+});
+
+// Helper function to create mock transaction object
+const createMockTransaction = (transactionId: string) => ({
+    transactionId,
+    amount: 0,
+    description: `Transaction ${transactionId}`,
+    date: Date.now()
+});
+
+// Helper function to parse URL path segments
+const parsePathSegments = (pathname: string): string[] => {
+    return pathname.split('/').filter(Boolean);
+};
+
+// Helper function to handle account selection with delay
+const handleAccountSelection = async (
+    accountId: string,
+    accounts: Account[],
+    selectedAccount: Account | undefined,
+    selectAccount: (account: Account) => void
+): Promise<boolean> => {
+    const account = findAccountById(accounts, accountId);
+    if (account && (!selectedAccount || selectedAccount.accountId !== accountId)) {
+        selectAccount(account);
+        await new Promise(resolve => setTimeout(resolve, 50));
+        return true;
+    }
+    return false;
+};
+
+// Helper function to handle file selection
+const handleFileSelection = async (
+    fileId: string,
+    selectedFile: any,
+    selectFile: (file: any) => void
+): Promise<void> => {
+    if (!selectedFile || selectedFile.fileId !== fileId) {
+        selectFile(createMockFile(fileId));
+        await new Promise(resolve => setTimeout(resolve, 50));
+    }
+};
+
+// Helper function to handle transaction selection
+const handleTransactionSelection = (
+    transactionId: string,
+    selectedTransaction: any,
+    selectTransaction: (transaction: any) => void
+): void => {
+    if (!selectedTransaction || selectedTransaction.transactionId !== transactionId) {
+        selectTransaction(createMockTransaction(transactionId));
+    }
+};
+
+interface NavigationHandlers {
+    accounts: Account[];
+    currentView: string;
+    selectedAccount: Account | undefined;
+    selectedFile: any;
+    selectedTransaction: any;
+    selectAccount: (account: Account) => void;
+    selectFile: (file: any) => void;
+    selectTransaction: (transaction: any) => void;
+    goToAccountList: () => void;
+}
+
+// Helper functions for specific URL patterns
+const handleAccountListPattern = (currentView: string, goToAccountList: () => void): void => {
+    if (currentView !== 'account-list') {
+        goToAccountList();
+    }
+};
+
+const handleAccountDetailPattern = (
+    accountId: string | undefined,
+    handlers: NavigationHandlers
+): void => {
+    if (!accountId) return;
+
+    const { accounts, currentView, selectedAccount, selectAccount } = handlers;
+    const account = findAccountById(accounts, accountId);
+    if (!account) return;
+
+    if (currentView !== 'account-detail' || selectedAccount?.accountId !== accountId) {
+        selectAccount(account);
+    }
+};
+
+const handleFilePattern = (
+    accountId: string | undefined,
+    fileId: string | undefined,
+    handlers: NavigationHandlers
+): void => {
+    if (!accountId || !fileId) return;
+
+    const { accounts, selectedAccount, selectedFile, selectAccount, selectFile } = handlers;
+    const account = findAccountById(accounts, accountId);
+    if (!account) return;
+
+    if (selectedAccount?.accountId !== accountId) {
+        selectAccount(account);
+    }
+
+    if (!selectedFile || selectedFile.fileId !== fileId) {
+        selectFile(createMockFile(fileId));
+    }
+};
+
+const handleTransactionPattern = (
+    accountId: string | undefined,
+    fileId: string | undefined,
+    transactionId: string | undefined,
+    handlers: NavigationHandlers
+): void => {
+    if (!accountId || !transactionId) return;
+
+    const { accounts, selectedAccount, selectedFile, selectedTransaction, selectAccount, selectFile, selectTransaction } = handlers;
+    const account = findAccountById(accounts, accountId);
+    if (!account) return;
+
+    if (selectedAccount?.accountId !== accountId) {
+        selectAccount(account);
+    }
+
+    if (fileId && (!selectedFile || selectedFile.fileId !== fileId)) {
+        selectFile(createMockFile(fileId));
+    }
+
+    if (!selectedTransaction || selectedTransaction.transactionId !== transactionId) {
+        selectTransaction(createMockTransaction(transactionId));
+    }
+};
+
+// Helper function to handle traditional URL patterns
+const handleTraditionalUrl = (
+    pathSegments: string[],
+    accountId: string | undefined,
+    fileId: string | undefined,
+    transactionId: string | undefined,
+    handlers: NavigationHandlers
+): void => {
+    if (pathSegments.length === 1 && pathSegments[0] === 'accounts') {
+        handleAccountListPattern(handlers.currentView, handlers.goToAccountList);
+    } else if (pathSegments.length === 2 && pathSegments[0] === 'accounts') {
+        handleAccountDetailPattern(accountId, handlers);
+    } else if (pathSegments.includes('files')) {
+        handleFilePattern(accountId, fileId, handlers);
+    } else if (pathSegments.includes('transactions')) {
+        handleTransactionPattern(accountId, fileId, transactionId, handlers);
+    }
+};
 
 /**
  * Enhanced routing hook that uses session URL compression for complex navigation states
@@ -70,45 +236,19 @@ export const useSessionRouting = () => {
 
     // Apply navigation state to the navigation store
     const applyNavigationState = useCallback(async (state: NavigationSessionState) => {
-        // First, ensure we have the account if specified
+        // Handle account selection
         if (state.selectedAccountId) {
-            const account = accounts.find(acc => acc.accountId === state.selectedAccountId);
-            if (account && (!selectedAccount || selectedAccount.accountId !== state.selectedAccountId)) {
-                selectAccount(account);
-                // Wait a bit for the account selection to propagate
-                await new Promise(resolve => setTimeout(resolve, 50));
-            }
+            await handleAccountSelection(state.selectedAccountId, accounts, selectedAccount, selectAccount);
         }
 
-        // Then handle file selection
-        if (state.selectedFileId && selectedAccount) {
-            const mockFile = {
-                fileId: state.selectedFileId,
-                fileName: `File ${state.selectedFileId}`,
-                uploadDate: Date.now(),
-                startDate: Date.now(),
-                endDate: Date.now(),
-                transactionCount: 0
-            };
-
-            if (!selectedFile || selectedFile.fileId !== state.selectedFileId) {
-                selectFile(mockFile);
-                await new Promise(resolve => setTimeout(resolve, 50));
-            }
+        // Handle file selection (requires account to be selected first)
+        if (state.selectedFileId) {
+            await handleFileSelection(state.selectedFileId, selectedFile, selectFile);
         }
 
-        // Finally handle transaction selection
-        if (state.selectedTransactionId && selectedAccount) {
-            const mockTransaction = {
-                transactionId: state.selectedTransactionId,
-                amount: 0,
-                description: `Transaction ${state.selectedTransactionId}`,
-                date: Date.now()
-            };
-
-            if (!selectedTransaction || selectedTransaction.transactionId !== state.selectedTransactionId) {
-                selectTransaction(mockTransaction);
-            }
+        // Handle transaction selection (requires account to be selected first)
+        if (state.selectedTransactionId) {
+            handleTransactionSelection(state.selectedTransactionId, selectedTransaction, selectTransaction);
         }
 
         // Handle view-only states (no specific selections)
@@ -146,72 +286,22 @@ export const useSessionRouting = () => {
 
         // Handle traditional URL parsing
         const { accountId, fileId, transactionId } = params;
-        const pathSegments = location.pathname.split('/').filter(Boolean);
-        const searchParams = new URLSearchParams(location.search);
+        const pathSegments = parsePathSegments(location.pathname);
 
-        // Parse traditional URL structure
-        if (pathSegments.length === 1 && pathSegments[0] === 'accounts') {
-            if (currentView !== 'account-list') {
-                goToAccountList();
-            }
-        } else if (pathSegments.length === 2 && pathSegments[0] === 'accounts' && accountId) {
-            const account = accounts.find(acc => acc.accountId === accountId);
-            if (account && (currentView !== 'account-detail' || selectedAccount?.accountId !== accountId)) {
-                selectAccount(account);
-            }
-        } else if (pathSegments.includes('files') && accountId && fileId) {
-            const account = accounts.find(acc => acc.accountId === accountId);
-            if (account) {
-                const mockFile = {
-                    fileId: fileId,
-                    fileName: `File ${fileId}`,
-                    uploadDate: Date.now(),
-                    startDate: Date.now(),
-                    endDate: Date.now(),
-                    transactionCount: 0
-                };
+        // Parse traditional URL structure using helper function
+        const handlers: NavigationHandlers = {
+            accounts,
+            currentView,
+            selectedAccount,
+            selectedFile,
+            selectedTransaction,
+            selectAccount,
+            selectFile,
+            selectTransaction,
+            goToAccountList
+        };
 
-                if (selectedAccount?.accountId !== accountId) {
-                    selectAccount(account);
-                }
-                if (!selectedFile || selectedFile.fileId !== fileId) {
-                    selectFile(mockFile);
-                }
-            }
-        } else if (pathSegments.includes('transactions') && accountId && transactionId) {
-            const account = accounts.find(acc => acc.accountId === accountId);
-            if (account) {
-                const mockTransaction = {
-                    transactionId: transactionId,
-                    amount: 0,
-                    description: `Transaction ${transactionId}`,
-                    date: Date.now()
-                };
-
-                if (selectedAccount?.accountId !== accountId) {
-                    selectAccount(account);
-                }
-
-                // Handle file context if present
-                if (fileId) {
-                    const mockFile = {
-                        fileId: fileId,
-                        fileName: `File ${fileId}`,
-                        uploadDate: Date.now(),
-                        startDate: Date.now(),
-                        endDate: Date.now(),
-                        transactionCount: 0
-                    };
-                    if (!selectedFile || selectedFile.fileId !== fileId) {
-                        selectFile(mockFile);
-                    }
-                }
-
-                if (!selectedTransaction || selectedTransaction.transactionId !== transactionId) {
-                    selectTransaction(mockTransaction);
-                }
-            }
-        }
+        handleTraditionalUrl(pathSegments, accountId, fileId, transactionId, handlers);
     }, [params, location.pathname, location.search, accounts, currentView, selectedAccount, selectedFile, selectedTransaction,
         selectAccount, selectFile, selectTransaction, goToAccountList, isSessionUrl, resolveSessionUrl, applyNavigationState]);
 

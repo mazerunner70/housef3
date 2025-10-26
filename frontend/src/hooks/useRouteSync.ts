@@ -1,11 +1,174 @@
 import { useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useNavigationStore } from '@/stores/navigationStore';
-import useAccountsWithStore from '@/stores/useAccountsStore';
+import useAccountsWithStore from '@/components/domain/accounts/stores/useAccountsStore';
+import { Account } from '@/schemas/Account';
+
+// Helper function to find account by ID
+const findAccountById = (accounts: Account[], accountId: string): Account | undefined => {
+    return accounts.find(acc => acc.accountId === accountId);
+};
+
+// Helper function to create mock file object
+const createMockFile = (fileId: string) => ({
+    fileId,
+    fileName: `File ${fileId}`,
+    uploadDate: Date.now(),
+    startDate: Date.now(),
+    endDate: Date.now(),
+    transactionCount: 0
+});
+
+// Helper function to create mock transaction object
+const createMockTransaction = (transactionId: string) => ({
+    transactionId,
+    amount: 0,
+    description: `Transaction ${transactionId}`,
+    date: Date.now()
+});
+
+// Helper function to parse URL path segments
+const parsePathSegments = (pathname: string): string[] => {
+    return pathname.split('/').filter(Boolean);
+};
+
+// Helper function to generate path based on current navigation state
+const generateNavigationPath = (
+    currentView: string,
+    selectedAccount: Account | undefined,
+    selectedFile: any,
+    selectedTransaction: any
+): string => {
+    switch (currentView) {
+        case 'account-list':
+            return '/accounts';
+
+        case 'account-detail':
+            return selectedAccount ? `/accounts/${selectedAccount.accountId}` : '/accounts';
+
+        case 'file-transactions':
+            if (selectedAccount && selectedFile) {
+                return `/accounts/${selectedAccount.accountId}/files/${selectedFile.fileId}`;
+            }
+            return '/accounts';
+
+        case 'transaction-detail':
+            if (selectedAccount && selectedTransaction) {
+                if (selectedFile) {
+                    return `/accounts/${selectedAccount.accountId}/files/${selectedFile.fileId}/transactions/${selectedTransaction.transactionId}`;
+                }
+                return `/accounts/${selectedAccount.accountId}/transactions/${selectedTransaction.transactionId}`;
+            }
+            return '/accounts';
+
+        default:
+            return '/accounts';
+    }
+};
+
+// Helper function to handle account list URL
+const handleAccountListUrl = (currentView: string, goToAccountList: () => void): void => {
+    if (currentView !== 'account-list') {
+        goToAccountList();
+    }
+};
+
+// Helper function to handle account detail URL
+const handleAccountDetailUrl = (
+    pathSegments: string[],
+    accountId: string | undefined,
+    context: NavigationContext
+): void => {
+    if (pathSegments.length !== 2 || pathSegments[0] !== 'accounts' || !accountId) {
+        return;
+    }
+
+    const account = findAccountById(context.accounts, accountId);
+    if (!account) {
+        return;
+    }
+
+    const needsUpdate = context.currentView !== 'account-detail' || context.selectedAccount?.accountId !== accountId;
+    if (needsUpdate) {
+        context.selectAccount(account);
+    }
+};
+
+interface NavigationContext {
+    accounts: Account[];
+    currentView: string;
+    selectedAccount: Account | undefined;
+    selectedFile: any;
+    selectedTransaction: any;
+    selectAccount: (account: Account) => void;
+    selectFile: (file: any) => void;
+    selectTransaction: (transaction: any) => void;
+}
+
+// Helper function to handle file transactions URL
+const handleFileTransactionsUrl = (
+    pathSegments: string[],
+    accountId: string | undefined,
+    fileId: string | undefined,
+    context: NavigationContext
+): void => {
+    if (pathSegments.length !== 4 || pathSegments[0] !== 'accounts' || pathSegments[2] !== 'files' || !accountId || !fileId) {
+        return;
+    }
+
+    const account = findAccountById(context.accounts, accountId);
+    if (!account) {
+        return;
+    }
+
+    const needsUpdate = context.currentView !== 'file-transactions' || context.selectedFile?.fileId !== fileId;
+    if (!needsUpdate) {
+        return;
+    }
+
+    if (context.selectedAccount?.accountId !== accountId) {
+        context.selectAccount(account);
+    }
+
+    context.selectFile(createMockFile(fileId));
+};
+
+// Helper function to handle transaction detail URL
+const handleTransactionDetailUrl = (
+    pathSegments: string[],
+    accountId: string | undefined,
+    fileId: string | undefined,
+    transactionId: string | undefined,
+    context: NavigationContext
+): void => {
+    if (!pathSegments.includes('transactions') || !accountId || !transactionId) {
+        return;
+    }
+
+    const account = findAccountById(context.accounts, accountId);
+    if (!account) {
+        return;
+    }
+
+    const needsUpdate = context.currentView !== 'transaction-detail' || context.selectedTransaction?.transactionId !== transactionId;
+    if (!needsUpdate) {
+        return;
+    }
+
+    if (context.selectedAccount?.accountId !== accountId) {
+        context.selectAccount(account);
+    }
+
+    if (fileId && context.selectedFile?.fileId !== fileId) {
+        context.selectFile(createMockFile(fileId));
+    }
+
+    context.selectTransaction(createMockTransaction(transactionId));
+};
 
 /**
  * Hook to synchronize React Router with the navigation store
- * 
+ *
  * This creates a bidirectional sync:
  * 1. When navigation store changes → update URL
  * 2. When URL changes (direct navigation/back/forward) → update navigation store
@@ -30,35 +193,7 @@ export const useRouteSync = () => {
 
     // Sync navigation store changes to URL
     useEffect(() => {
-        let newPath = '/accounts';
-
-        switch (currentView) {
-            case 'account-list':
-                newPath = '/accounts';
-                break;
-
-            case 'account-detail':
-                if (selectedAccount) {
-                    newPath = `/accounts/${selectedAccount.accountId}`;
-                }
-                break;
-
-            case 'file-transactions':
-                if (selectedAccount && selectedFile) {
-                    newPath = `/accounts/${selectedAccount.accountId}/files/${selectedFile.fileId}`;
-                }
-                break;
-
-            case 'transaction-detail':
-                if (selectedAccount && selectedTransaction) {
-                    if (selectedFile) {
-                        newPath = `/accounts/${selectedAccount.accountId}/files/${selectedFile.fileId}/transactions/${selectedTransaction.transactionId}`;
-                    } else {
-                        newPath = `/accounts/${selectedAccount.accountId}/transactions/${selectedTransaction.transactionId}`;
-                    }
-                }
-                break;
-        }
+        const newPath = generateNavigationPath(currentView, selectedAccount, selectedFile, selectedTransaction);
 
         // Only navigate if the path has actually changed
         if (location.pathname !== newPath) {
@@ -69,80 +204,28 @@ export const useRouteSync = () => {
     // Sync URL changes to navigation store
     useEffect(() => {
         const { accountId, fileId, transactionId } = params;
-        const pathSegments = location.pathname.split('/').filter(Boolean);
+        const pathSegments = parsePathSegments(location.pathname);
 
-        // Determine the current view from the URL structure
+        const navigationContext: NavigationContext = {
+            accounts,
+            currentView,
+            selectedAccount,
+            selectedFile,
+            selectedTransaction,
+            selectAccount,
+            selectFile,
+            selectTransaction
+        };
+
+        // Route to appropriate handler based on URL pattern
         if (pathSegments.length === 1 && pathSegments[0] === 'accounts') {
-            // /accounts
-            if (currentView !== 'account-list') {
-                goToAccountList();
-            }
+            handleAccountListUrl(currentView, goToAccountList);
         } else if (pathSegments.length === 2 && pathSegments[0] === 'accounts' && accountId) {
-            // /accounts/:accountId
-            const account = accounts.find(acc => acc.accountId === accountId);
-            if (account && (currentView !== 'account-detail' || selectedAccount?.accountId !== accountId)) {
-                selectAccount(account);
-            }
+            handleAccountDetailUrl(pathSegments, accountId, navigationContext);
         } else if (pathSegments.length === 4 && pathSegments[0] === 'accounts' && pathSegments[2] === 'files' && accountId && fileId) {
-            // /accounts/:accountId/files/:fileId
-            const account = accounts.find(acc => acc.accountId === accountId);
-            if (account) {
-                // For now, we'll need to create a mock file object since we don't have file data yet
-                // This will be replaced when file management is implemented
-                const mockFile = {
-                    fileId: fileId,
-                    fileName: `File ${fileId}`,
-                    uploadDate: Date.now(),
-                    startDate: Date.now(),
-                    endDate: Date.now(),
-                    transactionCount: 0
-                };
-
-                if (currentView !== 'file-transactions' || selectedFile?.fileId !== fileId) {
-                    // First select the account if not already selected
-                    if (selectedAccount?.accountId !== accountId) {
-                        selectAccount(account);
-                    }
-                    selectFile(mockFile);
-                }
-            }
+            handleFileTransactionsUrl(pathSegments, accountId, fileId, navigationContext);
         } else if (pathSegments.includes('transactions') && accountId && transactionId) {
-            // /accounts/:accountId/transactions/:transactionId or
-            // /accounts/:accountId/files/:fileId/transactions/:transactionId
-            const account = accounts.find(acc => acc.accountId === accountId);
-            if (account) {
-                // Mock transaction object - will be replaced when transaction management is implemented
-                const mockTransaction = {
-                    transactionId: transactionId,
-                    amount: 0,
-                    description: `Transaction ${transactionId}`,
-                    date: Date.now()
-                };
-
-                if (currentView !== 'transaction-detail' || selectedTransaction?.transactionId !== transactionId) {
-                    // First select the account if not already selected
-                    if (selectedAccount?.accountId !== accountId) {
-                        selectAccount(account);
-                    }
-
-                    // If there's a fileId in the path, select the file first
-                    if (fileId) {
-                        const mockFile = {
-                            fileId: fileId,
-                            fileName: `File ${fileId}`,
-                            uploadDate: Date.now(),
-                            startDate: Date.now(),
-                            endDate: Date.now(),
-                            transactionCount: 0
-                        };
-                        if (selectedFile?.fileId !== fileId) {
-                            selectFile(mockFile);
-                        }
-                    }
-
-                    selectTransaction(mockTransaction);
-                }
-            }
+            handleTransactionDetailUrl(pathSegments, accountId, fileId, transactionId, navigationContext);
         }
     }, [params, location.pathname, accounts, currentView, selectedAccount, selectedFile, selectedTransaction,
         selectAccount, selectFile, selectTransaction, goToAccountList]);

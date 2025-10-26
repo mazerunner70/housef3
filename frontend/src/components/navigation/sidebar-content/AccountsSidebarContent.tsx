@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useNavigationStore } from '@/stores/navigationStore';
 import SidebarSection, { SidebarSectionData } from '@/components/navigation/SidebarSection';
-import useAccountsWithStore from '@/stores/useAccountsStore';
+import useAccountsWithStore from '@/components/domain/accounts/stores/useAccountsStore';
 
 interface AccountsSidebarContentProps {
     sidebarCollapsed: boolean;
@@ -36,7 +36,7 @@ const AccountsSidebarContent: React.FC<AccountsSidebarContentProps> = ({ sidebar
                 icon: getAccountIcon(account.accountType),
                 active: selectedAccount?.accountId === account.accountId,
                 onClick: () => {
-                    window.location.href = `/accounts/${account.accountId}`;
+                    globalThis.location.href = `/accounts/${account.accountId}`;
                 },
                 metadata: {
                     balance: account.balance,
@@ -59,7 +59,7 @@ const AccountsSidebarContent: React.FC<AccountsSidebarContentProps> = ({ sidebar
                         icon: '📊',
                         active: false,
                         onClick: () => {
-                            window.location.href = `/transactions?account=${selectedAccount.accountId}`;
+                            globalThis.location.href = `/transactions?account=${selectedAccount.accountId}`;
                         }
                     },
                     {
@@ -68,7 +68,7 @@ const AccountsSidebarContent: React.FC<AccountsSidebarContentProps> = ({ sidebar
                         icon: '📄',
                         active: selectedFile?.fileId !== undefined,
                         onClick: () => {
-                            window.location.href = `/files?account=${selectedAccount.accountId}`;
+                            globalThis.location.href = `/files?account=${selectedAccount.accountId}`;
                         }
                     }
                 ],
@@ -97,7 +97,7 @@ const AccountsSidebarContent: React.FC<AccountsSidebarContentProps> = ({ sidebar
                     icon: '📥',
                     active: false,
                     onClick: () => {
-                        window.location.href = '/transactions?tab=imports';
+                        globalThis.location.href = '/transactions?tab=imports';
                     }
                 }
             ],

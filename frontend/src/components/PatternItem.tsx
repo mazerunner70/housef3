@@ -3,7 +3,6 @@ import { PatternSuggestionItem } from '../hooks/usePatternSuggestions';
 
 interface PatternItemProps {
   pattern: PatternSuggestionItem;
-  index: number;
   isSelected: boolean;
   isExpanded: boolean;
   onSelect: () => void;
@@ -12,7 +11,6 @@ interface PatternItemProps {
 
 const PatternItem: React.FC<PatternItemProps> = ({
   pattern,
-  index,
   isSelected,
   isExpanded,
   onSelect,
@@ -50,8 +48,8 @@ const PatternItem: React.FC<PatternItemProps> = ({
             onChange={onSelect}
           />
         </div>
-        <div 
-          className="pattern-info" 
+        <button
+          className="pattern-info"
           onClick={onSelect}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -59,8 +57,6 @@ const PatternItem: React.FC<PatternItemProps> = ({
               onSelect();
             }
           }}
-          role="button"
-          tabIndex={0}
           aria-label={`Select pattern: ${pattern.pattern}`}
         >
           <div className="pattern-text">
@@ -72,59 +68,61 @@ const PatternItem: React.FC<PatternItemProps> = ({
           <div className="pattern-explanation">
             {pattern.explanation}
           </div>
+        </button>
+      <div className="pattern-stats">
+        <div className={`confidence-badge ${getConfidenceColor(pattern.confidence)}`}>
+          {pattern.confidence}%
         </div>
-        <div className="pattern-stats">
-          <div className={`confidence-badge ${getConfidenceColor(pattern.confidence)}`}>
-            {pattern.confidence}%
-          </div>
-          <button 
-            className={`match-count-button ${getMatchCountColor(pattern.matchCount)}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleExpanded();
-            }}
-            disabled={pattern.matchCount === 0}
-            title={pattern.matchCount > 0 ? "Click to see matching transactions" : "No matching transactions"}
-          >
-            {pattern.matchCount} match{pattern.matchCount !== 1 ? 'es' : ''}
-            {pattern.matchCount > 0 && (
-              <span className="expand-icon">
-                {isExpanded ? '▼' : '▶'}
-              </span>
-            )}
-          </button>
-        </div>
+        <button
+          className={`match-count-button ${getMatchCountColor(pattern.matchCount)}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleExpanded();
+          }}
+          disabled={pattern.matchCount === 0}
+          title={pattern.matchCount > 0 ? "Click to see matching transactions" : "No matching transactions"}
+        >
+          {pattern.matchCount} match{pattern.matchCount !== 1 ? 'es' : ''}
+          {pattern.matchCount > 0 && (
+            <span className="expand-icon">
+              {isExpanded ? '▼' : '▶'}
+            </span>
+          )}
+        </button>
       </div>
-      
-      {pattern.sampleMatches && pattern.sampleMatches.length > 0 && isExpanded && (
-        <div className="sample-matches">
-          <h5>Matching Transactions:</h5>
-          <div className="sample-transactions">
-            {pattern.sampleMatches.map((match, sampleIndex) => (
-              <div key={sampleIndex} className="sample-transaction expanded">
-                <div className="transaction-main">
-                  <div className="sample-description">
-                    {match.description}
-                  </div>
-                  <div className="sample-amount">
-                    {match.amount}
-                  </div>
+    </div>
+
+      {
+    pattern.sampleMatches && pattern.sampleMatches.length > 0 && isExpanded && (
+      <div className="sample-matches">
+        <h5>Matching Transactions:</h5>
+        <div className="sample-transactions">
+          {pattern.sampleMatches.map((match, sampleIndex) => (
+            <div key={sampleIndex} className="sample-transaction expanded">
+              <div className="transaction-main">
+                <div className="sample-description">
+                  {match.description}
                 </div>
-                <div className="transaction-meta">
-                  <div className="sample-date">
-                    {formatDate(match.date)}
-                  </div>
-                  {match.matchedText && (
-                    <div className="matched-text">
-                      Matched: "{match.matchedText}"
-                    </div>
-                  )}
+                <div className="sample-amount">
+                  {match.amount}
                 </div>
               </div>
-            ))}
-          </div>
+              <div className="transaction-meta">
+                <div className="sample-date">
+                  {formatDate(match.date)}
+                </div>
+                {match.matchedText && (
+                  <div className="matched-text">
+                    Matched: "{match.matchedText}"
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
-      )}
+      </div>
+    )
+  }
     </div>
   );
 };

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Category, CategoryRule, MatchCondition } from '../../types/Category';
-import { usePatternSuggestions, PatternSuggestionItem } from '../hooks/usePatternSuggestions';
-import CategorySelector from './CategorySelector';
-import PatternList from './PatternList';
+import { Category, CategoryRule, MatchCondition } from '@/types/Category';
+import { usePatternSuggestions, PatternSuggestionItem } from '@/hooks/usePatternSuggestions';
+import CategorySelector from '@/components/domain/categories/CategorySelector';
+import PatternList from '@/components/PatternList';
 import './PatternSuggestionModal.css';
 
 interface PatternSuggestionModalProps {
@@ -23,7 +23,7 @@ const PatternSuggestionModal: React.FC<PatternSuggestionModalProps> = ({
   onCreateCategory
 }) => {
   // Load pattern suggestions using custom hook
-  const { suggestedPatterns, categorySuggestion, existingCategories, isLoading } = 
+  const { suggestedPatterns, categorySuggestion, existingCategories, isLoading } =
     usePatternSuggestions(transactionDescription, isOpen);
 
   // Pattern selection state
@@ -106,7 +106,7 @@ const PatternSuggestionModal: React.FC<PatternSuggestionModalProps> = ({
           <h3>{getModalTitle()}</h3>
           <button className="close-button" onClick={onClose}>✕</button>
         </div>
-        
+
         <div className="modal-content">
           <div className="transaction-info">
             <h4>Transaction Details</h4>
@@ -148,12 +148,12 @@ const PatternSuggestionModal: React.FC<PatternSuggestionModalProps> = ({
             </>
           )}
         </div>
-        
+
         <div className="modal-actions">
           <button className="cancel-button" onClick={onClose}>
             Cancel
           </button>
-          <button 
+          <button
             className="confirm-button"
             onClick={handleConfirm}
             disabled={isConfirmDisabled()}

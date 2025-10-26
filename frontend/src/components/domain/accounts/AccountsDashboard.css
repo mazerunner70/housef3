@@ -1,0 +1,144 @@
+.accounts-dashboard-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: var(--color-background, #ffffff);
+}
+
+.accounts-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid var(--color-border, #e0e0e0);
+}
+
+.accounts-header h1 {
+    color: var(--color-text-primary, #333333);
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 600;
+}
+
+.add-account-button {
+    background-color: var(--color-primary, #007bff);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s ease;
+}
+
+.add-account-button:hover {
+    background-color: var(--color-primary-dark, #0056b3);
+}
+
+.accounts-loading {
+    text-align: center;
+    padding: 40px;
+    color: var(--color-text-secondary, #666666);
+    font-size: 16px;
+}
+
+.accounts-error-container {
+    background-color: var(--color-error-light, #f8d7da);
+    border: 1px solid var(--color-error, #dc3545);
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.error-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.error-icon {
+    font-size: 20px;
+    color: var(--color-error, #dc3545);
+}
+
+.error-details h4 {
+    margin: 0 0 8px 0;
+    color: var(--color-error, #dc3545);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.error-details p {
+    margin: 0;
+    color: var(--color-text-primary, #333333);
+    font-size: 14px;
+}
+
+.clear-error-button {
+    background-color: transparent;
+    border: 1px solid var(--color-error, #dc3545);
+    color: var(--color-error, #dc3545);
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    margin-top: 10px;
+    transition: all 0.2s ease;
+}
+
+.clear-error-button:hover {
+    background-color: var(--color-error, #dc3545);
+    color: white;
+}
+
+.accounts-content {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 30px;
+    margin-top: 30px;
+}
+
+.back-button {
+    background-color: var(--color-secondary, #6c757d);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    margin-bottom: 20px;
+    transition: background-color 0.2s ease;
+}
+
+.back-button:hover {
+    background-color: var(--color-secondary-dark, #545b62);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .accounts-dashboard-container {
+        padding: 15px;
+    }
+
+    .accounts-header {
+        flex-direction: column;
+        gap: 15px;
+        align-items: stretch;
+    }
+
+    .accounts-header h1 {
+        font-size: 1.5rem;
+        text-align: center;
+    }
+
+    .add-account-button {
+        width: 100%;
+    }
+
+    .accounts-content {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+}

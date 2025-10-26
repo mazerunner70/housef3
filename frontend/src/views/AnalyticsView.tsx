@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import OverallAnalyticsTab from './OverallAnalyticsTab';
 import CategoriesAnalyticsTab from '../components/domain/categories/CategoriesAnalyticsTab';
-import AccountsAnalyticsTab from './AccountsAnalyticsTab';
+import AccountsAnalyticsTab from '@/components/domain/accounts/views/AccountsAnalyticsTab';
 import useAnalytics from '../hooks/useAnalytics';
 import './AnalyticsView.css';
 
