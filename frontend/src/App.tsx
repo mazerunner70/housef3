@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
-import Login from '@/components/Login';
+import Login from '@/components/business/auth/Login';
 import NewUILayout from '@/layouts/NewUILayout';
-import HomePage from '@/pages/HomePage';
+import HomePage from '@/components/domain/home/HomePage';
 import AccountsPage from '@/components/domain/accounts/AccountsPage';
 import TransactionsPage from '@/pages/TransactionsPage';
 import TransfersPage from '@/components/domain/transfers/TransfersPage';
 import CategoriesPage from '@/components/domain/categories/CategoriesPage';
-import ImportTransactionsPage from '@/pages/ImportTransactionsPage';
-import AccountFileUploadPage from '@/pages/AccountFileUploadPage';
+import ImportPage from '@/components/domain/import/ImportPage';
+import AccountFileUploadPage from '@/components/domain/accounts/AccountFileUploadPage';
 import AnalyticsView from '@/views/AnalyticsView';
 import FZIPPage from '@/components/domain/fzip/FZIPPage';
 import {
@@ -136,7 +136,7 @@ function App() {
         <Route path="transfers" element={<TransfersPage />} />
 
         {/* Import */}
-        <Route path="import" element={<ImportTransactionsPage />} />
+        <Route path="import" element={<ImportPage />} />
         <Route path="import/account/:accountId" element={<AccountFileUploadPage />} />
 
         {/* Files */}

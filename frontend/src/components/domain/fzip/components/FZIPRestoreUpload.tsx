@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { getFZIPRestoreUploadUrl } from '@/services/FZIPService';
-import Button from '@/components/Button';
+import Button from '@/components/ui/Button';
 import './FZIPRestoreUpload.css';
 
 interface FZIPRestoreUploadProps {

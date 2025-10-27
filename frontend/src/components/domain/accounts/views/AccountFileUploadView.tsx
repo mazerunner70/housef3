@@ -4,12 +4,12 @@ import useAccountsData from '@/components/domain/accounts/hooks/useAccountsData'
 import useFileUploadLogic from '@/hooks/useFileUploadLogic';
 import useUploadedFiles from '@/hooks/useUploadedFiles';
 import useFieldMapping from '@/hooks/useFieldMapping';
-import AccountUploadLayout from '@/components/business/import/AccountUploadLayout';
-import AccountUploadHeader from '@/components/business/import/AccountUploadHeader';
-import FileUploadStatus from '@/components/business/import/FileUploadStatus';
-import FieldMappingSection from '@/components/business/import/FieldMappingSection';
-import DragDropUploadPanel from '@/components/business/import/DragDropUploadPanel';
-import UploadedFilesList from '@/components/business/import/UploadedFilesList';
+import AccountUploadLayout from '@/components/domain/accounts/components/AccountUploadLayout';
+import AccountUploadHeader from '@/components/domain/accounts/components/AccountUploadHeader';
+import FileUploadStatus from '@/components/domain/accounts/components/FileUploadStatus';
+import FieldMappingSection from '@/components/domain/accounts/components/FieldMappingSection';
+import DragDropUploadPanel from '@/components/domain/accounts/components/DragDropUploadPanel';
+import UploadedFilesList from '@/components/domain/accounts/components/UploadedFilesList';
 import './AccountFileUploadView.css';
 
 interface AccountFileUploadViewProps {

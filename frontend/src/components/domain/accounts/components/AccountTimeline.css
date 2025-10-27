@@ -2,20 +2,20 @@
     background: var(--color-white);
     border: var(--border-width) solid var(--color-borders-dividers);
     border-radius: var(--border-radius-medium);
-    padding: var(--spacing-l);
-    margin-bottom: var(--spacing-xl);
+    padding: var(--spacing-m) var(--spacing-l);
     box-shadow: var(--shadow-subtle);
+    width: 100%;
 }
 
 .timeline-title {
-    margin: 0 0 var(--spacing-l) 0;
-    font-size: var(--font-size-h4);
+    margin: 0 0 var(--spacing-m) 0;
+    font-size: var(--font-size-h5);
     font-weight: var(--font-weight-bold);
     color: var(--color-text-primary);
 }
 
 .timeline-header {
-    margin-bottom: var(--spacing-m);
+    margin-bottom: var(--spacing-s);
 }
 
 .timeline-controls {
@@ -146,7 +146,7 @@
 .timeline-accounts {
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-xs);
+    gap: 2px;
 }
 
 .timeline-account-row {
@@ -154,8 +154,8 @@
     grid-template-columns: 200px 1fr;
     align-items: center;
     gap: var(--spacing-s);
-    min-height: 32px;
-    margin-bottom: var(--spacing-xs);
+    min-height: 28px;
+    margin-bottom: 4px;
 }
 
 .account-label {
@@ -174,7 +174,7 @@
 
 .timeline-bar-container {
     position: relative;
-    height: 24px;
+    height: 20px;
     background: var(--color-background-subtle);
     border-radius: var(--border-radius-small);
     overflow: hidden;

@@ -1,0 +1,104 @@
+/* frontend/src/new-ui/components/Button.css */
+
+.btn {
+    font-family: var(--font-primary);
+    font-weight: var(--font-weight-semibold);
+    border-radius: var(--border-radius-small);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    border: var(--border-width) solid transparent;
+    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+/* Sizes */
+.btn--standard {
+    padding: var(--button-padding-standard-vertical) var(--button-padding-standard-horizontal);
+    font-size: var(--font-size-button);
+    min-height: var(--button-height-standard);
+}
+
+.btn--compact {
+    padding: var(--button-padding-compact-vertical) var(--button-padding-compact-horizontal);
+    font-size: var(--font-size-small);
+    /* Slightly smaller font for compact buttons */
+    min-height: var(--button-height-compact);
+}
+
+/* Variants */
+.btn--primary {
+    background-color: var(--color-primary-brand);
+    color: var(--color-white);
+    border-color: var(--color-primary-brand);
+}
+
+.btn--primary:hover {
+    background-color: var(--color-primary-brand-hover);
+    border-color: var(--color-primary-brand-hover);
+}
+
+.btn--primary:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--color-primary-brand-focus);
+}
+
+.btn--secondary {
+    background-color: var(--color-secondary-brand);
+    color: var(--color-white);
+    border-color: var(--color-secondary-brand);
+}
+
+.btn--secondary:hover {
+    background-color: var(--color-secondary-brand-hover);
+    border-color: var(--color-secondary-brand-hover);
+}
+
+.btn--secondary:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--color-secondary-brand-focus);
+}
+
+.btn--tertiary {
+    background-color: transparent;
+    color: var(--color-primary-brand);
+    border-color: var(--color-borders-dividers);
+}
+
+.btn--tertiary:hover {
+    background-color: var(--color-background-subtle);
+    border-color: var(--color-primary-brand);
+}
+
+.btn--tertiary:focus {
+    outline: none;
+    border-color: var(--color-primary-brand);
+    box-shadow: 0 0 0 3px hsl(from var(--color-primary-brand) h s l / 0.2);
+}
+
+.btn--danger {
+    background-color: var(--color-error-danger);
+    color: var(--color-white);
+    border-color: var(--color-error-danger);
+}
+
+.btn--danger:hover {
+    background-color: var(--color-error-danger-hover);
+    border-color: var(--color-error-danger-hover);
+}
+
+.btn--danger:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--color-error-danger-focus);
+}
+
+/* Disabled state */
+.btn:disabled,
+.btn:disabled:hover {
+    background-color: var(--color-background-subtle);
+    color: var(--color-text-disabled);
+    border-color: var(--color-borders-dividers);
+    cursor: not-allowed;
+    box-shadow: none;
+}

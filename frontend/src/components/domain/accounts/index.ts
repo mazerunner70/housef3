@@ -1,5 +1,6 @@
 // Barrel exports for the accounts domain
 export { default as AccountsPage } from './AccountsPage';
+export { default as AccountFileUploadPage } from './AccountFileUploadPage';
 export { default as AccountsDashboard } from './AccountsDashboard';
 export { default as AccountFileUploadView } from './views/AccountFileUploadView';
 
