@@ -94,8 +94,8 @@
 }
 
 .accounts-content {
-    display: grid;
-    grid-template-columns: 1fr 2fr;
+    display: flex;
+    flex-direction: column;
     gap: 30px;
     margin-top: 30px;
 }
@@ -138,7 +138,6 @@
     }
 
     .accounts-content {
-        grid-template-columns: 1fr;
         gap: 20px;
     }
 }

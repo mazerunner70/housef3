@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { DateRangePicker, DateRange, DateCell } from '@/components/ui';
-import Button from '@/components/Button';
+import Button from '@/components/ui/Button';
 import './ScanControlsPanel.css';
 
 

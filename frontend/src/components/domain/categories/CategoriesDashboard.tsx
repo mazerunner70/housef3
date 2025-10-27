@@ -4,8 +4,8 @@ import { useCategories, useCategoryRules } from '@/hooks/useCategories';
 import { useRealTimeRuleTesting } from '@/hooks/useRealTimeRuleTesting';
 import { CategoryService } from '@/services/CategoryService';
 import CategoryHierarchyTree from './CategoryHierarchyTree';
-import RuleBuilder from '@/components/RuleBuilder';
-import ConfirmationModal from '@/components/ConfirmationModal';
+import RuleBuilder from './RuleBuilder';
+import ConfirmationModal from '@/components/ui/ConfirmationModal';
 import './CategoriesDashboard.css';
 
 interface CategoriesDashboardProps {

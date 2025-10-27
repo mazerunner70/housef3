@@ -7,7 +7,7 @@ import {
     LoadingState,
     Alert
 } from '@/components/ui';
-import Button from '@/components/Button';
+import Button from '@/components/ui/Button';
 import { useLocale } from '@/hooks/useLocale';
 import './TransferResultsDashboard.css';
 

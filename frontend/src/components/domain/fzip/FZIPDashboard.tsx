@@ -10,7 +10,7 @@ import { FZIPRestoreSummary } from './components/FZIPRestoreSummary';
 import { FZIPRestoreResults } from './components/FZIPRestoreResults';
 import { FZIPRestoreError } from './components/FZIPRestoreError';
 import { FZIPRestoreStatus, InitiateFZIPBackupRequest } from '@/services/FZIPService';
-import Button from '@/components/Button';
+import Button from '@/components/ui/Button';
 import './FZIPDashboard.css';
 
 type TabType = 'backup' | 'restore';

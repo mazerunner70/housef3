@@ -13,7 +13,7 @@ import {
     Alert,
     LoadingState
 } from '@/components/ui';
-import Button from '@/components/Button';
+import Button from '@/components/ui/Button';
 import CurrencyDisplay from '@/components/ui/CurrencyDisplay';
 import DateCell from '@/components/ui/DateCell';
 
