@@ -9,6 +9,9 @@ export { default as useAccountsWithStore } from './stores/useAccountsStore';
 export { useAccountsStore } from './stores/accountsStore';
 export { useAccountsData } from './stores/useAccountsStore';
 
+// Re-export sidebar components
+export { AccountsSidebarContent } from './sidebar';
+
 // Re-export commonly used types from schemas for convenience
 export type {
     Account,

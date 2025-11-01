@@ -5,8 +5,8 @@
  * Uses the established configuration-based approach with BaseSidebarContent
  */
 
-import { SidebarContentConfig } from '../types';
-import { createNavItem, createActionItem } from '../SidebarConfigFactory';
+import { SidebarContentConfig } from '@/components/navigation/sidebar-content/types';
+import { createNavItem, createActionItem } from '@/components/navigation/sidebar-content/SidebarConfigFactory';
 
 export const importConfig: SidebarContentConfig = {
     sections: [
@@ -47,36 +47,36 @@ export const importConfig: SidebarContentConfig = {
             ]
         },
 
-        // Actions Section - Quick Actions
+        // Actions Section - Import-Specific Quick Actions
         {
             type: 'actions',
             title: 'Quick Actions',
             items: [
                 createActionItem(
-                    'add-account',
-                    'Add New Account',
+                    'start-import',
+                    'Start New Import',
                     () => {
-                        console.log('Add new account clicked');
-                        // TODO: Implement account creation dialog
-                        alert('Account creation functionality coming soon!');
+                        console.log('Start new import clicked');
+                        // TODO: Navigate to upload page or open import wizard
+                        globalThis.location.href = '/import/upload';
                     },
-                    '🏦'
+                    '📤'
                 ),
                 createActionItem(
-                    'refresh-accounts',
-                    'Refresh Account Data',
+                    'download-template',
+                    'Download Sample Template',
                     () => {
-                        console.log('Refresh accounts clicked');
-                        // TODO: Implement account data refresh
-                        window.location.reload();
+                        console.log('Download template clicked');
+                        // TODO: Implement template download
+                        alert('Sample CSV template download coming soon!');
                     },
-                    '🔄'
+                    '📄'
                 ),
                 createNavItem(
-                    'view-accounts',
-                    'View All Accounts',
-                    '/accounts',
-                    '📈'
+                    'view-history',
+                    'View Import History',
+                    '/import/history',
+                    '📊'
                 )
             ]
         }
@@ -133,4 +133,3 @@ export const importConfig: SidebarContentConfig = {
     }
 };
 
-export default importConfig;

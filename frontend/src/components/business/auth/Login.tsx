@@ -1,14 +1,12 @@
 import { useState, FormEvent } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
 import './Login.css';
 
-interface LoginProps {
-    handleLogin: () => Promise<void>;
-}
-
-const Login = ({ handleLogin: onLoginCallback }: LoginProps) => {
+const Login = () => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const navigate = useNavigate();
     const { loginLoading, loginError, handleLogin: authHandleLogin } = useAuth();
 
     const handleSubmit = async (e: FormEvent) => {
@@ -18,15 +16,15 @@ const Login = ({ handleLogin: onLoginCallback }: LoginProps) => {
             return;
         }
 
-        // Call the auth hook's handleLogin to perform authentication
-        // Note: authHandleLogin errors are handled internally by the useAuth hook
-        await authHandleLogin(username, password);
-
-        // On success, call the router's navigation callback (no sensitive data passed)
         try {
-            await onLoginCallback();
-        } catch (err) {
-            console.error('Navigation callback error:', err);
+            // Perform authentication
+            await authHandleLogin(username, password);
+
+            // On success, navigate to home
+            navigate('/');
+        } catch (error) {
+            // Error is already handled by useAuth hook (sets loginError state)
+            console.error('Login failed:', error);
         }
     };
 

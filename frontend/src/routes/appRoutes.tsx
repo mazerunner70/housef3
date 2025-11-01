@@ -1,4 +1,5 @@
 import { RouteObject, Link, UIMatch, Navigate } from 'react-router-dom';
+import { RouteHandle } from './types';
 import {
     HomePage,
     AccountsPage,
@@ -33,11 +34,17 @@ import {
  * This file centralizes all route definitions to keep App.tsx clean.
  * Routes are organized by feature domain for easy navigation and maintenance.
  * 
- * Each route can export a `handle` property with a `breadcrumb` function.
+ * Each route should export a `handle` property with:
+ * - breadcrumb: Function to render breadcrumb for this route
+ * - sidebar: Key identifying which sidebar to use (e.g., 'accounts', 'transactions')
+ * 
  * The breadcrumb function receives the route match and can access:
  * - match.pathname - the matched URL path
  * - match.params - URL parameters (e.g., accountId, categoryId)
  * - match.data - data from the route's loader (if defined)
+ * 
+ * The sidebar key is used to lookup the sidebar component from the registry.
+ * If not specified, the system falls back to using the first path segment.
  * 
  * Route Organization:
  * - Home/Landing
@@ -56,15 +63,17 @@ export const appRoutes: RouteObject[] = [
         index: true,
         element: <HomePage />,
         handle: {
-            breadcrumb: () => <Link to="/">Home</Link>
-        }
+            breadcrumb: () => <Link to="/">Home</Link>,
+            sidebar: 'default'
+        } as RouteHandle
     },
     {
         path: 'home',
         element: <HomePage />,
         handle: {
-            breadcrumb: () => <Link to="/home">Home</Link>
-        }
+            breadcrumb: () => <Link to="/home">Home</Link>,
+            sidebar: 'default'
+        } as RouteHandle
     },
 
     // Accounts
@@ -73,8 +82,9 @@ export const appRoutes: RouteObject[] = [
         path: 'accounts',
         element: <AccountsPage />,
         handle: {
-            breadcrumb: () => <Link to="/accounts">Accounts</Link>
-        }
+            breadcrumb: () => <Link to="/accounts">Accounts</Link>,
+            sidebar: 'accounts'
+        } as RouteHandle
     },
     {
         path: 'accounts/:accountId',
@@ -85,8 +95,9 @@ export const appRoutes: RouteObject[] = [
                 // For now, we'll show the ID or fetch it
                 const accountId = match.params.accountId as string;
                 return <Link to={`/accounts/${accountId}`}>Account {accountId?.slice(0, 8)}</Link>;
-            }
-        }
+            },
+            sidebar: 'accounts'
+        } as RouteHandle
     },
 
     // Categories
@@ -94,8 +105,9 @@ export const appRoutes: RouteObject[] = [
         path: 'categories',
         element: <CategoriesPage />,
         handle: {
-            breadcrumb: () => <Link to="/categories">Categories</Link>
-        }
+            breadcrumb: () => <Link to="/categories">Categories</Link>,
+            sidebar: 'categories'
+        } as RouteHandle
     },
     {
         path: 'categories/:categoryId',
@@ -104,8 +116,9 @@ export const appRoutes: RouteObject[] = [
             breadcrumb: (match: UIMatch) => {
                 const categoryId = match.params.categoryId as string;
                 return <Link to={`/categories/${categoryId}`}>Category {categoryId?.slice(0, 8)}</Link>;
-            }
-        }
+            },
+            sidebar: 'categories'
+        } as RouteHandle
     },
     {
         path: 'categories/:categoryId/transactions',
@@ -114,8 +127,9 @@ export const appRoutes: RouteObject[] = [
             breadcrumb: (match: UIMatch) => {
                 const categoryId = match.params.categoryId as string;
                 return <Link to={`/categories/${categoryId}/transactions`}>Transactions</Link>;
-            }
-        }
+            },
+            sidebar: 'categories'
+        } as RouteHandle
     },
     {
         path: 'categories/:categoryId/accounts',
@@ -124,8 +138,9 @@ export const appRoutes: RouteObject[] = [
             breadcrumb: (match: UIMatch) => {
                 const categoryId = match.params.categoryId as string;
                 return <Link to={`/categories/${categoryId}/accounts`}>Accounts</Link>;
-            }
-        }
+            },
+            sidebar: 'categories'
+        } as RouteHandle
     },
     {
         path: 'categories/:categoryId/analytics',
@@ -134,15 +149,17 @@ export const appRoutes: RouteObject[] = [
             breadcrumb: (match: UIMatch) => {
                 const categoryId = match.params.categoryId as string;
                 return <Link to={`/categories/${categoryId}/analytics`}>Analytics</Link>;
-            }
-        }
+            },
+            sidebar: 'categories'
+        } as RouteHandle
     },
     {
         path: 'categories/compare',
         element: <CategoryComparePage />,
         handle: {
-            breadcrumb: () => <Link to="/categories/compare">Compare Categories</Link>
-        }
+            breadcrumb: () => <Link to="/categories/compare">Compare Categories</Link>,
+            sidebar: 'categories'
+        } as RouteHandle
     },
 
     // Transactions
@@ -150,8 +167,9 @@ export const appRoutes: RouteObject[] = [
         path: 'transactions',
         element: <TransactionsPage />,
         handle: {
-            breadcrumb: () => <Link to="/transactions">Transactions</Link>
-        }
+            breadcrumb: () => <Link to="/transactions">Transactions</Link>,
+            sidebar: 'transactions'
+        } as RouteHandle
     },
     {
         path: 'transactions/:transactionId',
@@ -160,8 +178,9 @@ export const appRoutes: RouteObject[] = [
             breadcrumb: (match: UIMatch) => {
                 const transactionId = match.params.transactionId as string;
                 return <Link to={`/transactions/${transactionId}`}>Transaction {transactionId?.slice(-6)}</Link>;
-            }
-        }
+            },
+            sidebar: 'transactions'
+        } as RouteHandle
     },
     {
         path: 'transactions/:transactionId/edit',
@@ -170,15 +189,17 @@ export const appRoutes: RouteObject[] = [
             breadcrumb: (match: UIMatch) => {
                 const transactionId = match.params.transactionId as string;
                 return <Link to={`/transactions/${transactionId}/edit`}>Edit</Link>;
-            }
-        }
+            },
+            sidebar: 'transactions'
+        } as RouteHandle
     },
     {
         path: 'transactions/compare',
         element: <TransactionComparePage />,
         handle: {
-            breadcrumb: () => <Link to="/transactions/compare">Compare Transactions</Link>
-        }
+            breadcrumb: () => <Link to="/transactions/compare">Compare Transactions</Link>,
+            sidebar: 'transactions'
+        } as RouteHandle
     },
 
     // Transfers
@@ -186,8 +207,9 @@ export const appRoutes: RouteObject[] = [
         path: 'transfers',
         element: <TransfersPage />,
         handle: {
-            breadcrumb: () => <Link to="/transfers">Transfers</Link>
-        }
+            breadcrumb: () => <Link to="/transfers">Transfers</Link>,
+            sidebar: 'transfers'
+        } as RouteHandle
     },
 
     // Import
@@ -195,8 +217,9 @@ export const appRoutes: RouteObject[] = [
         path: 'import',
         element: <ImportPage />,
         handle: {
-            breadcrumb: () => <Link to="/import">Import</Link>
-        }
+            breadcrumb: () => <Link to="/import">Import</Link>,
+            sidebar: 'import'
+        } as RouteHandle
     },
     {
         path: 'import/account/:accountId',
@@ -205,8 +228,9 @@ export const appRoutes: RouteObject[] = [
             breadcrumb: (match: UIMatch) => {
                 const accountId = match.params.accountId as string;
                 return <Link to={`/import/account/${accountId}`}>Upload File</Link>;
-            }
-        }
+            },
+            sidebar: 'import'
+        } as RouteHandle
     },
 
     // Files
@@ -214,8 +238,9 @@ export const appRoutes: RouteObject[] = [
         path: 'files',
         element: <FilesPage />,
         handle: {
-            breadcrumb: () => <Link to="/files">Files</Link>
-        }
+            breadcrumb: () => <Link to="/files">Files</Link>,
+            sidebar: 'files'
+        } as RouteHandle
     },
     {
         path: 'files/:fileId',
@@ -297,8 +322,9 @@ export const appRoutes: RouteObject[] = [
         path: 'fzip',
         element: <FZIPPage />,
         handle: {
-            breadcrumb: () => <Link to="/fzip">Backup & Restore</Link>
-        }
+            breadcrumb: () => <Link to="/fzip">Backup & Restore</Link>,
+            sidebar: 'fzip'
+        } as RouteHandle
     },
     {
         path: 'backup',

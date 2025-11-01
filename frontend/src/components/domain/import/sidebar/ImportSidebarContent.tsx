@@ -10,8 +10,8 @@
  */
 
 import React from 'react';
-import BaseSidebarContent from './BaseSidebarContent';
-import importConfig from './configs/importConfig';
+import BaseSidebarContent from '@/components/navigation/sidebar-content/BaseSidebarContent';
+import { importConfig } from './importConfig';
 
 interface ImportSidebarContentProps {
     sidebarCollapsed: boolean;
@@ -33,3 +33,4 @@ const ImportSidebarContent: React.FC<ImportSidebarContentProps> = ({
 };
 
 export default ImportSidebarContent;
+

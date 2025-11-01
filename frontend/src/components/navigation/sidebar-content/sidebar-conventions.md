@@ -1,5 +1,12 @@
 # Contextual Sidebar Development Conventions
 
+> **⚠️ NOTE**: This document describes the legacy architecture. For the current registry-based architecture, see [README.md](./README.md).
+> 
+> **Current Structure**:
+> - Domain-specific sidebars now live in `components/domain/{feature}/sidebar/`
+> - Shared infrastructure remains in `components/navigation/sidebar-content/`
+> - Registration happens via `registerSidebars.ts`
+
 ## Overview
 This document defines the conventions and patterns for developing contextual sidebar components in the `/sidebar-content/` folder. The sidebar system uses a configuration-driven approach to eliminate code duplication and provide consistent navigation experiences across different application contexts.
 

@@ -1,10 +1,12 @@
 /**
- * Barrel export for all sidebar configurations
- * Provides a single import point for all page-specific sidebar configs
+ * Barrel export for shared sidebar configurations
+ * Domain-specific configs are now located in their respective domain folders
  */
 
-export { categoriesConfig } from './categoriesConfig';
 export { defaultConfig } from './defaultConfig';
-export { importConfig } from './importConfig';
-export { transactionsConfig } from './transactionsConfig';
-export { transfersConfig } from '@/components/domain/transfers/sidebar/transfersConfig';
+
+// Domain-specific configs are now exported from their respective domains:
+// - transactionsConfig: @/components/domain/transactions/sidebar/transactionsConfig
+// - transfersConfig: @/components/domain/transfers/sidebar/transfersConfig
+// - categoriesConfig: @/components/domain/categories/sidebar/categoriesSidebarConfig
+// - importConfig: @/components/domain/import/sidebar/importConfig

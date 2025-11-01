@@ -142,3 +142,4 @@ function getAccountIcon(accountType: string): string {
 }
 
 export default AccountsSidebarContent;
+
