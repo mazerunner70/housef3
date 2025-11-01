@@ -176,8 +176,40 @@
   padding-left: calc(var(--spacing-l) - 3px);
 }
 
-.header-sign-out-button {
+/* Header action buttons container */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
   margin-left: auto;
+}
+
+/* Breadcrumb mode toggle button */
+.breadcrumb-mode-toggle {
+  padding: var(--spacing-s) var(--spacing-m);
+  background-color: var(--color-background-subtle);
+  border: var(--border-width) solid var(--color-borders-dividers);
+  border-radius: var(--border-radius-small);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-size: var(--font-size-body);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.breadcrumb-mode-toggle:hover {
+  background-color: var(--color-primary-brand-light);
+  border-color: var(--color-primary-brand);
+  transform: translateY(-1px);
+}
+
+.breadcrumb-mode-toggle:active {
+  transform: translateY(0);
+}
+
+.header-sign-out-button {
   padding: var(--spacing-s) var(--spacing-m);
   background-color: var(--color-background-subtle);
   border: var(--border-width) solid var(--color-borders-dividers);

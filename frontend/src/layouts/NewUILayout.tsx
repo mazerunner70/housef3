@@ -1,6 +1,6 @@
 import React from 'react';
 import './NewUILayout.css'; // We'll create this for basic styling
-import { Outlet, NavLink } from 'react-router-dom';
+import { Outlet, NavLink, useMatches } from 'react-router-dom';
 import logoImage from '../assets/logo1.png'; // Import the logo
 import ContextualSidebar from '@/components/navigation/ContextualSidebar';
 import Breadcrumb from '@/components/navigation/Breadcrumb';
@@ -13,7 +13,11 @@ interface NewUILayoutProps {
 const NewUILayout: React.FC<NewUILayoutProps> = ({ onSignOut }) => {
   const { sidebarCollapsed, setSidebarCollapsed } = useNavigationStore();
   const [isMobileView, setIsMobileView] = React.useState(false);
+  const [breadcrumbMode, setBreadcrumbMode] = React.useState<'path' | 'history'>('path');
 
+  // Get all matched routes for breadcrumb rendering
+  // Native useMatches() works with data router (createBrowserRouter)
+  const matches = useMatches();
 
   // Handle responsive sidebar behavior
   React.useEffect(() => {
@@ -45,12 +49,21 @@ const NewUILayout: React.FC<NewUILayoutProps> = ({ onSignOut }) => {
           <img src={logoImage} alt="App Logo" className="new-ui-logo" />
         </NavLink>
         <h1 className="new-ui-title">Modern Finance App</h1>
-        <button onClick={onSignOut} className="header-sign-out-button">Sign Out</button>
+        <div className="header-actions">
+          <button
+            onClick={() => setBreadcrumbMode(breadcrumbMode === 'path' ? 'history' : 'path')}
+            className="breadcrumb-mode-toggle"
+            title={`Breadcrumb mode: ${breadcrumbMode === 'path' ? 'Path-based' : 'History-based'}`}
+          >
+            🍞 {breadcrumbMode === 'path' ? '📍' : '📜'}
+          </button>
+          <button onClick={onSignOut} className="header-sign-out-button">Sign Out</button>
+        </div>
       </header>
       <div className="new-ui-layout-content">
         <ContextualSidebar />
         <main className="new-ui-main-content">
-          <Breadcrumb />
+          <Breadcrumb matches={matches} mode={breadcrumbMode} />
           <Outlet />
         </main>
 
