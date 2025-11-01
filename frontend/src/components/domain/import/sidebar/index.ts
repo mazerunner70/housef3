@@ -3,5 +3,5 @@
  */
 
 export { default as ImportSidebarContent } from './ImportSidebarContent';
-export { importConfig } from './importConfig';
+export { importSidebarConfig } from './importSidebarConfig';
 

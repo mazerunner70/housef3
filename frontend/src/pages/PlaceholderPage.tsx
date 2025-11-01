@@ -1,5 +1,5 @@
 import React from 'react';
-import { useParams, useLocation } from 'react-router-dom';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import './PlaceholderPage.css';
 
 interface PlaceholderPageProps {
@@ -10,6 +10,7 @@ interface PlaceholderPageProps {
 const PlaceholderPage: React.FC<PlaceholderPageProps> = ({ title, description }) => {
     const params = useParams();
     const location = useLocation();
+    const navigate = useNavigate();
 
     return (
         <div className="placeholder-page">
@@ -54,13 +55,13 @@ const PlaceholderPage: React.FC<PlaceholderPageProps> = ({ title, description })
                 <div className="placeholder-actions">
                     <button
                         className="back-button"
-                        onClick={() => window.history.back()}
+                        onClick={() => navigate(-1)}
                     >
                         ← Go Back
                     </button>
                     <button
                         className="home-button"
-                        onClick={() => window.location.href = '/accounts'}
+                        onClick={() => navigate('/accounts')}
                     >
                         🏠 Go to Accounts
                     </button>

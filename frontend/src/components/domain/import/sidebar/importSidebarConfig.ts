@@ -8,7 +8,7 @@
 import { SidebarContentConfig } from '@/components/navigation/sidebar-content/types';
 import { createNavItem, createActionItem } from '@/components/navigation/sidebar-content/SidebarConfigFactory';
 
-export const importConfig: SidebarContentConfig = {
+export const importSidebarConfig: SidebarContentConfig = {
     sections: [
         // Navigation Section - Import Tools
         {
@@ -21,28 +21,28 @@ export const importConfig: SidebarContentConfig = {
                     '/import/upload',
                     '📤',
                     // Custom active check for upload functionality
-                    (pathname) => pathname.includes('/import/upload')
+                    (pathname) => pathname === '/import/upload' || pathname.startsWith('/import/upload/')
                 ),
                 createNavItem(
                     'import-history',
                     'Import History',
                     '/import/history',
                     '📊',
-                    (pathname) => pathname.includes('/import/history')
+                    (pathname) => pathname === '/import/history' || pathname.startsWith('/import/history/')
                 ),
                 createNavItem(
                     'field-mappings',
                     'Field Mappings',
                     '/import/mappings',
                     '🗂️',
-                    (pathname) => pathname.includes('/import/mappings')
+                    (pathname) => pathname === '/import/mappings' || pathname.startsWith('/import/mappings/')
                 ),
                 createNavItem(
                     'import-settings',
                     'Import Settings',
                     '/import/settings',
                     '⚙️',
-                    (pathname) => pathname.includes('/import/settings')
+                    (pathname) => pathname === '/import/settings' || pathname.startsWith('/import/settings/')
                 )
             ]
         },
@@ -52,14 +52,10 @@ export const importConfig: SidebarContentConfig = {
             type: 'actions',
             title: 'Quick Actions',
             items: [
-                createActionItem(
+                createNavItem(
                     'start-import',
                     'Start New Import',
-                    () => {
-                        console.log('Start new import clicked');
-                        // TODO: Navigate to upload page or open import wizard
-                        globalThis.location.href = '/import/upload';
-                    },
+                    '/import/upload',
                     '📤'
                 ),
                 createActionItem(

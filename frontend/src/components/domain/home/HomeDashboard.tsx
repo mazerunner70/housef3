@@ -37,25 +37,28 @@ const LoadingView: React.FC = () => (
 );
 
 // Error component
-const ErrorView: React.FC<{ error: string | null }> = ({ error }) => (
-    <div className="home-page">
-        <div className="home-header">
-            <h1>Portfolio Overview</h1>
-            <p className="error-message">{error || 'Unable to load portfolio data'}</p>
-        </div>
-        <div className="insights-grid">
-            <div className="insight-card error">
-                <div className="card-content">
-                    <h3>Error Loading Data</h3>
-                    <p>Please try refreshing the page or check your connection.</p>
-                    <button onClick={() => globalThis.location.reload()} className="retry-button">
-                        Retry
-                    </button>
+const ErrorView: React.FC<{ error: string | null }> = ({ error }) => {
+    const navigate = useNavigate();
+    return (
+        <div className="home-page">
+            <div className="home-header">
+                <h1>Portfolio Overview</h1>
+                <p className="error-message">{error || 'Unable to load portfolio data'}</p>
+            </div>
+            <div className="insights-grid">
+                <div className="insight-card error">
+                    <div className="card-content">
+                        <h3>Error Loading Data</h3>
+                        <p>Please try refreshing the page or check your connection.</p>
+                        <button onClick={() => navigate(0)} className="retry-button">
+                            Retry
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
-);
+    );
+};
 
 // Transfer Recommendation Section Component
 interface TransferRecommendationProps {

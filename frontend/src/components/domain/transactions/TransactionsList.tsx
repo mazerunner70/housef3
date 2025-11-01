@@ -1,16 +1,16 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import {
     getUserTransactions,
     getCategories,
     quickUpdateTransactionCategory,
 } from '@/services/TransactionService';
 import { listAccounts } from '@/components/domain/accounts/services/AccountService';
-import { TransactionViewItem, CategoryInfo, TransactionRequestParams } from '@/schemas/Transaction';
+import { CategoryInfo, TransactionRequestParams } from '@/schemas/Transaction';
 import { Account } from '@/schemas/Account';
 import TransactionFilters, { FilterValues as ComponentFilterValues } from './TransactionFilters';
 import TransactionTable from '@/components/business/transactions/TransactionTable';
-import '@/pages/TransactionsPage.css';
+import './TransactionsList.css';
 import { useTransactionsUIStore } from '@/stores/transactionsStore';
 
 // Helper functions
@@ -27,9 +27,6 @@ const TransactionsList: React.FC = () => {
     // Simple state
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [categories, setCategories] = useState<CategoryInfo[]>([]);
-    const [allTransactions, setAllTransactions] = useState<TransactionViewItem[]>([]);
-    const [lastEvaluatedKey, setLastEvaluatedKey] = useState<any>(undefined);
-    const [isLoadingMore, setIsLoadingMore] = useState(false);
 
     // Load initial data (accounts + categories)
     useEffect(() => {
@@ -49,7 +46,7 @@ const TransactionsList: React.FC = () => {
     }, []);
 
     // Build request params
-    const buildParams = (useLastKey = false): TransactionRequestParams => {
+    const buildParams = (pageParam?: any): TransactionRequestParams => {
         const startDateMs = filters.startDate ? parseDateString(filters.startDate)?.getTime() : undefined;
         const endDateSourceDate = parseDateString(filters.endDate);
         let endDateMs = endDateSourceDate ? endDateSourceDate.getTime() : undefined;
@@ -69,44 +66,41 @@ const TransactionsList: React.FC = () => {
             endDate: endDateMs,
             sortBy: 'date',
             sortOrder: 'desc',
-            lastEvaluatedKey: useLastKey ? lastEvaluatedKey : undefined,
+            lastEvaluatedKey: pageParam,
             ignoreDup: true,
         };
     };
 
-    // Load transactions (initial load)
-    const { isLoading, error } = useQuery({
+    // Load transactions with pagination
+    const {
+        data,
+        isLoading,
+        error,
+        fetchNextPage,
+        hasNextPage,
+        isFetchingNextPage,
+    } = useInfiniteQuery({
         queryKey: ['transactions', filters, pageSize],
-        queryFn: async () => {
-            const response = await getUserTransactions(buildParams(false));
-            setAllTransactions(response.transactions);
-            setLastEvaluatedKey(response.loadMore.lastEvaluatedKey);
+        queryFn: async ({ pageParam }: { pageParam: Record<string, any> | undefined }) => {
+            const response = await getUserTransactions(buildParams(pageParam));
             return response;
         },
+        getNextPageParam: (lastPage) => {
+            return lastPage.loadMore.lastEvaluatedKey || undefined;
+        },
+        initialPageParam: undefined as Record<string, any> | undefined,
         staleTime: 120000,
     });
 
-    // Load more function
-    const handleLoadMore = async () => {
-        if (!lastEvaluatedKey || isLoadingMore) return;
-
-        setIsLoadingMore(true);
-        try {
-            const response = await getUserTransactions(buildParams(true));
-            setAllTransactions(prev => [...prev, ...response.transactions]);
-            setLastEvaluatedKey(response.loadMore.lastEvaluatedKey);
-        } catch (error) {
-            console.error('Error loading more:', error);
-        } finally {
-            setIsLoadingMore(false);
-        }
-    };
+    // Derive combined transactions list from all pages
+    const allTransactions = useMemo(() => {
+        if (!data?.pages) return [];
+        return data.pages.flatMap(page => page.transactions);
+    }, [data]);
 
     // Handle filter changes
     const handleApplyFilters = (newFilters: ComponentFilterValues) => {
-        setAllTransactions([]);
-        setLastEvaluatedKey(undefined);
-
+        // React Query will automatically reset when the query key changes
         applyNewFilters({
             startDate: newFilters.startDate,
             endDate: newFilters.endDate,
@@ -119,8 +113,7 @@ const TransactionsList: React.FC = () => {
 
     // Handle page size change
     const handlePageSizeChange = (newPageSize: number) => {
-        setAllTransactions([]);
-        setLastEvaluatedKey(undefined);
+        // React Query will automatically reset when the query key changes
         setPageSize(newPageSize);
     };
 
@@ -184,14 +177,14 @@ const TransactionsList: React.FC = () => {
 
             <TransactionTable
                 transactions={transformedTransactions}
-                isLoading={isLoading || isQuickUpdating}
+                isLoading={isLoading || isQuickUpdating || isFetchingNextPage}
                 error={null}
                 categories={categories}
                 accountsData={accounts}
                 onEditTransaction={handleEditTransaction}
                 onQuickCategoryChange={handleQuickCategoryChange}
-                hasMore={!!lastEvaluatedKey}
-                onLoadMore={handleLoadMore}
+                hasMore={!!hasNextPage}
+                onLoadMore={fetchNextPage}
                 itemsLoaded={transformedTransactions.length}
                 pageSize={pageSize}
                 onPageSizeChange={handlePageSizeChange}

@@ -3,7 +3,11 @@ import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import './Login.css';
 
-const Login = () => {
+interface LoginProps {
+    onLoginSuccess?: () => void;
+}
+
+const Login = ({ onLoginSuccess }: LoginProps) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const navigate = useNavigate();
@@ -20,8 +24,12 @@ const Login = () => {
             // Perform authentication
             await authHandleLogin(username, password);
 
-            // On success, navigate to home
-            navigate('/');
+            // On success, call the callback or navigate to home
+            if (onLoginSuccess) {
+                onLoginSuccess();
+            } else {
+                navigate('/');
+            }
         } catch (error) {
             // Error is already handled by useAuth hook (sets loginError state)
             console.error('Login failed:', error);

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import AccountList from '@/components/domain/accounts/components/AccountList';
 import AccountTimeline from '@/components/domain/accounts/components/AccountTimeline';
 import useAccountsWithStore from '@/components/domain/accounts/stores/useAccountsStore';
@@ -6,6 +7,7 @@ import { useNavigationStore } from '@/stores/navigationStore';
 import './AccountListView.css';
 
 const AccountListView: React.FC = () => {
+    const navigate = useNavigate();
     const {
         accounts,
         isLoading,
@@ -24,17 +26,17 @@ const AccountListView: React.FC = () => {
 
     const handleEditAccount = (account: { accountId: string;[key: string]: unknown }) => {
         // Navigate to account edit page
-        globalThis.location.href = `/accounts/${account.accountId}?action=edit`;
+        navigate(`/accounts/${account.accountId}?action=edit`);
     };
 
     const handleDeleteAccount = (accountId: string) => {
         // Navigate to account delete confirmation page
-        globalThis.location.href = `/accounts/${accountId}?action=delete`;
+        navigate(`/accounts/${accountId}?action=delete`);
     };
 
     const handleViewTransactions = (accountId: string) => {
         // Navigate to transactions page for this account
-        globalThis.location.href = `/transactions?account=${accountId}`;
+        navigate(`/transactions?account=${accountId}`);
     };
 
     const handleTimelineAccountClick = (accountId: string) => {
@@ -43,7 +45,7 @@ const AccountListView: React.FC = () => {
         if (accountElement) {
             accountElement.scrollIntoView({ behavior: 'smooth' });
         } else {
-            globalThis.location.href = `/accounts/${accountId}`;
+            navigate(`/accounts/${accountId}`);
         }
     };
 

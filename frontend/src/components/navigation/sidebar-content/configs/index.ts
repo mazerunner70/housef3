@@ -9,4 +9,4 @@ export { defaultConfig } from './defaultConfig';
 // - transactionsConfig: @/components/domain/transactions/sidebar/transactionsConfig
 // - transfersConfig: @/components/domain/transfers/sidebar/transfersConfig
 // - categoriesConfig: @/components/domain/categories/sidebar/categoriesSidebarConfig
-// - importConfig: @/components/domain/import/sidebar/importConfig
+// - importSidebarConfig: @/components/domain/import/sidebar/importSidebarConfig

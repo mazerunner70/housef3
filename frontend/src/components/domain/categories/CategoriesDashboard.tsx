@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Category, CategorySuggestionStrategy, CategoryRule, MatchCondition, CategoryHierarchy, RuleTestResponse, CategoryCreate, CategoryType } from '@/types/Category';
 import { useCategories, useCategoryRules } from '@/hooks/useCategories';
 import { useRealTimeRuleTesting } from '@/hooks/useRealTimeRuleTesting';
@@ -24,6 +25,7 @@ const CategoriesDashboard: React.FC<CategoriesDashboardProps> = ({
   initialCategoryData,
   onCategoryCreated
 }) => {
+  const navigate = useNavigate();
   const {
     categories,
     hierarchy,
@@ -155,7 +157,7 @@ const CategoriesDashboard: React.FC<CategoriesDashboardProps> = ({
       alert(`Categories reset successfully! ${results.results.totalApplicationsApplied} category assignments were applied to ${results.results.totalTransactionsProcessed} transactions.`);
 
       // Refresh the categories list
-      window.location.reload();
+      navigate(0);
     } catch (error) {
       console.error('Error resetting categories:', error);
       alert('Failed to reset categories. Please try again.');
