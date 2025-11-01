@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
     getCurrentUser,
     isAuthenticated,
@@ -9,10 +9,23 @@ import {
 } from '@/services/AuthService';
 
 /**
+ * Return type for the useAuth hook
+ */
+export interface UseAuthReturn {
+    authenticated: boolean;
+    loading: boolean;
+    user: AuthUser | null;
+    loginLoading: boolean;
+    loginError: string | null;
+    handleLogin: (username: string, password: string) => Promise<AuthUser>;
+    handleSignOut: () => Promise<void>;
+}
+
+/**
  * Custom hook for managing authentication state
  * Handles token validation, refresh, login, logout, and authentication status
  */
-export const useAuth = () => {
+export const useAuth = (): UseAuthReturn => {
     const [authenticated, setAuthenticated] = useState<boolean>(false);
     const [loading, setLoading] = useState<boolean>(true);
     const [user, setUser] = useState<AuthUser | null>(null);
@@ -107,7 +120,7 @@ export const useAuth = () => {
      * Handles user sign out
      * Clears session, tokens, and resets authentication state
      */
-    const handleSignOut = async (): Promise<void> => {
+    const handleSignOut = useCallback(async (): Promise<void> => {
         try {
             // Call the sign out service to clear tokens on backend
             await signOut();
@@ -120,7 +133,7 @@ export const useAuth = () => {
             setUser(null);
             setLoginError(null);
         }
-    };
+    }, [signOut, setAuthenticated, setUser, setLoginError]);
 
     return {
         authenticated,

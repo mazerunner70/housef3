@@ -3,7 +3,7 @@ import { useAuth } from '@/hooks/useAuth';
 import './Login.css';
 
 interface LoginProps {
-    handleLogin: (username: string, password: string) => Promise<void>;
+    handleLogin: () => Promise<void>;
 }
 
 const Login = ({ handleLogin: onLoginCallback }: LoginProps) => {
@@ -18,14 +18,15 @@ const Login = ({ handleLogin: onLoginCallback }: LoginProps) => {
             return;
         }
 
+        // Call the auth hook's handleLogin to perform authentication
+        // Note: authHandleLogin errors are handled internally by the useAuth hook
+        await authHandleLogin(username, password);
+
+        // On success, call the router's navigation callback (no sensitive data passed)
         try {
-            // Call the auth hook's handleLogin to perform authentication
-            await authHandleLogin(username, password);
-            // On success, call the router's navigation callback
-            await onLoginCallback(username, password);
+            await onLoginCallback();
         } catch (err) {
-            // Error is handled by useAuth hook
-            console.error('Login error:', err);
+            console.error('Navigation callback error:', err);
         }
     };
 
