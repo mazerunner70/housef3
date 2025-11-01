@@ -1,6 +1,6 @@
 import React from 'react';
-import BaseSidebarContent from './BaseSidebarContent';
-import { transactionsConfig } from './configs';
+import BaseSidebarContent from '@/components/navigation/sidebar-content/BaseSidebarContent';
+import { transactionsConfig } from './transactionsConfig';
 
 interface TransactionsSidebarContentProps {
     sidebarCollapsed: boolean;
@@ -16,3 +16,4 @@ const TransactionsSidebarContent: React.FC<TransactionsSidebarContentProps> = ({
 };
 
 export default TransactionsSidebarContent;
+

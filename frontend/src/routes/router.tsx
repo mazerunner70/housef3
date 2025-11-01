@@ -23,14 +23,11 @@ import { appRoutes } from './appRoutes';
  * - Protected routes inherit auth check from parent
  */
 
-// Store handlers for auth state changes (set by App component)
-let authHandlers: {
-    handleLogin: (username: string, password: string) => Promise<void>;
-    handleSignOut: () => Promise<void>;
-} | null = null;
+// Store handler for sign out (set by App component)
+let signOutHandler: (() => Promise<void>) | null = null;
 
-export const setAuthHandlers = (handlers: typeof authHandlers) => {
-    authHandlers = handlers;
+export const setSignOutHandler = (handler: () => Promise<void>) => {
+    signOutHandler = handler;
 };
 
 /**
@@ -121,12 +118,12 @@ export const exampleDataLoader = async ({ params }: LoaderFunctionArgs) => {
 /**
  * Create the router with data router features
  */
-export const createAppRouter = (queryClient: QueryClient) => {
+export const createAppRouter = (_queryClient: QueryClient) => {
     return createBrowserRouter([
         // Login route
         {
             path: '/login',
-            element: <Login handleLogin={authHandlers?.handleLogin || (async () => {})} />,
+            element: <Login />,
             loader: loginLoader,
             errorElement: <div>Error loading login page</div>
         },
@@ -134,7 +131,7 @@ export const createAppRouter = (queryClient: QueryClient) => {
         // Protected routes wrapped in layout
         {
             path: '/',
-            element: <NewUILayout onSignOut={() => authHandlers?.handleSignOut()} />,
+            element: <NewUILayout onSignOut={() => signOutHandler?.()} />,
             loader: protectedLoader,
             errorElement: <div>Something went wrong. Please refresh the page.</div>,
             // Add Home breadcrumb to root so all child routes have at least 2 breadcrumbs

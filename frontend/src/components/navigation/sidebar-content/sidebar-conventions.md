@@ -1,5 +1,12 @@
 # Contextual Sidebar Development Conventions
 
+> **⚠️ NOTE**: This document describes the legacy architecture. For the current registry-based architecture, see [README.md](./README.md).
+> 
+> **Current Structure**:
+> - Domain-specific sidebars now live in `components/domain/{feature}/sidebar/`
+> - Shared infrastructure remains in `components/navigation/sidebar-content/`
+> - Registration happens via `registerSidebars.ts`
+
 ## Overview
 This document defines the conventions and patterns for developing contextual sidebar components in the `/sidebar-content/` folder. The sidebar system uses a configuration-driven approach to eliminate code duplication and provide consistent navigation experiences across different application contexts.
 
@@ -38,7 +45,7 @@ configs/{context}Config.ts
 **Examples:**
 - `configs/accountsConfig.ts`
 - `configs/transactionsConfig.ts`
-- `configs/importConfig.ts`
+- `configs/importSidebarConfig.ts`
 - `configs/categoriesConfig.ts`
 
 ### Supporting Files
@@ -53,11 +60,11 @@ configs/{context}Config.ts
 Use `BaseSidebarContent` with configuration objects for new sidebar contexts:
 
 ```typescript
-// configs/importConfig.ts
+// configs/importSidebarConfig.ts
 import { SidebarContentConfig } from '../types';
 import { createNavItem, createActionItem } from '../SidebarConfigFactory';
 
-export const importConfig: SidebarContentConfig = {
+export const importSidebarConfig: SidebarContentConfig = {
     sections: [
         {
             type: 'navigation',
@@ -75,7 +82,7 @@ export const importConfig: SidebarContentConfig = {
 // ImportSidebarContent.tsx
 import React from 'react';
 import BaseSidebarContent from './BaseSidebarContent';
-import { importConfig } from './configs/importConfig';
+import { importSidebarConfig } from './configs/importSidebarConfig';
 
 interface ImportSidebarContentProps {
     sidebarCollapsed: boolean;
@@ -85,7 +92,7 @@ const ImportSidebarContent: React.FC<ImportSidebarContentProps> = ({ sidebarColl
     return (
         <BaseSidebarContent
             sidebarCollapsed={sidebarCollapsed}
-            config={importConfig}
+            config={importSidebarConfig}
         />
     );
 };
@@ -375,11 +382,11 @@ describe('ImportSidebarContent', () => {
 
 ### Configuration Tests
 ```typescript
-// __tests__/configs/importConfig.test.ts
-describe('importConfig', () => {
+// __tests__/configs/importSidebarConfig.test.ts
+describe('importSidebarConfig', () => {
     it('generates correct section structure', () => {
         const context = createMockContext();
-        const sections = createSidebarSections(importConfig, context);
+        const sections = createSidebarSections(importSidebarConfig, context);
         
         expect(sections).toHaveLength(2);
         expect(sections[0].type).toBe('navigation');

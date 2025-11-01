@@ -1,7 +1,7 @@
 import { RouterProvider } from 'react-router-dom';
 import { QueryClient } from '@tanstack/react-query';
-import { useState, useMemo } from 'react';
-import { createAppRouter, setAuthHandlers } from '@/routes/router';
+import { useMemo } from 'react';
+import { createAppRouter, setSignOutHandler } from '@/routes/router';
 import './App.css';
 
 /**
@@ -11,8 +11,8 @@ import './App.css';
  * 
  * Features:
  * - Uses RouterProvider instead of Routes/Route
- * - Authentication is handled via route loaders
- * - Auth state is managed by the router
+ * - Authentication is handled by components (Login) and useAuth hook
+ * - Protected routes use route loaders for auth checks
  * - Supports route loaders and actions for data fetching/mutations
  * 
  * Benefits:
@@ -20,7 +20,7 @@ import './App.css';
  * - Route-level data loading
  * - Better error handling
  * - Optimistic UI patterns
- * - Data persistence callbacks on route changes
+ * - Simpler auth flow without unnecessary callbacks
  */
 
 interface AppProps {
@@ -28,30 +28,19 @@ interface AppProps {
 }
 
 function App({ queryClient }: AppProps) {
-  const [authKey, setAuthKey] = useState(0);
-
-  // Create router instance with auth handlers
+  // Create router instance
   const router = useMemo(() => {
     const newRouter = createAppRouter(queryClient);
 
-    // Set up auth handlers that trigger router refresh
-    setAuthHandlers({
-      handleLogin: async (username: string, password: string) => {
-        // The actual authentication is handled by the useAuth hook
-        // This is just a navigation callback after successful login
-        setAuthKey(prev => prev + 1);
-        newRouter.navigate('/');
-      },
-      handleSignOut: async () => {
-        // Clear auth data
-        localStorage.removeItem('authUser');
-        setAuthKey(prev => prev + 1);
-        newRouter.navigate('/login');
-      }
+    // Set up sign out handler
+    setSignOutHandler(async () => {
+      // Clear auth data
+      localStorage.removeItem('authUser');
+      newRouter.navigate('/login');
     });
 
     return newRouter;
-  }, [queryClient, authKey]);
+  }, [queryClient]);
 
   return <RouterProvider router={router} />;
 }

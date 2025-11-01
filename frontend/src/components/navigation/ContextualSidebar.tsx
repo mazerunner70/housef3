@@ -1,49 +1,59 @@
 import React from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useMatches } from 'react-router-dom';
 import { useNavigationStore } from '@/stores/navigationStore';
-import AccountsSidebarContent from './sidebar-content/AccountsSidebarContent';
-import TransactionsSidebarContent from './sidebar-content/TransactionsSidebarContent';
-import CategoriesSidebarContent from '@/components/domain/categories/sidebar/CategoriesSidebarContent';
-import ImportSidebarContent from './sidebar-content/ImportSidebarContent';
-import TransfersSidebarContent from '@/components/domain/transfers/sidebar/TransfersSidebarContent';
-import FZIPSidebarContent from '@/components/domain/fzip/sidebar/FZIPSidebarContent';
-import DefaultSidebarContent from './sidebar-content/DefaultSidebarContent';
+import { sidebarRegistry } from './sidebar-content/sidebarRegistry';
+import { hasRouteHandle } from '@/routes/types';
 import './ContextualSidebar.css';
 
 interface ContextualSidebarProps {
     className?: string;
 }
 
+/**
+ * ContextualSidebar - Generic sidebar container
+ * 
+ * Uses a registry pattern to decouple from domain-specific implementations.
+ * Sidebars are registered in registerSidebars.ts which is called at app initialization.
+ * 
+ * Sidebar Selection Logic:
+ * 1. Check if current route specifies a sidebar in its handle
+ * 2. If not, fall back to first path segment
+ * 3. If still not found, use 'default' sidebar
+ */
 const ContextualSidebar: React.FC<ContextualSidebarProps> = ({ className = '' }) => {
     const location = useLocation();
+    const matches = useMatches();
     const { sidebarCollapsed, toggleSidebar } = useNavigationStore();
 
     // Determine which sidebar content to show based on current route
     const renderSidebarContent = () => {
-        const pathSegments = location.pathname.split('/').filter(Boolean);
-        const route = pathSegments[0];
+        let sidebarKey: string | undefined;
 
-        switch (route) {
-            case 'accounts':
-                return <AccountsSidebarContent sidebarCollapsed={sidebarCollapsed} />;
-            case 'transactions':
-                return <TransactionsSidebarContent sidebarCollapsed={sidebarCollapsed} />;
-            case 'transfers':
-                return <TransfersSidebarContent sidebarCollapsed={sidebarCollapsed} />;
-            case 'categories':
-                return <CategoriesSidebarContent sidebarCollapsed={sidebarCollapsed} />;
-            case 'import':
-                return <ImportSidebarContent sidebarCollapsed={sidebarCollapsed} />;
-            case 'fzip':
-            case 'backup':
-                return <FZIPSidebarContent sidebarCollapsed={sidebarCollapsed} />;
-            case 'files':
-                // For now, files can use the default content, but could have its own component later
-                return <DefaultSidebarContent sidebarCollapsed={sidebarCollapsed} />;
-            default:
-                // Home page and other routes
-                return <DefaultSidebarContent sidebarCollapsed={sidebarCollapsed} />;
+        // Strategy 1: Check if route explicitly specifies a sidebar in its handle
+        // Look through matches in reverse order (most specific route first)
+        for (let i = matches.length - 1; i >= 0; i--) {
+            const match = matches[i];
+            if (hasRouteHandle(match) && match.handle.sidebar) {
+                sidebarKey = match.handle.sidebar;
+                break;
+            }
         }
+
+        // Strategy 2: Fall back to path-based lookup (first segment)
+        if (!sidebarKey) {
+            const pathSegments = location.pathname.split('/').filter(Boolean);
+            sidebarKey = pathSegments[0] || 'default';
+        }
+
+        // Get the sidebar component from the registry
+        const SidebarComponent = sidebarRegistry.get(sidebarKey) || sidebarRegistry.get('default');
+
+        if (!SidebarComponent) {
+            console.warn(`No sidebar registered for key: ${sidebarKey}`);
+            return null;
+        }
+
+        return <SidebarComponent sidebarCollapsed={sidebarCollapsed} />;
     };
 
     return (

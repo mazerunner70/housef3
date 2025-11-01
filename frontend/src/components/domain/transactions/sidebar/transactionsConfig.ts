@@ -3,8 +3,8 @@
  * Replaces TransactionsSidebarContent.tsx with declarative configuration
  */
 
-import { SidebarContentConfig } from '../types';
-import { createNavItem, createFilterItem, createActionItem } from '../SidebarConfigFactory';
+import { SidebarContentConfig } from '@/components/navigation/sidebar-content/types';
+import { createNavItem, createFilterItem, createActionItem } from '@/components/navigation/sidebar-content/SidebarConfigFactory';
 
 export const transactionsConfig: SidebarContentConfig = {
     sections: [
@@ -93,3 +93,4 @@ export const transactionsConfig: SidebarContentConfig = {
         }
     ]
 };
+

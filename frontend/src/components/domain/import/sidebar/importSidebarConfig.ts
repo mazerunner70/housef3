@@ -5,10 +5,10 @@
  * Uses the established configuration-based approach with BaseSidebarContent
  */
 
-import { SidebarContentConfig } from '../types';
-import { createNavItem, createActionItem } from '../SidebarConfigFactory';
+import { SidebarContentConfig } from '@/components/navigation/sidebar-content/types';
+import { createNavItem, createActionItem } from '@/components/navigation/sidebar-content/SidebarConfigFactory';
 
-export const importConfig: SidebarContentConfig = {
+export const importSidebarConfig: SidebarContentConfig = {
     sections: [
         // Navigation Section - Import Tools
         {
@@ -21,62 +21,58 @@ export const importConfig: SidebarContentConfig = {
                     '/import/upload',
                     '📤',
                     // Custom active check for upload functionality
-                    (pathname) => pathname.includes('/import/upload')
+                    (pathname) => pathname === '/import/upload' || pathname.startsWith('/import/upload/')
                 ),
                 createNavItem(
                     'import-history',
                     'Import History',
                     '/import/history',
                     '📊',
-                    (pathname) => pathname.includes('/import/history')
+                    (pathname) => pathname === '/import/history' || pathname.startsWith('/import/history/')
                 ),
                 createNavItem(
                     'field-mappings',
                     'Field Mappings',
                     '/import/mappings',
                     '🗂️',
-                    (pathname) => pathname.includes('/import/mappings')
+                    (pathname) => pathname === '/import/mappings' || pathname.startsWith('/import/mappings/')
                 ),
                 createNavItem(
                     'import-settings',
                     'Import Settings',
                     '/import/settings',
                     '⚙️',
-                    (pathname) => pathname.includes('/import/settings')
+                    (pathname) => pathname === '/import/settings' || pathname.startsWith('/import/settings/')
                 )
             ]
         },
 
-        // Actions Section - Quick Actions
+        // Actions Section - Import-Specific Quick Actions
         {
             type: 'actions',
             title: 'Quick Actions',
             items: [
-                createActionItem(
-                    'add-account',
-                    'Add New Account',
-                    () => {
-                        console.log('Add new account clicked');
-                        // TODO: Implement account creation dialog
-                        alert('Account creation functionality coming soon!');
-                    },
-                    '🏦'
+                createNavItem(
+                    'start-import',
+                    'Start New Import',
+                    '/import/upload',
+                    '📤'
                 ),
                 createActionItem(
-                    'refresh-accounts',
-                    'Refresh Account Data',
+                    'download-template',
+                    'Download Sample Template',
                     () => {
-                        console.log('Refresh accounts clicked');
-                        // TODO: Implement account data refresh
-                        window.location.reload();
+                        console.log('Download template clicked');
+                        // TODO: Implement template download
+                        alert('Sample CSV template download coming soon!');
                     },
-                    '🔄'
+                    '📄'
                 ),
                 createNavItem(
-                    'view-accounts',
-                    'View All Accounts',
-                    '/accounts',
-                    '📈'
+                    'view-history',
+                    'View Import History',
+                    '/import/history',
+                    '📊'
                 )
             ]
         }
@@ -133,4 +129,3 @@ export const importConfig: SidebarContentConfig = {
     }
 };
 
-export default importConfig;

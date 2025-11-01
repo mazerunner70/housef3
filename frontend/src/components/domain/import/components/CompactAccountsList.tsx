@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AccountForImport } from '@/components/domain/accounts/hooks/useAccountsData';
 import CompactAccountItem from './CompactAccountItem';
 import LoadingState from '@/components/ui/LoadingState';
@@ -29,6 +30,8 @@ const CompactAccountsList: React.FC<CompactAccountsListProps> = ({
     onAccountClick,
     isLoading = false
 }) => {
+    const navigate = useNavigate();
+
     // Loading state
     if (isLoading) {
         return (
@@ -55,7 +58,7 @@ const CompactAccountsList: React.FC<CompactAccountsListProps> = ({
                     <button
                         className="create-account-button"
                         onClick={() => {
-                            globalThis.location.href = '/accounts?action=create';
+                            navigate('/accounts?action=create');
                         }}
                     >
                         Create Your First Account

@@ -46,8 +46,8 @@ const ImportDashboard: React.FC = () => {
     console.log('🏦 This will navigate to account detail page');
 
     // Navigate to account detail page
-    globalThis.location.href = `/accounts/${accountId}`;
-  }, [accountsData.accounts]);
+    navigate(`/accounts/${accountId}`);
+  }, [accountsData.accounts, navigate]);
 
   const handleUploadClick = useCallback(() => {
     // Stage 1: Enhanced placeholder with context
@@ -118,7 +118,7 @@ const ImportDashboard: React.FC = () => {
                 )}
               </button>
               <button
-                onClick={() => globalThis.location.reload()}
+                onClick={() => navigate(0)}
                 className="retry-button secondary"
               >
                 <span>↻</span>

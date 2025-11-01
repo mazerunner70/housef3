@@ -1,11 +1,11 @@
 import React from 'react';
-import TransactionsDashboard from '@/components/domain/transactions/TransactionsDashboard';
+import TransactionsList from '@/components/domain/transactions/TransactionsList';
 import './TransactionsPage.css';
 
 /**
  * TransactionsPage - Entry point for the transactions domain
  * 
- * Role: Routing jump off point that renders main component
+ * Role: Routing jump off point that renders transactions list
  * Route: /transactions
  * 
  * Note: Breadcrumbs are automatically managed by useBreadcrumbSync hook in Layout
@@ -13,7 +13,7 @@ import './TransactionsPage.css';
 const TransactionsPage: React.FC = () => {
     return (
         <div className="transactions-page">
-            <TransactionsDashboard />
+            <TransactionsList />
         </div>
     );
 };

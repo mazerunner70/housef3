@@ -7,6 +7,10 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import './App.css'
 import './styles/global.css'
 
+// Register all sidebar components
+import { registerAllSidebars } from './components/navigation/sidebar-content/registerSidebars'
+registerAllSidebars()
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

@@ -1,3 +1,3 @@
-export { default as TransactionsDashboard } from './TransactionsDashboard';
-export { default as TransactionsListTab } from './TransactionsListTab';
+export { default as TransactionsList } from './TransactionsList';
 export { default as TransactionFilters } from './TransactionFilters';
+export { TransactionsSidebarContent, transactionsConfig } from './sidebar';
