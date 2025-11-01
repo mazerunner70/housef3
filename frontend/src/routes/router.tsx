@@ -25,8 +25,8 @@ import { appRoutes } from './appRoutes';
 
 // Store handlers for auth state changes (set by App component)
 let authHandlers: {
-    handleLogin: () => void;
-    handleSignOut: () => void;
+    handleLogin: (username: string, password: string) => Promise<void>;
+    handleSignOut: () => Promise<void>;
 } | null = null;
 
 export const setAuthHandlers = (handlers: typeof authHandlers) => {
@@ -126,7 +126,7 @@ export const createAppRouter = (queryClient: QueryClient) => {
         // Login route
         {
             path: '/login',
-            element: <Login onLoginSuccess={() => authHandlers?.handleLogin()} />,
+            element: <Login handleLogin={authHandlers?.handleLogin || (async () => {})} />,
             loader: loginLoader,
             errorElement: <div>Error loading login page</div>
         },

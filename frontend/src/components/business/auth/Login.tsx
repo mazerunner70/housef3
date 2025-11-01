@@ -1,36 +1,31 @@
 import { useState, FormEvent } from 'react';
-import { signIn } from '@/services/AuthService';
+import { useAuth } from '@/hooks/useAuth';
 import './Login.css';
 
 interface LoginProps {
-    onLoginSuccess: () => void;
+    handleLogin: (username: string, password: string) => Promise<void>;
 }
 
-const Login = ({ onLoginSuccess }: LoginProps) => {
+const Login = ({ handleLogin: onLoginCallback }: LoginProps) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const { loginLoading, loginError, handleLogin: authHandleLogin } = useAuth();
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
 
         if (!username || !password) {
-            setError('Please enter both username and password');
             return;
         }
 
-        setLoading(true);
-        setError(null);
-
         try {
-            await signIn(username, password);
-            onLoginSuccess();
+            // Call the auth hook's handleLogin to perform authentication
+            await authHandleLogin(username, password);
+            // On success, call the router's navigation callback
+            await onLoginCallback(username, password);
         } catch (err) {
+            // Error is handled by useAuth hook
             console.error('Login error:', err);
-            setError('Invalid username or password. Please try again.');
-        } finally {
-            setLoading(false);
         }
     };
 
@@ -44,7 +39,8 @@ const Login = ({ onLoginSuccess }: LoginProps) => {
                         id="username"
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
-                        disabled={loading}
+                        disabled={loginLoading}
+                        required
                     />
                 </div>
 
@@ -55,14 +51,15 @@ const Login = ({ onLoginSuccess }: LoginProps) => {
                         id="password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        disabled={loading}
+                        disabled={loginLoading}
+                        required
                     />
                 </div>
 
-                {error && <div className="error-message">{error}</div>}
+                {loginError && <div className="error-message">{loginError}</div>}
 
-                <button type="submit" className="login-button" disabled={loading}>
-                    {loading ? 'Signing in...' : 'Sign In'}
+                <button type="submit" className="login-button" disabled={loginLoading}>
+                    {loginLoading ? 'Signing in...' : 'Sign In'}
                 </button>
             </form>
         </div>

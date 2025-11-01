@@ -36,13 +36,15 @@ function App({ queryClient }: AppProps) {
 
     // Set up auth handlers that trigger router refresh
     setAuthHandlers({
-      handleLogin: () => {
+      handleLogin: async (username: string, password: string) => {
+        // The actual authentication is handled by the useAuth hook
+        // This is just a navigation callback after successful login
         setAuthKey(prev => prev + 1);
         newRouter.navigate('/');
       },
-      handleSignOut: () => {
+      handleSignOut: async () => {
         // Clear auth data
-        localStorage.removeItem('currentUser');
+        localStorage.removeItem('authUser');
         setAuthKey(prev => prev + 1);
         newRouter.navigate('/login');
       }

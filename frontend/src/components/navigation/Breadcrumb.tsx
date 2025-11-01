@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, UIMatch } from 'react-router-dom';
+import { createLogger } from '@/utils/logger';
 import './Breadcrumb.css';
+
+const logger = createLogger('Breadcrumb');
 
 interface BreadcrumbProps {
     className?: string;
@@ -153,7 +156,7 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({
         // Middle click or Ctrl+click = open in new tab (future feature)
         if (event.button === 1 || event.ctrlKey) {
             // TODO: Implement new tab navigation
-            console.log('Open in new tab:', match.pathname);
+            logger.debug('Open in new tab', { pathname: match.pathname });
             return;
         }
 

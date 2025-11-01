@@ -1,4 +1,4 @@
-import { RouteObject, Link, UIMatch } from 'react-router-dom';
+import { RouteObject, Link, UIMatch, Navigate } from 'react-router-dom';
 import {
     HomePage,
     AccountsPage,
@@ -302,7 +302,7 @@ export const appRoutes: RouteObject[] = [
     },
     {
         path: 'backup',
-        element: <FZIPPage />, // Legacy route - redirects to /fzip
+        element: <Navigate to="/fzip" replace />, // Legacy route - redirects to /fzip
         handle: {
             breadcrumb: () => <Link to="/backup">Backup & Restore</Link>
         }

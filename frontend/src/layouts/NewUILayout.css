@@ -205,6 +205,19 @@
   transform: translateY(-1px);
 }
 
+.breadcrumb-mode-toggle:focus {
+  outline: 2px solid var(--color-primary-brand);
+  outline-offset: 2px;
+}
+
+.breadcrumb-mode-toggle:focus-visible {
+  background-color: var(--color-primary-brand-light);
+  border-color: var(--color-primary-brand);
+  transform: translateY(-1px);
+  outline: 2px solid var(--color-primary-brand);
+  outline-offset: 2px;
+}
+
 .breadcrumb-mode-toggle:active {
   transform: translateY(0);
 }
@@ -222,4 +235,16 @@
 .header-sign-out-button:hover {
   background-color: var(--color-primary-brand);
   color: var(--color-white);
+}
+
+.header-sign-out-button:focus {
+  outline: 2px solid var(--color-primary-brand);
+  outline-offset: 2px;
+}
+
+.header-sign-out-button:focus-visible {
+  background-color: var(--color-primary-brand);
+  color: var(--color-white);
+  outline: 2px solid var(--color-primary-brand);
+  outline-offset: 2px;
 }
