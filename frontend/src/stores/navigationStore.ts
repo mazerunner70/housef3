@@ -1,15 +1,20 @@
 import { create } from 'zustand';
 import { Account } from '../schemas/Account';
 
+/**
+ * Navigation Store
+ * 
+ * Manages navigation state for the application including:
+ * - Selected entities (account, file, transaction)
+ * - View state
+ * - Sidebar state
+ * - URL context
+ * 
+ * Note: Breadcrumbs are now managed by React Router's useMatches() hook
+ */
+
 // Navigation view types
 export type ViewType = 'account-list' | 'account-detail' | 'file-transactions' | 'transaction-detail';
-
-// Breadcrumb item interface
-export interface BreadcrumbItem {
-    label: string;
-    action: () => void;
-    level: number;
-}
 
 // Transaction file interface (simplified for now)
 export interface TransactionFile {
@@ -59,7 +64,6 @@ export interface NavigationState {
     selectedFile?: TransactionFile;
     selectedTransaction?: Transaction;
     sidebarCollapsed: boolean;
-    breadcrumb: BreadcrumbItem[];
 
     // URL-derived context available to components
     urlContext: NavigationContext;
@@ -70,12 +74,7 @@ export interface NavigationActions {
     selectAccount: (account: Account) => void;
     selectFile: (file: TransactionFile) => void;
     selectTransaction: (transaction: Transaction) => void;
-    goBack: () => void;
-    goToAccountList: () => void;
-    goToHome: () => void;
-    goToTransfers: () => void;
-    goToCategories: () => void;
-    setBreadcrumb: (breadcrumb: BreadcrumbItem[]) => void;
+    clearSelection: () => void;
     toggleSidebar: () => void;
     setSidebarCollapsed: (collapsed: boolean) => void;
 
@@ -91,26 +90,18 @@ export interface NavigationStore extends NavigationState, NavigationActions { }
 
 // Create the navigation store
 export const useNavigationStore = create<NavigationStore>((set, get) => ({
-    // Initial state - start with just Home, let pages set their own breadcrumb
+    // Initial state
     currentView: 'account-list',
     sidebarCollapsed: false,
     urlContext: {},
-    breadcrumb: [
-        { label: 'Home', action: () => get().goToHome(), level: 0 }
-    ],
 
-    // Actions
+    // Actions - simplified to only manage selection state
     selectAccount: (account: Account) => {
         set({
             currentView: 'account-detail',
             selectedAccount: account,
             selectedFile: undefined,
-            selectedTransaction: undefined,
-            breadcrumb: [
-                { label: 'Home', action: () => get().goToHome(), level: 0 },
-                { label: 'Accounts', action: () => get().goToAccountList(), level: 1 },
-                { label: account.accountName, action: () => get().selectAccount(account), level: 2 }
-            ]
+            selectedTransaction: undefined
         });
     },
 
@@ -121,124 +112,24 @@ export const useNavigationStore = create<NavigationStore>((set, get) => ({
         set({
             currentView: 'file-transactions',
             selectedFile: file,
-            selectedTransaction: undefined,
-            breadcrumb: [
-                { label: 'Home', action: () => get().goToHome(), level: 0 },
-                { label: 'Accounts', action: () => get().goToAccountList(), level: 1 },
-                { label: selectedAccount.accountName, action: () => get().selectAccount(selectedAccount), level: 2 },
-                { label: file.fileName, action: () => get().selectFile(file), level: 3 }
-            ]
+            selectedTransaction: undefined
         });
     },
 
     selectTransaction: (transaction: Transaction) => {
-        const { selectedAccount, selectedFile } = get();
-        if (!selectedAccount) return;
-
-        const breadcrumb: BreadcrumbItem[] = [
-            { label: 'Home', action: () => get().goToHome(), level: 0 },
-            { label: 'Accounts', action: () => get().goToAccountList(), level: 1 },
-            { label: selectedAccount.accountName, action: () => get().selectAccount(selectedAccount), level: 2 }
-        ];
-
-        if (selectedFile) {
-            breadcrumb.push({ label: selectedFile.fileName, action: () => get().selectFile(selectedFile), level: 3 });
-        }
-
-        breadcrumb.push({
-            label: `Transaction ${transaction.transactionId.slice(-6)}`,
-            action: () => get().selectTransaction(transaction),
-            level: selectedFile ? 4 : 3
-        });
-
         set({
             currentView: 'transaction-detail',
-            selectedTransaction: transaction,
-            breadcrumb
+            selectedTransaction: transaction
         });
     },
 
-    goBack: () => {
-        const { currentView, selectedAccount, selectedFile } = get();
-
-        switch (currentView) {
-            case 'transaction-detail':
-                if (selectedFile) {
-                    get().selectFile(selectedFile);
-                } else if (selectedAccount) {
-                    get().selectAccount(selectedAccount);
-                } else {
-                    get().goToAccountList();
-                }
-                break;
-            case 'file-transactions':
-                if (selectedAccount) {
-                    get().selectAccount(selectedAccount);
-                } else {
-                    get().goToAccountList();
-                }
-                break;
-            case 'account-detail':
-                get().goToAccountList();
-                break;
-            default:
-                // Already at account list, do nothing
-                break;
-        }
-    },
-
-    goToAccountList: () => {
-        const newBreadcrumb = [
-            { label: 'Home', action: () => get().goToHome(), level: 0 },
-            { label: 'Accounts', action: () => get().goToAccountList(), level: 1 }
-        ];
+    clearSelection: () => {
         set({
             currentView: 'account-list',
             selectedAccount: undefined,
             selectedFile: undefined,
-            selectedTransaction: undefined,
-            breadcrumb: newBreadcrumb
+            selectedTransaction: undefined
         });
-    },
-
-    goToHome: () => {
-        set({
-            currentView: 'account-list', // This doesn't really matter for home
-            selectedAccount: undefined,
-            selectedFile: undefined,
-            selectedTransaction: undefined,
-            breadcrumb: [{ label: 'Home', action: () => get().goToHome(), level: 0 }]
-        });
-    },
-
-    goToTransfers: () => {
-        set({
-            currentView: 'account-list', // This doesn't really matter for transfers
-            selectedAccount: undefined,
-            selectedFile: undefined,
-            selectedTransaction: undefined,
-            breadcrumb: [
-                { label: 'Home', action: () => get().goToHome(), level: 0 },
-                { label: 'Transfers', action: () => get().goToTransfers(), level: 1 }
-            ]
-        });
-    },
-
-    goToCategories: () => {
-        set({
-            currentView: 'account-list', // This doesn't really matter for categories
-            selectedAccount: undefined,
-            selectedFile: undefined,
-            selectedTransaction: undefined,
-            breadcrumb: [
-                { label: 'Home', action: () => get().goToHome(), level: 0 },
-                { label: 'Categories', action: () => get().goToCategories(), level: 1 }
-            ]
-        });
-    },
-
-    setBreadcrumb: (breadcrumb: BreadcrumbItem[]) => {
-        set({ breadcrumb });
     },
 
     toggleSidebar: () => {
