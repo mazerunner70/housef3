@@ -1,16 +1,16 @@
-import React, { useEffect } from 'react';
-import { useNavigationStore } from '@/stores/navigationStore';
+import React from 'react';
 import TransfersDashboard from './TransfersDashboard';
 import './TransfersPage.css';
 
+/**
+ * TransfersPage - Entry point for the transfers domain
+ * 
+ * Role: Routing jump off point that renders main component
+ * Route: /transfers
+ * 
+ * Note: Breadcrumbs are automatically managed by useBreadcrumbSync hook in Layout
+ */
 const TransfersPage: React.FC = () => {
-    const { goToTransfers } = useNavigationStore();
-
-    // Set up correct breadcrumb for transfers page
-    useEffect(() => {
-        goToTransfers();
-    }, [goToTransfers]);
-
     return (
         <div className="transfers-page">
             <TransfersDashboard />

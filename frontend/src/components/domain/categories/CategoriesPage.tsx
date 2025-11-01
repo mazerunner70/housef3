@@ -1,22 +1,16 @@
-import React, { useEffect } from 'react';
-import { useNavigationStore } from '@/stores/navigationStore';
+import React from 'react';
 import CategoriesDashboard from './CategoriesDashboard';
 import './CategoriesPage.css';
 
 /**
  * CategoriesPage - Entry point for the categories domain
  * 
- * Role: Routing jump off point that sets up context and renders main component
+ * Role: Routing jump off point that renders main component
  * Route: /categories
+ * 
+ * Note: Breadcrumbs are automatically managed by useBreadcrumbSync hook in Layout
  */
 const CategoriesPage: React.FC = () => {
-    const { goToCategories } = useNavigationStore();
-
-    // Set up breadcrumbs/navigation context
-    useEffect(() => {
-        goToCategories();
-    }, [goToCategories]);
-
     return (
         <div className="categories-page">
             <CategoriesDashboard />

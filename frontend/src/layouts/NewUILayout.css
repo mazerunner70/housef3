@@ -176,8 +176,53 @@
   padding-left: calc(var(--spacing-l) - 3px);
 }
 
-.header-sign-out-button {
+/* Header action buttons container */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
   margin-left: auto;
+}
+
+/* Breadcrumb mode toggle button */
+.breadcrumb-mode-toggle {
+  padding: var(--spacing-s) var(--spacing-m);
+  background-color: var(--color-background-subtle);
+  border: var(--border-width) solid var(--color-borders-dividers);
+  border-radius: var(--border-radius-small);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-size: var(--font-size-body);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.breadcrumb-mode-toggle:hover {
+  background-color: var(--color-primary-brand-light);
+  border-color: var(--color-primary-brand);
+  transform: translateY(-1px);
+}
+
+.breadcrumb-mode-toggle:focus {
+  outline: 2px solid var(--color-primary-brand);
+  outline-offset: 2px;
+}
+
+.breadcrumb-mode-toggle:focus-visible {
+  background-color: var(--color-primary-brand-light);
+  border-color: var(--color-primary-brand);
+  transform: translateY(-1px);
+  outline: 2px solid var(--color-primary-brand);
+  outline-offset: 2px;
+}
+
+.breadcrumb-mode-toggle:active {
+  transform: translateY(0);
+}
+
+.header-sign-out-button {
   padding: var(--spacing-s) var(--spacing-m);
   background-color: var(--color-background-subtle);
   border: var(--border-width) solid var(--color-borders-dividers);
@@ -190,4 +235,16 @@
 .header-sign-out-button:hover {
   background-color: var(--color-primary-brand);
   color: var(--color-white);
+}
+
+.header-sign-out-button:focus {
+  outline: 2px solid var(--color-primary-brand);
+  outline-offset: 2px;
+}
+
+.header-sign-out-button:focus-visible {
+  background-color: var(--color-primary-brand);
+  color: var(--color-white);
+  outline: 2px solid var(--color-primary-brand);
+  outline-offset: 2px;
 }
