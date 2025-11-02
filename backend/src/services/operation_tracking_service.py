@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional, List, Callable
 from datetime import datetime, timedelta
 from enum import Enum
 
-from utils.db_utils import get_workflows_table
+from utils.db.base import tables
 from boto3.dynamodb.conditions import Attr
 from pydantic import ValidationError
 import logging
@@ -45,7 +45,7 @@ class OperationTrackingService:
     """Generic service for tracking long-running operations"""
     
     def __init__(self):
-        self.table = get_workflows_table()
+        self.table = tables.workflows
         
         # Operation configurations
         self.operation_configs = {

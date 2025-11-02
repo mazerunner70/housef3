@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 import uuid
 
 from services.transfer_detection_service import TransferDetectionService
-from utils.db_utils import get_transactions_table
+from utils.db.base import tables
 from models.transaction import Transaction
 from utils.lambda_utils import (
     create_response,
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 def get_transaction_by_id(transaction_id: uuid.UUID) -> Optional[Transaction]:
     """Get a transaction by its ID."""
     try:
-        table = get_transactions_table()
+        table = tables.transactions
         if not table:
             return None
         

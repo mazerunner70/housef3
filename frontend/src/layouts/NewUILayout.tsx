@@ -13,7 +13,7 @@ interface NewUILayoutProps {
 const NewUILayout: React.FC<NewUILayoutProps> = ({ onSignOut }) => {
   const { sidebarCollapsed, setSidebarCollapsed } = useNavigationStore();
   const [isMobileView, setIsMobileView] = React.useState(false);
-  const [breadcrumbMode, setBreadcrumbMode] = React.useState<'path' | 'history'>('path');
+  const [breadcrumbMode, setBreadcrumbMode] = React.useState<'path' | 'history'>('history');
 
   // Get all matched routes for breadcrumb rendering
   // Native useMatches() works with data router (createBrowserRouter)

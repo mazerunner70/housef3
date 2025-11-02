@@ -7,7 +7,7 @@ import os
 from typing import Dict, Any, Optional, Set, List
 from datetime import datetime, timedelta
 
-from utils.db_utils import get_workflows_table
+from utils.db.base import tables
 from services.operation_tracking_service import operation_tracking_service, OperationStatus
 import logging
 
@@ -20,7 +20,7 @@ class VoteService:
     """Service layer for managing voting workflows"""
     
     def __init__(self):
-        self.table = get_workflows_table()
+        self.table = tables.workflows
         
         # Workflow configurations - can be externalized to config service
         self.workflow_configs = {

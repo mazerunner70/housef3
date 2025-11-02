@@ -7,7 +7,8 @@ from datetime import datetime
 from models.transaction import Transaction, TransactionCategoryAssignment, CategoryAssignmentStatus
 from models.category import Category
 from utils.auth import get_user_from_event
-from utils.db_utils import list_user_transactions, get_transactions_table
+from utils.db_utils import list_user_transactions
+from utils.db.base import tables
 from utils.lambda_utils import create_response, mandatory_path_parameter
 
 # Event-driven architecture imports
@@ -181,7 +182,7 @@ def delete_transaction_handler(event: Dict[str, Any], user_id: str) -> Dict[str,
         transaction_id = event["pathParameters"]["id"]
         
         # Get transaction to verify ownership
-        response = get_transactions_table().get_item(Key={'transactionId': transaction_id})
+        response = tables.transactions.get_item(Key={'transactionId': transaction_id})
         if 'Item' not in response:
             return create_response(404, {"message": "Transaction not found"})
         
@@ -190,7 +191,7 @@ def delete_transaction_handler(event: Dict[str, Any], user_id: str) -> Dict[str,
             return create_response(403, {"message": "Unauthorized to delete this transaction"})
         
         # Delete the transaction
-        get_transactions_table().delete_item(Key={'transactionId': transaction_id})
+        tables.transactions.delete_item(Key={'transactionId': transaction_id})
         
         # Publish transaction deletion event
         try:
@@ -236,7 +237,7 @@ def confirm_category_suggestions_handler(event: Dict[str, Any], user_id: str) ->
             return create_response(400, {"error": "At least one category must be confirmed"})
         
         # Get transaction from database
-        response = get_transactions_table().get_item(Key={'transactionId': transaction_id})
+        response = tables.transactions.get_item(Key={'transactionId': transaction_id})
         if 'Item' not in response:
             return create_response(404, {"error": "Transaction not found"})
         
@@ -261,7 +262,7 @@ def confirm_category_suggestions_handler(event: Dict[str, Any], user_id: str) ->
         
         # Update transaction in database
         transaction_item = transaction.to_dynamodb_item()
-        get_transactions_table().put_item(Item=transaction_item)
+        tables.transactions.put_item(Item=transaction_item)
         
         return create_response(200, {
             "transactionId": transaction_id,
@@ -287,7 +288,7 @@ def remove_category_assignment_handler(event: Dict[str, Any], user_id: str) -> D
         category_id = mandatory_path_parameter(event, 'categoryId')
         
         # Get transaction from database
-        response = get_transactions_table().get_item(Key={'transactionId': transaction_id})
+        response = tables.transactions.get_item(Key={'transactionId': transaction_id})
         if 'Item' not in response:
             return create_response(404, {"error": "Transaction not found"})
         
@@ -304,7 +305,7 @@ def remove_category_assignment_handler(event: Dict[str, Any], user_id: str) -> D
         
         # Update transaction in database
         transaction_item = transaction.to_dynamodb_item()
-        get_transactions_table().put_item(Item=transaction_item)
+        tables.transactions.put_item(Item=transaction_item)
         
         return create_response(200, {
             "transactionId": transaction_id,
@@ -343,7 +344,7 @@ def set_primary_category_handler(event: Dict[str, Any], user_id: str) -> Dict[st
             return create_response(400, {"error": "Category ID is required"})
         
         # Get transaction from database
-        response = get_transactions_table().get_item(Key={'transactionId': transaction_id})
+        response = tables.transactions.get_item(Key={'transactionId': transaction_id})
         if 'Item' not in response:
             return create_response(404, {"error": "Transaction not found"})
         
@@ -360,7 +361,7 @@ def set_primary_category_handler(event: Dict[str, Any], user_id: str) -> Dict[st
         
         # Update transaction in database
         transaction_item = transaction.to_dynamodb_item()
-        get_transactions_table().put_item(Item=transaction_item)
+        tables.transactions.put_item(Item=transaction_item)
         
         return create_response(200, {
             "transactionId": transaction_id,
@@ -399,7 +400,7 @@ def add_manual_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str
             return create_response(400, {"error": "Category ID is required"})
         
         # Get transaction from database
-        response = get_transactions_table().get_item(Key={'transactionId': transaction_id})
+        response = tables.transactions.get_item(Key={'transactionId': transaction_id})
         if 'Item' not in response:
             return create_response(404, {"error": "Transaction not found"})
         
@@ -417,7 +418,7 @@ def add_manual_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str
         
         # Update transaction in database
         transaction_item = transaction.to_dynamodb_item()
-        get_transactions_table().put_item(Item=transaction_item)
+        tables.transactions.put_item(Item=transaction_item)
         
         # Publish transaction updated event
         try:
@@ -483,7 +484,7 @@ def quick_update_category_handler(event: Dict[str, Any], user_id: str) -> Dict[s
             return create_response(400, {"error": "Category ID is required"})
         
         # Get transaction from database
-        response = get_transactions_table().get_item(Key={'transactionId': transaction_id})
+        response = tables.transactions.get_item(Key={'transactionId': transaction_id})
         if 'Item' not in response:
             return create_response(404, {"error": "Transaction not found"})
         
@@ -500,7 +501,7 @@ def quick_update_category_handler(event: Dict[str, Any], user_id: str) -> Dict[s
         
         # Update transaction in database
         transaction_item = transaction.to_dynamodb_item()
-        get_transactions_table().put_item(Item=transaction_item)
+        tables.transactions.put_item(Item=transaction_item)
         
         # Publish transaction updated event
         try:

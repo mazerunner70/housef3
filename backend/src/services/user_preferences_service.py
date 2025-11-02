@@ -8,7 +8,8 @@ from datetime import datetime, timezone
 from functools import reduce
 
 from models.user_preferences import UserPreferences, UserPreferencesCreate, UserPreferencesUpdate
-from utils.db_utils import get_user_preferences_table, list_user_accounts, update_account_derived_values
+from utils.db_utils import list_user_accounts, update_account_derived_values
+from utils.db.base import tables
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ class UserPreferencesService:
     
     def __init__(self):
         """Initialize the service with DynamoDB connection."""
-        self.table = get_user_preferences_table()
+        self.table = tables.user_preferences
         if not self.table:
             raise ValueError("USER_PREFERENCES_TABLE environment variable is not set or table not available")
         logger.info("UserPreferencesService initialized")

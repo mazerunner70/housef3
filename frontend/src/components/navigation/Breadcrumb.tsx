@@ -87,8 +87,13 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({
                 setBreadcrumbHistory(breadcrumbHistory.slice(0, matchingIndex + 1));
             }
         } else {
-            // Navigating to unrelated path - reset to current breadcrumbs
-            setBreadcrumbHistory(currentBreadcrumbs);
+            // Navigating to unrelated path - append to history (true navigation tracking)
+            const newCrumbs = currentBreadcrumbs.filter(
+                (crumb) => !breadcrumbHistory.some(
+                    (existing) => existing.pathname === crumb.pathname
+                )
+            );
+            setBreadcrumbHistory([...breadcrumbHistory, ...newCrumbs]);
         }
 
         previousPathRef.current = currentPath;

@@ -19,7 +19,8 @@ from pydantic import ValidationError
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from models.account import Account
-from utils.db_utils import get_accounts_table, update_account
+from utils.db_utils import update_account
+from utils.db.base import tables
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -35,7 +36,7 @@ def scan_all_accounts() -> List[Account]:
     accounts = []
     try:
         # Use paginated scan to handle large datasets
-        table = get_accounts_table()
+        table = tables.accounts
         response = table.scan()
         
         while True:
