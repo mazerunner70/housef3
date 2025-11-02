@@ -36,11 +36,11 @@ os.environ.setdefault('CATEGORIES_TABLE_NAME', f'{PROJECT_NAME}-{ENVIRONMENT}-ca
 os.environ.setdefault('USER_PREFERENCES_TABLE', f'{PROJECT_NAME}-{ENVIRONMENT}-user-preferences')
 
 from utils.db_utils import (
-    get_accounts_table, 
     update_account_derived_values, 
     get_account_transaction_date_range,
     list_user_accounts
 )
+from utils.db.base import tables
 from models.account import Account
 
 # Configure logging
@@ -60,7 +60,7 @@ def scan_all_accounts() -> List[Dict[str, Any]]:
     """
     logger.info("Scanning all accounts from DynamoDB...")
     
-    accounts_table = get_accounts_table()
+    accounts_table = tables.accounts
     all_accounts = []
     
     try:

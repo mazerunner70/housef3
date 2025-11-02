@@ -13,6 +13,7 @@ from models.category import Category, CategoryCreate, CategoryUpdate, CategoryRu
 from models.transaction import Transaction
 from services.category_rule_engine import CategoryRuleEngine
 from utils.db_utils import create_category_in_db, delete_category_from_db, get_category_by_id_from_db, list_categories_by_user_from_db, update_category_in_db, list_user_transactions, update_transaction
+from utils.db.base import tables
 from utils.lambda_utils import mandatory_path_parameter, optional_query_parameter, mandatory_body_parameter, optional_body_parameter, mandatory_query_parameter
 from utils.auth import get_user_from_event
 
@@ -858,7 +859,6 @@ def suggest_category_from_transaction_handler(event: Dict[str, Any], user_id: st
     """Suggest category name and type from transaction details."""
     try:
         from services.pattern_extraction_service import PatternExtractionService
-        from utils.db_utils import get_transactions_table
         from decimal import Decimal
         
         # Get either transaction ID or direct transaction data
@@ -875,7 +875,7 @@ def suggest_category_from_transaction_handler(event: Dict[str, Any], user_id: st
         # Handle transaction ID or direct transaction data
         if transaction_id:
             # Get transaction from database
-            response = get_transactions_table().get_item(Key={'transactionId': transaction_id})
+            response = tables.transactions.get_item(Key={'transactionId': transaction_id})
             if 'Item' not in response:
                 return create_response(404, {"message": "Transaction not found"})
             

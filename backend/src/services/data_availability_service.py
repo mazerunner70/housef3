@@ -9,9 +9,7 @@ from ..models.analytics import (
     AccountDataRange, AnalyticDateRange, DataGap, DataDisclaimer,
     AnalyticType, DataQuality
 )
-from ..utils.db_utils import (
-    get_transactions_table, get_files_table, get_accounts_table
-)
+from ..utils.db.base import tables
 from ..utils.analytics_config import get_analytics_config
 
 # Configure logging
@@ -22,9 +20,9 @@ class DataAvailabilityService:
     """Service to assess data availability and quality for analytics."""
 
     def __init__(self):
-        self.transactions_table = get_transactions_table()
-        self.files_table = get_files_table()
-        self.accounts_table = get_accounts_table()
+        self.transactions_table = tables.transactions
+        self.files_table = tables.files
+        self.accounts_table = tables.accounts
         self.config = get_analytics_config()
 
     def get_account_data_ranges(self, user_id: str) -> List[AccountDataRange]:

@@ -42,7 +42,8 @@ from models.events import BaseEvent, FileDeletionVoteEvent
 from models.category import CategorySuggestionStrategy
 from services.category_rule_engine import CategoryRuleEngine
 from services.event_service import event_service
-from utils.db_utils import list_categories_by_user_from_db, get_transactions_table
+from utils.db_utils import list_categories_by_user_from_db
+from utils.db.base import tables
 
 # Event publishing configuration
 ENABLE_EVENT_PUBLISHING = os.environ.get('ENABLE_EVENT_PUBLISHING', 'true').lower() == 'true'
@@ -181,7 +182,7 @@ class CategorizationEventConsumer(BaseEventConsumer):
                 try:
                     # Get the transaction from database
                     from models.transaction import Transaction
-                    response = get_transactions_table().get_item(Key={'transactionId': transaction_id})
+                    response = tables.transactions.get_item(Key={'transactionId': transaction_id})
                     if 'Item' not in response:
                         logger.warning(f"Transaction {transaction_id} not found")
                         stats['errors'] += 1

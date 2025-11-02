@@ -12,32 +12,28 @@ export const transactionsConfig: SidebarContentConfig = {
             type: 'navigation',
             title: 'Transaction Views',
             items: [
-                createFilterItem(
+                createNavItem(
                     'transactions-list',
                     'All Transactions',
                     '/transactions',
-                    { tab: 'list' },
                     '📋'
                 ),
-                createFilterItem(
+                createNavItem(
                     'category-management',
                     'Category Management',
-                    '/transactions',
-                    { tab: 'categories' },
+                    '/categories',
                     '🏷️'
                 ),
-                createFilterItem(
+                createNavItem(
                     'imports',
                     'Imports & Statements',
-                    '/transactions',
-                    { tab: 'imports' },
+                    '/import',
                     '📥'
                 ),
-                createFilterItem(
+                createNavItem(
                     'transfers',
                     'Transfer Detection',
-                    '/transactions',
-                    { tab: 'transfers' },
+                    '/transfers',
                     '↔️'
                 )
             ],
