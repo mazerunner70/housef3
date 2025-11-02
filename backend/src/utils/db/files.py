@@ -393,23 +393,19 @@ def get_account_default_file_map(account_id: uuid.UUID) -> Optional[FileMap]:
     # Import here to avoid circular dependency
     from .accounts import get_account
     
-    try:
-        # Get the account record
-        account = get_account(account_id) 
-        if not account:
-            logger.warning(f"Account {str(account_id)} not found when trying to get default file map.")
-            return None
-            
-        # Check for default field map
-        default_file_map_id = account.default_file_map_id 
-        if not default_file_map_id:
-            return None
-            
-        # Get the field map
-        return get_file_map(default_file_map_id)
-    except Exception as e:
-        logger.error(f"Error getting default file map for account {str(account_id)}: {str(e)}")
+    # Get the account record
+    account = get_account(account_id) 
+    if not account:
+        logger.warning(f"Account {str(account_id)} not found when trying to get default file map.")
         return None
+        
+    # Check for default field map
+    default_file_map_id = account.default_file_map_id 
+    if not default_file_map_id:
+        return None
+        
+    # Get the field map
+    return get_file_map(default_file_map_id)
 
 
 @monitor_performance(warn_threshold_ms=300)
@@ -453,14 +449,10 @@ def delete_file_map(file_map_id: uuid.UUID) -> bool:
     Returns:
         True if successful, False otherwise
     """
-    try:
-        tables.file_maps.delete_item(
-            Key={'fileMapId': str(file_map_id)}
-        )
-        return True
-    except Exception as e:
-        logger.error(f"Error deleting file map: {str(e)}")
-        return False
+    tables.file_maps.delete_item(
+        Key={'fileMapId': str(file_map_id)}
+    )
+    return True
 
 
 @monitor_performance(operation_type="query", warn_threshold_ms=500)

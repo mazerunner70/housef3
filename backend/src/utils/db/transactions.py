@@ -465,50 +465,45 @@ def update_transaction_statuses_by_status(old_status: str, new_status: str) -> i
     Returns:
         Number of transactions updated
     """
-    try:
-        table = tables.transactions
-        count = 0
+    table = tables.transactions
+    count = 0
+    
+    # Query using StatusIndex GSI
+    response = table.query(
+        IndexName='StatusIndex',
+        KeyConditionExpression=Key('status').eq(old_status)
+    )
+    
+    # Process in batches of 25 (DynamoDB limit)
+    while True:
+        items = response.get('Items', [])
+        if not items:
+            break
+            
+        # Update items in batches
+        with table.batch_writer() as batch:
+            for item in items:
+                batch.put_item(
+                    Item={
+                        **item,
+                        'status': new_status,
+                        'updatedAt': int(datetime.now(timezone.utc).timestamp() * 1000)
+                    }
+                )
+                count += 1
         
-        # Query using StatusIndex GSI
+        # Check if there are more items
+        if 'LastEvaluatedKey' not in response:
+            break
+            
         response = table.query(
             IndexName='StatusIndex',
-            KeyConditionExpression=Key('status').eq(old_status)
+            KeyConditionExpression=Key('status').eq(old_status),
+            ExclusiveStartKey=response['LastEvaluatedKey']
         )
-        
-        # Process in batches of 25 (DynamoDB limit)
-        while True:
-            items = response.get('Items', [])
-            if not items:
-                break
-                
-            # Update items in batches
-            with table.batch_writer() as batch:
-                for item in items:
-                    batch.put_item(
-                        Item={
-                            **item,
-                            'status': new_status,
-                            'updatedAt': int(datetime.now(timezone.utc).timestamp() * 1000)
-                        }
-                    )
-                    count += 1
-            
-            # Check if there are more items
-            if 'LastEvaluatedKey' not in response:
-                break
-                
-            response = table.query(
-                IndexName='StatusIndex',
-                KeyConditionExpression=Key('status').eq(old_status),
-                ExclusiveStartKey=response['LastEvaluatedKey']
-            )
-        
-        logger.info(f"Updated {count} transactions from status '{old_status}' to '{new_status}'")
-        return count
-        
-    except Exception as e:
-        logger.error(f"Error updating transaction statuses: {str(e)}")
-        raise
+    
+    logger.info(f"Updated {count} transactions from status '{old_status}' to '{new_status}'")
+    return count
 
 
 @monitor_performance(operation_type="query", warn_threshold_ms=200)
@@ -550,16 +545,13 @@ def check_duplicate_transaction(transaction: Transaction) -> bool:
     if transaction.transaction_hash is None or transaction.account_id is None:
         logger.error(f"Transaction hash or account ID is None for transaction: {transaction}")
         raise ValueError("Transaction hash or account ID is None")
-    try:
-        existing = get_transaction_by_account_and_hash(transaction.account_id, transaction.transaction_hash)
-        if existing:
-            logger.info(f"Found existing transaction: hash={existing.transaction_hash} date={existing.date} amount={existing.amount} description={existing.description}")
-        else:
-            logger.info(f"No existing transaction found for hash={transaction.transaction_hash}")
-        return existing is not None
-    except Exception as e:
-        logger.error(f"Error checking for duplicate transaction: {str(e)}")
-        return False 
+    
+    existing = get_transaction_by_account_and_hash(transaction.account_id, transaction.transaction_hash)
+    if existing:
+        logger.info(f"Found existing transaction: hash={existing.transaction_hash} date={existing.date} amount={existing.amount} description={existing.description}")
+    else:
+        logger.info(f"No existing transaction found for hash={transaction.transaction_hash}")
+    return existing is not None 
 
 
 @monitor_performance(warn_threshold_ms=300)
@@ -589,23 +581,18 @@ def get_first_transaction_date(account_id: Union[str, uuid.UUID]) -> Optional[in
     Returns:
         Transaction date as milliseconds since epoch, or None if no transactions found
     """
-    try:
-        # Query the earliest non-duplicate transaction for this account
-        # The statusDate field is a composite key of format "status#timestamp"
-        response = tables.transactions.query(
-            IndexName='AccountStatusDateIndex',
-            KeyConditionExpression=Key('accountId').eq(str(account_id)) & Key('statusDate').begins_with('new#'),
-            Limit=1,
-            ScanIndexForward=True  # Sort in ascending order to get earliest first
-        )
-        
-        if response.get('Items'):
-            return response['Items'][0].get('date')
-        return None
-        
-    except Exception as e:
-        logger.error(f"Error getting first transaction date for account {str(account_id)}: {str(e)}")
-        return None
+    # Query the earliest non-duplicate transaction for this account
+    # The statusDate field is a composite key of format "status#timestamp"
+    response = tables.transactions.query(
+        IndexName='AccountStatusDateIndex',
+        KeyConditionExpression=Key('accountId').eq(str(account_id)) & Key('statusDate').begins_with('new#'),
+        Limit=1,
+        ScanIndexForward=True  # Sort in ascending order to get earliest first
+    )
+    
+    if response.get('Items'):
+        return response['Items'][0].get('date')
+    return None
 
 
 @monitor_performance(operation_type="query", warn_threshold_ms=200)
@@ -622,23 +609,18 @@ def get_last_transaction_date(account_id: Union[str, uuid.UUID]) -> Optional[int
     Returns:
         Transaction date as milliseconds since epoch, or None if no transactions found
     """
-    try:
-        # Query the most recent non-duplicate transaction for this account
-        # The statusDate field is a composite key of format "status#timestamp"
-        response = tables.transactions.query(
-            IndexName='AccountStatusDateIndex',
-            KeyConditionExpression=Key('accountId').eq(str(account_id)) & Key('statusDate').begins_with('new#'),
-            Limit=1,
-            ScanIndexForward=False  # Sort in descending order to get most recent first
-        )
-        
-        if response.get('Items'):
-            return response['Items'][0].get('date')
-        return None
-        
-    except Exception as e:
-        logger.error(f"Error getting last transaction date for account {str(account_id)}: {str(e)}")
-        return None
+    # Query the most recent non-duplicate transaction for this account
+    # The statusDate field is a composite key of format "status#timestamp"
+    response = tables.transactions.query(
+        IndexName='AccountStatusDateIndex',
+        KeyConditionExpression=Key('accountId').eq(str(account_id)) & Key('statusDate').begins_with('new#'),
+        Limit=1,
+        ScanIndexForward=False  # Sort in descending order to get most recent first
+    )
+    
+    if response.get('Items'):
+        return response['Items'][0].get('date')
+    return None
 
 
 @monitor_performance(operation_type="query", warn_threshold_ms=200)
@@ -655,22 +637,17 @@ def get_latest_transaction(account_id: Union[str, uuid.UUID]) -> Optional[Transa
     Returns:
         Transaction object or None if no transactions found
     """
-    try:
-        # Query the most recent non-duplicate transaction for this account
-        # The statusDate field is a composite key of format "status#timestamp"
-        response = tables.transactions.query(
-            IndexName='AccountStatusDateIndex',
-            KeyConditionExpression=Key('accountId').eq(str(account_id)) & Key('statusDate').begins_with('new#'),
-            Limit=1,
-            ScanIndexForward=False  # Sort in descending order to get most recent first
-        )
-        logger.info(f"DB: get_latest_transaction response: {response}")
-        
-        if response.get('Items'):
-            return Transaction.from_dynamodb_item(response['Items'][0])
-        return None
-        
-    except Exception as e:
-        logger.error(f"Error getting latest transaction for account {str(account_id)}: {str(e)}")
-        return None
+    # Query the most recent non-duplicate transaction for this account
+    # The statusDate field is a composite key of format "status#timestamp"
+    response = tables.transactions.query(
+        IndexName='AccountStatusDateIndex',
+        KeyConditionExpression=Key('accountId').eq(str(account_id)) & Key('statusDate').begins_with('new#'),
+        Limit=1,
+        ScanIndexForward=False  # Sort in descending order to get most recent first
+    )
+    logger.info(f"DB: get_latest_transaction response: {response}")
+    
+    if response.get('Items'):
+        return Transaction.from_dynamodb_item(response['Items'][0])
+    return None
 

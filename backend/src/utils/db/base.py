@@ -83,9 +83,8 @@ def dynamodb_operation(operation_name: Optional[str] = None):
             except ClientError as e:
                 error_code = e.response.get('Error', {}).get('Code', 'Unknown')
                 error_msg = e.response.get('Error', {}).get('Message', str(e))
-                logger.error(
+                logger.exception(
                     f"DynamoDB error in {op_name}: {error_code} - {error_msg}",
-                    exc_info=True,
                     extra={
                         'operation': op_name,
                         'error_code': error_code,
@@ -94,16 +93,14 @@ def dynamodb_operation(operation_name: Optional[str] = None):
                 )
                 raise
             except ValidationError as e:
-                logger.error(
+                logger.exception(
                     f"Validation error in {op_name}: {str(e)}",
-                    exc_info=True,
                     extra={'operation': op_name}
                 )
                 raise ValueError(f"Invalid data in {op_name}: {str(e)}")
             except Exception as e:
-                logger.error(
+                logger.exception(
                     f"Unexpected error in {op_name}: {str(e)}",
-                    exc_info=True,
                     extra={'operation': op_name}
                 )
                 raise
@@ -168,7 +165,8 @@ def retry_on_throttle(
                             f"Throttled on {func.__name__} "
                             f"(attempt {attempt + 1}/{max_attempts}), "
                             f"retrying in {delay:.2f}s... "
-                            f"Error: {error_code}"
+                            f"Error: {error_code}",
+                            exc_info=True
                         )
                         time.sleep(delay)
                     else:

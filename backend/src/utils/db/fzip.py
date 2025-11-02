@@ -55,21 +55,17 @@ def get_fzip_job(job_id: str, user_id: str) -> Optional[FZIPJob]:
     Returns:
         FZIPJob object if found and owned by user, None otherwise
     """
-    try:
-        response = tables.fzip_jobs.get_item(Key={'jobId': job_id})
-        
-        if 'Item' in response:
-            item = response['Item']
-            # Check user ownership
-            if item.get('userId') == user_id:
-                return FZIPJob.from_dynamodb_item(item)
-            else:
-                logger.warning(f"User {user_id} attempted to access FZIP job {job_id} owned by {item.get('userId')}")
-                return None
-        return None
-    except ClientError as e:
-        logger.error(f"Error retrieving FZIP job {job_id}: {str(e)}")
-        return None
+    response = tables.fzip_jobs.get_item(Key={'jobId': job_id})
+    
+    if 'Item' in response:
+        item = response['Item']
+        # Check user ownership
+        if item.get('userId') == user_id:
+            return FZIPJob.from_dynamodb_item(item)
+        else:
+            logger.warning(f"User {user_id} attempted to access FZIP job {job_id} owned by {item.get('userId')}")
+            return None
+    return None
 
 
 @monitor_performance(warn_threshold_ms=300)
@@ -111,46 +107,41 @@ def list_user_fzip_jobs(
     Returns:
         Tuple of (fzip_jobs_list, next_pagination_key)
     """
-    try:
-        if job_type:
-            # Use UserJobTypeIndex for filtering by job type
-            query_params = {
-                'IndexName': 'UserJobTypeIndex',
-                'KeyConditionExpression': Key('userId').eq(user_id) & Key('jobType').eq(job_type),
-                'Limit': limit,
-                'ScanIndexForward': False  # Most recent first
-            }
-        else:
-            # Use UserIdIndex for all jobs
-            query_params = {
-                'IndexName': 'UserIdIndex',
-                'KeyConditionExpression': Key('userId').eq(user_id),
-                'Limit': limit,
-                'ScanIndexForward': False  # Most recent first
-            }
-        
-        if last_evaluated_key:
-            query_params['ExclusiveStartKey'] = last_evaluated_key
-        
-        response = tables.fzip_jobs.query(**query_params)
-        
-        fzip_jobs = []
-        for item in response.get('Items', []):
-            try:
-                fzip_job = FZIPJob.from_dynamodb_item(item)
-                fzip_jobs.append(fzip_job)
-            except Exception as e:
-                logger.error(f"Error creating FZIPJob from item: {str(e)}")
-                continue
-        
-        pagination_key = response.get('LastEvaluatedKey')
-        
-        logger.info(f"Listed {len(fzip_jobs)} FZIP jobs for user {user_id}")
-        return fzip_jobs, pagination_key
-        
-    except ClientError as e:
-        logger.error(f"Error listing FZIP jobs for user {user_id}: {str(e)}")
-        return [], None
+    if job_type:
+        # Use UserJobTypeIndex for filtering by job type
+        query_params = {
+            'IndexName': 'UserJobTypeIndex',
+            'KeyConditionExpression': Key('userId').eq(user_id) & Key('jobType').eq(job_type),
+            'Limit': limit,
+            'ScanIndexForward': False  # Most recent first
+        }
+    else:
+        # Use UserIdIndex for all jobs
+        query_params = {
+            'IndexName': 'UserIdIndex',
+            'KeyConditionExpression': Key('userId').eq(user_id),
+            'Limit': limit,
+            'ScanIndexForward': False  # Most recent first
+        }
+    
+    if last_evaluated_key:
+        query_params['ExclusiveStartKey'] = last_evaluated_key
+    
+    response = tables.fzip_jobs.query(**query_params)
+    
+    fzip_jobs = []
+    for item in response.get('Items', []):
+        try:
+            fzip_job = FZIPJob.from_dynamodb_item(item)
+            fzip_jobs.append(fzip_job)
+        except Exception as e:
+            logger.error(f"Error creating FZIPJob from item: {str(e)}")
+            continue
+    
+    pagination_key = response.get('LastEvaluatedKey')
+    
+    logger.info(f"Listed {len(fzip_jobs)} FZIP jobs for user {user_id}")
+    return fzip_jobs, pagination_key
 
 
 @monitor_performance(warn_threshold_ms=300)
@@ -167,21 +158,16 @@ def delete_fzip_job(job_id: str, user_id: str) -> bool:
     Returns:
         True if deleted, False if not found or access denied
     """
-    try:
-        # First verify ownership
-        fzip_job = get_fzip_job(job_id, user_id)
-        if not fzip_job:
-            logger.warning(f"FZIP job {job_id} not found or access denied for user {user_id}")
-            return False
-        
-        # Delete the job
-        tables.fzip_jobs.delete_item(Key={'jobId': job_id})
-        logger.info(f"Deleted FZIP job: {job_id} for user {user_id}")
-        return True
-        
-    except ClientError as e:
-        logger.error(f"Error deleting FZIP job {job_id}: {str(e)}")
+    # First verify ownership
+    fzip_job = get_fzip_job(job_id, user_id)
+    if not fzip_job:
+        logger.warning(f"FZIP job {job_id} not found or access denied for user {user_id}")
         return False
+    
+    # Delete the job
+    tables.fzip_jobs.delete_item(Key={'jobId': job_id})
+    logger.info(f"Deleted FZIP job: {job_id} for user {user_id}")
+    return True
 
 
 @monitor_performance(warn_threshold_ms=1000)
