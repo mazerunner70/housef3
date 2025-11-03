@@ -37,7 +37,6 @@ from utils.db_utils import (
     delete_transactions_for_file,
     get_file_map,
     list_file_transactions,
-    get_transactions_table,
     update_transaction_file_object
 )
 from utils.file_processor_utils import (

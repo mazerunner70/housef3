@@ -788,6 +788,16 @@ if upcoming:
    pip install scikit-learn pandas numpy holidays
    ```
 
+4. **Performance Monitoring**
+   - Add processing time logging for each stage:
+     - Transaction fetch time
+     - Feature extraction time
+     - Clustering time
+     - Pattern analysis time
+     - Total execution time
+   - Log transaction count per execution
+   - Monitor memory usage patterns
+
 ### Phase 2: Feature Engineering (Week 2-3)
 
 **Backend:**

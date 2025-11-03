@@ -349,7 +349,7 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
 }
 
 resource "aws_iam_role_policy" "lambda_dynamodb_access" {
-  name = "dynamodb-access-v3"
+  name = "dynamodb-access-v4"
   role = aws_iam_role.lambda_exec.id
 
   policy = jsonencode({
@@ -385,7 +385,13 @@ resource "aws_iam_role_policy" "lambda_dynamodb_access" {
           aws_dynamodb_table.transaction_category_assignments.arn,
           "${aws_dynamodb_table.transaction_category_assignments.arn}/index/*",
           aws_dynamodb_table.fzip_jobs.arn,
-          "${aws_dynamodb_table.fzip_jobs.arn}/index/*"
+          "${aws_dynamodb_table.fzip_jobs.arn}/index/*",
+          aws_dynamodb_table.recurring_charge_patterns.arn,
+          "${aws_dynamodb_table.recurring_charge_patterns.arn}/index/*",
+          aws_dynamodb_table.recurring_charge_predictions.arn,
+          "${aws_dynamodb_table.recurring_charge_predictions.arn}/index/*",
+          aws_dynamodb_table.pattern_feedback.arn,
+          "${aws_dynamodb_table.pattern_feedback.arn}/index/*"
         ]
       }
     ]

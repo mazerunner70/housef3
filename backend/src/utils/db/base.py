@@ -435,6 +435,9 @@ class DynamoDBTables:
         'fzip_jobs': 'FZIP_JOBS_TABLE',
         'user_preferences': 'USER_PREFERENCES_TABLE',
         'workflows': 'WORKFLOWS_TABLE',
+        'recurring_charge_patterns': 'RECURRING_CHARGE_PATTERNS_TABLE',
+        'recurring_charge_predictions': 'RECURRING_CHARGE_PREDICTIONS_TABLE',
+        'pattern_feedback': 'PATTERN_FEEDBACK_TABLE',
     }
     
     def __new__(cls):
@@ -520,6 +523,21 @@ class DynamoDBTables:
     def workflows(self) -> Any:
         """Get workflows table."""
         return self._get_table('workflows')
+    
+    @property
+    def recurring_charge_patterns(self) -> Any:
+        """Get recurring charge patterns table."""
+        return self._get_table('recurring_charge_patterns')
+    
+    @property
+    def recurring_charge_predictions(self) -> Any:
+        """Get recurring charge predictions table."""
+        return self._get_table('recurring_charge_predictions')
+    
+    @property
+    def pattern_feedback(self) -> Any:
+        """Get pattern feedback table."""
+        return self._get_table('pattern_feedback')
     
     def reinitialize(self):
         """Reinitialize DynamoDB resource (useful for testing)."""

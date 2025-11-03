@@ -19,8 +19,7 @@ import uuid
 from models.transaction import Transaction
 from models.category import Category, CategoryType, CategoryCreate
 from utils.db_utils import (
-    list_user_transactions, 
-    get_categories_table,
+    list_user_transactions,
     list_categories_by_user_from_db,
     update_transaction,
     create_category_in_db
