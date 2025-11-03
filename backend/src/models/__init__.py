@@ -63,10 +63,14 @@ from .user_preferences import (
 
 from .recurring_charge import (
     RecurringChargePattern,
+    RecurringChargePatternCreate,
+    RecurringChargePatternUpdate,
     RecurrenceFrequency,
     TemporalPatternType,
     RecurringChargePrediction,
-    PatternFeedback
+    RecurringChargePredictionCreate,
+    PatternFeedback,
+    PatternFeedbackCreate
 )
 
 __all__ = [
@@ -108,10 +112,14 @@ __all__ = [
     'UIPreferences',
     'TransactionPreferences',
     'RecurringChargePattern',
+    'RecurringChargePatternCreate',
+    'RecurringChargePatternUpdate',
     'RecurrenceFrequency',
     'TemporalPatternType',
     'RecurringChargePrediction',
+    'RecurringChargePredictionCreate',
     'PatternFeedback',
+    'PatternFeedbackCreate',
 ]
 
 from .account import AccountCreate, AccountUpdate

@@ -204,6 +204,151 @@ class RecurringChargePattern(BaseModel):
                 data['temporalPatternType'] = TemporalPatternType.FLEXIBLE
 
 
+class RecurringChargePatternCreate(BaseModel):
+    """
+    Data Transfer Object for creating a new recurring charge pattern.
+    
+    This DTO contains all required fields for pattern creation except
+    auto-generated fields (pattern_id, created_at, updated_at).
+    """
+    user_id: str = Field(alias="userId")
+    
+    # Pattern identification
+    merchant_pattern: str = Field(alias="merchantPattern")  # Regex or substring for matching
+    frequency: RecurrenceFrequency
+    temporal_pattern_type: TemporalPatternType = Field(alias="temporalPatternType")
+    
+    # Temporal constraints
+    day_of_week: Optional[int] = Field(default=None, alias="dayOfWeek", ge=0, le=6)
+    day_of_month: Optional[int] = Field(default=None, alias="dayOfMonth", ge=1, le=31)
+    tolerance_days: int = Field(default=2, alias="toleranceDays", ge=0)
+    
+    # Amount constraints
+    amount_mean: Decimal = Field(alias="amountMean")
+    amount_std: Decimal = Field(alias="amountStd")
+    amount_min: Decimal = Field(alias="amountMin")
+    amount_max: Decimal = Field(alias="amountMax")
+    amount_tolerance_pct: float = Field(default=10.0, alias="amountTolerancePct", ge=0.0, le=100.0)
+    
+    # Pattern metadata
+    confidence_score: float = Field(alias="confidenceScore", ge=0.0, le=1.0)
+    transaction_count: int = Field(alias="transactionCount", ge=0)
+    first_occurrence: int = Field(alias="firstOccurrence")
+    last_occurrence: int = Field(alias="lastOccurrence")
+    
+    # ML features
+    feature_vector: Optional[List[float]] = Field(default=None, alias="featureVector")
+    cluster_id: Optional[int] = Field(default=None, alias="clusterId")
+    
+    # Associated category
+    suggested_category_id: Optional[uuid.UUID] = Field(default=None, alias="suggestedCategoryId")
+    auto_categorize: bool = Field(default=False, alias="autoCategorize")
+    
+    # Status
+    active: bool = Field(default=True)
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        json_encoders={
+            Decimal: str,
+            uuid.UUID: str
+        },
+        use_enum_values=True
+    )
+
+    @field_validator('first_occurrence', 'last_occurrence')
+    @classmethod
+    def check_positive_timestamp(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError(TIMESTAMP_ERROR_MESSAGE)
+        return v
+
+    @field_validator('day_of_week')
+    @classmethod
+    def validate_day_of_week(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and not (0 <= v <= 6):
+            raise ValueError("day_of_week must be between 0 (Monday) and 6 (Sunday)")
+        return v
+
+    @field_validator('day_of_month')
+    @classmethod
+    def validate_day_of_month(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and not (1 <= v <= 31):
+            raise ValueError("day_of_month must be between 1 and 31")
+        return v
+
+
+class RecurringChargePatternUpdate(BaseModel):
+    """
+    Data Transfer Object for updating a recurring charge pattern.
+    
+    All fields are optional to allow partial updates.
+    """
+    # Pattern identification
+    merchant_pattern: Optional[str] = Field(default=None, alias="merchantPattern")
+    frequency: Optional[RecurrenceFrequency] = None
+    temporal_pattern_type: Optional[TemporalPatternType] = Field(default=None, alias="temporalPatternType")
+    
+    # Temporal constraints
+    day_of_week: Optional[int] = Field(default=None, alias="dayOfWeek", ge=0, le=6)
+    day_of_month: Optional[int] = Field(default=None, alias="dayOfMonth", ge=1, le=31)
+    tolerance_days: Optional[int] = Field(default=None, alias="toleranceDays", ge=0)
+    
+    # Amount constraints
+    amount_mean: Optional[Decimal] = Field(default=None, alias="amountMean")
+    amount_std: Optional[Decimal] = Field(default=None, alias="amountStd")
+    amount_min: Optional[Decimal] = Field(default=None, alias="amountMin")
+    amount_max: Optional[Decimal] = Field(default=None, alias="amountMax")
+    amount_tolerance_pct: Optional[float] = Field(default=None, alias="amountTolerancePct", ge=0.0, le=100.0)
+    
+    # Pattern metadata
+    confidence_score: Optional[float] = Field(default=None, alias="confidenceScore", ge=0.0, le=1.0)
+    transaction_count: Optional[int] = Field(default=None, alias="transactionCount", ge=0)
+    first_occurrence: Optional[int] = Field(default=None, alias="firstOccurrence")
+    last_occurrence: Optional[int] = Field(default=None, alias="lastOccurrence")
+    
+    # ML features
+    feature_vector: Optional[List[float]] = Field(default=None, alias="featureVector")
+    cluster_id: Optional[int] = Field(default=None, alias="clusterId")
+    
+    # Associated category
+    suggested_category_id: Optional[uuid.UUID] = Field(default=None, alias="suggestedCategoryId")
+    auto_categorize: Optional[bool] = Field(default=None, alias="autoCategorize")
+    
+    # Status
+    active: Optional[bool] = None
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        json_encoders={
+            Decimal: str,
+            uuid.UUID: str
+        },
+        use_enum_values=True
+    )
+
+    @field_validator('first_occurrence', 'last_occurrence')
+    @classmethod
+    def check_positive_timestamp(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v < 0:
+            raise ValueError(TIMESTAMP_ERROR_MESSAGE)
+        return v
+
+    @field_validator('day_of_week')
+    @classmethod
+    def validate_day_of_week(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and not (0 <= v <= 6):
+            raise ValueError("day_of_week must be between 0 (Monday) and 6 (Sunday)")
+        return v
+
+    @field_validator('day_of_month')
+    @classmethod
+    def validate_day_of_month(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and not (1 <= v <= 31):
+            raise ValueError("day_of_month must be between 1 and 31")
+        return v
+
+
 class RecurringChargePrediction(BaseModel):
     """
     Prediction for next occurrence of a recurring charge.
@@ -276,6 +421,66 @@ class RecurringChargePrediction(BaseModel):
         # amount_range and expected_amount remain as Decimal (DynamoDB native)
         
         return cls.model_construct(**converted_data)
+
+
+class RecurringChargePredictionCreate(BaseModel):
+    """Data Transfer Object for creating a new recurring charge prediction."""
+    pattern_id: uuid.UUID = Field(alias="patternId")
+    next_expected_date: int = Field(alias="nextExpectedDate")  # Timestamp (ms)
+    expected_amount: Decimal = Field(alias="expectedAmount")
+    confidence: float = Field(ge=0.0, le=1.0)  # 0.0-1.0
+    days_until_due: int = Field(alias="daysUntilDue")
+    amount_range: Dict[str, Decimal] = Field(alias="amountRange")  # {"min": X, "max": Y}
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        json_encoders={
+            Decimal: str,
+            uuid.UUID: str
+        }
+    )
+
+    @field_validator('next_expected_date')
+    @classmethod
+    def check_positive_timestamp(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError(TIMESTAMP_ERROR_MESSAGE)
+        return v
+
+    @field_validator('confidence')
+    @classmethod
+    def validate_confidence(cls, v: float) -> float:
+        if not (0.0 <= v <= 1.0):
+            raise ValueError("confidence must be between 0.0 and 1.0")
+        return v
+
+
+class PatternFeedbackCreate(BaseModel):
+    """
+    Data Transfer Object for creating pattern feedback.
+    
+    Excludes auto-generated fields (feedback_id, timestamp).
+    """
+    pattern_id: uuid.UUID = Field(alias="patternId")
+    user_id: str = Field(alias="userId")
+    feedback_type: str = Field(alias="feedbackType")  # 'correct', 'incorrect', 'missed_transaction', 'false_positive'
+    user_correction: Optional[Dict[str, Any]] = Field(default=None, alias="userCorrection")  # What the user changed
+    transaction_id: Optional[uuid.UUID] = Field(default=None, alias="transactionId")
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        json_encoders={
+            uuid.UUID: str
+        }
+    )
+
+    @field_validator('feedback_type')
+    @classmethod
+    def validate_feedback_type(cls, v: str) -> str:
+        valid_types = {'correct', 'incorrect', 'missed_transaction', 'false_positive'}
+        if v not in valid_types:
+            raise ValueError(f"feedback_type must be one of {valid_types}")
+        return v
 
 
 class PatternFeedback(BaseModel):

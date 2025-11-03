@@ -19,9 +19,11 @@ from botocore.exceptions import ClientError
 
 from models.recurring_charge import (
     RecurringChargePattern,
+    RecurringChargePatternCreate,
     RecurrenceFrequency,
     TemporalPatternType,
     RecurringChargePrediction,
+    RecurringChargePredictionCreate,
     PatternFeedback
 )
 from utils.db.recurring_charges import (
@@ -52,8 +54,28 @@ def mock_tables():
 
 
 @pytest.fixture
+def sample_pattern_create():
+    """Create a sample recurring charge pattern Create DTO for testing."""
+    return RecurringChargePatternCreate(
+        userId="user123",
+        merchantPattern="NETFLIX",
+        frequency=RecurrenceFrequency.MONTHLY,
+        temporalPatternType=TemporalPatternType.DAY_OF_MONTH,
+        dayOfMonth=15,
+        amountMean=Decimal("14.99"),
+        amountStd=Decimal("0.00"),
+        amountMin=Decimal("14.99"),
+        amountMax=Decimal("14.99"),
+        confidenceScore=0.95,
+        transactionCount=12,
+        firstOccurrence=1672531200000,
+        lastOccurrence=1704067200000
+    )
+
+
+@pytest.fixture
 def sample_pattern():
-    """Create a sample recurring charge pattern for testing."""
+    """Create a sample recurring charge pattern (full model) for testing."""
     return RecurringChargePattern(
         userId="user123",
         merchantPattern="NETFLIX",
@@ -73,9 +95,9 @@ def sample_pattern():
 
 @pytest.fixture
 def sample_prediction():
-    """Create a sample prediction for testing."""
+    """Create a sample prediction Create DTO for testing."""
     pattern_id = uuid.uuid4()
-    return RecurringChargePrediction(
+    return RecurringChargePredictionCreate(
         patternId=pattern_id,
         nextExpectedDate=1704067200000,
         expectedAmount=Decimal("14.99"),
@@ -86,8 +108,20 @@ def sample_prediction():
 
 
 @pytest.fixture
+def sample_feedback_create():
+    """Create a sample feedback Create DTO for testing."""
+    pattern_id = uuid.uuid4()
+    from models.recurring_charge import PatternFeedbackCreate
+    return PatternFeedbackCreate(
+        patternId=pattern_id,
+        userId="user123",
+        feedbackType="correct"
+    )
+
+
+@pytest.fixture
 def sample_feedback():
-    """Create a sample feedback for testing."""
+    """Create a sample feedback (full model) for testing."""
     pattern_id = uuid.uuid4()
     return PatternFeedback(
         patternId=pattern_id,
@@ -99,9 +133,9 @@ def sample_feedback():
 class TestCreatePatternInDB:
     """Test cases for create_pattern_in_db."""
 
-    def test_create_pattern_success(self, mock_tables, sample_pattern):
+    def test_create_pattern_success(self, mock_tables, sample_pattern_create):
         """Test successfully creating a pattern."""
-        result = create_pattern_in_db(sample_pattern)
+        result = create_pattern_in_db(sample_pattern_create)
         
         # Verify put_item was called
         mock_tables.recurring_charge_patterns.put_item.assert_called_once()
@@ -109,16 +143,20 @@ class TestCreatePatternInDB:
         assert call_args[1]['Item']['userId'] == "user123"
         assert call_args[1]['Item']['merchantPattern'] == "NETFLIX"
         
-        # Verify the pattern is returned
-        assert result == sample_pattern
+        # Verify the returned pattern is a RecurringChargePattern with correct data
+        assert isinstance(result, RecurringChargePattern)
+        assert result.user_id == "user123"
+        assert result.merchant_pattern == "NETFLIX"
+        assert result.frequency == RecurrenceFrequency.MONTHLY
+        assert result.pattern_id is not None  # Auto-generated
 
-    def test_create_pattern_table_not_initialized(self, sample_pattern):
+    def test_create_pattern_table_not_initialized(self, sample_pattern_create):
         """Test error when table is not initialized."""
         with patch('utils.db.recurring_charges.tables') as mock:
             mock.recurring_charge_patterns = None
             
             with pytest.raises(ConnectionError, match="Database table not initialized"):
-                create_pattern_in_db(sample_pattern)
+                create_pattern_in_db(sample_pattern_create)
 
 
 class TestGetPatternByIdFromDB:
@@ -345,10 +383,13 @@ class TestUpdatePatternInDB:
         """Test successfully updating a pattern."""
         pattern_id = sample_pattern.pattern_id
         user_id = "user123"
-        updates = {
-            "active": False,
-            "confidenceScore": 0.98
-        }
+        
+        # Create update DTO
+        from models.recurring_charge import RecurringChargePatternUpdate
+        pattern_update = RecurringChargePatternUpdate(
+            active=False,
+            confidenceScore=0.98
+        )
         
         # Mock get_item response (for existence check)
         mock_tables.recurring_charge_patterns.get_item.return_value = {
@@ -363,7 +404,7 @@ class TestUpdatePatternInDB:
             'Attributes': updated_item
         }
         
-        result = update_pattern_in_db(pattern_id, user_id, updates)
+        result = update_pattern_in_db(pattern_id, user_id, pattern_update)
         
         # Verify update_item was called
         mock_tables.recurring_charge_patterns.update_item.assert_called_once()
@@ -376,13 +417,16 @@ class TestUpdatePatternInDB:
         """Test updating non-existent pattern raises NotFound."""
         pattern_id = uuid.uuid4()
         user_id = "user123"
-        updates = {"active": False}
+        
+        # Create update DTO
+        from models.recurring_charge import RecurringChargePatternUpdate
+        pattern_update = RecurringChargePatternUpdate(active=False)
         
         # Mock empty get_item response
         mock_tables.recurring_charge_patterns.get_item.return_value = {}
         
         with pytest.raises(NotFound, match="not found"):
-            update_pattern_in_db(pattern_id, user_id, updates)
+            update_pattern_in_db(pattern_id, user_id, pattern_update)
 
 
 class TestDeletePatternFromDB:
@@ -425,8 +469,8 @@ class TestBatchCreatePatternsInDB:
 
     def test_batch_create_success(self, mock_tables):
         """Test successfully batch creating patterns."""
-        patterns = [
-            RecurringChargePattern(
+        pattern_creates = [
+            RecurringChargePatternCreate(
                 userId="user123",
                 merchantPattern=f"MERCHANT{i}",
                 frequency=RecurrenceFrequency.MONTHLY,
@@ -447,7 +491,7 @@ class TestBatchCreatePatternsInDB:
         mock_writer = MagicMock()
         mock_tables.recurring_charge_patterns.batch_writer.return_value.__enter__.return_value = mock_writer
         
-        result = batch_create_patterns_in_db(patterns)
+        result = batch_create_patterns_in_db(pattern_creates)
         
         assert result == 10
         assert mock_writer.put_item.call_count == 10
@@ -459,9 +503,9 @@ class TestBatchCreatePatternsInDB:
 
     def test_batch_create_large_batch(self, mock_tables):
         """Test batch creating more than 25 items (DynamoDB limit)."""
-        # Create 50 patterns (should be split into 2 batches)
-        patterns = [
-            RecurringChargePattern(
+        # Create 50 pattern Create DTOs (should be split into 2 batches)
+        pattern_creates = [
+            RecurringChargePatternCreate(
                 userId="user123",
                 merchantPattern=f"MERCHANT{i}",
                 frequency=RecurrenceFrequency.MONTHLY,
@@ -482,7 +526,7 @@ class TestBatchCreatePatternsInDB:
         mock_writer = MagicMock()
         mock_tables.recurring_charge_patterns.batch_writer.return_value.__enter__.return_value = mock_writer
         
-        result = batch_create_patterns_in_db(patterns)
+        result = batch_create_patterns_in_db(pattern_creates)
         
         assert result == 50
         assert mock_writer.put_item.call_count == 50
@@ -532,7 +576,14 @@ class TestPredictionOperations:
         call_args = mock_tables.recurring_charge_predictions.put_item.call_args
         assert call_args[1]['Item']['userId'] == user_id
         
-        assert result == sample_prediction
+        # Verify the result is a RecurringChargePrediction model with the same data
+        assert isinstance(result, RecurringChargePrediction)
+        assert result.pattern_id == sample_prediction.pattern_id
+        assert result.next_expected_date == sample_prediction.next_expected_date
+        assert result.expected_amount == sample_prediction.expected_amount
+        assert result.confidence == sample_prediction.confidence
+        assert result.days_until_due == sample_prediction.days_until_due
+        assert result.amount_range == sample_prediction.amount_range
 
     def test_list_predictions_success(self, mock_tables):
         """Test successfully listing predictions."""
@@ -614,14 +665,18 @@ class TestPredictionOperations:
 class TestFeedbackOperations:
     """Test cases for feedback operations."""
 
-    def test_save_feedback_success(self, mock_tables, sample_feedback):
+    def test_save_feedback_success(self, mock_tables, sample_feedback_create):
         """Test successfully saving feedback."""
-        result = save_feedback_in_db(sample_feedback)
+        result = save_feedback_in_db(sample_feedback_create)
         
         # Verify put_item was called
         mock_tables.pattern_feedback.put_item.assert_called_once()
         
-        assert result == sample_feedback
+        # Verify the returned feedback is a PatternFeedback with correct data
+        assert isinstance(result, PatternFeedback)
+        assert result.user_id == "user123"
+        assert result.feedback_type == "correct"
+        assert result.feedback_id is not None  # Auto-generated
 
     def test_list_feedback_by_pattern(self, mock_tables):
         """Test listing feedback for a specific pattern."""

@@ -12,8 +12,12 @@ from boto3.dynamodb.conditions import Key, Attr
 
 from models.recurring_charge import (
     RecurringChargePattern,
+    RecurringChargePatternCreate,
+    RecurringChargePatternUpdate,
     RecurringChargePrediction,
-    PatternFeedback
+    RecurringChargePredictionCreate,
+    PatternFeedback,
+    PatternFeedbackCreate
 )
 from .base import (
     tables,
@@ -56,12 +60,12 @@ def checked_mandatory_pattern(pattern_id: uuid.UUID, user_id: str) -> RecurringC
 # ============================================================================
 
 @dynamodb_operation("create_pattern_in_db")
-def create_pattern_in_db(pattern: RecurringChargePattern) -> RecurringChargePattern:
+def create_pattern_in_db(pattern_create: RecurringChargePatternCreate) -> RecurringChargePattern:
     """
     Persist a new recurring charge pattern to DynamoDB.
     
     Args:
-        pattern: The RecurringChargePattern object to create
+        pattern_create: The RecurringChargePatternCreate DTO with pattern data
         
     Returns:
         The created RecurringChargePattern object
@@ -73,6 +77,10 @@ def create_pattern_in_db(pattern: RecurringChargePattern) -> RecurringChargePatt
     if not table:
         logger.error("DB: RecurringChargePatterns table not initialized for create_pattern_in_db")
         raise ConnectionError("Database table not initialized")
+    
+    # Instantiate the full model from the Create DTO
+    pattern_data = pattern_create.model_dump(by_alias=False)
+    pattern = RecurringChargePattern(**pattern_data)
     
     table.put_item(Item=pattern.to_dynamodb_item())
     logger.info(f"DB: Pattern {str(pattern.pattern_id)} created successfully for user {pattern.user_id}.")
@@ -158,7 +166,7 @@ def list_patterns_by_user_from_db(
 def update_pattern_in_db(
     pattern_id: uuid.UUID,
     user_id: str,
-    updates: Dict[str, Any]
+    pattern_update: RecurringChargePatternUpdate
 ) -> RecurringChargePattern:
     """
     Update a recurring charge pattern.
@@ -166,7 +174,7 @@ def update_pattern_in_db(
     Args:
         pattern_id: The pattern ID
         user_id: The user ID (for access control)
-        updates: Dictionary of fields to update
+        pattern_update: RecurringChargePatternUpdate DTO with fields to update
         
     Returns:
         Updated RecurringChargePattern object
@@ -184,6 +192,14 @@ def update_pattern_in_db(
     existing_pattern = get_pattern_by_id_from_db(pattern_id, user_id)
     if not existing_pattern:
         raise NotFound(f"Pattern {str(pattern_id)} not found")
+    
+    # Extract only the fields that were set (not None) from the DTO
+    updates = pattern_update.model_dump(by_alias=True, exclude_unset=True, exclude_none=True)
+    
+    if not updates:
+        # No updates provided, return existing pattern
+        logger.debug(f"DB: No updates provided for pattern {str(pattern_id)}")
+        return existing_pattern
     
     # Build update expression
     update_expression_parts = []
@@ -262,12 +278,12 @@ def delete_pattern_from_db(pattern_id: uuid.UUID, user_id: str) -> bool:
 @monitor_performance(operation_type="batch_write", warn_threshold_ms=1000)
 @retry_on_throttle(max_attempts=3)
 @dynamodb_operation("batch_create_patterns_in_db")
-def batch_create_patterns_in_db(patterns: List[RecurringChargePattern]) -> int:
+def batch_create_patterns_in_db(pattern_creates: List[RecurringChargePatternCreate]) -> int:
     """
     Batch create multiple recurring charge patterns.
     
     Args:
-        patterns: List of RecurringChargePattern objects to create
+        pattern_creates: List of RecurringChargePatternCreate DTOs to create
         
     Returns:
         Number of patterns successfully created
@@ -280,20 +296,23 @@ def batch_create_patterns_in_db(patterns: List[RecurringChargePattern]) -> int:
         logger.error("DB: RecurringChargePatterns table not initialized for batch_create_patterns_in_db")
         raise ConnectionError("Database table not initialized")
     
-    if not patterns:
+    if not pattern_creates:
         return 0
     
-    logger.debug(f"DB: Batch creating {len(patterns)} patterns")
+    logger.debug(f"DB: Batch creating {len(pattern_creates)} patterns")
     
     # DynamoDB batch_write_item has a limit of 25 items per batch
     batch_size = 25
     total_created = 0
     
-    for i in range(0, len(patterns), batch_size):
-        batch = patterns[i:i + batch_size]
+    for i in range(0, len(pattern_creates), batch_size):
+        batch = pattern_creates[i:i + batch_size]
         
         with table.batch_writer() as writer:
-            for pattern in batch:
+            for pattern_create in batch:
+                # Instantiate the full model from the Create DTO
+                pattern_data = pattern_create.model_dump(by_alias=False)
+                pattern = RecurringChargePattern(**pattern_data)
                 writer.put_item(Item=pattern.to_dynamodb_item())
                 total_created += 1
     
@@ -306,12 +325,12 @@ def batch_create_patterns_in_db(patterns: List[RecurringChargePattern]) -> int:
 # ============================================================================
 
 @dynamodb_operation("save_prediction_in_db")
-def save_prediction_in_db(prediction: RecurringChargePrediction, user_id: str) -> RecurringChargePrediction:
+def save_prediction_in_db(prediction_create: RecurringChargePredictionCreate, user_id: str) -> RecurringChargePrediction:
     """
     Save a recurring charge prediction to DynamoDB.
     
     Args:
-        prediction: The RecurringChargePrediction object to save
+        prediction_create: The RecurringChargePredictionCreate DTO with prediction data
         user_id: The user ID (for composite key)
         
     Returns:
@@ -319,12 +338,25 @@ def save_prediction_in_db(prediction: RecurringChargePrediction, user_id: str) -
         
     Raises:
         ConnectionError: If database table is not initialized
+        ValidationError: If prediction data is invalid
     """
     table = tables.recurring_charge_predictions
     if not table:
         logger.error("DB: RecurringChargePredictions table not initialized for save_prediction_in_db")
         raise ConnectionError("Database table not initialized")
     
+    # Construct the full RecurringChargePrediction model from the Create DTO
+    # This validates all fields according to the model's validators
+    prediction = RecurringChargePrediction(
+        patternId=prediction_create.pattern_id,
+        nextExpectedDate=prediction_create.next_expected_date,
+        expectedAmount=prediction_create.expected_amount,
+        confidence=prediction_create.confidence,
+        daysUntilDue=prediction_create.days_until_due,
+        amountRange=prediction_create.amount_range
+    )
+    
+    # Convert to DynamoDB item and add userId
     item = prediction.to_dynamodb_item()
     item['userId'] = user_id  # Add userId for partition key
     
@@ -378,12 +410,12 @@ def list_predictions_by_user_from_db(
 # ============================================================================
 
 @dynamodb_operation("save_feedback_in_db")
-def save_feedback_in_db(feedback: PatternFeedback) -> PatternFeedback:
+def save_feedback_in_db(feedback_create: PatternFeedbackCreate) -> PatternFeedback:
     """
     Save pattern feedback to DynamoDB.
     
     Args:
-        feedback: The PatternFeedback object to save
+        feedback_create: The PatternFeedbackCreate DTO with feedback data
         
     Returns:
         The saved PatternFeedback object
@@ -395,6 +427,10 @@ def save_feedback_in_db(feedback: PatternFeedback) -> PatternFeedback:
     if not table:
         logger.error("DB: PatternFeedback table not initialized for save_feedback_in_db")
         raise ConnectionError("Database table not initialized")
+    
+    # Instantiate the full model from the Create DTO
+    feedback_data = feedback_create.model_dump(by_alias=False)
+    feedback = PatternFeedback(**feedback_data)
     
     table.put_item(Item=feedback.to_dynamodb_item())
     logger.info(f"DB: Feedback {str(feedback.feedback_id)} saved successfully for pattern {str(feedback.pattern_id)}")

@@ -201,10 +201,10 @@ def get_memory_usage_mb() -> float:
         memory_info = process.memory_info()
         return memory_info.rss / (1024 * 1024)  # Convert bytes to MB
     except ImportError:
-        logger.debug("psutil not available, memory tracking disabled")
+        logger.debug("psutil not available, memory tracking disabled", exc_info=True)
         return 0.0
     except Exception as e:
-        logger.warning(f"Unable to get memory usage: {e}")
+        logger.exception(f"Unable to get memory usage: {e}")
         return 0.0
 
 
