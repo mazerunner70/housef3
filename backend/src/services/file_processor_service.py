@@ -37,7 +37,6 @@ from utils.db_utils import (
     delete_transactions_for_file,
     get_file_map,
     list_file_transactions,
-    get_transactions_table,
     update_transaction_file_object
 )
 from utils.file_processor_utils import (
@@ -325,7 +324,7 @@ def update_transaction_duplicates(
         if not transactions:
             return 0
             
-        logger.info(f"Checking for duplicate transactions")
+        logger.info("Checking for duplicate transactions")
         duplicate_count = 0
         for transaction in transactions:
             is_duplicate = check_duplicate_transaction(transaction)
@@ -355,7 +354,7 @@ def  determine_opening_balance_from_transaction_overlap(transactions: List[Trans
     try:
         if not transactions:
             return None
-        logger.info(f"Determining opening balance from transaction overlap or chronological adjacency")
+        logger.info("Determining opening balance from transaction overlap or chronological adjacency")
             
         first_transaction = min(transactions, key=lambda tx: tx.import_order or 0)
         last_transaction = max(transactions, key=lambda tx: tx.import_order or 0)
@@ -430,7 +429,7 @@ def  determine_opening_balance_from_transaction_overlap(transactions: List[Trans
             logger.info("Last transaction from previous file has no balance")
             return None
             
-        logger.info(f"No opening balance found from transaction overlap or chronological adjacency")        
+        logger.info("No opening balance found from transaction overlap or chronological adjacency")        
         return None
     except Exception as e:
         logger.error(f"Error determining opening balance: {str(e)}")
@@ -451,8 +450,8 @@ def update_opening_balance(transaction_file: TransactionFile) -> FileProcessorRe
 def change_file_account(transaction_file: TransactionFile) -> FileProcessorResponse:
     """Reassign a file to a different account."""
 
-    # Get old transaction_file
-    old_transaction_file = checked_mandatory_transaction_file(transaction_file.file_id, transaction_file.user_id)
+    # Verify transaction_file exists
+    checked_mandatory_transaction_file(transaction_file.file_id, transaction_file.user_id)
     if not transaction_file.currency:
         raise ValueError("Currency is required")
     # Validate new account
@@ -608,7 +607,6 @@ def process_file(transaction_file: TransactionFile) -> FileProcessorResponse:
     """
     logger.info(f"Processing file {transaction_file}")
     old_transaction_file = checked_optional_transaction_file(transaction_file.file_id, transaction_file.user_id)
-    #return upsert_file(old_transaction_file, transaction_file)
     transaction_file = set_defaults_from_account(transaction_file)
     if not old_transaction_file:
         create_transaction_file(transaction_file)

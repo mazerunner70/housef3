@@ -21,6 +21,13 @@ from utils.auth import get_user_from_event
 logger = logging.getLogger(__name__) # Use __name__ for module-specific logger
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
 
+# Constants for error messages
+ERROR_REQUEST_BODY_MISSING = "Request body is missing or empty"
+ERROR_INVALID_JSON = "Invalid JSON format in request body"
+ERROR_CATEGORY_NOT_FOUND = "Category not found or access denied"
+ERROR_DELETING_CATEGORY = "deleting category"
+ERROR_INTERNAL_SERVER = "Internal server error"
+
 # Database tables are initialized by db_utils when functions are called
 
 # --- Local Utility Functions (kept as per account_operations.py pattern) ---
@@ -55,7 +62,7 @@ def parse_and_validate_json(event: Dict[str, Any], model_class):
     """Parse JSON body and validate using Pydantic model."""
     body_str = event.get('body')
     if not body_str:
-        return None, create_response(400, {"message": "Request body is missing or empty"})
+        return None, create_response(400, {"message": ERROR_REQUEST_BODY_MISSING})
     
     try:
         return model_class.model_validate_json(body_str), None
@@ -63,8 +70,8 @@ def parse_and_validate_json(event: Dict[str, Any], model_class):
         logger.error(f"Validation error: {str(e)}")
         return None, create_response(400, {"message": "Invalid request data", "details": e.errors()})
     except json.JSONDecodeError:
-        logger.error("Invalid JSON format in request body")
-        return None, create_response(400, {"message": "Invalid JSON format in request body"})
+        logger.error(ERROR_INVALID_JSON)
+        return None, create_response(400, {"message": ERROR_INVALID_JSON})
 
 def serialize_model(model, success_message: Optional[str] = None) -> Dict[str, Any]:
     """Serialize a Pydantic model to JSON-safe dict."""
@@ -103,9 +110,9 @@ def get_rule_engine() -> CategoryRuleEngine:
     """Get a CategoryRuleEngine instance."""
     return CategoryRuleEngine()
 
-def handle_category_not_found(category_id: str) -> Dict[str, Any]:
+def handle_category_not_found() -> Dict[str, Any]:
     """Standard response for category not found."""
-    return create_response(404, {"message": "Category not found or access denied"})
+    return create_response(404, {"message": ERROR_CATEGORY_NOT_FOUND})
 
 def handle_validation_error(operation: str, error: Exception) -> Dict[str, Any]:
     """Standard response for validation errors."""
@@ -183,7 +190,7 @@ def get_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
         # Get the category
         category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
         if not category:
-            return handle_category_not_found(category_id)
+            return handle_category_not_found()
         
         return create_response(200, {
             'category': serialize_model(category)
@@ -216,7 +223,7 @@ def update_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
         # Update the category
         updated_category = update_category_in_db(uuid.UUID(category_id), user_id, update_payload)
         if not updated_category:
-            return handle_category_not_found(category_id)
+            return handle_category_not_found()
         
         return create_response(200, {
             'message': 'Category updated successfully',
@@ -241,15 +248,15 @@ def delete_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
                 'categoryId': category_id
             })
         else:
-            return handle_category_not_found(category_id)
+            return handle_category_not_found()
         
     except ValueError as e:
         # Special handling for child categories error
         if "it has child categories" in str(e):
-            return handle_validation_error("deleting category", e)
-        return handle_validation_error("deleting category", e)
+            return handle_validation_error(ERROR_DELETING_CATEGORY, e)
+        return handle_validation_error(ERROR_DELETING_CATEGORY, e)
     except Exception as e:
-        return handle_server_error("deleting category", e)
+        return handle_server_error(ERROR_DELETING_CATEGORY, e)
 
 def get_category_hierarchy_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """
@@ -311,7 +318,7 @@ def test_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[str,
         body_str = event.get('body')
         if not body_str:
             logger.warning("API_DEBUG: Request body is missing or empty")
-            return create_response(400, {"message": "Request body is missing or empty"})
+            return create_response(400, {"message": ERROR_REQUEST_BODY_MISSING})
         
         logger.info(f"API_DEBUG: Request body: {body_str}")
         
@@ -338,7 +345,7 @@ def test_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[str,
                 limit = int(limit)
             logger.info(f"API_DEBUG: Using limit: {limit}")
                 
-        except (json.JSONDecodeError, ValidationError, ValueError) as e:
+        except (json.JSONDecodeError, ValidationError) as e:
             logger.error(f"API_DEBUG: Error parsing rule data: {str(e)}")
             return create_response(400, {"message": "Invalid rule data"})
         
@@ -350,10 +357,10 @@ def test_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[str,
         
         # Initialize rule engine using utility function
         rule_engine = get_rule_engine()
-        logger.info(f"API_DEBUG: Initialized rule engine")
+        logger.info("API_DEBUG: Initialized rule engine")
         
         # Test rule against transactions
-        logger.info(f"API_DEBUG: Starting rule test against transactions")
+        logger.info("API_DEBUG: Starting rule test against transactions")
         rule_test_result = rule_engine.test_rule_against_transactions(
             user_id=user_id,
             rule=rule,
@@ -415,7 +422,7 @@ def preview_category_matches_handler(event: Dict[str, Any], user_id: str) -> Dic
         # Get category from database
         category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
         if not category:
-            return create_response(404, {"error": "Category not found or access denied"})
+            return create_response(404, {"error": ERROR_CATEGORY_NOT_FOUND})
         
         # Get optional parameters
         query_params = event.get('queryStringParameters', {}) or {}
@@ -485,7 +492,7 @@ def preview_category_matches_handler(event: Dict[str, Any], user_id: str) -> Dic
         return create_response(400, {"error": str(ve)})
     except Exception as e:
         logger.error(f"Error previewing category matches: {str(e)}", exc_info=True)
-        return create_response(500, {"error": "Internal server error", "message": str(e)})
+        return create_response(500, {"error": ERROR_INTERNAL_SERVER, "message": str(e)})
 
 def generate_category_suggestions_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """
@@ -543,7 +550,7 @@ def generate_category_suggestions_handler(event: Dict[str, Any], user_id: str) -
         return create_response(400, {"error": str(ve)})
     except Exception as e:
         logger.error(f"Error generating category suggestions: {str(e)}", exc_info=True)
-        return create_response(500, {"error": "Internal server error", "message": str(e)})
+        return create_response(500, {"error": ERROR_INTERNAL_SERVER, "message": str(e)})
 
 def apply_category_rules_bulk_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """
@@ -554,12 +561,12 @@ def apply_category_rules_bulk_handler(event: Dict[str, Any], user_id: str) -> Di
     try:
         body_str = event.get('body')
         if not body_str:
-            return create_response(400, {"error": "Request body is missing or empty"})
+            return create_response(400, {"error": ERROR_REQUEST_BODY_MISSING})
         
         try:
             body_data = json.loads(body_str)
         except json.JSONDecodeError:
-            return create_response(400, {"error": "Invalid JSON format in request body"})
+            return create_response(400, {"error": ERROR_INVALID_JSON})
         
         category_id = body_data.get('categoryId')
         transaction_ids = body_data.get('transactionIds')
@@ -601,9 +608,9 @@ def apply_category_rules_bulk_handler(event: Dict[str, Any], user_id: str) -> Di
         
     except Exception as e:
         logger.error(f"Error applying category rules in bulk: {str(e)}", exc_info=True)
-        return create_response(500, {"error": "Internal server error", "message": str(e)})
+        return create_response(500, {"error": ERROR_INTERNAL_SERVER, "message": str(e)})
 
-def validate_regex_pattern_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+def validate_regex_pattern_handler(event: Dict[str, Any], _user_id: str) -> Dict[str, Any]:
     """
     Validate a regex pattern
     POST /categories/validate-regex
@@ -612,13 +619,13 @@ def validate_regex_pattern_handler(event: Dict[str, Any], user_id: str) -> Dict[
     try:
         body_str = event.get('body')
         if not body_str:
-            return create_response(400, {"error": "Request body is missing or empty"})
+            return create_response(400, {"error": ERROR_REQUEST_BODY_MISSING})
         
         try:
             body_data = json.loads(body_str)
             pattern = body_data.get('pattern', '')
         except json.JSONDecodeError:
-            return create_response(400, {"error": "Invalid JSON format in request body"})
+            return create_response(400, {"error": ERROR_INVALID_JSON})
         
         if not pattern:
             return create_response(400, {"error": "Pattern is required"})
@@ -638,9 +645,9 @@ def validate_regex_pattern_handler(event: Dict[str, Any], user_id: str) -> Dict[
         
     except Exception as e:
         logger.error(f"Error validating regex pattern: {str(e)}", exc_info=True)
-        return create_response(500, {"error": "Internal server error", "message": str(e)})
+        return create_response(500, {"error": ERROR_INTERNAL_SERVER, "message": str(e)})
 
-def generate_pattern_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+def generate_pattern_handler(event: Dict[str, Any], _user_id: str) -> Dict[str, Any]:
     """
     Generate a pattern from sample descriptions
     POST /categories/generate-pattern
@@ -652,14 +659,14 @@ def generate_pattern_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
     try:
         body_str = event.get('body')
         if not body_str:
-            return create_response(400, {"error": "Request body is missing or empty"})
+            return create_response(400, {"error": ERROR_REQUEST_BODY_MISSING})
         
         try:
             body_data = json.loads(body_str)
             descriptions = body_data.get('descriptions', [])
             pattern_type = body_data.get('patternType', 'contains')
         except json.JSONDecodeError:
-            return create_response(400, {"error": "Invalid JSON format in request body"})
+            return create_response(400, {"error": ERROR_INVALID_JSON})
         
         if not descriptions or not isinstance(descriptions, list):
             return create_response(400, {"error": "Descriptions array is required"})
@@ -682,7 +689,7 @@ def generate_pattern_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
         
     except Exception as e:
         logger.error(f"Error generating pattern: {str(e)}", exc_info=True)
-        return create_response(500, {"error": "Internal server error", "message": str(e)})
+        return create_response(500, {"error": ERROR_INTERNAL_SERVER, "message": str(e)})
 
 # --- Category Rule Management Handlers (Individual Rules) ---
 
@@ -697,20 +704,20 @@ def add_rule_to_category_handler(event: Dict[str, Any], user_id: str) -> Dict[st
         
         body_str = event.get('body')
         if not body_str:
-            return create_response(400, {"error": "Request body is missing or empty"})
+            return create_response(400, {"error": ERROR_REQUEST_BODY_MISSING})
         
         try:
             rule_data = json.loads(body_str)
             # Create new rule with generated ID
             rule = CategoryRule(**rule_data)
-        except (json.JSONDecodeError, ValidationError, ValueError) as e:
+        except (json.JSONDecodeError, ValidationError) as e:
             logger.error(f"Error parsing rule data: {str(e)}")
             return create_response(400, {"error": "Invalid rule data", "details": str(e)})
         
         # Get existing category
         category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
         if not category:
-            return create_response(404, {"error": "Category not found or access denied"})
+            return create_response(404, {"error": ERROR_CATEGORY_NOT_FOUND})
         
         # Diagnostic logging
         logger.info(f"DIAG: Retrieved category {category_id} with {len(category.rules)} existing rules")
@@ -757,7 +764,7 @@ def add_rule_to_category_handler(event: Dict[str, Any], user_id: str) -> Dict[st
         return create_response(400, {"error": str(ve)})
     except Exception as e:
         logger.error(f"Error adding rule to category: {str(e)}", exc_info=True)
-        return create_response(500, {"error": "Internal server error", "message": str(e)})
+        return create_response(500, {"error": ERROR_INTERNAL_SERVER, "message": str(e)})
 
 def update_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """
@@ -771,17 +778,17 @@ def update_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[st
         
         body_str = event.get('body')
         if not body_str:
-            return create_response(400, {"error": "Request body is missing or empty"})
+            return create_response(400, {"error": ERROR_REQUEST_BODY_MISSING})
         
         try:
             update_data = json.loads(body_str)
         except json.JSONDecodeError:
-            return create_response(400, {"error": "Invalid JSON format in request body"})
+            return create_response(400, {"error": ERROR_INVALID_JSON})
         
         # Get existing category
         category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
         if not category:
-            return create_response(404, {"error": "Category not found or access denied"})
+            return create_response(404, {"error": ERROR_CATEGORY_NOT_FOUND})
         
         # Find rule to update
         rule_index = None
@@ -816,7 +823,7 @@ def update_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[st
         return create_response(400, {"error": str(ve)})
     except Exception as e:
         logger.error(f"Error updating category rule: {str(e)}", exc_info=True)
-        return create_response(500, {"error": "Internal server error", "message": str(e)})
+        return create_response(500, {"error": ERROR_INTERNAL_SERVER, "message": str(e)})
 
 def delete_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """
@@ -830,7 +837,7 @@ def delete_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[st
         # Get existing category
         category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
         if not category:
-            return create_response(404, {"error": "Category not found or access denied"})
+            return create_response(404, {"error": ERROR_CATEGORY_NOT_FOUND})
         
         # Find and remove rule
         original_count = len(category.rules)
@@ -851,7 +858,7 @@ def delete_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[st
         return create_response(400, {"error": str(ve)})
     except Exception as e:
         logger.error(f"Error deleting category rule: {str(e)}", exc_info=True)
-        return create_response(500, {"error": "Internal server error", "message": str(e)})
+        return create_response(500, {"error": ERROR_INTERNAL_SERVER, "message": str(e)})
 
 # --- Phase 4.1 Pattern Extraction & Smart Category Creation Handlers ---
 
@@ -926,7 +933,7 @@ def suggest_category_from_transaction_handler(event: Dict[str, Any], user_id: st
         logger.error(f"Error suggesting category from transaction: {str(e)}")
         return create_response(500, {"message": "Error suggesting category from transaction"})
 
-def extract_patterns_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+def extract_patterns_handler(event: Dict[str, Any], _user_id: str) -> Dict[str, Any]:
     """Extract rule patterns from transaction description(s)."""
     try:
         from services.pattern_extraction_service import PatternExtractionService
@@ -1085,12 +1092,12 @@ def reset_and_reapply_categories_handler(event: Dict[str, Any], user_id: str) ->
     try:
         body_str = event.get('body')
         if not body_str:
-            return create_response(400, {"error": "Request body is missing or empty"})
+            return create_response(400, {"error": ERROR_REQUEST_BODY_MISSING})
         
         try:
             body_data = json.loads(body_str)
         except json.JSONDecodeError:
-            return create_response(400, {"error": "Invalid JSON format in request body"})
+            return create_response(400, {"error": ERROR_INVALID_JSON})
         
         # Safety check - require explicit confirmation
         if not body_data.get('confirmReset'):
@@ -1187,7 +1194,7 @@ def reset_and_reapply_categories_handler(event: Dict[str, Any], user_id: str) ->
         
     except Exception as e:
         logger.error(f"Error in reset and reapply categories: {str(e)}", exc_info=True)
-        return create_response(500, {"error": "Internal server error", "message": str(e)})
+        return create_response(500, {"error": ERROR_INTERNAL_SERVER, "message": str(e)})
 
 # --- Main Lambda Handler (Router) ---
 
