@@ -18,6 +18,13 @@ from typing import Callable, TypeVar, Dict, Any, Optional
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+# Optional dependency for memory tracking
+try:
+    import psutil  # type: ignore[import-not-found]
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 T = TypeVar('T')
@@ -193,16 +200,14 @@ def get_memory_usage_mb() -> float:
     Returns:
         Memory usage in MB, or 0.0 if unable to determine
     """
+    if not PSUTIL_AVAILABLE:
+        return 0.0
+    
     try:
-        import psutil
         import os
-        
         process = psutil.Process(os.getpid())
         memory_info = process.memory_info()
         return memory_info.rss / (1024 * 1024)  # Convert bytes to MB
-    except ImportError:
-        logger.debug("psutil not available, memory tracking disabled", exc_info=True)
-        return 0.0
     except Exception as e:
         logger.exception(f"Unable to get memory usage: {e}")
         return 0.0

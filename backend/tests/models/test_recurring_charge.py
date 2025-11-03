@@ -98,12 +98,12 @@ class TestRecurringChargePattern:
         assert pattern.frequency == RecurrenceFrequency.MONTHLY
         assert pattern.temporal_pattern_type == TemporalPatternType.DAY_OF_MONTH
         assert pattern.amount_mean == Decimal("14.99")
-        assert pattern.confidence_score == 0.95
+        assert pattern.confidence_score == pytest.approx(0.95)
         assert pattern.transaction_count == 12
         assert pattern.active is True
         assert pattern.auto_categorize is False
         assert pattern.tolerance_days == 2  # Default value
-        assert pattern.amount_tolerance_pct == 10.0  # Default value
+        assert pattern.amount_tolerance_pct == pytest.approx(10.0)  # Default value
 
     def test_create_pattern_with_all_fields(self):
         """Test creating a pattern with all optional fields."""
@@ -142,7 +142,7 @@ class TestRecurringChargePattern:
         assert pattern.frequency == RecurrenceFrequency.MONTHLY
         assert pattern.temporal_pattern_type == TemporalPatternType.LAST_WORKING_DAY
         assert pattern.tolerance_days == 3
-        assert pattern.amount_tolerance_pct == 5.0
+        assert pattern.amount_tolerance_pct == pytest.approx(5.0)
         assert pattern.feature_vector == [0.1, 0.2, 0.3, 0.4, 0.5]
         assert pattern.cluster_id == 3
         assert pattern.suggested_category_id == category_id
@@ -247,7 +247,7 @@ class TestRecurringChargePattern:
         # Check other fields
         assert item["merchantPattern"] == "NETFLIX"
         assert item["dayOfMonth"] == 15
-        assert item["confidenceScore"] == 0.95
+        assert item["confidenceScore"] == pytest.approx(0.95)
         assert item["transactionCount"] == 12
         assert item["featureVector"] == [0.1, 0.2, 0.3]
 
@@ -303,7 +303,7 @@ class TestRecurringChargePattern:
         assert isinstance(pattern.transaction_count, int)
         
         # Check Decimal to float conversion for float fields
-        assert pattern.confidence_score == 0.95
+        assert pattern.confidence_score == pytest.approx(0.95)
         assert isinstance(pattern.confidence_score, float)
         
         # Check Decimal preservation for amount fields
@@ -373,7 +373,7 @@ class TestRecurringChargePrediction:
         assert prediction.pattern_id == pattern_id
         assert prediction.next_expected_date == 1704067200000
         assert prediction.expected_amount == Decimal("14.99")
-        assert prediction.confidence == 0.95
+        assert prediction.confidence == pytest.approx(0.95)
         assert prediction.days_until_due == 15
         assert prediction.amount_range["min"] == Decimal("14.49")
         assert prediction.amount_range["max"] == Decimal("15.49")
@@ -424,7 +424,7 @@ class TestRecurringChargePrediction:
         assert item["patternId"] == str(pattern_id)
         assert item["nextExpectedDate"] == 1704067200000
         assert item["expectedAmount"] == Decimal("14.99")
-        assert item["confidence"] == 0.95
+        assert item["confidence"] == pytest.approx(0.95)
         assert item["daysUntilDue"] == 15
 
     def test_prediction_from_dynamodb_item(self):
@@ -449,7 +449,7 @@ class TestRecurringChargePrediction:
         assert prediction.next_expected_date == 1704067200000
         assert isinstance(prediction.next_expected_date, int)
         assert prediction.expected_amount == Decimal("14.99")
-        assert prediction.confidence == 0.95
+        assert prediction.confidence == pytest.approx(0.95)
         assert isinstance(prediction.confidence, float)
         assert prediction.days_until_due == 15
         assert isinstance(prediction.days_until_due, int)
@@ -518,6 +518,7 @@ class TestPatternFeedback:
         )
 
         assert feedback.user_correction == correction
+        assert feedback.user_correction is not None
         assert feedback.user_correction["correct_merchant"] == "ACTUAL MERCHANT"
 
     def test_feedback_to_dynamodb_item(self):
@@ -566,6 +567,7 @@ class TestPatternFeedback:
         assert feedback.transaction_id == transaction_id
         assert feedback.timestamp == 1704067200000
         assert isinstance(feedback.timestamp, int)
+        assert feedback.user_correction is not None
         assert feedback.user_correction["notes"] == "This is not recurring"
 
     def test_feedback_roundtrip_serialization(self):

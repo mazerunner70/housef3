@@ -18,6 +18,14 @@ from models.events import TransactionUpdatedEvent, TransactionsDeletedEvent
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+# Constants for error messages
+ERROR_TRANSACTION_NOT_FOUND = "Transaction not found"
+ERROR_REQUEST_BODY_MISSING = "Request body is missing or empty"
+ERROR_INVALID_JSON = "Invalid JSON format in request body"
+ERROR_UNAUTHORIZED_MODIFY = "Unauthorized to modify this transaction"
+ERROR_INTERNAL_SERVER = "Internal server error"
+ERROR_CATEGORY_ID_REQUIRED = "Category ID is required"
+
 def get_transactions_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Handle GET /transactions request with filtering, sorting by date, and pagination."""
     try:
@@ -81,11 +89,6 @@ def get_transactions_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
             sort_order_date=sort_order,
             ignore_dup=ignore_dup
         )
-        
-        # Get all user categories to populate category information
-        from utils.db_utils import list_categories_by_user_from_db
-        user_categories = list_categories_by_user_from_db(user_id)
-        categories_map = {str(cat.categoryId): cat for cat in user_categories}
         
         # For DynamoDB pagination, we can't know the exact total count without scanning all items
         # Instead, we provide an estimated total based on pagination state
@@ -184,7 +187,7 @@ def delete_transaction_handler(event: Dict[str, Any], user_id: str) -> Dict[str,
         # Get transaction to verify ownership
         response = tables.transactions.get_item(Key={'transactionId': transaction_id})
         if 'Item' not in response:
-            return create_response(404, {"message": "Transaction not found"})
+            return create_response(404, {"message": ERROR_TRANSACTION_NOT_FOUND})
         
         transaction = Transaction.from_dynamodb_item(response['Item'])
         if transaction.user_id != user_id:
@@ -224,14 +227,14 @@ def confirm_category_suggestions_handler(event: Dict[str, Any], user_id: str) ->
         
         body_str = event.get('body')
         if not body_str:
-            return create_response(400, {"error": "Request body is missing or empty"})
+            return create_response(400, {"error": ERROR_REQUEST_BODY_MISSING})
         
         try:
             body_data = json.loads(body_str)
             confirmed_category_ids = body_data.get('confirmedCategoryIds', [])
             primary_category_id = body_data.get('primaryCategoryId')
         except json.JSONDecodeError:
-            return create_response(400, {"error": "Invalid JSON format in request body"})
+            return create_response(400, {"error": ERROR_INVALID_JSON})
         
         if not confirmed_category_ids:
             return create_response(400, {"error": "At least one category must be confirmed"})
@@ -239,11 +242,11 @@ def confirm_category_suggestions_handler(event: Dict[str, Any], user_id: str) ->
         # Get transaction from database
         response = tables.transactions.get_item(Key={'transactionId': transaction_id})
         if 'Item' not in response:
-            return create_response(404, {"error": "Transaction not found"})
+            return create_response(404, {"error": ERROR_TRANSACTION_NOT_FOUND})
         
         transaction = Transaction.from_dynamodb_item(response['Item'])
         if transaction.user_id != user_id:
-            return create_response(403, {"error": "Unauthorized to modify this transaction"})
+            return create_response(403, {"error": ERROR_UNAUTHORIZED_MODIFY})
         
         # Confirm the specified category suggestions
         confirmed_count = 0
@@ -276,7 +279,7 @@ def confirm_category_suggestions_handler(event: Dict[str, Any], user_id: str) ->
         return create_response(400, {"error": str(ve)})
     except Exception as e:
         logger.error(f"Error confirming category suggestions: {str(e)}", exc_info=True)
-        return create_response(500, {"error": "Internal server error", "message": str(e)})
+        return create_response(500, {"error": ERROR_INTERNAL_SERVER, "message": str(e)})
 
 def remove_category_assignment_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """
@@ -290,11 +293,11 @@ def remove_category_assignment_handler(event: Dict[str, Any], user_id: str) -> D
         # Get transaction from database
         response = tables.transactions.get_item(Key={'transactionId': transaction_id})
         if 'Item' not in response:
-            return create_response(404, {"error": "Transaction not found"})
+            return create_response(404, {"error": ERROR_TRANSACTION_NOT_FOUND})
         
         transaction = Transaction.from_dynamodb_item(response['Item'])
         if transaction.user_id != user_id:
-            return create_response(403, {"error": "Unauthorized to modify this transaction"})
+            return create_response(403, {"error": ERROR_UNAUTHORIZED_MODIFY})
         
         # Remove the category assignment
         category_uuid = uuid.UUID(category_id)
@@ -319,7 +322,7 @@ def remove_category_assignment_handler(event: Dict[str, Any], user_id: str) -> D
         return create_response(400, {"error": str(ve)})
     except Exception as e:
         logger.error(f"Error removing category assignment: {str(e)}", exc_info=True)
-        return create_response(500, {"error": "Internal server error", "message": str(e)})
+        return create_response(500, {"error": ERROR_INTERNAL_SERVER, "message": str(e)})
 
 def set_primary_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """
@@ -332,25 +335,25 @@ def set_primary_category_handler(event: Dict[str, Any], user_id: str) -> Dict[st
         
         body_str = event.get('body')
         if not body_str:
-            return create_response(400, {"error": "Request body is missing or empty"})
+            return create_response(400, {"error": ERROR_REQUEST_BODY_MISSING})
         
         try:
             body_data = json.loads(body_str)
             category_id = body_data.get('categoryId')
         except json.JSONDecodeError:
-            return create_response(400, {"error": "Invalid JSON format in request body"})
+            return create_response(400, {"error": ERROR_INVALID_JSON})
         
         if not category_id:
-            return create_response(400, {"error": "Category ID is required"})
+            return create_response(400, {"error": ERROR_CATEGORY_ID_REQUIRED})
         
         # Get transaction from database
         response = tables.transactions.get_item(Key={'transactionId': transaction_id})
         if 'Item' not in response:
-            return create_response(404, {"error": "Transaction not found"})
+            return create_response(404, {"error": ERROR_TRANSACTION_NOT_FOUND})
         
         transaction = Transaction.from_dynamodb_item(response['Item'])
         if transaction.user_id != user_id:
-            return create_response(403, {"error": "Unauthorized to modify this transaction"})
+            return create_response(403, {"error": ERROR_UNAUTHORIZED_MODIFY})
         
         # Set primary category
         category_uuid = uuid.UUID(category_id)
@@ -374,7 +377,7 @@ def set_primary_category_handler(event: Dict[str, Any], user_id: str) -> Dict[st
         return create_response(400, {"error": str(ve)})
     except Exception as e:
         logger.error(f"Error setting primary category: {str(e)}", exc_info=True)
-        return create_response(500, {"error": "Internal server error", "message": str(e)})
+        return create_response(500, {"error": ERROR_INTERNAL_SERVER, "message": str(e)})
 
 def add_manual_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """
@@ -387,26 +390,26 @@ def add_manual_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str
         
         body_str = event.get('body')
         if not body_str:
-            return create_response(400, {"error": "Request body is missing or empty"})
+            return create_response(400, {"error": ERROR_REQUEST_BODY_MISSING})
         
         try:
             body_data = json.loads(body_str)
             category_id = body_data.get('categoryId')
             is_primary = body_data.get('isPrimary', False)
         except json.JSONDecodeError:
-            return create_response(400, {"error": "Invalid JSON format in request body"})
+            return create_response(400, {"error": ERROR_INVALID_JSON})
         
         if not category_id:
-            return create_response(400, {"error": "Category ID is required"})
+            return create_response(400, {"error": ERROR_CATEGORY_ID_REQUIRED})
         
         # Get transaction from database
         response = tables.transactions.get_item(Key={'transactionId': transaction_id})
         if 'Item' not in response:
-            return create_response(404, {"error": "Transaction not found"})
+            return create_response(404, {"error": ERROR_TRANSACTION_NOT_FOUND})
         
         transaction = Transaction.from_dynamodb_item(response['Item'])
         if transaction.user_id != user_id:
-            return create_response(403, {"error": "Unauthorized to modify this transaction"})
+            return create_response(403, {"error": ERROR_UNAUTHORIZED_MODIFY})
         
         # Store old state for event tracking
         old_category_count = len(transaction.confirmed_categories)
@@ -459,7 +462,7 @@ def add_manual_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str
         return create_response(400, {"error": str(ve)})
     except Exception as e:
         logger.error(f"Error adding manual category: {str(e)}", exc_info=True)
-        return create_response(500, {"error": "Internal server error", "message": str(e)})
+        return create_response(500, {"error": ERROR_INTERNAL_SERVER, "message": str(e)})
 
 def quick_update_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """
@@ -472,25 +475,25 @@ def quick_update_category_handler(event: Dict[str, Any], user_id: str) -> Dict[s
         
         body_str = event.get('body')
         if not body_str:
-            return create_response(400, {"error": "Request body is missing or empty"})
+            return create_response(400, {"error": ERROR_REQUEST_BODY_MISSING})
         
         try:
             body_data = json.loads(body_str)
             category_id = body_data.get('categoryId')
         except json.JSONDecodeError:
-            return create_response(400, {"error": "Invalid JSON format in request body"})
+            return create_response(400, {"error": ERROR_INVALID_JSON})
         
         if not category_id:
-            return create_response(400, {"error": "Category ID is required"})
+            return create_response(400, {"error": ERROR_CATEGORY_ID_REQUIRED})
         
         # Get transaction from database
         response = tables.transactions.get_item(Key={'transactionId': transaction_id})
         if 'Item' not in response:
-            return create_response(404, {"error": "Transaction not found"})
+            return create_response(404, {"error": ERROR_TRANSACTION_NOT_FOUND})
         
         transaction = Transaction.from_dynamodb_item(response['Item'])
         if transaction.user_id != user_id:
-            return create_response(403, {"error": "Unauthorized to modify this transaction"})
+            return create_response(403, {"error": ERROR_UNAUTHORIZED_MODIFY})
         
         # Store old primary category for event tracking
         old_primary_category_id = transaction.primary_category_id
@@ -533,7 +536,7 @@ def quick_update_category_handler(event: Dict[str, Any], user_id: str) -> Dict[s
         return create_response(400, {"error": str(ve)})
     except Exception as e:
         logger.error(f"Error updating transaction category: {str(e)}", exc_info=True)
-        return create_response(500, {"error": "Internal server error", "message": str(e)})
+        return create_response(500, {"error": ERROR_INTERNAL_SERVER, "message": str(e)})
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main handler for transaction operations."""

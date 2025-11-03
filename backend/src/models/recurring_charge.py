@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 # Constants
 TIMESTAMP_ERROR_MESSAGE = "Timestamp must be a positive integer representing milliseconds since epoch"
+DAY_OF_WEEK_ERROR_MESSAGE = "day_of_week must be between 0 (Monday) and 6 (Sunday)"
+DAY_OF_MONTH_ERROR_MESSAGE = "day_of_month must be between 1 and 31"
 
 
 class RecurrenceFrequency(str, Enum):
@@ -123,14 +125,14 @@ class RecurringChargePattern(BaseModel):
     @classmethod
     def validate_day_of_week(cls, v: Optional[int]) -> Optional[int]:
         if v is not None and not (0 <= v <= 6):
-            raise ValueError("day_of_week must be between 0 (Monday) and 6 (Sunday)")
+            raise ValueError(DAY_OF_WEEK_ERROR_MESSAGE)
         return v
 
     @field_validator('day_of_month')
     @classmethod
     def validate_day_of_month(cls, v: Optional[int]) -> Optional[int]:
         if v is not None and not (1 <= v <= 31):
-            raise ValueError("day_of_month must be between 1 and 31")
+            raise ValueError(DAY_OF_MONTH_ERROR_MESSAGE)
         return v
 
     def to_dynamodb_item(self) -> Dict[str, Any]:
@@ -267,14 +269,14 @@ class RecurringChargePatternCreate(BaseModel):
     @classmethod
     def validate_day_of_week(cls, v: Optional[int]) -> Optional[int]:
         if v is not None and not (0 <= v <= 6):
-            raise ValueError("day_of_week must be between 0 (Monday) and 6 (Sunday)")
+            raise ValueError(DAY_OF_WEEK_ERROR_MESSAGE)
         return v
 
     @field_validator('day_of_month')
     @classmethod
     def validate_day_of_month(cls, v: Optional[int]) -> Optional[int]:
         if v is not None and not (1 <= v <= 31):
-            raise ValueError("day_of_month must be between 1 and 31")
+            raise ValueError(DAY_OF_MONTH_ERROR_MESSAGE)
         return v
 
 
@@ -338,14 +340,14 @@ class RecurringChargePatternUpdate(BaseModel):
     @classmethod
     def validate_day_of_week(cls, v: Optional[int]) -> Optional[int]:
         if v is not None and not (0 <= v <= 6):
-            raise ValueError("day_of_week must be between 0 (Monday) and 6 (Sunday)")
+            raise ValueError(DAY_OF_WEEK_ERROR_MESSAGE)
         return v
 
     @field_validator('day_of_month')
     @classmethod
     def validate_day_of_month(cls, v: Optional[int]) -> Optional[int]:
         if v is not None and not (1 <= v <= 31):
-            raise ValueError("day_of_month must be between 1 and 31")
+            raise ValueError(DAY_OF_MONTH_ERROR_MESSAGE)
         return v
 
 

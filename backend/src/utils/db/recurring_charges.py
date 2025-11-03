@@ -30,6 +30,9 @@ from .base import (
 
 logger = logging.getLogger(__name__)
 
+# Constants
+DB_TABLE_NOT_INITIALIZED_ERROR = "Database table not initialized"
+
 
 # ============================================================================
 # Helper Functions
@@ -76,7 +79,7 @@ def create_pattern_in_db(pattern_create: RecurringChargePatternCreate) -> Recurr
     table = tables.recurring_charge_patterns
     if not table:
         logger.error("DB: RecurringChargePatterns table not initialized for create_pattern_in_db")
-        raise ConnectionError("Database table not initialized")
+        raise ConnectionError(DB_TABLE_NOT_INITIALIZED_ERROR)
     
     # Instantiate the full model from the Create DTO
     pattern_data = pattern_create.model_dump(by_alias=False)
@@ -186,7 +189,7 @@ def update_pattern_in_db(
     table = tables.recurring_charge_patterns
     if not table:
         logger.error("DB: RecurringChargePatterns table not initialized for update_pattern_in_db")
-        raise ConnectionError("Database table not initialized")
+        raise ConnectionError(DB_TABLE_NOT_INITIALIZED_ERROR)
     
     # First, verify the pattern exists and belongs to the user
     existing_pattern = get_pattern_by_id_from_db(pattern_id, user_id)
@@ -258,7 +261,7 @@ def delete_pattern_from_db(pattern_id: uuid.UUID, user_id: str) -> bool:
     table = tables.recurring_charge_patterns
     if not table:
         logger.error("DB: RecurringChargePatterns table not initialized for delete_pattern_from_db")
-        raise ConnectionError("Database table not initialized")
+        raise ConnectionError(DB_TABLE_NOT_INITIALIZED_ERROR)
     
     # First, verify the pattern exists and belongs to the user
     existing_pattern = get_pattern_by_id_from_db(pattern_id, user_id)
@@ -294,7 +297,7 @@ def batch_create_patterns_in_db(pattern_creates: List[RecurringChargePatternCrea
     table = tables.recurring_charge_patterns
     if not table:
         logger.error("DB: RecurringChargePatterns table not initialized for batch_create_patterns_in_db")
-        raise ConnectionError("Database table not initialized")
+        raise ConnectionError(DB_TABLE_NOT_INITIALIZED_ERROR)
     
     if not pattern_creates:
         return 0
@@ -343,7 +346,7 @@ def save_prediction_in_db(prediction_create: RecurringChargePredictionCreate, us
     table = tables.recurring_charge_predictions
     if not table:
         logger.error("DB: RecurringChargePredictions table not initialized for save_prediction_in_db")
-        raise ConnectionError("Database table not initialized")
+        raise ConnectionError(DB_TABLE_NOT_INITIALIZED_ERROR)
     
     # Construct the full RecurringChargePrediction model from the Create DTO
     # This validates all fields according to the model's validators
@@ -426,7 +429,7 @@ def save_feedback_in_db(feedback_create: PatternFeedbackCreate) -> PatternFeedba
     table = tables.pattern_feedback
     if not table:
         logger.error("DB: PatternFeedback table not initialized for save_feedback_in_db")
-        raise ConnectionError("Database table not initialized")
+        raise ConnectionError(DB_TABLE_NOT_INITIALIZED_ERROR)
     
     # Instantiate the full model from the Create DTO
     feedback_data = feedback_create.model_dump(by_alias=False)
