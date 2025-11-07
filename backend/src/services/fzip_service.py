@@ -480,7 +480,7 @@ class FZIPService:
         job.error = error_message
         update_fzip_job(job)
         logger.error(f"Job {job.job_id} failed: {error_message}")
-        if job.job_type == FZIPType.RESTORE:
+        if type(job.job_type).__name__ == "FZIPType" and job.job_type.name == "RESTORE":
             event_service.publish_event(RestoreFailedEvent(
                 user_id=job.user_id,
                 restore_id=str(job.job_id),
@@ -1052,7 +1052,7 @@ class FZIPService:
         Also ensure terminal timestamp is recorded if missing.
         """
         latest = get_fzip_job(str(restore_job.job_id), restore_job.user_id)
-        if latest and latest.status == FZIPStatus.RESTORE_CANCELED:
+        if latest and type(latest.status).__name__ == "FZIPStatus" and latest.status.name == "RESTORE_CANCELED":
             restore_job.status = FZIPStatus.RESTORE_CANCELED
             restore_job.current_phase = "canceled"
             if not restore_job.completed_at:

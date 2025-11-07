@@ -32,7 +32,7 @@ class Money(BaseModel):
         json_encoders={
             Decimal: str
         },
-        use_enum_values=True,
+        use_enum_values=False,  # Preserve enum objects (not strings) for type safety
         arbitrary_types_allowed=True
     )
 

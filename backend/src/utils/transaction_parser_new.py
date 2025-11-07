@@ -565,22 +565,30 @@ def create_transaction_from_parsed_data(
     # Update balance
     new_balance = context.current_balance + parsed_data.amount
     
-    transaction = Transaction.create(
-        account_id=context.transaction_file.account_id,
-        user_id=context.transaction_file.user_id,
-        file_id=context.transaction_file.file_id,
+    # Create TransactionCreate DTO
+    from models.transaction import TransactionCreate
+    
+    # Ensure we have a currency value (required field)
+    currency = parsed_data.currency or context.transaction_file.currency or Currency.USD
+    
+    create_data = TransactionCreate(
+        accountId=context.transaction_file.account_id,
+        userId=context.transaction_file.user_id,
+        fileId=context.transaction_file.file_id,
         date=parsed_data.date,
         description=parsed_data.description.strip(),
         amount=parsed_data.amount,
-        currency=parsed_data.currency or context.transaction_file.currency,
+        currency=currency,
         balance=new_balance,
-        import_order=context.import_order,
-        transaction_type=parsed_data.transaction_type,
+        importOrder=context.import_order,
+        transactionType=parsed_data.transaction_type,
         memo=parsed_data.memo,
-        check_number=parsed_data.check_number,
-        fit_id=parsed_data.fit_id,
+        checkNumber=parsed_data.check_number,
+        fitId=parsed_data.fit_id,
         status=parsed_data.status
     )
+    
+    transaction = Transaction.create(create_data)
     
     # Update context for next transaction
     context.current_balance = new_balance
@@ -859,11 +867,11 @@ def _process_amount_for_format(mapped_data: Dict[str, Any], file_format: Optiona
     
     amount_str = str(mapped_data.get('amount', '0'))
     
-    if file_format == FileFormat.CSV:
+    if type(file_format).__name__ == "FileFormat" and file_format.name == "CSV":
         amount = process_csv_amount(amount_str, mapped_data.get('debitOrCredit'))
-    elif file_format in [FileFormat.OFX, FileFormat.QFX]:
+    elif type(file_format).__name__ == "FileFormat" and file_format.name in ["OFX", "QFX"]:
         amount = process_ofx_amount(amount_str)
-    elif file_format == FileFormat.QIF:
+    elif type(file_format).__name__ == "FileFormat" and file_format.name == "QIF":
         amount = process_qif_amount(amount_str)
     else:
         amount = Decimal(amount_str.replace(',', ''))

@@ -111,7 +111,7 @@ class RecurringChargePattern(BaseModel):
             Decimal: str,
             uuid.UUID: str
         },
-        use_enum_values=True
+        use_enum_values=False  # Preserve enum objects (not strings) for type safety
     )
 
     @field_validator('first_occurrence', 'last_occurrence', 'created_at', 'updated_at')
@@ -155,7 +155,7 @@ class RecurringChargePattern(BaseModel):
         cls._convert_uuid_fields(converted_data)
         cls._convert_enum_fields(converted_data)
         
-        return cls.model_construct(**converted_data)
+        return cls.model_validate(converted_data)
     
     @staticmethod
     def _convert_decimal_fields(data: Dict[str, Any]) -> None:
@@ -255,7 +255,7 @@ class RecurringChargePatternCreate(BaseModel):
             Decimal: str,
             uuid.UUID: str
         },
-        use_enum_values=True
+        use_enum_values=False  # Preserve enum objects (not strings) for type safety
     )
 
     @field_validator('first_occurrence', 'last_occurrence')
@@ -326,7 +326,7 @@ class RecurringChargePatternUpdate(BaseModel):
             Decimal: str,
             uuid.UUID: str
         },
-        use_enum_values=True
+        use_enum_values=False  # Preserve enum objects (not strings) for type safety
     )
 
     @field_validator('first_occurrence', 'last_occurrence')
@@ -422,7 +422,7 @@ class RecurringChargePrediction(BaseModel):
         
         # amount_range and expected_amount remain as Decimal (DynamoDB native)
         
-        return cls.model_construct(**converted_data)
+        return cls.model_validate(converted_data)
 
 
 class RecurringChargePredictionCreate(BaseModel):
@@ -552,5 +552,5 @@ class PatternFeedback(BaseModel):
                 except ValueError:
                     pass
         
-        return cls.model_construct(**converted_data)
+        return cls.model_validate(converted_data)
 

@@ -12,8 +12,8 @@ from models.account import (
     AccountCreate,
     AccountUpdate,
     AccountType,
-    convert_currency_input,
 )
+from utils.serde_utils import to_currency
 from models.transaction_file import FileFormat, TransactionFileCreate
 from utils.db_utils import (
     get_account,

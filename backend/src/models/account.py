@@ -13,34 +13,10 @@ from typing_extensions import Self
 from pydantic import BaseModel, Field, field_validator, ConfigDict, model_validator, ValidationInfo
 
 from models.money import Currency, Money
+from utils.serde_utils import to_currency
 
 # Configure logging
 logger = logging.getLogger(__name__)
-
-def convert_currency_input(currency_input: Any) -> Optional[Currency]:
-    """
-    Helper function to convert currency input (typically from API) to Currency enum.
-    Use this for API input handling before creating model instances.
-    
-    Args:
-        currency_input: String currency code or Currency enum
-        
-    Returns:
-        Currency enum or None
-        
-    Raises:
-        ValueError: If currency_input is invalid
-    """
-    if currency_input is None:
-        return None
-    if isinstance(currency_input, Currency):
-        return currency_input
-    if isinstance(currency_input, str):
-        try:
-            return Currency(currency_input)
-        except ValueError:
-            raise ValueError(f"Invalid currency value: '{currency_input}'. Valid options are: {', '.join([c.value for c in Currency])}")
-    raise ValueError(f"Currency must be a string or Currency enum, got {type(currency_input).__name__}: {currency_input}")
 
 
 class AccountType(str, enum.Enum):
@@ -81,6 +57,7 @@ class Account(BaseModel):
             Decimal: str,
             uuid.UUID: str
         },
+        use_enum_values=False,  # Preserve enum objects (not strings) for type safety
         arbitrary_types_allowed=True
     )
 
@@ -98,10 +75,6 @@ class Account(BaseModel):
         if v is None:
             return None
         if isinstance(v, Currency):
-            return v
-        # Check if this is from database deserialization
-        if info.context and info.context.get('from_database'):
-            # During database deserialization, we've already converted strings to enums
             return v
         # If we get here, something assigned a non-Currency value
         raise ValueError(f"Currency must be a Currency enum, got {type(v).__name__}: {v}")
@@ -199,8 +172,8 @@ class Account(BaseModel):
                 logger.warning(f"Invalid currency value from database: {data['currency']}, setting to None")
                 data['currency'] = None
 
-        # Use model_validate with context to indicate this is from database
-        return cls.model_validate(data, context={'from_database': True})
+        # Use model_validate for proper validation
+        return cls.model_validate(data)
 
 
 class AccountCreate(BaseModel):
@@ -220,6 +193,7 @@ class AccountCreate(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
         json_encoders={uuid.UUID: str, Decimal: str},
+        use_enum_values=False,  # Preserve enum objects (not strings) for type safety
         arbitrary_types_allowed=True
     )
     
@@ -230,10 +204,6 @@ class AccountCreate(BaseModel):
         if v is None:
             return None
         if isinstance(v, Currency):
-            return v
-        # Check if this is from database deserialization
-        if info.context and info.context.get('from_database'):
-            # During database deserialization, we've already converted strings to enums
             return v
         # If we get here, something assigned a non-Currency value
         raise ValueError(f"Currency must be a Currency enum, got {type(v).__name__}: {v}")
@@ -268,6 +238,7 @@ class AccountUpdate(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
         json_encoders={uuid.UUID: str, Decimal: str},
+        use_enum_values=False,  # Preserve enum objects (not strings) for type safety
         arbitrary_types_allowed=True
     )
 
@@ -278,10 +249,6 @@ class AccountUpdate(BaseModel):
         if v is None:
             return None
         if isinstance(v, Currency):
-            return v
-        # Check if this is from database deserialization
-        if info.context and info.context.get('from_database'):
-            # During database deserialization, we've already converted strings to enums
             return v
         # If we get here, something assigned a non-Currency value
         raise ValueError(f"Currency must be a Currency enum, got {type(v).__name__}: {v}")

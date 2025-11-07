@@ -1021,7 +1021,7 @@ def get_file_preview_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
         file_id = uuid.UUID(mandatory_path_parameter(event, 'id'))
         file = checked_mandatory_transaction_file(file_id, user_id)
 
-        if file.file_format == FileFormat.CSV:
+        if type(file.file_format).__name__ == "FileFormat" and file.file_format.name == "CSV":
             content_bytes = get_object_content(file.s3_key)
             if content_bytes is None:
                 return handle_error(500, "Error reading file content from S3.")
@@ -1108,7 +1108,7 @@ def get_file_preview_handler(event: Dict[str, Any], user_id: str) -> Dict[str, A
                 logger.error(traceback.format_exc())
                 file_format_str = file.file_format.value.upper() if file.file_format else "UNKNOWN"
                 return handle_error(400, f"Error parsing {file_format_str} file: {str(parse_e)}")
-        elif file.file_format == FileFormat.QIF:
+        elif type(file.file_format).__name__ == "FileFormat" and file.file_format.name == "QIF":
             content_bytes = get_object_content(file.s3_key)
             if content_bytes is None:
                 return handle_error(500, "Error reading file content from S3.")

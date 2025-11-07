@@ -47,7 +47,7 @@ class TransactionCategoryAssignment(BaseModel):
         json_encoders={
             uuid.UUID: str
         },
-        use_enum_values=True
+        use_enum_values=False  # Preserve enum objects (not strings) for type safety
     )
 
     @field_validator('assigned_at', 'confirmed_at')
@@ -94,17 +94,8 @@ class TransactionCategoryAssignment(BaseModel):
                 # If invalid UUID, let Pydantic handle the error
                 pass
         
-        # Manually convert status string to enum object to preserve enum type
-        if 'status' in converted_data and isinstance(converted_data['status'], str):
-            try:
-                converted_data['status'] = CategoryAssignmentStatus(converted_data['status'])
-            except ValueError:
-                # If invalid enum value, default to SUGGESTED
-                logger.warning(f"Invalid CategoryAssignmentStatus value: {converted_data['status']}, defaulting to SUGGESTED")
-                converted_data['status'] = CategoryAssignmentStatus.SUGGESTED
-        
-        # Use model_construct to preserve enum objects (model_validate would convert them back to strings due to use_enum_values=True)
-        return cls.model_construct(**converted_data)
+        # Use model_validate for proper validation
+        return cls.model_validate(converted_data)
 
 
 class Transaction(BaseModel):
@@ -145,6 +136,7 @@ class Transaction(BaseModel):
             Decimal: str,       # Serialize Decimal as string in JSON
             uuid.UUID: str      # Serialize UUID as string in JSON (default but explicit)
         },
+        use_enum_values=False,  # Preserve enum objects (not strings) for type safety
         arbitrary_types_allowed=True # If Money or Currency are not Pydantic models but used directly
     )
 
@@ -162,10 +154,6 @@ class Transaction(BaseModel):
         if v is None:
             return None
         if isinstance(v, Currency):
-            return v
-        # Check if this is from database deserialization
-        if info.context and info.context.get('from_database'):
-            # During database deserialization, we've already converted strings to enums
             return v
         # If we get here, something assigned a non-Currency value
         raise ValueError(f"Currency must be a Currency enum, got {type(v).__name__}: {v}")
@@ -192,12 +180,12 @@ class Transaction(BaseModel):
     @property
     def confirmed_categories(self) -> List[TransactionCategoryAssignment]:
         """Returns only confirmed category assignments"""
-        return [cat for cat in self.categories if cat.status == CategoryAssignmentStatus.CONFIRMED]
+        return [cat for cat in self.categories if type(cat.status).__name__ == "CategoryAssignmentStatus" and cat.status.name == "CONFIRMED"]
 
     @property
     def suggested_categories(self) -> List[TransactionCategoryAssignment]:
         """Returns only suggested category assignments awaiting review"""
-        return [cat for cat in self.categories if cat.status == CategoryAssignmentStatus.SUGGESTED]
+        return [cat for cat in self.categories if type(cat.status).__name__ == "CategoryAssignmentStatus" and cat.status.name == "SUGGESTED"]
 
     @property
     def needs_category_review(self) -> bool:
@@ -228,7 +216,7 @@ class Transaction(BaseModel):
     def confirm_category_assignment(self, category_id: uuid.UUID, set_as_primary: bool = False) -> bool:
         """Confirm a suggested category assignment"""
         assignment = next((cat for cat in self.categories if cat.category_id == category_id), None)
-        if assignment and assignment.status == CategoryAssignmentStatus.SUGGESTED:
+        if assignment and type(assignment.status).__name__ == "CategoryAssignmentStatus" and assignment.status.name == "SUGGESTED":
             assignment.confirm_assignment()
             if set_as_primary or self.primary_category_id is None:
                 self.primary_category_id = category_id
@@ -245,7 +233,7 @@ class Transaction(BaseModel):
         # Check if category is already assigned
         existing = next((cat for cat in self.categories if cat.category_id == category_id), None)
         if existing:
-            if existing.status == CategoryAssignmentStatus.SUGGESTED:
+            if type(existing.status).__name__ == "CategoryAssignmentStatus" and existing.status.name == "SUGGESTED":
                 existing.confirm_assignment()
                 existing.is_manual = True
             return
@@ -278,7 +266,7 @@ class Transaction(BaseModel):
         """Set a confirmed category as primary"""
         # Ensure the category is confirmed
         assignment = next((cat for cat in self.categories if cat.category_id == category_id), None)
-        if assignment and assignment.status == CategoryAssignmentStatus.CONFIRMED:
+        if assignment and type(assignment.status).__name__ == "CategoryAssignmentStatus" and assignment.status.name == "CONFIRMED":
             self.primary_category_id = category_id
             return True
         return False
@@ -353,50 +341,14 @@ class Transaction(BaseModel):
         return None
 
     @classmethod
-    def create(
-        cls,
-        user_id: str,
-        file_id: Union[str, uuid.UUID],
-        account_id: Union[str, uuid.UUID],
-        date: int,
-        description: str,
-        amount: Decimal,
-        currency: Optional[Currency] = None,
-        balance: Optional[Decimal] = None,
-        import_order: Optional[int] = None,
-        transaction_type: Optional[str] = None,
-        memo: Optional[str] = None,
-        check_number: Optional[str] = None,
-        fit_id: Optional[str] = None,
-        status: Optional[str] = None
-    ) -> "Transaction":
+    def create(cls, create_data: "TransactionCreate") -> "Transaction":
         """
-        Creates a new Transaction instance.
+        Creates a new Transaction instance from a TransactionCreate DTO.
         `transaction_id` is generated automatically by default_factory.
         `created_at` and `updated_at` are also set by default_factories.
         Hash is calculated via model_validator.
         """
-        init_data = {
-            "userId": user_id, # Pass as alias, Pydantic will map due to populate_by_name
-            "fileId": file_id,
-            "accountId": account_id,
-            "date": date,
-            "description": description,
-            "amount": amount,
-            "currency": currency,
-            "balance": balance,
-            "importOrder": import_order,
-            "transactionType": transaction_type,
-            "memo": memo,
-            "checkNumber": check_number,
-            "fitId": fit_id,
-            "status": status
-        }
-        # Filter out None kwargs to avoid overriding Pydantic defaults if not intended
-        # However, Pydantic handles Optional[X]=None correctly.
-        # clean_init_data = {k: v for k, v in init_data.items() if v is not None}
-        # It's generally fine to pass None for optional fields.
-        
+        init_data = create_data.model_dump(by_alias=True, exclude_none=True)
         return cls.model_validate(init_data)
 
     def to_dynamodb_item(self) -> Dict[str, Any]:
@@ -452,24 +404,6 @@ class Transaction(BaseModel):
                 if isinstance(converted_data[field], Decimal):
                     converted_data[field] = int(converted_data[field])
 
-        # Manually convert string values to enum objects before model_construct
-        if 'currency' in converted_data and isinstance(converted_data['currency'], str):
-            try:
-                converted_data['currency'] = Currency(converted_data['currency'])
-            except ValueError:
-                logger.warning(f"Invalid currency value from database: {converted_data['currency']}, setting to None")
-                converted_data['currency'] = None
-
-        # Manually convert UUID string fields to UUID objects
-        uuid_fields = ['fileId', 'transactionId', 'accountId', 'primaryCategoryId']
-        for field in uuid_fields:
-            if field in converted_data and isinstance(converted_data[field], str):
-                try:
-                    converted_data[field] = uuid.UUID(converted_data[field])
-                except ValueError:
-                    # If invalid UUID, let Pydantic handle the error
-                    pass
-
         # Handle category assignments reconstruction
         if 'categories' in converted_data and converted_data['categories']:
             processed_categories = []
@@ -504,8 +438,8 @@ class Transaction(BaseModel):
             
             converted_data['categories'] = processed_categories
 
-        # Use model_construct to preserve enum objects (model_validate would convert them back to strings due to use_enum_values=True)
-        return cls.model_construct(**converted_data)
+        # Use model_validate for proper validation
+        return cls.model_validate(converted_data)
 
 
 def transaction_to_json(transaction_input: Union[Transaction, Dict[str, Any]]) -> str:
@@ -537,59 +471,12 @@ def transaction_to_json(transaction_input: Union[Transaction, Dict[str, Any]]) -
 # - validate_transaction_data function (validations moved into Pydantic model)
 # - type_default function (Pydantic json_encoders in model_config handle this)
 
-class TransactionCreate(BaseModel):
-    """Data Transfer Object for creating a new transaction."""
-    user_id: str = Field(alias="userId")
-    file_id: uuid.UUID = Field(alias="fileId")
-    account_id: uuid.UUID = Field(alias="accountId")
-    date: int  # milliseconds since epoch
-    description: str = Field(max_length=1000)
-    amount: Decimal
-    currency: Currency
-
-    # Optional fields at creation
-    balance: Optional[Decimal] = None
-    import_order: Optional[int] = Field(default=None, alias="importOrder")
-    transaction_type: Optional[str] = Field(default=None, alias="transactionType", max_length=50)
-    memo: Optional[str] = Field(default=None, max_length=1000)
-    check_number: Optional[str] = Field(default=None, alias="checkNumber", max_length=50)
-    fit_id: Optional[str] = Field(default=None, alias="fitId", max_length=100)
-    status: Optional[str] = Field(default=None, max_length=50)
-
-    model_config = ConfigDict(
-        populate_by_name=True,
-        arbitrary_types_allowed=True # If Money is not a Pydantic model but used directly
-    )
-
-    @field_validator('date')
-    @classmethod
-    def check_positive_timestamp(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("Timestamp must be a positive integer representing milliseconds since epoch")
-        return v
-
-    @field_validator('currency', mode='after')
-    @classmethod
-    def validate_currency(cls, v, info: ValidationInfo) -> Currency:
-        """Ensure currency is always a Currency enum, never a string."""
-        if isinstance(v, Currency):
-            return v
-        # Check if this is from database deserialization
-        if info.context and info.context.get('from_database'):
-            # During database deserialization, we've already converted strings to enums
-            return v
-        # If we get here, something assigned a non-Currency value
-        raise ValueError(f"Currency must be a Currency enum, got {type(v).__name__}: {v}")
-
-class TransactionUpdate(BaseModel):
-    """Data Transfer Object for updating an existing transaction.
-    All fields are optional.
+class _TransactionFieldsMixin(BaseModel):
     """
-    account_id: Optional[uuid.UUID] = Field(default=None, alias="accountId")
-    date: Optional[int] = None  # milliseconds since epoch
-    description: Optional[str] = Field(default=None, max_length=1000)
-    amount: Optional[Decimal] = None
-    currency: Optional[Currency] = None
+    Shared field definitions and validators for Transaction DTOs.
+    Not meant to be used directly - use TransactionCreate or TransactionUpdate instead.
+    """
+    # Optional transaction detail fields (shared across Create/Update)
     balance: Optional[Decimal] = None
     import_order: Optional[int] = Field(default=None, alias="importOrder")
     transaction_type: Optional[str] = Field(default=None, alias="transactionType", max_length=50)
@@ -600,15 +487,9 @@ class TransactionUpdate(BaseModel):
 
     model_config = ConfigDict(
         populate_by_name=True,
-        arbitrary_types_allowed=True # If Money is not a Pydantic model but used directly
+        use_enum_values=False,  # Preserve enum objects (not strings) for type safety
+        arbitrary_types_allowed=True
     )
-
-    @field_validator('date', check_fields=False) # check_fields=False for optional fields
-    @classmethod
-    def check_positive_timestamp_optional(cls, v: Optional[int]) -> Optional[int]:
-        if v is not None and v < 0:
-            raise ValueError("Timestamp must be a positive integer representing milliseconds since epoch")
-        return v
 
     @field_validator('currency', mode='after')
     @classmethod
@@ -618,9 +499,42 @@ class TransactionUpdate(BaseModel):
             return None
         if isinstance(v, Currency):
             return v
-        # Check if this is from database deserialization
-        if info.context and info.context.get('from_database'):
-            # During database deserialization, we've already converted strings to enums
-            return v
         # If we get here, something assigned a non-Currency value
         raise ValueError(f"Currency must be a Currency enum, got {type(v).__name__}: {v}")
+
+
+class TransactionCreate(_TransactionFieldsMixin):
+    """Data Transfer Object for creating a new transaction."""
+    # Required fields at creation
+    user_id: str = Field(alias="userId")
+    file_id: uuid.UUID = Field(alias="fileId")
+    account_id: uuid.UUID = Field(alias="accountId")
+    date: int  # milliseconds since epoch
+    description: str = Field(max_length=1000)
+    amount: Decimal
+    currency: Currency
+
+    @field_validator('date')
+    @classmethod
+    def check_positive_timestamp(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("Timestamp must be a positive integer representing milliseconds since epoch")
+        return v
+
+
+class TransactionUpdate(_TransactionFieldsMixin):
+    """Data Transfer Object for updating an existing transaction.
+    All fields are optional.
+    """
+    account_id: Optional[uuid.UUID] = Field(default=None, alias="accountId")
+    date: Optional[int] = None  # milliseconds since epoch
+    description: Optional[str] = Field(default=None, max_length=1000)
+    amount: Optional[Decimal] = None
+    currency: Optional[Currency] = None
+
+    @field_validator('date', check_fields=False)
+    @classmethod
+    def check_positive_timestamp_optional(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v < 0:
+            raise ValueError("Timestamp must be a positive integer representing milliseconds since epoch")
+        return v

@@ -18,7 +18,8 @@ from handlers.account_operations import create_response
 from models import account
 from models.account import Account, Currency
 from models.money import Money
-from models.transaction_file import DateRange, FileFormat, ProcessingStatus, TransactionFile, convert_currency_input
+from models.transaction_file import DateRange, FileFormat, ProcessingStatus, TransactionFile
+from utils.serde_utils import to_currency
 from models.file_map import FileMap
 from models.transaction import Transaction
 from utils.lambda_utils import handle_error

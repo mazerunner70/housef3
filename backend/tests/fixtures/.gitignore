@@ -1,0 +1,8 @@
+# Ignore real data fetched from DynamoDB to protect privacy
+data/
+*.json
+!.gitkeep
+
+# Allow example/template files
+!example_*.json
+

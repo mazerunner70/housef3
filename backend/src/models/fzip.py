@@ -113,7 +113,7 @@ class FZIPJob(BaseModel):
             uuid.UUID: str,
             Decimal: str
         },
-        use_enum_values=True
+        use_enum_values=False  # Preserve enum objects (not strings) for type safety
     )
 
     @field_validator('created_at', 'completed_at', 'expires_at')
@@ -165,23 +165,16 @@ class FZIPJob(BaseModel):
         if 'packageFormat' in converted_item:
             converted_item['packageFormat'] = FZIPFormat(converted_item['packageFormat'])
         
-        # Ensure default dicts for nested result fields (model_construct bypasses defaults)
-        if 'validationResults' not in converted_item or converted_item.get('validationResults') is None:
-            converted_item['validationResults'] = {}
-        if 'restoreResults' not in converted_item or converted_item.get('restoreResults') is None:
-            converted_item['restoreResults'] = {}
-            
-        # Use model_construct to bypass validation that would convert enums back to strings
-        # This preserves our enum objects instead of converting them to string values
-        return cls.model_construct(**converted_item)
+        # Use model_validate for proper validation
+        return cls.model_validate(converted_item)
 
     def is_backup(self) -> bool:
         """Check if this is a backup job"""
-        return self.job_type == FZIPType.BACKUP
+        return type(self.job_type).__name__ == "FZIPType" and self.job_type.name == "BACKUP"
 
     def is_restore(self) -> bool:
         """Check if this is a restore job"""
-        return self.job_type == FZIPType.RESTORE
+        return type(self.job_type).__name__ == "FZIPType" and self.job_type.name == "RESTORE"
 
     def is_completed(self) -> bool:
         """Check if the job is completed"""
@@ -214,7 +207,7 @@ class FZIPBackupRequest(BaseModel):
         json_encoders={
             uuid.UUID: str
         },
-        use_enum_values=True
+        use_enum_values=False  # Preserve enum objects (not strings) for type safety
     )
 
 
@@ -224,7 +217,7 @@ class FZIPRestoreRequest(BaseModel):
     
     model_config = ConfigDict(
         populate_by_name=True,
-        use_enum_values=True
+        use_enum_values=False  # Preserve enum objects (not strings) for type safety
     )
 
 
@@ -247,7 +240,7 @@ class FZIPResponse(BaseModel):
         json_encoders={
             uuid.UUID: str
         },
-        use_enum_values=True
+        use_enum_values=False  # Preserve enum objects (not strings) for type safety
     )
 
 
@@ -281,7 +274,7 @@ class FZIPStatusResponse(BaseModel):
         json_encoders={
             uuid.UUID: str
         },
-        use_enum_values=True
+        use_enum_values=False  # Preserve enum objects (not strings) for type safety
     )
 
 
@@ -335,7 +328,7 @@ class FZIPManifest(BaseModel):
         json_encoders={
             uuid.UUID: str
         },
-        use_enum_values=True
+        use_enum_values=False  # Preserve enum objects (not strings) for type safety
     )
 
 
