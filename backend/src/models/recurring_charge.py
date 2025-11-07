@@ -135,6 +135,27 @@ class RecurringChargePattern(BaseModel):
             raise ValueError(DAY_OF_MONTH_ERROR_MESSAGE)
         return v
 
+    def update_model_details(self, update_data: 'RecurringChargePatternUpdate') -> bool:
+        """
+        Updates the pattern with data from a RecurringChargePatternUpdate DTO.
+        Returns True if any fields were changed, False otherwise.
+        """
+        updated_fields = False
+        
+        # Get only the fields that were actually set (not None)
+        update_dict = update_data.model_dump(exclude_unset=True, exclude_none=True, by_alias=False)
+        
+        # Handle each field individually to preserve object types
+        for key, value in update_dict.items():
+            if key not in ["pattern_id", "user_id", "created_at"] and hasattr(self, key):
+                if getattr(self, key) != value:
+                    setattr(self, key, value)
+                    updated_fields = True
+        
+        if updated_fields:
+            self.updated_at = int(datetime.now(timezone.utc).timestamp() * 1000)
+        return updated_fields
+
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format."""
         data = self.model_dump(by_alias=True, exclude_none=True)

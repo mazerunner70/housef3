@@ -34,7 +34,7 @@ try:
     
     logger.info("Successfully adjusted Python path for Lambda environment")
 except Exception as e:
-    logger.error(f"Import path setup error: {str(e)}")
+    logger.exception(f"Import path setup error: {str(e)}", exc_info=True)
     raise
 
 # Import after path fixing
@@ -42,10 +42,11 @@ from consumers.base_consumer import BaseEventConsumer, EventProcessingError
 from models.events import BaseEvent
 from services.recurring_charge_detection_service import RecurringChargeDetectionService
 from services.recurring_charge_prediction_service import RecurringChargePredictionService
-from utils.db_utils import list_account_transactions
+from utils.db.transactions import list_user_transactions
 from utils.db.recurring_charges import batch_create_patterns_in_db
 from models.transaction import Transaction
 from models.recurring_charge import RecurringChargePatternCreate
+import uuid
 
 # Operation tracking
 from services.operation_tracking_service import (
@@ -96,7 +97,10 @@ class RecurringChargeDetectionConsumer(BaseEventConsumer):
             account_id = event.data.get("accountId")
             min_occurrences = event.data.get("minOccurrences", 3)
             min_confidence = event.data.get("minConfidence", 0.6)
-            
+            if min_occurrences < 1:
+                raise EventProcessingError("minOccurrences must be at least 1", permanent=True)
+            if not (0.0 <= min_confidence <= 1.0):
+                raise EventProcessingError("minConfidence must be between 0.0 and 1.0", permanent=True)
             if not operation_id:
                 raise EventProcessingError("Operation ID is missing", permanent=True)
             
@@ -229,38 +233,60 @@ class RecurringChargeDetectionConsumer(BaseEventConsumer):
         """
         Fetch transactions for pattern detection.
         
+        Fetches up to 10,000 most recent transactions for the user, optionally
+        filtered by account. Uses pagination to avoid Lambda timeouts and
+        automatically filters out duplicate transactions.
+        
         Args:
             user_id: User ID
             account_id: Optional account ID to filter transactions
             
         Returns:
-            List of Transaction objects
+            List of Transaction objects sorted by date (most recent first)
         """
         try:
-            if account_id:
-                # Fetch transactions for specific account
-                transactions = list_account_transactions(account_id, limit=10000)
-            else:
-                # Fetch all user transactions
-                from utils.db_utils import list_user_accounts
-                from utils.db.base import tables
+            # Prepare account filter if specified
+            account_ids = [uuid.UUID(account_id)] if account_id else None
+            
+            # Fetch transactions with proper sorting (most recent first)
+            # We'll paginate to get up to 10,000 transactions
+            all_transactions = []
+            last_key = None
+            max_transactions = 10000
+            page_size = 1000  # Fetch in chunks to avoid timeouts
+            
+            while len(all_transactions) < max_transactions:
+                remaining = max_transactions - len(all_transactions)
+                limit = min(page_size, remaining)
                 
-                accounts = list_user_accounts(user_id)
-                transactions = []
+                transactions, last_key, _ = list_user_transactions(
+                    user_id=user_id,
+                    limit=limit,
+                    last_evaluated_key=last_key,
+                    account_ids=account_ids,
+                    sort_order_date='desc',  # Most recent first!
+                    ignore_dup=True,  # Automatically filter duplicates
+                )
                 
-                for account in accounts:
-                    account_txs = list_account_transactions(str(account.account_id), limit=10000)
-                    transactions.extend(account_txs)
+                if not transactions:
+                    break
+                    
+                all_transactions.extend(transactions)
+                
+                # If no more pages, stop
+                if not last_key:
+                    break
             
             # Filter out transactions without dates or amounts
             valid_transactions = [
-                tx for tx in transactions
+                tx for tx in all_transactions
                 if tx.date is not None and tx.amount is not None
             ]
             
             logger.info(
-                f"Fetched {len(transactions)} transactions, "
-                f"{len(valid_transactions)} valid for analysis"
+                f"Fetched {len(all_transactions)} transactions, "
+                f"{len(valid_transactions)} valid for analysis "
+                f"(account_id={account_id or 'all accounts'})"
             )
             
             return valid_transactions
@@ -299,7 +325,7 @@ class RecurringChargeDetectionConsumer(BaseEventConsumer):
                     
             except ValueError as e:
                 # Expected errors (e.g., pattern too irregular)
-                logger.warning(f"Could not generate prediction for pattern {pattern.pattern_id}: {e}")
+                logger.warning(f"Could not generate prediction for pattern {pattern.pattern_id}: {e}", exc_info=True)
                 continue
             except Exception as e:
                 # Unexpected errors - log but continue with other patterns
@@ -339,7 +365,7 @@ class RecurringChargeDetectionConsumer(BaseEventConsumer):
             )
         except Exception as e:
             # Don't fail the main operation if tracking update fails
-            logger.warning(f"Failed to update operation status: {e}")
+            logger.warning(f"Failed to update operation status: {e}", exc_info=True)
 
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:

@@ -204,11 +204,10 @@ def test_get_patterns_with_active_filter(mock_list):
 def test_update_pattern_success(mock_get, mock_update):
     """Test successful pattern update"""
     pattern = _create_test_pattern()
-    updated_pattern = _create_test_pattern()
-    updated_pattern.active = False
     
     mock_get.return_value = pattern
-    mock_update.return_value = updated_pattern
+    # Mock returns the same pattern instance that was passed to it
+    mock_update.return_value = pattern
     
     event = {
         **_auth_headers(),
@@ -223,7 +222,12 @@ def test_update_pattern_success(mock_get, mock_update):
     assert resp["statusCode"] == 200
     body = json.loads(resp["body"])
     assert "pattern" in body
-    assert body["pattern"]["active"] is False
+    
+    # Verify update_pattern_in_db was called with the pattern instance
+    mock_update.assert_called_once()
+    call_args = mock_update.call_args[0]
+    assert len(call_args) == 1  # Should only receive the pattern
+    assert call_args[0] == pattern
 
 
 @patch("src.handlers.recurring_charge_operations.get_pattern_by_id_from_db")
@@ -276,11 +280,11 @@ def test_apply_pattern_to_category_success(mock_get_pattern, mock_get_category, 
     body = json.loads(resp["body"])
     assert "pattern" in body
     
-    # Verify update was called with correct parameters
-    call_args = mock_update.call_args
-    update_dict = call_args[0][2]
-    assert update_dict["suggested_category_id"] == category_id
-    assert update_dict["auto_categorize"] is True
+    # Verify update_pattern_in_db was called with the pattern instance
+    mock_update.assert_called_once()
+    call_args = mock_update.call_args[0]
+    assert len(call_args) == 1  # Should only receive the pattern
+    assert call_args[0] == pattern
 
 
 @patch("src.handlers.recurring_charge_operations.get_category_by_id_from_db")

@@ -167,77 +167,30 @@ def list_patterns_by_user_from_db(
 @retry_on_throttle(max_attempts=3)
 @dynamodb_operation("update_pattern_in_db")
 def update_pattern_in_db(
-    pattern_id: uuid.UUID,
-    user_id: str,
-    pattern_update: RecurringChargePatternUpdate
+    pattern: RecurringChargePattern
 ) -> RecurringChargePattern:
     """
-    Update a recurring charge pattern.
+    Update a recurring charge pattern in the database.
     
     Args:
-        pattern_id: The pattern ID
-        user_id: The user ID (for access control)
-        pattern_update: RecurringChargePatternUpdate DTO with fields to update
+        pattern: The RecurringChargePattern instance to save (already updated)
         
     Returns:
-        Updated RecurringChargePattern object
+        The same RecurringChargePattern object after successful save
         
     Raises:
-        NotFound: If pattern doesn't exist
-        NotAuthorized: If user doesn't own the pattern
+        ConnectionError: If table not initialized
     """
     table = tables.recurring_charge_patterns
     if not table:
         logger.error("DB: RecurringChargePatterns table not initialized for update_pattern_in_db")
         raise ConnectionError(DB_TABLE_NOT_INITIALIZED_ERROR)
     
-    # First, verify the pattern exists and belongs to the user
-    existing_pattern = get_pattern_by_id_from_db(pattern_id, user_id)
-    if not existing_pattern:
-        raise NotFound(f"Pattern {str(pattern_id)} not found")
+    # Save updates to DynamoDB
+    table.put_item(Item=pattern.to_dynamodb_item())
     
-    # Extract only the fields that were set (not None) from the DTO
-    updates = pattern_update.model_dump(by_alias=True, exclude_unset=True, exclude_none=True)
-    
-    if not updates:
-        # No updates provided, return existing pattern
-        logger.debug(f"DB: No updates provided for pattern {str(pattern_id)}")
-        return existing_pattern
-    
-    # Build update expression
-    update_expression_parts = []
-    expression_attribute_names = {}
-    expression_attribute_values = {}
-    
-    # Add updatedAt timestamp
-    import time
-    updates['updatedAt'] = int(time.time() * 1000)
-    
-    for idx, (key, value) in enumerate(updates.items()):
-        attr_name = f"#attr{idx}"
-        attr_value = f":val{idx}"
-        update_expression_parts.append(f"{attr_name} = {attr_value}")
-        expression_attribute_names[attr_name] = key
-        expression_attribute_values[attr_value] = value
-    
-    update_expression = "SET " + ", ".join(update_expression_parts)
-    
-    logger.debug(f"DB: Updating pattern {str(pattern_id)} with expression: {update_expression}")
-    
-    response = table.update_item(
-        Key={'userId': user_id, 'patternId': str(pattern_id)},
-        UpdateExpression=update_expression,
-        ExpressionAttributeNames=expression_attribute_names,
-        ExpressionAttributeValues=expression_attribute_values,
-        ReturnValues='ALL_NEW'
-    )
-    
-    updated_item = response.get('Attributes')
-    if not updated_item:
-        raise NotFound(f"Pattern {str(pattern_id)} not found after update")
-    
-    logger.info(f"DB: Pattern {str(pattern_id)} updated successfully")
-    return RecurringChargePattern.from_dynamodb_item(updated_item)
+    logger.info(f"DB: Pattern {str(pattern.pattern_id)} updated successfully")
+    return pattern
 
 
 @monitor_performance(warn_threshold_ms=200)

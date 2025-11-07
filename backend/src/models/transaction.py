@@ -491,7 +491,7 @@ class _TransactionFieldsMixin(BaseModel):
         arbitrary_types_allowed=True
     )
 
-    @field_validator('currency', mode='after')
+    @field_validator('currency', mode='after', check_fields=False)
     @classmethod
     def validate_currency(cls, v, info: ValidationInfo) -> Optional[Currency]:
         """Ensure currency is always a Currency enum, never a string."""

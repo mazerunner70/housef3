@@ -381,52 +381,26 @@ class TestUpdatePatternInDB:
 
     def test_update_pattern_success(self, mock_tables, sample_pattern):
         """Test successfully updating a pattern."""
-        pattern_id = sample_pattern.pattern_id
-        user_id = "user123"
-        
-        # Create update DTO
+        # Create update DTO and apply to pattern
         from models.recurring_charge import RecurringChargePatternUpdate
         pattern_update = RecurringChargePatternUpdate(
             active=False,
             confidenceScore=0.98
         )
         
-        # Mock get_item response (for existence check)
-        mock_tables.recurring_charge_patterns.get_item.return_value = {
-            'Item': sample_pattern.to_dynamodb_item()
-        }
+        # Apply update to pattern
+        sample_pattern.update_model_details(pattern_update)
         
-        # Mock update_item response
-        updated_item = sample_pattern.to_dynamodb_item()
-        updated_item['active'] = False
-        updated_item['confidenceScore'] = Decimal("0.98")
-        mock_tables.recurring_charge_patterns.update_item.return_value = {
-            'Attributes': updated_item
-        }
+        # Call update_pattern_in_db with the updated pattern
+        result = update_pattern_in_db(sample_pattern)
         
-        result = update_pattern_in_db(pattern_id, user_id, pattern_update)
-        
-        # Verify update_item was called
-        mock_tables.recurring_charge_patterns.update_item.assert_called_once()
+        # Verify put_item was called
+        mock_tables.recurring_charge_patterns.put_item.assert_called_once()
         
         # Verify result
         assert result.active is False
         assert result.confidence_score == 0.98
 
-    def test_update_pattern_not_found(self, mock_tables):
-        """Test updating non-existent pattern raises NotFound."""
-        pattern_id = uuid.uuid4()
-        user_id = "user123"
-        
-        # Create update DTO
-        from models.recurring_charge import RecurringChargePatternUpdate
-        pattern_update = RecurringChargePatternUpdate(active=False)
-        
-        # Mock empty get_item response
-        mock_tables.recurring_charge_patterns.get_item.return_value = {}
-        
-        with pytest.raises(NotFound, match="not found"):
-            update_pattern_in_db(pattern_id, user_id, pattern_update)
 
 
 class TestDeletePatternFromDB:

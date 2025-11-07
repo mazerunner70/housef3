@@ -218,58 +218,56 @@ def test_process_event_missing_operation_id(mock_tracking):
 # ==============================================================================
 
 
-@patch("src.consumers.recurring_charge_detection_consumer.list_account_transactions")
-def test_fetch_transactions_for_specific_account(mock_list_txs):
+@patch("src.consumers.recurring_charge_detection_consumer.list_user_transactions")
+def test_fetch_transactions_for_specific_account(mock_list_user_txs):
     """Test fetching transactions for specific account"""
     consumer = RecurringChargeDetectionConsumer()
     
     account_id = str(uuid.uuid4())
     transactions = [_create_test_transaction() for _ in range(10)]
-    mock_list_txs.return_value = transactions
+    # list_user_transactions returns (transactions, last_key, count)
+    mock_list_user_txs.return_value = (transactions, None, 10)
     
     result = consumer._fetch_transactions("test-user-id", account_id)
     
     assert len(result) == 10
-    assert mock_list_txs.called
-    call_args = mock_list_txs.call_args
-    assert call_args[0][0] == account_id
+    assert mock_list_user_txs.called
+    # Verify it was called with the account_id filter
+    call_kwargs = mock_list_user_txs.call_args.kwargs
+    assert call_kwargs["user_id"] == "test-user-id"
+    assert call_kwargs["account_ids"] == [uuid.UUID(account_id)]
+    assert call_kwargs["sort_order_date"] == "desc"
+    assert call_kwargs["ignore_dup"] is True
 
 
-@patch("src.consumers.recurring_charge_detection_consumer.list_user_accounts")
-@patch("src.consumers.recurring_charge_detection_consumer.list_account_transactions")
-def test_fetch_transactions_for_all_accounts(mock_list_txs, mock_list_accounts):
+@patch("src.consumers.recurring_charge_detection_consumer.list_user_transactions")
+def test_fetch_transactions_for_all_accounts(mock_list_user_txs):
     """Test fetching transactions for all user accounts"""
     consumer = RecurringChargeDetectionConsumer()
     
-    # Mock accounts
-    from models.account import Account, AccountType, Currency
-    accounts = [
-        Account(
-            accountId=uuid.uuid4(),
-            userId="test-user-id",
-            accountName=f"Account {i}",
-            accountType=AccountType.CHECKING,
-            currency=Currency.USD,
-        )
-        for i in range(2)
-    ]
-    mock_list_accounts.return_value = accounts
-    
-    # Mock transactions for each account
-    mock_list_txs.return_value = [_create_test_transaction() for _ in range(5)]
+    # Mock transactions across all accounts
+    transactions = [_create_test_transaction() for _ in range(10)]
+    # list_user_transactions returns (transactions, last_key, count)
+    mock_list_user_txs.return_value = (transactions, None, 10)
     
     result = consumer._fetch_transactions("test-user-id", None)
     
-    # Should fetch from all accounts
-    assert mock_list_txs.call_count == 2
-    assert len(result) == 10  # 5 transactions per account
+    # Should fetch all user transactions
+    assert len(result) == 10
+    assert mock_list_user_txs.called
+    # Verify it was called without account filter
+    call_kwargs = mock_list_user_txs.call_args.kwargs
+    assert call_kwargs["user_id"] == "test-user-id"
+    assert call_kwargs["account_ids"] is None
+    assert call_kwargs["sort_order_date"] == "desc"
+    assert call_kwargs["ignore_dup"] is True
 
 
 def test_fetch_transactions_filters_invalid():
     """Test that invalid transactions are filtered out"""
     consumer = RecurringChargeDetectionConsumer()
     
-    with patch("src.consumers.recurring_charge_detection_consumer.list_account_transactions") as mock_list:
+    with patch("src.consumers.recurring_charge_detection_consumer.list_user_transactions") as mock_list:
         # Create mix of valid and invalid transactions
         valid_tx = _create_test_transaction()
         # Create invalid transactions using model_construct to bypass validation
@@ -294,12 +292,70 @@ def test_fetch_transactions_filters_invalid():
             transactionType="debit",
         )
         
-        mock_list.return_value = [valid_tx, invalid_tx_no_date, invalid_tx_no_amount]
+        # list_user_transactions returns (transactions, last_key, count)
+        mock_list.return_value = ([valid_tx, invalid_tx_no_date, invalid_tx_no_amount], None, 3)
         
         result = consumer._fetch_transactions("test-user-id", str(uuid.uuid4()))
         
         # Should only return valid transaction
         assert len(result) == 1
+
+
+@patch("src.consumers.recurring_charge_detection_consumer.list_user_transactions")
+def test_fetch_transactions_pagination(mock_list_user_txs):
+    """Test that pagination works correctly to fetch up to 10,000 transactions"""
+    consumer = RecurringChargeDetectionConsumer()
+    
+    # Simulate multiple pages of transactions
+    page1_txs = [_create_test_transaction() for _ in range(1000)]
+    page2_txs = [_create_test_transaction() for _ in range(1000)]
+    page3_txs = [_create_test_transaction() for _ in range(500)]
+    
+    # Mock returns different pages with pagination keys
+    mock_list_user_txs.side_effect = [
+        (page1_txs, {"lastKey": "page2"}, 1000),
+        (page2_txs, {"lastKey": "page3"}, 1000),
+        (page3_txs, None, 500),  # Last page, no more pagination
+    ]
+    
+    result = consumer._fetch_transactions("test-user-id", None)
+    
+    # Should fetch all pages
+    assert len(result) == 2500
+    assert mock_list_user_txs.call_count == 3
+    
+    # Verify pagination parameters
+    call1_kwargs = mock_list_user_txs.call_args_list[0].kwargs
+    assert call1_kwargs["limit"] == 1000
+    assert call1_kwargs["last_evaluated_key"] is None
+    
+    call2_kwargs = mock_list_user_txs.call_args_list[1].kwargs
+    assert call2_kwargs["limit"] == 1000
+    assert call2_kwargs["last_evaluated_key"] == {"lastKey": "page2"}
+    
+    call3_kwargs = mock_list_user_txs.call_args_list[2].kwargs
+    assert call3_kwargs["limit"] == 1000
+    assert call3_kwargs["last_evaluated_key"] == {"lastKey": "page3"}
+
+
+@patch("src.consumers.recurring_charge_detection_consumer.list_user_transactions")
+def test_fetch_transactions_respects_max_limit(mock_list_user_txs):
+    """Test that fetching stops at 10,000 transactions"""
+    consumer = RecurringChargeDetectionConsumer()
+    
+    # Simulate many pages that would exceed 10k
+    def side_effect(*args, **kwargs):
+        # Return 1000 transactions per page with a next key
+        txs = [_create_test_transaction() for _ in range(1000)]
+        return (txs, {"lastKey": "next"}, 1000)
+    
+    mock_list_user_txs.side_effect = side_effect
+    
+    result = consumer._fetch_transactions("test-user-id", None)
+    
+    # Should stop at 10,000 transactions
+    assert len(result) == 10000
+    assert mock_list_user_txs.call_count == 10  # 10 pages of 1000 each
 
 
 # ==============================================================================

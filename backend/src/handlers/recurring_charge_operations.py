@@ -28,7 +28,7 @@ try:
     
     logger.info("Successfully adjusted Python path for Lambda environment")
 except Exception as e:
-    logger.error(f"Import path setup error: {str(e)}")
+    logger.exception(f"Import path setup error: {str(e)}", exc_info=True)
     raise
 
 # Import after path fixing
@@ -243,11 +243,11 @@ def update_pattern_handler(event: Dict[str, Any], user_id: str, pattern: Recurri
     
     assert update_data is not None
     
-    # Convert to dict (only non-None fields)
-    update_dict = {k: v for k, v in update_data.model_dump().items() if v is not None}
+    # Update the pattern model with the validated DTO
+    pattern.update_model_details(update_data)
     
-    # Update pattern in database
-    updated_pattern = update_pattern_in_db(pattern.pattern_id, user_id, update_dict)
+    # Persist the updated pattern to database
+    updated_pattern = update_pattern_in_db(pattern)
     
     return {
         "message": "Pattern updated successfully",
@@ -332,13 +332,15 @@ def apply_pattern_to_category_handler(
     if not category:
         raise ValueError("Category not found or does not belong to user")
     
-    # Update pattern with category link
-    update_dict = {
-        "suggested_category_id": uuid.UUID(category_id),
-        "auto_categorize": auto_categorize,
-    }
+    # Create update DTO and apply to pattern
+    update_data = RecurringChargePatternUpdate(
+        suggestedCategoryId=uuid.UUID(category_id),
+        autoCategorize=auto_categorize,
+    )
+    pattern.update_model_details(update_data)
     
-    updated_pattern = update_pattern_in_db(pattern.pattern_id, user_id, update_dict)
+    # Persist the updated pattern to database
+    updated_pattern = update_pattern_in_db(pattern)
     
     return {
         "message": "Pattern linked to category successfully",
