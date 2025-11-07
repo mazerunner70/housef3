@@ -471,56 +471,12 @@ def transaction_to_json(transaction_input: Union[Transaction, Dict[str, Any]]) -
 # - validate_transaction_data function (validations moved into Pydantic model)
 # - type_default function (Pydantic json_encoders in model_config handle this)
 
-class TransactionCreate(BaseModel):
-    """Data Transfer Object for creating a new transaction."""
-    user_id: str = Field(alias="userId")
-    file_id: uuid.UUID = Field(alias="fileId")
-    account_id: uuid.UUID = Field(alias="accountId")
-    date: int  # milliseconds since epoch
-    description: str = Field(max_length=1000)
-    amount: Decimal
-    currency: Currency
-
-    # Optional fields at creation
-    balance: Optional[Decimal] = None
-    import_order: Optional[int] = Field(default=None, alias="importOrder")
-    transaction_type: Optional[str] = Field(default=None, alias="transactionType", max_length=50)
-    memo: Optional[str] = Field(default=None, max_length=1000)
-    check_number: Optional[str] = Field(default=None, alias="checkNumber", max_length=50)
-    fit_id: Optional[str] = Field(default=None, alias="fitId", max_length=100)
-    status: Optional[str] = Field(default=None, max_length=50)
-
-    model_config = ConfigDict(
-        populate_by_name=True,
-        use_enum_values=False,  # Preserve enum objects (not strings) for type safety
-        arbitrary_types_allowed=True # If Money is not a Pydantic model but used directly
-    )
-
-    @field_validator('date')
-    @classmethod
-    def check_positive_timestamp(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("Timestamp must be a positive integer representing milliseconds since epoch")
-        return v
-
-    @field_validator('currency', mode='after')
-    @classmethod
-    def validate_currency(cls, v, info: ValidationInfo) -> Currency:
-        """Ensure currency is always a Currency enum, never a string."""
-        if isinstance(v, Currency):
-            return v
-        # If we get here, something assigned a non-Currency value
-        raise ValueError(f"Currency must be a Currency enum, got {type(v).__name__}: {v}")
-
-class TransactionUpdate(BaseModel):
-    """Data Transfer Object for updating an existing transaction.
-    All fields are optional.
+class _TransactionFieldsMixin(BaseModel):
     """
-    account_id: Optional[uuid.UUID] = Field(default=None, alias="accountId")
-    date: Optional[int] = None  # milliseconds since epoch
-    description: Optional[str] = Field(default=None, max_length=1000)
-    amount: Optional[Decimal] = None
-    currency: Optional[Currency] = None
+    Shared field definitions and validators for Transaction DTOs.
+    Not meant to be used directly - use TransactionCreate or TransactionUpdate instead.
+    """
+    # Optional transaction detail fields (shared across Create/Update)
     balance: Optional[Decimal] = None
     import_order: Optional[int] = Field(default=None, alias="importOrder")
     transaction_type: Optional[str] = Field(default=None, alias="transactionType", max_length=50)
@@ -532,15 +488,8 @@ class TransactionUpdate(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
         use_enum_values=False,  # Preserve enum objects (not strings) for type safety
-        arbitrary_types_allowed=True # If Money is not a Pydantic model but used directly
+        arbitrary_types_allowed=True
     )
-
-    @field_validator('date', check_fields=False) # check_fields=False for optional fields
-    @classmethod
-    def check_positive_timestamp_optional(cls, v: Optional[int]) -> Optional[int]:
-        if v is not None and v < 0:
-            raise ValueError("Timestamp must be a positive integer representing milliseconds since epoch")
-        return v
 
     @field_validator('currency', mode='after')
     @classmethod
@@ -552,3 +501,40 @@ class TransactionUpdate(BaseModel):
             return v
         # If we get here, something assigned a non-Currency value
         raise ValueError(f"Currency must be a Currency enum, got {type(v).__name__}: {v}")
+
+
+class TransactionCreate(_TransactionFieldsMixin):
+    """Data Transfer Object for creating a new transaction."""
+    # Required fields at creation
+    user_id: str = Field(alias="userId")
+    file_id: uuid.UUID = Field(alias="fileId")
+    account_id: uuid.UUID = Field(alias="accountId")
+    date: int  # milliseconds since epoch
+    description: str = Field(max_length=1000)
+    amount: Decimal
+    currency: Currency
+
+    @field_validator('date')
+    @classmethod
+    def check_positive_timestamp(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("Timestamp must be a positive integer representing milliseconds since epoch")
+        return v
+
+
+class TransactionUpdate(_TransactionFieldsMixin):
+    """Data Transfer Object for updating an existing transaction.
+    All fields are optional.
+    """
+    account_id: Optional[uuid.UUID] = Field(default=None, alias="accountId")
+    date: Optional[int] = None  # milliseconds since epoch
+    description: Optional[str] = Field(default=None, max_length=1000)
+    amount: Optional[Decimal] = None
+    currency: Optional[Currency] = None
+
+    @field_validator('date', check_fields=False)
+    @classmethod
+    def check_positive_timestamp_optional(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v < 0:
+            raise ValueError("Timestamp must be a positive integer representing milliseconds since epoch")
+        return v

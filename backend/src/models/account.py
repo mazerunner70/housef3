@@ -13,34 +13,10 @@ from typing_extensions import Self
 from pydantic import BaseModel, Field, field_validator, ConfigDict, model_validator, ValidationInfo
 
 from models.money import Currency, Money
+from utils.serde_utils import to_currency
 
 # Configure logging
 logger = logging.getLogger(__name__)
-
-def convert_currency_input(currency_input: Any) -> Optional[Currency]:
-    """
-    Helper function to convert currency input (typically from API) to Currency enum.
-    Use this for API input handling before creating model instances.
-    
-    Args:
-        currency_input: String currency code or Currency enum
-        
-    Returns:
-        Currency enum or None
-        
-    Raises:
-        ValueError: If currency_input is invalid
-    """
-    if currency_input is None:
-        return None
-    if isinstance(currency_input, Currency):
-        return currency_input
-    if isinstance(currency_input, str):
-        try:
-            return Currency(currency_input)
-        except ValueError:
-            raise ValueError(f"Invalid currency value: '{currency_input}'. Valid options are: {', '.join([c.value for c in Currency])}")
-    raise ValueError(f"Currency must be a string or Currency enum, got {type(currency_input).__name__}: {currency_input}")
 
 
 class AccountType(str, enum.Enum):

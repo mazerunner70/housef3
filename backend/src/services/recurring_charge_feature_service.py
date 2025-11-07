@@ -20,6 +20,7 @@ from scipy.sparse import csr_matrix
 import holidays
 
 from models.transaction import Transaction
+from utils.temporal_utils import is_first_working_day, is_last_working_day
 
 logger = logging.getLogger(__name__)
 
@@ -151,8 +152,8 @@ class RecurringChargeFeatureService:
         is_last_day = 1.0 if day_of_month == days_in_month else 0.0
         
         # First/last working day
-        is_first_working_day = 1.0 if self._is_first_working_day(dt) else 0.0
-        is_last_working_day = 1.0 if self._is_last_working_day(dt) else 0.0
+        is_first_working_day_flag = 1.0 if is_first_working_day(dt, self.holidays) else 0.0
+        is_last_working_day_flag = 1.0 if is_last_working_day(dt, self.holidays) else 0.0
         
         # First/last weekday of month
         is_first_weekday = 1.0 if self._is_first_weekday_of_month(dt) else 0.0
@@ -168,7 +169,7 @@ class RecurringChargeFeatureService:
             month_position_sin, month_position_cos,
             week_of_month_sin, week_of_month_cos,
             # Boolean flags (8 features)
-            is_working_day, is_first_working_day, is_last_working_day,
+            is_working_day, is_first_working_day_flag, is_last_working_day_flag,
             is_first_weekday, is_last_weekday, is_weekend,
             is_first_day, is_last_day,
             # Position (1 feature)
@@ -259,42 +260,6 @@ class RecurringChargeFeatureService:
             vectorizer = None
         
         return feature_matrix, vectorizer
-    
-    def _is_first_working_day(self, dt: datetime) -> bool:
-        """Check if date is the first working day of the month."""
-        year = dt.year
-        month = dt.month
-        
-        for day in range(1, 32):
-            try:
-                candidate = datetime(year, month, day, tzinfo=timezone.utc)
-                if candidate.weekday() < 5 and candidate.date() not in self.holidays:
-                    return candidate.date() == dt.date()
-            except ValueError:
-                break
-        
-        return False
-    
-    def _is_last_working_day(self, dt: datetime) -> bool:
-        """Check if date is the last working day of the month."""
-        year = dt.year
-        month = dt.month
-        
-        # Get last day of month
-        if month == 12:
-            next_month = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
-        else:
-            next_month = datetime(year, month + 1, 1, tzinfo=timezone.utc)
-        
-        last_day = (next_month - datetime(year, month, 1, tzinfo=timezone.utc)).days
-        
-        # Search backwards for first working day
-        for day in range(last_day, 0, -1):
-            candidate = datetime(year, month, day, tzinfo=timezone.utc)
-            if candidate.weekday() < 5 and candidate.date() not in self.holidays:
-                return candidate.date() == dt.date()
-        
-        return False
     
     def _is_first_weekday_of_month(self, dt: datetime) -> bool:
         """Check if date is the first occurrence of its weekday in the month."""

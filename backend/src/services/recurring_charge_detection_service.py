@@ -25,6 +25,7 @@ from models.recurring_charge import (
 )
 from services.recurring_charge_feature_service import RecurringChargeFeatureService
 from utils.ml_performance import MLPerformanceTracker
+from utils.temporal_utils import is_first_working_day, is_last_working_day
 
 logger = logging.getLogger(__name__)
 
@@ -95,25 +96,25 @@ class RecurringChargeDetectionService:
         logger.info(f"Starting pattern detection for user {user_id} with {len(transactions)} transactions")
         
         with MLPerformanceTracker("recurring_charge_detection") as tracker:
+            tracker.set_transaction_count(len(transactions))
+            
             # Stage 1: Feature extraction
-            tracker.start_stage("feature_extraction")
-            feature_matrix, vectorizer = self.feature_service.extract_features_batch(transactions)
-            tracker.end_stage("feature_extraction")
+            with tracker.stage("feature_extraction"):
+                feature_matrix, _ = self.feature_service.extract_features_batch(transactions)
             
             # Stage 2: DBSCAN clustering
-            tracker.start_stage("clustering")
-            clusters = self._perform_clustering(feature_matrix, eps, len(transactions))
-            tracker.end_stage("clustering")
+            with tracker.stage("clustering"):
+                clusters = self._perform_clustering(feature_matrix, eps, len(transactions))
+                tracker.set_clusters_identified(len(set(clusters)) - (1 if -1 in clusters else 0))
             
             # Stage 3: Pattern analysis
-            tracker.start_stage("pattern_analysis")
-            patterns = self._analyze_clusters(
-                user_id, transactions, clusters, min_occurrences, min_confidence
-            )
-            tracker.end_stage("pattern_analysis")
+            with tracker.stage("pattern_analysis"):
+                patterns = self._analyze_clusters(
+                    user_id, transactions, clusters, min_occurrences, min_confidence
+                )
+                tracker.set_patterns_detected(len(patterns))
             
             logger.info(f"Detection complete: found {len(patterns)} patterns")
-            tracker.log_metrics()
         
         return patterns
     
@@ -142,7 +143,7 @@ class RecurringChargeDetectionService:
         cluster_labels = dbscan.fit_predict(feature_matrix)
         
         n_clusters = len(set(cluster_labels)) - (1 if -1 in cluster_labels else 0)
-        n_noise = list(cluster_labels).count(-1)
+        n_noise = int(np.sum(cluster_labels == -1))
         
         logger.info(f"DBSCAN complete: {n_clusters} clusters, {n_noise} noise points")
         
@@ -307,7 +308,7 @@ class RecurringChargeDetectionService:
         dates = [datetime.fromtimestamp(txn.date / 1000, tz=timezone.utc) for txn in cluster_transactions]
         
         # Check last working day pattern
-        last_working_matches = sum(1 for dt in dates if self._is_last_working_day(dt))
+        last_working_matches = sum(1 for dt in dates if is_last_working_day(dt, self.holidays))
         last_working_pct = last_working_matches / len(dates)
         if last_working_pct >= 0.70:
             return {
@@ -316,7 +317,7 @@ class RecurringChargeDetectionService:
             }
         
         # Check first working day pattern
-        first_working_matches = sum(1 for dt in dates if self._is_first_working_day(dt))
+        first_working_matches = sum(1 for dt in dates if is_first_working_day(dt, self.holidays))
         first_working_pct = first_working_matches / len(dates)
         if first_working_pct >= 0.70:
             return {
@@ -558,40 +559,4 @@ class RecurringChargeDetectionService:
         )
         
         return round(confidence, 2)
-    
-    def _is_first_working_day(self, dt: datetime) -> bool:
-        """Check if date is the first working day of the month."""
-        year = dt.year
-        month = dt.month
-        
-        for day in range(1, 32):
-            try:
-                candidate = datetime(year, month, day, tzinfo=timezone.utc)
-                if candidate.weekday() < 5 and candidate.date() not in self.holidays:
-                    return candidate.date() == dt.date()
-            except ValueError:
-                break
-        
-        return False
-    
-    def _is_last_working_day(self, dt: datetime) -> bool:
-        """Check if date is the last working day of the month."""
-        year = dt.year
-        month = dt.month
-        
-        # Get last day of month
-        if month == 12:
-            next_month = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
-        else:
-            next_month = datetime(year, month + 1, 1, tzinfo=timezone.utc)
-        
-        last_day = (next_month - datetime(year, month, 1, tzinfo=timezone.utc)).days
-        
-        # Search backwards for first working day
-        for day in range(last_day, 0, -1):
-            candidate = datetime(year, month, day, tzinfo=timezone.utc)
-            if candidate.weekday() < 5 and candidate.date() not in self.holidays:
-                return candidate.date() == dt.date()
-        
-        return False
 
