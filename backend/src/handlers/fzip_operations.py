@@ -257,7 +257,7 @@ def list_fzip_backups_handler(event: Dict[str, Any], user_id: str) -> Dict[str, 
         
         for job in backup_jobs:
             # For completed backups, verify the S3 file exists before including in response
-            if job.status == FZIPStatus.BACKUP_COMPLETED and job.s3_key:
+            if type(job.status).__name__ == "FZIPStatus" and job.status.name == "BACKUP_COMPLETED" and job.s3_key:
                 metadata = get_object_metadata(job.s3_key, fzip_bucket)
                 if not metadata:
                     logger.warning(f"Skipping completed backup {job.job_id} - S3 file not found: {job.s3_key}")

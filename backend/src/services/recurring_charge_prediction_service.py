@@ -161,49 +161,79 @@ class RecurringChargePredictionService:
         """
         pattern_type = pattern.temporal_pattern_type
         
-        if pattern_type == TemporalPatternType.DAY_OF_MONTH:
-            if pattern.day_of_month is None:
-                # Fallback to frequency-based if day not specified
-                return self._next_by_frequency(from_date, last_occurrence, pattern.frequency)
-            return self._next_day_of_month(from_date, pattern.day_of_month)
+        # Handle patterns requiring special logic
+        if type(pattern_type).__name__ == "TemporalPatternType" and pattern_type.name == "DAY_OF_MONTH":
+            return self._handle_day_of_month(pattern, from_date, last_occurrence)
         
-        elif pattern_type == TemporalPatternType.DAY_OF_WEEK:
-            if pattern.day_of_week is None:
-                # Fallback to frequency-based if day not specified
-                return self._next_by_frequency(from_date, last_occurrence, pattern.frequency)
-            return self._next_day_of_week(from_date, pattern.day_of_week, pattern.frequency)
+        if type(pattern_type).__name__ == "TemporalPatternType" and pattern_type.name == "DAY_OF_WEEK":
+            return self._handle_day_of_week(pattern, from_date, last_occurrence)
         
-        elif pattern_type == TemporalPatternType.FIRST_WORKING_DAY:
-            return self._next_first_working_day(from_date)
+        if type(pattern_type).__name__ == "TemporalPatternType" and pattern_type.name == "FIRST_DAY_OF_MONTH":
+            return self._handle_first_day_of_month(pattern, from_date)
         
-        elif pattern_type == TemporalPatternType.LAST_WORKING_DAY:
-            return self._next_last_working_day(from_date)
+        if type(pattern_type).__name__ == "TemporalPatternType" and pattern_type.name == "LAST_DAY_OF_MONTH":
+            return self._handle_last_day_of_month(pattern, from_date)
         
-        elif pattern_type == TemporalPatternType.FIRST_DAY_OF_MONTH:
-            if pattern.day_of_week is not None:
-                # First occurrence of specific weekday
-                return self._next_first_weekday_of_month(from_date, pattern.day_of_week)
-            else:
-                # First day of month
-                return self._next_day_of_month(from_date, 1)
+        # Simple pattern type mappings
+        simple_handlers = {
+            TemporalPatternType.FIRST_WORKING_DAY: lambda: self._next_first_working_day(from_date),
+            TemporalPatternType.LAST_WORKING_DAY: lambda: self._next_last_working_day(from_date),
+            TemporalPatternType.WEEKEND: lambda: self._next_weekend(from_date),
+            TemporalPatternType.WEEKDAY: lambda: self._next_weekday(from_date),
+        }
         
-        elif pattern_type == TemporalPatternType.LAST_DAY_OF_MONTH:
-            if pattern.day_of_week is not None:
-                # Last occurrence of specific weekday
-                return self._next_last_weekday_of_month(from_date, pattern.day_of_week)
-            else:
-                # Last day of month
-                return self._next_last_day_of_month(from_date)
+        handler = simple_handlers.get(pattern_type)
+        if handler:
+            return handler()
         
-        elif pattern_type == TemporalPatternType.WEEKEND:
-            return self._next_weekend(from_date)
-        
-        elif pattern_type == TemporalPatternType.WEEKDAY:
-            return self._next_weekday(from_date)
-        
-        else:  # FLEXIBLE or unknown
-            # Use frequency-based prediction
+        # Default: FLEXIBLE or unknown - use frequency-based prediction
+        return self._next_by_frequency(from_date, last_occurrence, pattern.frequency)
+    
+    def _handle_day_of_month(
+        self,
+        pattern: RecurringChargePattern,
+        from_date: datetime,
+        last_occurrence: datetime
+    ) -> datetime:
+        """Handle DAY_OF_MONTH pattern type."""
+        if pattern.day_of_month is None:
             return self._next_by_frequency(from_date, last_occurrence, pattern.frequency)
+        return self._next_day_of_month(from_date, pattern.day_of_month)
+    
+    def _handle_day_of_week(
+        self,
+        pattern: RecurringChargePattern,
+        from_date: datetime,
+        last_occurrence: datetime
+    ) -> datetime:
+        """Handle DAY_OF_WEEK pattern type."""
+        if pattern.day_of_week is None:
+            return self._next_by_frequency(from_date, last_occurrence, pattern.frequency)
+        return self._next_day_of_week(from_date, pattern.day_of_week, pattern.frequency)
+    
+    def _handle_first_day_of_month(
+        self,
+        pattern: RecurringChargePattern,
+        from_date: datetime
+    ) -> datetime:
+        """Handle FIRST_DAY_OF_MONTH pattern type."""
+        if pattern.day_of_week is not None:
+            # First occurrence of specific weekday
+            return self._next_first_weekday_of_month(from_date, pattern.day_of_week)
+        # First day of month
+        return self._next_day_of_month(from_date, 1)
+    
+    def _handle_last_day_of_month(
+        self,
+        pattern: RecurringChargePattern,
+        from_date: datetime
+    ) -> datetime:
+        """Handle LAST_DAY_OF_MONTH pattern type."""
+        if pattern.day_of_week is not None:
+            # Last occurrence of specific weekday
+            return self._next_last_weekday_of_month(from_date, pattern.day_of_week)
+        # Last day of month
+        return self._next_last_day_of_month(from_date)
     
     def _next_day_of_month(self, from_date: datetime, day: int) -> datetime:
         """
@@ -250,9 +280,9 @@ class RecurringChargePredictionService:
         
         if days_ahead == 0:
             # Same day of week, move to next occurrence based on frequency
-            if frequency == RecurrenceFrequency.WEEKLY:
+            if type(frequency).__name__ == "RecurrenceFrequency" and frequency.name == "WEEKLY":
                 days_ahead = 7
-            elif frequency == RecurrenceFrequency.BI_WEEKLY:
+            elif type(frequency).__name__ == "RecurrenceFrequency" and frequency.name == "BI_WEEKLY":
                 days_ahead = 14
             else:
                 days_ahead = 7  # Default to weekly
@@ -414,7 +444,7 @@ class RecurringChargePredictionService:
         frequency: RecurrenceFrequency
     ) -> datetime:
         """Predict next date based on frequency from last occurrence."""
-        if frequency == RecurrenceFrequency.IRREGULAR:
+        if type(frequency).__name__ == "RecurrenceFrequency" and frequency.name == "IRREGULAR":
             # Use 30 days as default
             days = 30
         else:

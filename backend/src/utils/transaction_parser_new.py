@@ -859,11 +859,11 @@ def _process_amount_for_format(mapped_data: Dict[str, Any], file_format: Optiona
     
     amount_str = str(mapped_data.get('amount', '0'))
     
-    if file_format == FileFormat.CSV:
+    if type(file_format).__name__ == "FileFormat" and file_format.name == "CSV":
         amount = process_csv_amount(amount_str, mapped_data.get('debitOrCredit'))
-    elif file_format in [FileFormat.OFX, FileFormat.QFX]:
+    elif type(file_format).__name__ == "FileFormat" and file_format.name in ["OFX", "QFX"]:
         amount = process_ofx_amount(amount_str)
-    elif file_format == FileFormat.QIF:
+    elif type(file_format).__name__ == "FileFormat" and file_format.name == "QIF":
         amount = process_qif_amount(amount_str)
     else:
         amount = Decimal(amount_str.replace(',', ''))

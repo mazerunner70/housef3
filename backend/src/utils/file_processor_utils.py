@@ -120,9 +120,9 @@ def extract_opening_balance(content_bytes: bytes, file_format: FileFormat) -> Op
                 return None
         
         # Process based on file format
-        if file_format == FileFormat.OFX or file_format == FileFormat.QFX:
+        if type(file_format).__name__ == "FileFormat" and file_format.name in ["OFX", "QFX"]:
             return extract_opening_balance_ofx(content_text)
-        elif file_format == FileFormat.CSV:
+        elif type(file_format).__name__ == "FileFormat" and file_format.name == "CSV":
             return extract_opening_balance_csv(content_text)
         
         return None

@@ -177,11 +177,11 @@ class FZIPJob(BaseModel):
 
     def is_backup(self) -> bool:
         """Check if this is a backup job"""
-        return self.job_type == FZIPType.BACKUP
+        return type(self.job_type).__name__ == "FZIPType" and self.job_type.name == "BACKUP"
 
     def is_restore(self) -> bool:
         """Check if this is a restore job"""
-        return self.job_type == FZIPType.RESTORE
+        return type(self.job_type).__name__ == "FZIPType" and self.job_type.name == "RESTORE"
 
     def is_completed(self) -> bool:
         """Check if the job is completed"""

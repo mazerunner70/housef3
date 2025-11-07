@@ -192,12 +192,12 @@ class Transaction(BaseModel):
     @property
     def confirmed_categories(self) -> List[TransactionCategoryAssignment]:
         """Returns only confirmed category assignments"""
-        return [cat for cat in self.categories if cat.status == CategoryAssignmentStatus.CONFIRMED]
+        return [cat for cat in self.categories if type(cat.status).__name__ == "CategoryAssignmentStatus" and cat.status.name == "CONFIRMED"]
 
     @property
     def suggested_categories(self) -> List[TransactionCategoryAssignment]:
         """Returns only suggested category assignments awaiting review"""
-        return [cat for cat in self.categories if cat.status == CategoryAssignmentStatus.SUGGESTED]
+        return [cat for cat in self.categories if type(cat.status).__name__ == "CategoryAssignmentStatus" and cat.status.name == "SUGGESTED"]
 
     @property
     def needs_category_review(self) -> bool:
@@ -228,7 +228,7 @@ class Transaction(BaseModel):
     def confirm_category_assignment(self, category_id: uuid.UUID, set_as_primary: bool = False) -> bool:
         """Confirm a suggested category assignment"""
         assignment = next((cat for cat in self.categories if cat.category_id == category_id), None)
-        if assignment and assignment.status == CategoryAssignmentStatus.SUGGESTED:
+        if assignment and type(assignment.status).__name__ == "CategoryAssignmentStatus" and assignment.status.name == "SUGGESTED":
             assignment.confirm_assignment()
             if set_as_primary or self.primary_category_id is None:
                 self.primary_category_id = category_id
@@ -245,7 +245,7 @@ class Transaction(BaseModel):
         # Check if category is already assigned
         existing = next((cat for cat in self.categories if cat.category_id == category_id), None)
         if existing:
-            if existing.status == CategoryAssignmentStatus.SUGGESTED:
+            if type(existing.status).__name__ == "CategoryAssignmentStatus" and existing.status.name == "SUGGESTED":
                 existing.confirm_assignment()
                 existing.is_manual = True
             return
@@ -278,7 +278,7 @@ class Transaction(BaseModel):
         """Set a confirmed category as primary"""
         # Ensure the category is confirmed
         assignment = next((cat for cat in self.categories if cat.category_id == category_id), None)
-        if assignment and assignment.status == CategoryAssignmentStatus.CONFIRMED:
+        if assignment and type(assignment.status).__name__ == "CategoryAssignmentStatus" and assignment.status.name == "CONFIRMED":
             self.primary_category_id = category_id
             return True
         return False

@@ -459,7 +459,8 @@ class RecurringChargeDetectionService:
                 common = new_common
             else:
                 # Fall back to first word if no common substring
-                common = descriptions[0].split()[0] if descriptions[0] else "UNKNOWN"
+                words = descriptions[0].split()
+                common = words[0] if words else "UNKNOWN"
                 break
         
         # Clean up the pattern

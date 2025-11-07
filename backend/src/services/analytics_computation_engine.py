@@ -36,7 +36,7 @@ class AnalyticsComputationEngine:
             categories = list_categories_by_user_from_db(user_id)
             transfer_category_ids = {
                 str(cat.categoryId) for cat in categories 
-                if cat.type == CategoryType.TRANSFER
+                if type(cat.type).__name__ == "CategoryType" and cat.type.name == "TRANSFER"
             }
             self._transfer_category_cache[user_id] = transfer_category_ids
             return transfer_category_ids
@@ -279,7 +279,7 @@ class AnalyticsComputationEngine:
                 # Credit utilization for credit card accounts
                 credit_utilization = None
                 credit_utilization_estimated = None
-                if account.account_type == AccountType.CREDIT_CARD and account.balance:
+                if type(account.account_type).__name__ == "AccountType" and account.account_type.name == "CREDIT_CARD" and account.balance:
                     # TODO: Use actual credit limit data when available
                     # For now, use a rough estimate (3x balance) but mark it as estimated
                     estimated_limit = abs(account.balance) * 3  # Rough estimate

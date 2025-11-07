@@ -570,7 +570,7 @@ class TransferDetectionService:
             categories = list_categories_by_user_from_db(user_id)
             transfer_category_ids = {
                 str(cat.categoryId) for cat in categories 
-                if cat.type == CategoryType.TRANSFER
+                if type(cat.type).__name__ == "CategoryType" and cat.type.name == "TRANSFER"
             }
             self._transfer_category_ids_cache[user_id] = transfer_category_ids
             return transfer_category_ids
@@ -613,7 +613,7 @@ class TransferDetectionService:
             # Look for existing transfer category
             categories = list_categories_by_user_from_db(user_id)
             transfer_category = next(
-                (cat for cat in categories if cat.type == CategoryType.TRANSFER), 
+                (cat for cat in categories if type(cat.type).__name__ == "CategoryType" and cat.type.name == "TRANSFER"), 
                 None
             )
             

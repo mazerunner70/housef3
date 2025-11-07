@@ -10,12 +10,13 @@ Produces a 67-dimensional feature vector:
 
 import logging
 import math
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from datetime import datetime, timezone
 from decimal import Decimal
 
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
+from scipy.sparse import csr_matrix
 import holidays
 
 from models.transaction import Transaction
@@ -53,7 +54,7 @@ class RecurringChargeFeatureService:
     def extract_features_batch(
         self,
         transactions: List[Transaction]
-    ) -> Tuple[np.ndarray, TfidfVectorizer]:
+    ) -> Tuple[np.ndarray, Optional[TfidfVectorizer]]:
         """
         Extract features from a batch of transactions.
         
@@ -63,7 +64,7 @@ class RecurringChargeFeatureService:
         Returns:
             Tuple of (feature_matrix, fitted_vectorizer)
             - feature_matrix: numpy array of shape (n_transactions, 67)
-            - fitted_vectorizer: Fitted TF-IDF vectorizer for descriptions
+            - fitted_vectorizer: Fitted TF-IDF vectorizer for descriptions (None if empty or failed)
         """
         if not transactions:
             return np.array([]).reshape(0, FEATURE_VECTOR_SIZE), None
@@ -209,7 +210,7 @@ class RecurringChargeFeatureService:
     def extract_description_features_batch(
         self,
         transactions: List[Transaction]
-    ) -> Tuple[np.ndarray, TfidfVectorizer]:
+    ) -> Tuple[np.ndarray, Optional[TfidfVectorizer]]:
         """
         Extract description features using TF-IDF vectorization.
         
@@ -222,10 +223,10 @@ class RecurringChargeFeatureService:
         Returns:
             Tuple of (feature_matrix, vectorizer)
             - feature_matrix: numpy array of shape (n_transactions, 49)
-            - vectorizer: Fitted TfidfVectorizer
+            - vectorizer: Fitted TfidfVectorizer (None if vectorization failed)
         """
         # Extract descriptions
-        descriptions = [txn.description.lower() for txn in transactions]
+        descriptions = [txn.description.lower() for txn in transactions if txn.description]
         
         # Initialize and fit TF-IDF vectorizer
         vectorizer = TfidfVectorizer(
@@ -239,7 +240,7 @@ class RecurringChargeFeatureService:
         )
         
         try:
-            tfidf_matrix = vectorizer.fit_transform(descriptions)
+            tfidf_matrix: csr_matrix = vectorizer.fit_transform(descriptions)  # type: ignore[assignment]
             feature_matrix = tfidf_matrix.toarray()
             
             # Ensure we have exactly DESCRIPTION_FEATURE_SIZE features
@@ -253,7 +254,7 @@ class RecurringChargeFeatureService:
                 
         except ValueError as e:
             # Handle case where vocabulary is empty or too small
-            logger.warning(f"TF-IDF vectorization failed: {e}. Using zero vectors.")
+            logger.warning(f"TF-IDF vectorization failed: {e}. Using zero vectors.", exc_info=True)
             feature_matrix = np.zeros((len(transactions), DESCRIPTION_FEATURE_SIZE))
             vectorizer = None
         

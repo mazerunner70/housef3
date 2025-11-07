@@ -214,11 +214,11 @@ class CategoryRuleEngine:
         try:
             amount_value = Decimal(str(amount))
             
-            if rule.condition == MatchCondition.AMOUNT_GREATER:
+            if type(rule.condition).__name__ == "MatchCondition" and rule.condition.name == "AMOUNT_GREATER":
                 return rule.amount_min is not None and amount_value > rule.amount_min
-            elif rule.condition == MatchCondition.AMOUNT_LESS:
+            elif type(rule.condition).__name__ == "MatchCondition" and rule.condition.name == "AMOUNT_LESS":
                 return rule.amount_max is not None and amount_value < rule.amount_max
-            elif rule.condition == MatchCondition.AMOUNT_BETWEEN:
+            elif type(rule.condition).__name__ == "MatchCondition" and rule.condition.name == "AMOUNT_BETWEEN":
                 return (rule.amount_min is not None and rule.amount_max is not None and 
                         rule.amount_min <= amount_value <= rule.amount_max)
             
@@ -241,19 +241,19 @@ class CategoryRuleEngine:
         
         try:
             result = False
-            if rule.condition == MatchCondition.CONTAINS:
+            if type(rule.condition).__name__ == "MatchCondition" and rule.condition.name == "CONTAINS":
                 result = pattern_value in search_value
                 logger.debug(f"RULE_DEBUG: CONTAINS check: '{pattern_value}' in '{search_value}' = {result}")
-            elif rule.condition == MatchCondition.STARTS_WITH:
+            elif type(rule.condition).__name__ == "MatchCondition" and rule.condition.name == "STARTS_WITH":
                 result = search_value.startswith(pattern_value)
                 logger.debug(f"RULE_DEBUG: STARTS_WITH check: '{search_value}'.startswith('{pattern_value}') = {result}")
-            elif rule.condition == MatchCondition.ENDS_WITH:
+            elif type(rule.condition).__name__ == "MatchCondition" and rule.condition.name == "ENDS_WITH":
                 result = search_value.endswith(pattern_value)
                 logger.debug(f"RULE_DEBUG: ENDS_WITH check: '{search_value}'.endswith('{pattern_value}') = {result}")
-            elif rule.condition == MatchCondition.EQUALS:
+            elif type(rule.condition).__name__ == "MatchCondition" and rule.condition.name == "EQUALS":
                 result = search_value == pattern_value
                 logger.debug(f"RULE_DEBUG: EQUALS check: '{search_value}' == '{pattern_value}' = {result}")
-            elif rule.condition == MatchCondition.REGEX:
+            elif type(rule.condition).__name__ == "MatchCondition" and rule.condition.name == "REGEX":
                 result = self._match_regex_pattern(rule, search_value)
                 logger.debug(f"RULE_DEBUG: REGEX check: pattern '{rule.value}' against '{search_value}' = {result}")
             
@@ -367,11 +367,11 @@ class CategoryRuleEngine:
         
         suggestions = []
         
-        if strategy == CategorySuggestionStrategy.ALL_MATCHES:
+        if type(strategy).__name__ == "CategorySuggestionStrategy" and strategy.name == "ALL_MATCHES":
             suggestions = self._create_suggestions_from_all_matches(sorted_matches)
-        elif strategy == CategorySuggestionStrategy.TOP_N_MATCHES:
+        elif type(strategy).__name__ == "CategorySuggestionStrategy" and strategy.name == "TOP_N_MATCHES":
             suggestions = self._create_top_n_suggestions(sorted_matches, n=3)
-        elif strategy == CategorySuggestionStrategy.CONFIDENCE_THRESHOLD:
+        elif type(strategy).__name__ == "CategorySuggestionStrategy" and strategy.name == "CONFIDENCE_THRESHOLD":
             suggestions = self._create_threshold_suggestions(sorted_matches, threshold=60)
         else:  # PRIORITY_FILTERED
             suggestions = self._create_priority_filtered_suggestions(sorted_matches)
