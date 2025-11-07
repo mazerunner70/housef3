@@ -8,3 +8,4 @@ export * from './Analytics';
 export * from './Category';
 export * from './Transaction';
 export * from './FZIP';
+export * from './RecurringCharge';
