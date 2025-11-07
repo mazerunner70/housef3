@@ -9,8 +9,6 @@ Provides API endpoints for analytics data:
 
 import json
 import logging
-import os
-import sys
 import traceback
 import uuid
 from datetime import datetime, date
@@ -29,23 +27,6 @@ from services.analytics_computation_engine import AnalyticsComputationEngine
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
-# Fix imports for Lambda environment
-try:
-    # Add the /var/task (Lambda root) to the path if not already there
-    if '/var/task' not in sys.path:
-        sys.path.insert(0, '/var/task')
-
-    # Add the parent directory to allow direct imports
-    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
-
-    logger.info("Successfully adjusted Python path for Lambda environment")
-except ImportError as e:
-    logger.error(f"Import error: {str(e)}")
-    logger.error(f"Current sys.path: {sys.path}")
-    raise
 
 
 # Custom JSON encoder to handle Decimal, UUID, and date values

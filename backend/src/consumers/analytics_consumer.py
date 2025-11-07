@@ -17,29 +17,12 @@ Event Types Processed:
 import json
 import logging
 import os
-import sys
 import traceback
 from typing import Dict, Any, List, Optional
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
-# Fix imports for Lambda environment
-try:
-    if '/var/task' not in sys.path:
-        sys.path.insert(0, '/var/task')
-    
-    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
-        
-    logger.info("Successfully adjusted Python path for Lambda environment")
-except Exception as e:
-    logger.error(f"Import path setup error: {str(e)}")
-    raise
-
-# Import after path fixing
 from consumers.base_consumer import BaseEventConsumer
 from models.events import BaseEvent, FileDeletionVoteEvent
 from models.analytics import AnalyticType, AnalyticsProcessingStatus

@@ -52,36 +52,6 @@ ENABLE_EVENT_PUBLISHING = os.environ.get('ENABLE_EVENT_PUBLISHING', 'true').lowe
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Fix imports for Lambda environment
-try:
-    import sys
-    # Add the Lambda root to the path if not already there
-    if '/var/task' not in sys.path:
-        sys.path.insert(0, '/var/task')
-    
-    # Add the parent directory to allow imports
-    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
-    
-    # Import required modules
-    from models.transaction_file import FileFormat, ProcessingStatus
-    from utils.file_analyzer import analyze_file_format
-    from utils.db_utils import get_transaction_file
-    
-    logger.info("Successfully imported modules for file processor")
-except ImportError as e:
-    logger.error(f"Import error in file processor: {str(e)}")
-    logger.error(f"Current sys.path: {sys.path}")
-    try:
-        from ..models.transaction_file import FileFormat, ProcessingStatus
-        from ..utils.file_analyzer import analyze_file_format
-        from ..utils.db_utils import get_transaction_file
-        logger.info("Successfully imported modules using relative imports")
-    except ImportError as e2:
-        logger.error(f"Final import attempt failed in file processor: {str(e2)}")
-        raise
-
 # Initialize clients
 dynamodb = boto3.resource('dynamodb')
 s3_client = boto3.client('s3')

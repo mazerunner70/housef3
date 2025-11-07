@@ -16,6 +16,7 @@ locals {
     analytics_operations        = aws_lambda_function.analytics_operations
     export_operations           = aws_lambda_function.export_operations
     user_preferences_operations = aws_lambda_function.user_preferences_operations
+    recurring_charge_operations = aws_lambda_function.recurring_charge_operations
   }
 
   # Special lambda with alias
@@ -67,6 +68,10 @@ locals {
     user_preferences_operations = {
       lambda_key  = "user_preferences_operations"
       description = "Lambda integration for user preferences operations endpoints"
+    }
+    recurring_charge_operations = {
+      lambda_key  = "recurring_charge_operations"
+      description = "Lambda integration for recurring charge pattern detection and management"
     }
     fzip_operations = {
       lambda_key  = "fzip_operations"
@@ -530,6 +535,38 @@ locals {
       integration  = "user_preferences_operations"
       requires_auth = true
     }
+
+    # Recurring Charge Operations
+    detect_recurring_charges = {
+      route_key    = "POST /recurring-charges/detect"
+      integration  = "recurring_charge_operations"
+      requires_auth = true
+    }
+    get_recurring_charge_patterns = {
+      route_key    = "GET /recurring-charges/patterns"
+      integration  = "recurring_charge_operations"
+      requires_auth = true
+    }
+    get_recurring_charge_pattern = {
+      route_key    = "GET /recurring-charges/patterns/{id}"
+      integration  = "recurring_charge_operations"
+      requires_auth = true
+    }
+    update_recurring_charge_pattern = {
+      route_key    = "PATCH /recurring-charges/patterns/{id}"
+      integration  = "recurring_charge_operations"
+      requires_auth = true
+    }
+    get_recurring_charge_predictions = {
+      route_key    = "GET /recurring-charges/predictions"
+      integration  = "recurring_charge_operations"
+      requires_auth = true
+    }
+    apply_pattern_to_category = {
+      route_key    = "POST /recurring-charges/patterns/{id}/apply-category"
+      integration  = "recurring_charge_operations"
+      requires_auth = true
+    }
   }
 
   # Lambda permission configurations
@@ -604,6 +641,11 @@ locals {
       statement_id  = "AllowAPIGatewayInvokeUserPreferencesLambda"
       function_name = "user_preferences_operations"
       source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+    }
+    api_gateway_recurring_charge_ops = {
+      statement_id  = "AllowAPIGatewayInvokeRecurringChargeOps"
+      function_name = "recurring_charge_operations"
+      source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/recurring-charges*"
     }
   }
 }
