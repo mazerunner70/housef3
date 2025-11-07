@@ -39,6 +39,7 @@ class OperationType(str, Enum):
     DATA_EXPORT = "data_export"
     BULK_CATEGORIZATION = "bulk_categorization"
     ACCOUNT_MIGRATION = "account_migration"
+    RECURRING_CHARGE_DETECTION = "recurring_charge_detection"
 
 
 class OperationTrackingService:
@@ -83,6 +84,17 @@ class OperationTrackingService:
                     {'name': 'completed', 'description': 'Export ready for download'}
                 ],
                 'cancellable_until': OperationStatus.EXECUTING
+            },
+            OperationType.RECURRING_CHARGE_DETECTION: {
+                'display_name': 'Recurring Charge Detection',
+                'estimated_duration_minutes': 5,
+                'steps': [
+                    {'name': 'initiated', 'description': 'Detection request received'},
+                    {'name': 'in_progress', 'description': 'Analyzing transaction patterns'},
+                    {'name': 'executing', 'description': 'Saving detected patterns'},
+                    {'name': 'completed', 'description': 'Pattern detection completed'}
+                ],
+                'cancellable_until': OperationStatus.IN_PROGRESS
             }
         }
     
