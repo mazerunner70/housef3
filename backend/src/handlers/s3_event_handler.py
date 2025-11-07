@@ -8,29 +8,12 @@ This enables event-driven file processing through the consumer architecture.
 import json
 import logging
 import os
-import sys
 import traceback
 from typing import Dict, Any
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
-# Fix imports for Lambda environment
-try:
-    if '/var/task' not in sys.path:
-        sys.path.insert(0, '/var/task')
-    
-    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
-        
-    logger.info("Successfully adjusted Python path for Lambda environment")
-except Exception as e:
-    logger.error(f"Import path setup error: {str(e)}")
-    raise
-
-# Import after path fixing
 from services.event_service import event_service
 from models.events import FileUploadedEvent
 from utils.s3_dao import get_object_metadata

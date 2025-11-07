@@ -13,8 +13,6 @@ history and identify recurring patterns, then saves them to DynamoDB.
 
 import json
 import logging
-import os
-import sys
 import traceback
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -22,22 +20,6 @@ from datetime import datetime
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
-# Fix imports for Lambda environment
-try:
-    if "/var/task" not in sys.path:
-        sys.path.insert(0, "/var/task")
-    
-    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
-    
-    logger.info("Successfully adjusted Python path for Lambda environment")
-except Exception as e:
-    logger.exception(f"Import path setup error: {str(e)}", exc_info=True)
-    raise
-
-# Import after path fixing
 from consumers.base_consumer import BaseEventConsumer, EventProcessingError
 from models.events import BaseEvent
 from services.recurring_charge_detection_service import RecurringChargeDetectionService

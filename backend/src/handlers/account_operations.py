@@ -49,59 +49,6 @@ from models.events import AccountCreatedEvent, AccountUpdatedEvent, AccountDelet
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Fix imports for Lambda environment
-try:
-    # Try direct imports for Lambda environment
-    import sys
-
-    # Add the /var/task (Lambda root) to the path if not already there
-    if "/var/task" not in sys.path:
-        sys.path.insert(0, "/var/task")
-
-    # Add the parent directory to allow direct imports
-    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
-
-    # Now try the imports
-    from models.account import Account, AccountType, Currency
-    from utils.db_utils import (
-        get_account,
-        list_user_accounts,
-        create_account,
-        update_account,
-        delete_account,
-    )
-    from utils.db_utils import list_account_files, create_transaction_file
-    from models.transaction_file import TransactionFile, FileFormat, ProcessingStatus
-
-    logger.info("Successfully imported modules using adjusted path")
-except ImportError as e:
-    logger.error(f"Import error: {str(e)}")
-    # Log the current sys.path to debug import issues
-    logger.error(f"Current sys.path: {sys.path}")
-    # Last resort, try relative import
-    try:
-        from ..models.account import Account, AccountType, Currency
-        from ..utils.db_utils import (
-            get_account,
-            list_user_accounts,
-            create_account,
-            update_account,
-            delete_account,
-        )
-        from ..utils.db_utils import list_account_files, create_transaction_file
-        from ..models.transaction_file import (
-            TransactionFile,
-            FileFormat,
-            ProcessingStatus,
-        )
-
-        logger.info("Successfully imported modules using relative imports")
-    except ImportError as e2:
-        logger.error(f"Final import attempt failed: {str(e2)}")
-        raise
-
 
 # Note: Using centralized create_response and DecimalEncoder from utils.lambda_utils
 # This ensures consistent JSON serialization across all handlers
