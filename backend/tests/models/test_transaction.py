@@ -3,6 +3,7 @@ import uuid
 from decimal import Decimal
 from datetime import datetime, timezone
 import json
+from pydantic import ValidationError
 
 from models.transaction import (
     Transaction, 
@@ -122,7 +123,7 @@ class TestTransactionCategoryAssignment:
         assert assignment_confirmed.status == CategoryAssignmentStatus.CONFIRMED
 
     def test_from_dynamodb_item_invalid_enum_value(self):
-        """Test handling of invalid enum values from DynamoDB."""
+        """Test that invalid enum values from DynamoDB are properly rejected."""
         category_id = uuid.uuid4()
         item = {
             "categoryId": str(category_id),
@@ -132,10 +133,12 @@ class TestTransactionCategoryAssignment:
             "assignedAt": 1751743054715
         }
         
-        # Should default to SUGGESTED for invalid values
-        assignment = TransactionCategoryAssignment.from_dynamodb_item(item)
-        assert assignment.status == CategoryAssignmentStatus.SUGGESTED
-        assert assignment.status.value == "suggested"
+        # Should raise ValidationError for invalid enum - proper early validation
+        with pytest.raises(ValidationError) as exc_info:
+            TransactionCategoryAssignment.from_dynamodb_item(item)
+        
+        # Verify it's an enum validation error
+        assert 'status' in str(exc_info.value)
 
 
 class TestTransaction:
@@ -151,15 +154,16 @@ class TestTransaction:
         amount = Decimal("100.50")
         currency = Currency.USD
         
-        transaction = Transaction.create(
-            user_id=user_id,
-            file_id=file_id,
-            account_id=account_id,
+        create_data = TransactionCreate(
+            userId=user_id,
+            fileId=file_id,
+            accountId=account_id,
             date=date,
             description=description,
             amount=amount,
             currency=currency
         )
+        transaction = Transaction.create(create_data)
         
         assert transaction.user_id == user_id
         assert transaction.file_id == file_id
@@ -297,15 +301,16 @@ class TestTransaction:
 
     def test_add_category_suggestion(self):
         """Test adding a category suggestion."""
-        transaction = Transaction.create(
-            user_id="test-user",
-            file_id=uuid.uuid4(),
-            account_id=uuid.uuid4(),
+        create_data = TransactionCreate(
+            userId="test-user",
+            fileId=uuid.uuid4(),
+            accountId=uuid.uuid4(),
             date=1717632000000,
             description="Test transaction",
             amount=Decimal("100.00"),
             currency=Currency.USD
         )
+        transaction = Transaction.create(create_data)
         
         category_id = uuid.uuid4()
         transaction.add_category_suggestion(category_id, confidence=80, rule_id="rule123")
@@ -321,15 +326,16 @@ class TestTransaction:
 
     def test_confirm_category_assignment(self):
         """Test confirming a category assignment."""
-        transaction = Transaction.create(
-            user_id="test-user",
-            file_id=uuid.uuid4(),
-            account_id=uuid.uuid4(),
+        create_data = TransactionCreate(
+            userId="test-user",
+            fileId=uuid.uuid4(),
+            accountId=uuid.uuid4(),
             date=1717632000000,
             description="Test transaction",
             amount=Decimal("100.00"),
             currency=Currency.USD
         )
+        transaction = Transaction.create(create_data)
         
         category_id = uuid.uuid4()
         transaction.add_category_suggestion(category_id, confidence=80)
@@ -346,15 +352,16 @@ class TestTransaction:
 
     def test_add_manual_category(self):
         """Test adding a manual category."""
-        transaction = Transaction.create(
-            user_id="test-user",
-            file_id=uuid.uuid4(),
-            account_id=uuid.uuid4(),
+        create_data = TransactionCreate(
+            userId="test-user",
+            fileId=uuid.uuid4(),
+            accountId=uuid.uuid4(),
             date=1717632000000,
             description="Test transaction",
             amount=Decimal("100.00"),
             currency=Currency.USD
         )
+        transaction = Transaction.create(create_data)
         
         category_id = uuid.uuid4()
         transaction.add_manual_category(category_id, set_as_primary=True)
@@ -370,15 +377,16 @@ class TestTransaction:
 
     def test_remove_category_assignment(self):
         """Test removing a category assignment."""
-        transaction = Transaction.create(
-            user_id="test-user",
-            file_id=uuid.uuid4(),
-            account_id=uuid.uuid4(),
+        create_data = TransactionCreate(
+            userId="test-user",
+            fileId=uuid.uuid4(),
+            accountId=uuid.uuid4(),
             date=1717632000000,
             description="Test transaction",
             amount=Decimal("100.00"),
             currency=Currency.USD
         )
+        transaction = Transaction.create(create_data)
         
         category_id = uuid.uuid4()
         transaction.add_manual_category(category_id, set_as_primary=True)
@@ -392,15 +400,16 @@ class TestTransaction:
 
     def test_category_properties(self):
         """Test category-related properties."""
-        transaction = Transaction.create(
-            user_id="test-user",
-            file_id=uuid.uuid4(),
-            account_id=uuid.uuid4(),
+        create_data = TransactionCreate(
+            userId="test-user",
+            fileId=uuid.uuid4(),
+            accountId=uuid.uuid4(),
             date=1717632000000,
             description="Test transaction",
             amount=Decimal("100.00"),
             currency=Currency.USD
         )
+        transaction = Transaction.create(create_data)
         
         suggested_category = uuid.uuid4()
         confirmed_category = uuid.uuid4()
@@ -417,15 +426,16 @@ class TestTransaction:
 
     def test_set_primary_category(self):
         """Test setting a primary category."""
-        transaction = Transaction.create(
-            user_id="test-user",
-            file_id=uuid.uuid4(),
-            account_id=uuid.uuid4(),
+        create_data = TransactionCreate(
+            userId="test-user",
+            fileId=uuid.uuid4(),
+            accountId=uuid.uuid4(),
             date=1717632000000,
             description="Test transaction",
             amount=Decimal("100.00"),
             currency=Currency.USD
         )
+        transaction = Transaction.create(create_data)
         
         category_id1 = uuid.uuid4()
         category_id2 = uuid.uuid4()
@@ -441,15 +451,16 @@ class TestTransaction:
 
     def test_transaction_hash_recalculation(self):
         """Test that transaction hash is recalculated when key fields change."""
-        transaction = Transaction.create(
-            user_id="test-user",
-            file_id=uuid.uuid4(),
-            account_id=uuid.uuid4(),
+        create_data = TransactionCreate(
+            userId="test-user",
+            fileId=uuid.uuid4(),
+            accountId=uuid.uuid4(),
             date=1717632000000,
             description="Test transaction",
             amount=Decimal("100.00"),
             currency=Currency.USD
         )
+        transaction = Transaction.create(create_data)
         
         original_hash = transaction.transaction_hash
         
@@ -462,15 +473,16 @@ class TestTransaction:
     def test_transaction_validation(self):
         """Test transaction validation."""
         # Test with valid data
-        transaction = Transaction.create(
-            user_id="test-user",
-            file_id=uuid.uuid4(),
-            account_id=uuid.uuid4(),
+        create_data = TransactionCreate(
+            userId="test-user",
+            fileId=uuid.uuid4(),
+            accountId=uuid.uuid4(),
             date=1717632000000,
             description="Test transaction",
             amount=Decimal("100.00"),
             currency=Currency.USD
         )
+        transaction = Transaction.create(create_data)
         
         assert transaction.user_id == "test-user"
         assert transaction.date == 1717632000000
@@ -478,15 +490,16 @@ class TestTransaction:
         
         # Test with invalid timestamp
         with pytest.raises(ValueError, match="Timestamp must be a positive integer"):
-            Transaction.create(
-                user_id="test-user",
-                file_id=uuid.uuid4(),
-                account_id=uuid.uuid4(),
+            invalid_data = TransactionCreate(
+                userId="test-user",
+                fileId=uuid.uuid4(),
+                accountId=uuid.uuid4(),
                 date=-1,  # Invalid negative timestamp
                 description="Test transaction",
                 amount=Decimal("100.00"),
                 currency=Currency.USD
             )
+            Transaction.create(invalid_data)
 
 
 class TestTransactionCreate:
@@ -561,15 +574,16 @@ class TestTransactionSerialization:
 
     def test_transaction_to_json(self):
         """Test transaction_to_json function."""
-        transaction = Transaction.create(
-            user_id="test-user",
-            file_id=uuid.uuid4(),
-            account_id=uuid.uuid4(),
+        create_data = TransactionCreate(
+            userId="test-user",
+            fileId=uuid.uuid4(),
+            accountId=uuid.uuid4(),
             date=1717632000000,
             description="Test transaction",
             amount=Decimal("100.50"),
             currency=Currency.USD
         )
+        transaction = Transaction.create(create_data)
         
         json_str = transaction_to_json(transaction)
         parsed = json.loads(json_str)
@@ -727,7 +741,7 @@ class TestTransactionSerialization:
             pytest.fail(f"Transaction serialization failed: {e}")
 
     def test_from_dynamodb_item_invalid_uuid_handling(self):
-        """Test that invalid UUID strings are handled gracefully."""
+        """Test that invalid UUID strings are properly rejected."""
         dynamodb_data = {
             'userId': 'test-user',
             'fileId': 'invalid-uuid-string',  # Invalid UUID
@@ -739,6 +753,9 @@ class TestTransactionSerialization:
             'currency': 'USD'
         }
         
-        # Should let Pydantic handle the invalid UUID and raise appropriate error
-        with pytest.raises(ValueError, match="badly formed hexadecimal UUID string"):
-            Transaction.from_dynamodb_item(dynamodb_data) 
+        # Should raise ValidationError for invalid UUID - proper early validation
+        with pytest.raises(ValidationError) as exc_info:
+            Transaction.from_dynamodb_item(dynamodb_data)
+        
+        # Verify it's a UUID validation error
+        assert 'fileId' in str(exc_info.value) 

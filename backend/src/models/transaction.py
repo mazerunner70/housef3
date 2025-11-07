@@ -47,7 +47,7 @@ class TransactionCategoryAssignment(BaseModel):
         json_encoders={
             uuid.UUID: str
         },
-        use_enum_values=True
+        use_enum_values=False  # Preserve enum objects (not strings) for type safety
     )
 
     @field_validator('assigned_at', 'confirmed_at')
@@ -94,17 +94,8 @@ class TransactionCategoryAssignment(BaseModel):
                 # If invalid UUID, let Pydantic handle the error
                 pass
         
-        # Manually convert status string to enum object to preserve enum type
-        if 'status' in converted_data and isinstance(converted_data['status'], str):
-            try:
-                converted_data['status'] = CategoryAssignmentStatus(converted_data['status'])
-            except ValueError:
-                # If invalid enum value, default to SUGGESTED
-                logger.warning(f"Invalid CategoryAssignmentStatus value: {converted_data['status']}, defaulting to SUGGESTED")
-                converted_data['status'] = CategoryAssignmentStatus.SUGGESTED
-        
-        # Use model_construct to preserve enum objects (model_validate would convert them back to strings due to use_enum_values=True)
-        return cls.model_construct(**converted_data)
+        # Use model_validate for proper validation
+        return cls.model_validate(converted_data)
 
 
 class Transaction(BaseModel):
@@ -145,6 +136,7 @@ class Transaction(BaseModel):
             Decimal: str,       # Serialize Decimal as string in JSON
             uuid.UUID: str      # Serialize UUID as string in JSON (default but explicit)
         },
+        use_enum_values=False,  # Preserve enum objects (not strings) for type safety
         arbitrary_types_allowed=True # If Money or Currency are not Pydantic models but used directly
     )
 
@@ -162,10 +154,6 @@ class Transaction(BaseModel):
         if v is None:
             return None
         if isinstance(v, Currency):
-            return v
-        # Check if this is from database deserialization
-        if info.context and info.context.get('from_database'):
-            # During database deserialization, we've already converted strings to enums
             return v
         # If we get here, something assigned a non-Currency value
         raise ValueError(f"Currency must be a Currency enum, got {type(v).__name__}: {v}")
@@ -353,50 +341,14 @@ class Transaction(BaseModel):
         return None
 
     @classmethod
-    def create(
-        cls,
-        user_id: str,
-        file_id: Union[str, uuid.UUID],
-        account_id: Union[str, uuid.UUID],
-        date: int,
-        description: str,
-        amount: Decimal,
-        currency: Optional[Currency] = None,
-        balance: Optional[Decimal] = None,
-        import_order: Optional[int] = None,
-        transaction_type: Optional[str] = None,
-        memo: Optional[str] = None,
-        check_number: Optional[str] = None,
-        fit_id: Optional[str] = None,
-        status: Optional[str] = None
-    ) -> "Transaction":
+    def create(cls, create_data: "TransactionCreate") -> "Transaction":
         """
-        Creates a new Transaction instance.
+        Creates a new Transaction instance from a TransactionCreate DTO.
         `transaction_id` is generated automatically by default_factory.
         `created_at` and `updated_at` are also set by default_factories.
         Hash is calculated via model_validator.
         """
-        init_data = {
-            "userId": user_id, # Pass as alias, Pydantic will map due to populate_by_name
-            "fileId": file_id,
-            "accountId": account_id,
-            "date": date,
-            "description": description,
-            "amount": amount,
-            "currency": currency,
-            "balance": balance,
-            "importOrder": import_order,
-            "transactionType": transaction_type,
-            "memo": memo,
-            "checkNumber": check_number,
-            "fitId": fit_id,
-            "status": status
-        }
-        # Filter out None kwargs to avoid overriding Pydantic defaults if not intended
-        # However, Pydantic handles Optional[X]=None correctly.
-        # clean_init_data = {k: v for k, v in init_data.items() if v is not None}
-        # It's generally fine to pass None for optional fields.
-        
+        init_data = create_data.model_dump(by_alias=True, exclude_none=True)
         return cls.model_validate(init_data)
 
     def to_dynamodb_item(self) -> Dict[str, Any]:
@@ -452,24 +404,6 @@ class Transaction(BaseModel):
                 if isinstance(converted_data[field], Decimal):
                     converted_data[field] = int(converted_data[field])
 
-        # Manually convert string values to enum objects before model_construct
-        if 'currency' in converted_data and isinstance(converted_data['currency'], str):
-            try:
-                converted_data['currency'] = Currency(converted_data['currency'])
-            except ValueError:
-                logger.warning(f"Invalid currency value from database: {converted_data['currency']}, setting to None")
-                converted_data['currency'] = None
-
-        # Manually convert UUID string fields to UUID objects
-        uuid_fields = ['fileId', 'transactionId', 'accountId', 'primaryCategoryId']
-        for field in uuid_fields:
-            if field in converted_data and isinstance(converted_data[field], str):
-                try:
-                    converted_data[field] = uuid.UUID(converted_data[field])
-                except ValueError:
-                    # If invalid UUID, let Pydantic handle the error
-                    pass
-
         # Handle category assignments reconstruction
         if 'categories' in converted_data and converted_data['categories']:
             processed_categories = []
@@ -504,8 +438,8 @@ class Transaction(BaseModel):
             
             converted_data['categories'] = processed_categories
 
-        # Use model_construct to preserve enum objects (model_validate would convert them back to strings due to use_enum_values=True)
-        return cls.model_construct(**converted_data)
+        # Use model_validate for proper validation
+        return cls.model_validate(converted_data)
 
 
 def transaction_to_json(transaction_input: Union[Transaction, Dict[str, Any]]) -> str:
@@ -558,6 +492,7 @@ class TransactionCreate(BaseModel):
 
     model_config = ConfigDict(
         populate_by_name=True,
+        use_enum_values=False,  # Preserve enum objects (not strings) for type safety
         arbitrary_types_allowed=True # If Money is not a Pydantic model but used directly
     )
 
@@ -573,10 +508,6 @@ class TransactionCreate(BaseModel):
     def validate_currency(cls, v, info: ValidationInfo) -> Currency:
         """Ensure currency is always a Currency enum, never a string."""
         if isinstance(v, Currency):
-            return v
-        # Check if this is from database deserialization
-        if info.context and info.context.get('from_database'):
-            # During database deserialization, we've already converted strings to enums
             return v
         # If we get here, something assigned a non-Currency value
         raise ValueError(f"Currency must be a Currency enum, got {type(v).__name__}: {v}")
@@ -600,6 +531,7 @@ class TransactionUpdate(BaseModel):
 
     model_config = ConfigDict(
         populate_by_name=True,
+        use_enum_values=False,  # Preserve enum objects (not strings) for type safety
         arbitrary_types_allowed=True # If Money is not a Pydantic model but used directly
     )
 
@@ -617,10 +549,6 @@ class TransactionUpdate(BaseModel):
         if v is None:
             return None
         if isinstance(v, Currency):
-            return v
-        # Check if this is from database deserialization
-        if info.context and info.context.get('from_database'):
-            # During database deserialization, we've already converted strings to enums
             return v
         # If we get here, something assigned a non-Currency value
         raise ValueError(f"Currency must be a Currency enum, got {type(v).__name__}: {v}")

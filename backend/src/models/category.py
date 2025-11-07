@@ -48,7 +48,7 @@ class CategoryRule(BaseModel):
             Decimal: str,
             UUID: str
         },
-        use_enum_values=True,
+        use_enum_values=False,  # Preserve enum objects (not strings) for type safety
         arbitrary_types_allowed=True
     )
     
@@ -92,7 +92,7 @@ class Category(BaseModel):
             UUID: str,
             Decimal: str
         },
-        use_enum_values=True,
+        use_enum_values=False,  # Preserve enum objects (not strings) for type safety
         arbitrary_types_allowed=True
     )
     

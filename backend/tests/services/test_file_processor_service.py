@@ -2,7 +2,7 @@ import pytest
 import uuid
 from decimal import Decimal
 from datetime import datetime, timezone
-from models.transaction import Transaction
+from models.transaction import Transaction, TransactionCreate
 from models.transaction_file import TransactionFile
 from models.account import Account, AccountType, Currency
 from services.file_processor_service import create_transactions
@@ -31,36 +31,36 @@ def test_create_transactions_updates_account_balance(mocker):
     
     # Create test transactions with different dates and balances
     transactions = [
-        Transaction.create(
-            user_id="test-user",
-            file_id=mock_transaction_file.file_id,
-            account_id=mock_account.account_id,
+        Transaction.create(TransactionCreate(
+            userId="test-user",
+            fileId=mock_transaction_file.file_id,
+            accountId=mock_account.account_id,
             date=1641024000000,  # 2022-01-01
             description="Transaction 1",
             amount=Decimal("-50.00"),
             currency=Currency.USD,
             balance=Decimal("950.00")
-        ),
-        Transaction.create(
-            user_id="test-user",
-            file_id=mock_transaction_file.file_id,
-            account_id=mock_account.account_id,
+        )),
+        Transaction.create(TransactionCreate(
+            userId="test-user",
+            fileId=mock_transaction_file.file_id,
+            accountId=mock_account.account_id,
             date=1641110400000,  # 2022-01-02
             description="Transaction 2",
             amount=Decimal("-30.00"),
             currency=Currency.USD,
             balance=Decimal("920.00")
-        ),
-        Transaction.create(
-            user_id="test-user",
-            file_id=mock_transaction_file.file_id,
-            account_id=mock_account.account_id,
+        )),
+        Transaction.create(TransactionCreate(
+            userId="test-user",
+            fileId=mock_transaction_file.file_id,
+            accountId=mock_account.account_id,
             date=1641196800000,  # 2022-01-03
             description="Transaction 3",
             amount=Decimal("-20.00"),
             currency=Currency.USD,
             balance=Decimal("900.00")
-        )
+        ))
     ]
     
     # Mock the checked_mandatory_account function to return our mock account

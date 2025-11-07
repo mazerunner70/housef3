@@ -9,6 +9,7 @@ import uuid
 from decimal import Decimal
 from typing import Dict, Any
 
+from pydantic import ValidationError
 import pytest
 
 from models.transaction import Transaction, TransactionCategoryAssignment, CategoryAssignmentStatus
@@ -249,7 +250,7 @@ def test_transaction_uuid_fields_conversion_from_dynamodb():
 
 
 def test_transaction_uuid_fields_with_invalid_uuids():
-    """Test that Transaction.from_dynamodb_item handles invalid UUID strings gracefully."""
+    """Test that Transaction.from_dynamodb_item properly validates and rejects invalid UUID strings."""
     mock_data = {
         'transactionId': 'invalid-uuid-string',  # Invalid UUID
         'accountId': '683f1901-22e8-48ad-bf52-6b148be3c8ee',  # Valid UUID
@@ -264,14 +265,14 @@ def test_transaction_uuid_fields_with_invalid_uuids():
         'updatedAt': 1749992863526
     }
     
-    # Convert using from_dynamodb_item - should not raise exceptions
-    transaction = Transaction.from_dynamodb_item(mock_data)
+    # Should raise ValidationError for invalid UUIDs - this is proper early validation
+    with pytest.raises(ValidationError) as exc_info:
+        Transaction.from_dynamodb_item(mock_data)
     
-    # Invalid UUIDs should be set to None with warning logged
-    assert transaction.transaction_id is None  # Invalid UUID string
-    assert isinstance(transaction.account_id, uuid.UUID)  # Valid UUID preserved
-    assert transaction.file_id is None  # Empty string treated as invalid
-    assert transaction.primary_category_id is None  # None value preserved
+    # Verify it's a UUID validation error
+    error_str = str(exc_info.value)
+    assert 'transactionId' in error_str or 'fileId' in error_str, \
+        "ValidationError should mention the invalid UUID field"
 
 
 if __name__ == "__main__":

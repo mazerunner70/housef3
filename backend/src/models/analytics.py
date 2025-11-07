@@ -58,7 +58,8 @@ class AccountDataRange(BaseModel):
         json_encoders={
             date: lambda v: v.isoformat() if v else None,
             datetime: lambda v: v.isoformat() if v else None
-        }
+        },
+        use_enum_values=False  # Preserve enum objects (not strings) for type safety
     )
 
 
@@ -99,7 +100,8 @@ class AnalyticsProcessingStatus(BaseModel):
         json_encoders={
             date: lambda v: v.isoformat() if v else None,
             datetime: lambda v: v.isoformat() if v else None
-        }
+        },
+        use_enum_values=False  # Preserve enum objects (not strings) for type safety
     )
 
     def to_dynamodb_item(self) -> Dict[str, Any]:
