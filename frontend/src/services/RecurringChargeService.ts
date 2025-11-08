@@ -6,6 +6,7 @@
  */
 
 import { ApiClient } from '@/utils/apiClient';
+import { withApiLogging } from '@/utils/logger';
 import {
     RecurringChargePattern,
     RecurringChargePatternUpdate,
@@ -125,10 +126,12 @@ export const linkPatternToCategory = async (
     patternId: string,
     request: ApplyPatternToCategoryRequest
 ): Promise<ApplyPatternToCategoryResponse> => {
-    return await ApiClient.postJson<ApplyPatternToCategoryResponse>(
+    return withApiLogging(
+        'RecurringChargeService',
         `/recurring-charges/patterns/${patternId}/apply-category`,
-        request
-    );
+        'POST',
+        (url: string) => ApiClient.postJson<ApplyPatternToCategoryResponse>(url, request)
+    )();
 };
 
 /**

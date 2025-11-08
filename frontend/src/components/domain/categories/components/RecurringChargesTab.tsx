@@ -8,13 +8,10 @@
 import React, { useEffect, useState } from 'react';
 import { useRecurringCharges } from '@/stores/recurringChargeStore';
 import { useCategories } from '@/hooks/useCategories';
-import {
-    DetectionTriggerButton,
-    LoadingState,
-    Alert,
-    LinkToCategoryDialog
-} from '@/components/ui';
+import { LoadingState, Alert } from '@/components/ui';
 import RecurringChargeCard from './RecurringChargeCard';
+import DetectionTriggerButton from './DetectionTriggerButton';
+import LinkToCategoryDialog from './LinkToCategoryDialog';
 import { RecurringChargePattern } from '@/types/RecurringCharge';
 import './RecurringChargesTab.css';
 
@@ -42,6 +39,7 @@ const RecurringChargesTab: React.FC<RecurringChargesTabProps> = ({ categoryId })
     const [linkDialogPattern, setLinkDialogPattern] = useState<RecurringChargePattern | null>(null);
     const [filterActive, setFilterActive] = useState<boolean | undefined>(undefined);
     const [filterConfidence, setFilterConfidence] = useState<number>(0);
+    const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
     // Load patterns on mount
     useEffect(() => {
@@ -72,7 +70,13 @@ const RecurringChargesTab: React.FC<RecurringChargesTabProps> = ({ categoryId })
     const handleDeletePattern = async (patternId: string) => {
         const success = await deletePattern(patternId);
         if (success) {
-            // Pattern deleted successfully
+            // Show success message
+            setSuccessMessage('Pattern deleted successfully');
+
+            // Auto-dismiss after 3 seconds
+            setTimeout(() => {
+                setSuccessMessage(null);
+            }, 3000);
         }
     };
 
@@ -141,6 +145,16 @@ const RecurringChargesTab: React.FC<RecurringChargesTabProps> = ({ categoryId })
                     onDismiss={clearError}
                 >
                     {error}
+                </Alert>
+            )}
+
+            {successMessage && (
+                <Alert
+                    variant="success"
+                    dismissible={true}
+                    onDismiss={() => setSuccessMessage(null)}
+                >
+                    {successMessage}
                 </Alert>
             )}
 

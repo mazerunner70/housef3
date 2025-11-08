@@ -7,7 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import { RecurringChargePattern } from '@/types/RecurringCharge';
 import { useCategories } from '@/hooks/useCategories';
-import Button from './Button';
+import Button from '@/components/ui/Button';
 import './LinkToCategoryDialog.css';
 
 export interface LinkToCategoryDialogProps {

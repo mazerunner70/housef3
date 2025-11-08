@@ -19,10 +19,6 @@ export { default as SortableTable } from './SortableTable';
 export { default as DateRangePicker } from './DateRangePicker';
 export { default as Pagination } from './Pagination';
 export { WorkflowProgressModal } from './WorkflowProgressModal';
-export { default as PatternConfidenceBadge } from './PatternConfidenceBadge';
-export { default as NextOccurrencePrediction } from './NextOccurrencePrediction';
-export { default as DetectionTriggerButton } from './DetectionTriggerButton';
-export { default as LinkToCategoryDialog } from './LinkToCategoryDialog';
 
 // Export types
 export type { ActionConfig } from './RowActions';

@@ -14,10 +14,8 @@ import {
     formatAmount,
     formatDate
 } from '@/types/RecurringCharge';
-import {
-    PatternConfidenceBadge,
-    Button
-} from '@/components/ui';
+import { Button, ConfirmationModal } from '@/components/ui';
+import PatternConfidenceBadge from './PatternConfidenceBadge';
 import './RecurringChargeCard.css';
 
 export interface RecurringChargeCardProps {
@@ -43,6 +41,7 @@ const RecurringChargeCard: React.FC<RecurringChargeCardProps> = ({
 }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
     const handleToggleActive = async () => {
         if (onToggleActive) {
@@ -50,17 +49,24 @@ const RecurringChargeCard: React.FC<RecurringChargeCardProps> = ({
         }
     };
 
-    const handleDelete = async () => {
+    const handleDeleteClick = () => {
+        setShowDeleteConfirmation(true);
+    };
+
+    const handleDeleteConfirm = async () => {
         if (!onDelete) return;
 
-        if (confirm(`Are you sure you want to delete this pattern for "${pattern.merchantPattern}"?`)) {
-            setIsDeleting(true);
-            try {
-                await onDelete(pattern.patternId);
-            } finally {
-                setIsDeleting(false);
-            }
+        setIsDeleting(true);
+        setShowDeleteConfirmation(false);
+        try {
+            await onDelete(pattern.patternId);
+        } finally {
+            setIsDeleting(false);
         }
+    };
+
+    const handleDeleteCancel = () => {
+        setShowDeleteConfirmation(false);
     };
 
     const handleLinkToCategory = () => {
@@ -209,7 +215,7 @@ const RecurringChargeCard: React.FC<RecurringChargeCardProps> = ({
                             <Button
                                 variant="danger"
                                 size="compact"
-                                onClick={handleDelete}
+                                onClick={handleDeleteClick}
                                 disabled={isDeleting}
                             >
                                 {isDeleting ? 'Deleting...' : 'Delete'}
@@ -218,6 +224,18 @@ const RecurringChargeCard: React.FC<RecurringChargeCardProps> = ({
                     </div>
                 </div>
             )}
+
+            <ConfirmationModal
+                isOpen={showDeleteConfirmation}
+                title="Delete Recurring Charge Pattern"
+                message={`Are you sure you want to delete this pattern for "${pattern.merchantPattern}"? This action cannot be undone.`}
+                confirmButtonText="Delete Pattern"
+                cancelButtonText="Cancel"
+                type="danger"
+                onConfirm={handleDeleteConfirm}
+                onCancel={handleDeleteCancel}
+                isLoading={isDeleting}
+            />
         </div>
     );
 };

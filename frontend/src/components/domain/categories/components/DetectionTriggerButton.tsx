@@ -5,7 +5,7 @@
  */
 
 import React, { useState } from 'react';
-import Button from './Button';
+import Button from '@/components/ui/Button';
 import './DetectionTriggerButton.css';
 
 export interface DetectionTriggerButtonProps {
