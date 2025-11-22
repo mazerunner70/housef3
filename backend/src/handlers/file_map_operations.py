@@ -12,13 +12,12 @@ from pydantic import ValidationError
 from datetime import datetime, timezone
 
 from models.file_map import FileMap, FileMapCreate, FileMapUpdate
-from utils.db_utils import NotAuthorized, list_user_files
+from utils.db_utils import NotAuthorized, NotFound, list_user_files
 from utils.lambda_utils import create_response, handle_error, mandatory_path_parameter
 from utils.auth import get_user_from_event
 from utils.db_utils import (
     checked_mandatory_file_map,
     create_file_map,
-    get_file_map,
     update_file_map,
     delete_file_map as delete_file_map_from_db,  # Renamed to avoid conflict
     list_file_maps_by_user,
@@ -108,24 +107,16 @@ def get_file_map_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
         API Gateway Lambda proxy response
     """
     try:
-        file_map_id = event['pathParameters']['id']
+        file_map_id = uuid.UUID(event['pathParameters']['id'])
         
-        # Get the file map
-        # response = get_file_maps_table().get_item(Key={'fileMapId': file_map_id})
-        file_map = get_file_map(file_map_id)
-        
-        # if 'Item' not in response:
-        if not file_map:
-            return handle_error(404, f"File map {file_map_id} not found")
-            
-        # file_map = FileMap.model_validate(response['Item'])
-        
-        # Check ownership
-        if str(file_map.user_id) != user_id:
-            return handle_error(403, "Not authorized to access this file map")
+        # Get the file map and verify ownership
+        file_map = checked_mandatory_file_map(file_map_id, user_id)
             
         return create_response(200, serialize_file_map(file_map))
-        
+    except NotFound:
+        return handle_error(404, f"File map not found")
+    except NotAuthorized:
+        return handle_error(403, "Not authorized to access this file map")
     except ClientError as e:
         logger.error(f"DynamoDB error getting file map: {str(e)}")
         logger.error(f"stack trace: {traceback.format_exc()}")

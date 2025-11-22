@@ -12,8 +12,8 @@ from pydantic import ValidationError
 from models.category import Category, CategoryCreate, CategoryUpdate, CategoryRule, MatchCondition, CategorySuggestionStrategy
 from models.transaction import Transaction
 from services.category_rule_engine import CategoryRuleEngine
-from utils.db_utils import create_category_in_db, delete_category_from_db, get_category_by_id_from_db, list_categories_by_user_from_db, update_category_in_db, list_user_transactions, update_transaction
-from utils.db.base import tables
+from utils.db_utils import create_category_in_db, delete_category_from_db, checked_mandatory_category, list_categories_by_user_from_db, update_category_in_db, list_user_transactions, update_transaction
+from utils.db.base import tables, NotFound, NotAuthorized
 from utils.lambda_utils import mandatory_path_parameter, optional_query_parameter, mandatory_body_parameter, optional_body_parameter, mandatory_query_parameter
 from utils.auth import get_user_from_event
 
@@ -188,14 +188,14 @@ def get_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
         category_id = mandatory_path_parameter(event, 'categoryId')
         
         # Get the category
-        category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
-        if not category:
-            return handle_category_not_found()
+        category = checked_mandatory_category(uuid.UUID(category_id), user_id)
         
         return create_response(200, {
             'category': serialize_model(category)
         })
         
+    except (NotFound, NotAuthorized):
+        return handle_category_not_found()
     except ValueError as e:
         return handle_validation_error("retrieving category", e)
     except Exception as e:
@@ -420,9 +420,7 @@ def preview_category_matches_handler(event: Dict[str, Any], user_id: str) -> Dic
         category_id = mandatory_path_parameter(event, 'categoryId')
         
         # Get category from database
-        category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
-        if not category:
-            return create_response(404, {"error": ERROR_CATEGORY_NOT_FOUND})
+        category = checked_mandatory_category(uuid.UUID(category_id), user_id)
         
         # Get optional parameters
         query_params = event.get('queryStringParameters', {}) or {}
@@ -490,6 +488,8 @@ def preview_category_matches_handler(event: Dict[str, Any], user_id: str) -> Dic
     except ValueError as ve:
         logger.warning(f"Missing category ID: {str(ve)}")
         return create_response(400, {"error": str(ve)})
+    except (NotFound, NotAuthorized):
+        return create_response(404, {"error": ERROR_CATEGORY_NOT_FOUND})
     except Exception as e:
         logger.error(f"Error previewing category matches: {str(e)}", exc_info=True)
         return create_response(500, {"error": ERROR_INTERNAL_SERVER, "message": str(e)})
@@ -715,9 +715,7 @@ def add_rule_to_category_handler(event: Dict[str, Any], user_id: str) -> Dict[st
             return create_response(400, {"error": "Invalid rule data", "details": str(e)})
         
         # Get existing category
-        category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
-        if not category:
-            return create_response(404, {"error": ERROR_CATEGORY_NOT_FOUND})
+        category = checked_mandatory_category(uuid.UUID(category_id), user_id)
         
         # Diagnostic logging
         logger.info(f"DIAG: Retrieved category {category_id} with {len(category.rules)} existing rules")
@@ -759,6 +757,8 @@ def add_rule_to_category_handler(event: Dict[str, Any], user_id: str) -> Dict[st
         
         return create_response(201, updated_category.model_dump(by_alias=True, mode='json'))
         
+    except (NotFound, NotAuthorized):
+        return create_response(404, {"error": ERROR_CATEGORY_NOT_FOUND})
     except ValueError as ve:
         logger.warning(f"Invalid category ID: {str(ve)}")
         return create_response(400, {"error": str(ve)})
@@ -786,9 +786,7 @@ def update_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[st
             return create_response(400, {"error": ERROR_INVALID_JSON})
         
         # Get existing category
-        category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
-        if not category:
-            return create_response(404, {"error": ERROR_CATEGORY_NOT_FOUND})
+        category = checked_mandatory_category(uuid.UUID(category_id), user_id)
         
         # Find rule to update
         rule_index = None
@@ -818,6 +816,8 @@ def update_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[st
         
         return create_response(200, updated_category.model_dump(by_alias=True, mode='json'))
         
+    except (NotFound, NotAuthorized):
+        return create_response(404, {"error": ERROR_CATEGORY_NOT_FOUND})
     except ValueError as ve:
         logger.warning(f"Invalid category or rule ID: {str(ve)}")
         return create_response(400, {"error": str(ve)})
@@ -835,9 +835,7 @@ def delete_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[st
         rule_id = mandatory_path_parameter(event, 'ruleId')
         
         # Get existing category
-        category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
-        if not category:
-            return create_response(404, {"error": ERROR_CATEGORY_NOT_FOUND})
+        category = checked_mandatory_category(uuid.UUID(category_id), user_id)
         
         # Find and remove rule
         original_count = len(category.rules)
@@ -853,6 +851,8 @@ def delete_category_rule_handler(event: Dict[str, Any], user_id: str) -> Dict[st
         
         return create_response(200, updated_category.model_dump(by_alias=True, mode='json'))
         
+    except (NotFound, NotAuthorized):
+        return create_response(404, {"error": ERROR_CATEGORY_NOT_FOUND})
     except ValueError as ve:
         logger.warning(f"Invalid category or rule ID: {str(ve)}")
         return create_response(400, {"error": str(ve)})

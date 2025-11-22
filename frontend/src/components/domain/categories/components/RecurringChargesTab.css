@@ -24,6 +24,47 @@
     line-height: 1.5;
 }
 
+.recurring-charges-tab__actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: flex-end;
+}
+
+.recurring-charges-tab__config {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.recurring-charges-tab__config label {
+    font-weight: 500;
+    color: #374151;
+    white-space: nowrap;
+}
+
+.recurring-charges-tab__config-input {
+    width: 100px;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    color: #111827;
+    background-color: #ffffff;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.recurring-charges-tab__config-input:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.recurring-charges-tab__config-input:hover:not(:focus) {
+    border-color: #9ca3af;
+}
+
 .recurring-charges-tab__stats {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

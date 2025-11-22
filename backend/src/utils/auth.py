@@ -8,7 +8,6 @@ from functools import wraps
 from models.file_map import FieldMapping, FileMap
 from models.transaction_file import TransactionFile
 from models.account import Account
-from utils.db_utils import get_account, get_file_map, get_transaction_file
 from utils.lambda_utils import create_response
 
 # Configure logging

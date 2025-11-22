@@ -197,6 +197,7 @@ export interface DetectRecurringChargesRequest {
     endDate?: string; // ISO date
     minOccurrences?: number;
     minConfidence?: number;
+    maxTransactions?: number; // Maximum number of transactions to analyze (default: 10000)
 }
 
 export interface DetectRecurringChargesResponse {

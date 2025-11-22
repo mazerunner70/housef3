@@ -12,7 +12,7 @@ from typing import Dict, Any, List, Optional
 from decimal import Decimal
 from models.transaction_file import FileFormat
 from utils.db_utils import (
-    get_transaction_file,
+    _get_transaction_file,  # Internal use - called after auth checks
     check_duplicate_transaction
 )
 from utils.s3_dao import get_object_content
@@ -58,7 +58,7 @@ def get_file_content(file_id: uuid.UUID, s3_client: Any = None) -> Optional[byte
     """
     try:
         # Get the file record to find the S3 key
-        file_record = get_transaction_file(file_id)
+        file_record = _get_transaction_file(file_id)
         if not file_record or not file_record.s3_key:
             logger.error(f"File record or S3 key not found for ID: {file_id}")
             return None

@@ -258,10 +258,10 @@ resource "aws_lambda_function" "analytics_operations" {
   }
 }
 
-# Workflow Tracking Lambda
-resource "aws_lambda_function" "workflow_tracking" {
+# Workflow Tracking Operations Lambda
+resource "aws_lambda_function" "workflow_tracking_operations" {
   filename         = "../../backend/lambda_deploy.zip"
-  function_name    = "${var.project_name}-${var.environment}-workflow-tracking"
+  function_name    = "${var.project_name}-${var.environment}-workflow-tracking-operations"
   handler          = "handlers/workflow_tracking.handler"
   runtime          = "python3.12"
   role             = aws_iam_role.lambda_exec.arn
@@ -284,10 +284,22 @@ resource "aws_lambda_function" "workflow_tracking" {
   }
 }
 
-# Get Colors Lambda
-resource "aws_lambda_function" "getcolors" {
+# CloudWatch log group for workflow tracking operations Lambda
+resource "aws_cloudwatch_log_group" "workflow_tracking_operations" {
+  name              = "/aws/lambda/${aws_lambda_function.workflow_tracking_operations.function_name}"
+  retention_in_days = 14
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
+# Get Colors Operations Lambda
+resource "aws_lambda_function" "getcolors_operations" {
   filename         = "../../backend/lambda_deploy.zip"
-  function_name    = "${var.project_name}-getcolors"
+  function_name    = "${var.project_name}-${var.environment}-getcolors-operations"
   role             = aws_iam_role.lambda_exec.arn
   handler          = "handlers/getcolors.handler"
   source_code_hash = base64encode(local.source_code_hash)
@@ -309,6 +321,19 @@ resource "aws_lambda_function" "getcolors" {
   tags = {
     Environment = var.environment
     Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
+# CloudWatch log group for getcolors operations Lambda
+resource "aws_cloudwatch_log_group" "getcolors_operations" {
+  name              = "/aws/lambda/${aws_lambda_function.getcolors_operations.function_name}"
+  retention_in_days = 14
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
   }
 }
 
@@ -690,11 +715,11 @@ resource "aws_iam_role_policy_attachment" "user_preferences_lambda_dynamodb_atta
 }
 # End Categories Lambda IAM Resources
 
-# Categories Lambda Function
-resource "aws_lambda_function" "categories_lambda" {
-  function_name = "${var.project_name}-${var.environment}-categories-lambda"
+# Category Operations Lambda Function
+resource "aws_lambda_function" "category_operations" {
+  function_name = "${var.project_name}-${var.environment}-category-operations"
   role          = aws_iam_role.categories_lambda_role.arn
-  handler       = "handlers/category_operations.handler" # Updated handler
+  handler       = "handlers/category_operations.handler"
   runtime       = "python3.12"
   timeout       = 30  # seconds
   memory_size   = 256 # MB
@@ -705,12 +730,11 @@ resource "aws_lambda_function" "categories_lambda" {
 
   environment {
     variables = {
-      CATEGORIES_TABLE_NAME                  = aws_dynamodb_table.categories.name # Ensure aws_dynamodb_table.categories is defined
+      CATEGORIES_TABLE_NAME                  = aws_dynamodb_table.categories.name
       TRANSACTION_CATEGORY_ASSIGNMENTS_TABLE = aws_dynamodb_table.transaction_category_assignments.name
       TRANSACTIONS_TABLE                     = aws_dynamodb_table.transactions.name
       ENVIRONMENT                            = var.environment
       LOG_LEVEL                              = "INFO"
-      # Add other necessary environment variables if any, e.g. for utils
     }
   }
 
@@ -720,7 +744,7 @@ resource "aws_lambda_function" "categories_lambda" {
     ManagedBy   = "terraform"
   }
 }
-# End Categories Lambda Function
+# End Category Operations Lambda Function
 
 # Export Operations Lambda
 resource "aws_lambda_function" "export_operations" {
@@ -827,9 +851,9 @@ resource "aws_cloudwatch_log_group" "export_operations" {
   }
 }
 
-resource "aws_cloudwatch_log_group" "categories_lambda" {
-  name              = "/aws/lambda/${aws_lambda_function.categories_lambda.function_name}"
-  retention_in_days = 7
+resource "aws_cloudwatch_log_group" "category_operations" {
+  name              = "/aws/lambda/${aws_lambda_function.category_operations.function_name}"
+  retention_in_days = 14
 
   tags = {
     Environment = var.environment
@@ -880,13 +904,14 @@ output "lambda_analytics_processor_arn" {
   value       = aws_lambda_function.analytics_processor.arn
 }
 
-output "lambda_getcolors_name" {
-  value = aws_lambda_function.getcolors.function_name
+output "lambda_getcolors_operations_name" {
+  description = "Name of the GetColors Operations Lambda function"
+  value       = aws_lambda_function.getcolors_operations.function_name
 }
 
-output "categories_lambda_name" {
-  description = "Name of the Categories Lambda function"
-  value       = aws_lambda_function.categories_lambda.function_name
+output "category_operations_name" {
+  description = "Name of the Category Operations Lambda function"
+  value       = aws_lambda_function.category_operations.function_name
 }
 
 output "lambda_fzip_operations_name" {
@@ -914,14 +939,14 @@ output "app_version_alias" {
   value       = local.app_version
 }
 
-output "categories_lambda_arn" {
-  description = "ARN of the Categories Lambda function"
-  value       = aws_lambda_function.categories_lambda.arn
+output "category_operations_arn" {
+  description = "ARN of the Category Operations Lambda function"
+  value       = aws_lambda_function.category_operations.arn
 }
 
-output "categories_lambda_invoke_arn" {
-  description = "Invoke ARN of the Categories Lambda function"
-  value       = aws_lambda_function.categories_lambda.invoke_arn
+output "category_operations_invoke_arn" {
+  description = "Invoke ARN of the Category Operations Lambda function"
+  value       = aws_lambda_function.category_operations.invoke_arn
 }
 
 # === Merged from lambda_field_maps.tf ===
@@ -997,6 +1022,18 @@ resource "aws_lambda_function" "user_preferences_operations" {
       ENVIRONMENT           = var.environment
     }
   }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
+# CloudWatch log group for user preferences operations Lambda
+resource "aws_cloudwatch_log_group" "user_preferences_operations" {
+  name              = "/aws/lambda/${aws_lambda_function.user_preferences_operations.function_name}"
+  retention_in_days = 14
 
   tags = {
     Environment = var.environment

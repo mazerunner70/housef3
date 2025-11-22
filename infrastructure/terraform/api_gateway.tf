@@ -5,14 +5,14 @@
 locals {
   # Lambda function configurations
   lambda_functions = {
-    getcolors                    = aws_lambda_function.getcolors
+    getcolors_operations        = aws_lambda_function.getcolors_operations
     file_operations             = aws_lambda_function.file_operations
-    workflow_tracking           = aws_lambda_function.workflow_tracking
+    workflow_tracking_operations = aws_lambda_function.workflow_tracking_operations
     account_operations          = aws_lambda_function.account_operations
     transaction_operations      = aws_lambda_function.transaction_operations
     transfer_operations         = aws_lambda_function.transfer_operations
     field_map_operations        = aws_lambda_function.file_map_operations
-    category_operations         = aws_lambda_function.categories_lambda
+    category_operations         = aws_lambda_function.category_operations
     analytics_operations        = aws_lambda_function.analytics_operations
     export_operations           = aws_lambda_function.export_operations
     user_preferences_operations = aws_lambda_function.user_preferences_operations
@@ -26,7 +26,7 @@ locals {
   # Integration configurations
   integrations = {
     getcolors = {
-      lambda_key  = "getcolors"
+      lambda_key  = "getcolors_operations"
       description = "Lambda integration for getcolors endpoint"
     }
     file_operations = {
@@ -34,7 +34,7 @@ locals {
       description = "Lambda integration for file operations endpoints"
     }
     workflow_tracking = {
-      lambda_key  = "workflow_tracking"
+      lambda_key  = "workflow_tracking_operations"
       description = "Lambda integration for workflow tracking endpoints"
     }
     account_operations = {
@@ -573,7 +573,7 @@ locals {
   lambda_permissions = {
     api_gateway_colors = {
       statement_id  = "AllowAPIGatewayInvokeColors"
-      function_name = "getcolors"
+      function_name = "getcolors_operations"
       source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/colors"
     }
     api_gateway_files = {
@@ -603,7 +603,7 @@ locals {
     }
     getcolors = {
       statement_id  = "AllowAPIGatewayInvoke"
-      function_name = "getcolors"
+      function_name = "getcolors_operations"
       source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
     }
     api_gateway_field_maps = {
@@ -623,7 +623,7 @@ locals {
     }
     api_gateway_workflows = {
       statement_id  = "AllowAPIGatewayInvokeWorkflowsLambda"
-      function_name = "workflow_tracking"
+      function_name = "workflow_tracking_operations"
       source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*/workflows*"
     }
     api_gateway_export = {

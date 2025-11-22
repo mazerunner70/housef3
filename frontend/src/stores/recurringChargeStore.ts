@@ -10,7 +10,8 @@ import {
     RecurringChargePattern,
     RecurringChargePatternUpdate,
     RecurringChargePrediction,
-    RecurringChargeFilters
+    RecurringChargeFilters,
+    DetectRecurringChargesRequest
 } from '@/types/RecurringCharge';
 import {
     getPatterns,
@@ -54,7 +55,7 @@ interface RecurringChargeState {
     toggleActive: (patternId: string, active: boolean) => Promise<boolean>;
     linkToCategory: (patternId: string, categoryId: string, autoCategorize: boolean) => Promise<boolean>;
     unlinkFromCategory: (patternId: string) => Promise<boolean>;
-    triggerDetection: (accountIds?: string[], startDate?: string, endDate?: string) => Promise<string | null>;
+    triggerDetection: (request?: DetectRecurringChargesRequest) => Promise<string | null>;
 
     // Utility actions
     setFilters: (filters: Partial<RecurringChargeFilters>) => void;
@@ -295,10 +296,10 @@ export const useRecurringChargeStore = create<RecurringChargeState>()(
             },
 
             // Trigger detection
-            triggerDetection: async (accountIds?: string[], startDate?: string, endDate?: string) => {
+            triggerDetection: async (request?: DetectRecurringChargesRequest) => {
                 try {
                     set({ isDetecting: true, error: null });
-                    const response = await triggerDetection({ accountIds, startDate, endDate });
+                    const response = await triggerDetection(request);
                     set({ isDetecting: false });
 
                     // Invalidate cache to force refresh on next fetch
@@ -422,7 +423,7 @@ export const useLinkToCategory = (): ((patternId: string, categoryId: string, au
 export const useUnlinkFromCategory = (): ((patternId: string) => Promise<boolean>) =>
     useRecurringChargeStore(state => state.unlinkFromCategory);
 
-export const useTriggerDetection = (): ((accountIds?: string[], startDate?: string, endDate?: string) => Promise<string | null>) =>
+export const useTriggerDetection = (): ((request?: DetectRecurringChargesRequest) => Promise<string | null>) =>
     useRecurringChargeStore(state => state.triggerDetection);
 
 // Combined hook for convenience (single subscription pattern)

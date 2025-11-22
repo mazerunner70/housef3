@@ -40,6 +40,7 @@ const RecurringChargesTab: React.FC<RecurringChargesTabProps> = ({ categoryId })
     const [filterActive, setFilterActive] = useState<boolean | undefined>(undefined);
     const [filterConfidence, setFilterConfidence] = useState<number>(0);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
+    const [maxTransactions, setMaxTransactions] = useState<number>(10000);
 
     // Load patterns on mount
     useEffect(() => {
@@ -56,10 +57,10 @@ const RecurringChargesTab: React.FC<RecurringChargesTabProps> = ({ categoryId })
     }, [filterActive, filterConfidence, categoryId, setFilters]);
 
     const handleTriggerDetection = async () => {
-        const operationId = await triggerDetection();
+        const operationId = await triggerDetection({ maxTransactions });
         if (operationId) {
             // Show success message
-            alert('Detection started! Patterns will be updated shortly.');
+            alert(`Detection started! Analyzing up to ${maxTransactions.toLocaleString()} transactions. Patterns will be updated shortly.`);
             // Refresh patterns after a delay
             setTimeout(() => {
                 fetchPatterns(true);
@@ -132,10 +133,25 @@ const RecurringChargesTab: React.FC<RecurringChargesTabProps> = ({ categoryId })
                     </p>
                 </div>
 
-                <DetectionTriggerButton
-                    onTrigger={handleTriggerDetection}
-                    disabled={isLoading}
-                />
+                <div className="recurring-charges-tab__actions">
+                    <div className="recurring-charges-tab__config">
+                        <label htmlFor="max-transactions">Max Transactions:</label>
+                        <input
+                            id="max-transactions"
+                            type="number"
+                            min="10"
+                            max="10000"
+                            step="10"
+                            value={maxTransactions}
+                            onChange={(e) => setMaxTransactions(Number(e.target.value))}
+                            className="recurring-charges-tab__config-input"
+                        />
+                    </div>
+                    <DetectionTriggerButton
+                        onTrigger={handleTriggerDetection}
+                        disabled={isLoading}
+                    />
+                </div>
             </div>
 
             {error && (

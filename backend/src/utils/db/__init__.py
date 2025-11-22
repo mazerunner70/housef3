@@ -72,7 +72,6 @@ from .helpers import (
 # ============================================================================
 
 from .accounts import (
-    get_account,
     list_user_accounts,
     create_account,
     update_account,
@@ -110,7 +109,6 @@ from .transactions import (
 
 from .files import (
     # TransactionFile operations
-    get_transaction_file,
     list_account_files,
     list_user_files,
     create_transaction_file,
@@ -122,9 +120,9 @@ from .files import (
     update_file_field_map,
     checked_mandatory_transaction_file,
     checked_optional_transaction_file,
+    _get_transaction_file,  # Internal use only - for utilities that run after auth checks
     
     # FileMap operations
-    get_file_map,
     get_account_default_file_map,
     create_file_map,
     update_file_map,
@@ -141,7 +139,6 @@ from .files import (
 
 from .categories import (
     create_category_in_db,
-    get_category_by_id_from_db,
     list_categories_by_user_from_db,
     update_category_in_db,
     delete_category_from_db,
@@ -250,7 +247,6 @@ __all__ = [
     'float_to_decimal',
     
     # Account operations
-    'get_account',
     'list_user_accounts',
     'create_account',
     'update_account',
@@ -277,7 +273,6 @@ __all__ = [
     'checked_optional_transaction',
     
     # File operations
-    'get_transaction_file',
     'list_account_files',
     'list_user_files',
     'create_transaction_file',
@@ -291,7 +286,6 @@ __all__ = [
     'checked_optional_transaction_file',
     
     # FileMap operations
-    'get_file_map',
     'get_account_default_file_map',
     'create_file_map',
     'update_file_map',
@@ -303,7 +297,6 @@ __all__ = [
     
     # Category operations
     'create_category_in_db',
-    'get_category_by_id_from_db',
     'list_categories_by_user_from_db',
     'update_category_in_db',
     'delete_category_from_db',

@@ -79,16 +79,22 @@ class RecurringChargeDetectionConsumer(BaseEventConsumer):
             account_id = event.data.get("accountId")
             min_occurrences = event.data.get("minOccurrences", 3)
             min_confidence = event.data.get("minConfidence", 0.6)
+            max_transactions = event.data.get("maxTransactions", 10000)
             if min_occurrences < 1:
                 raise EventProcessingError("minOccurrences must be at least 1", permanent=True)
             if not (0.0 <= min_confidence <= 1.0):
                 raise EventProcessingError("minConfidence must be between 0.0 and 1.0", permanent=True)
+            if max_transactions < 10:
+                raise EventProcessingError("maxTransactions must be at least 10", permanent=True)
+            if max_transactions > 50000:
+                raise EventProcessingError("maxTransactions must not exceed 50000", permanent=True)
             if not operation_id:
                 raise EventProcessingError("Operation ID is missing", permanent=True)
             
             logger.info(
                 f"Detection parameters: account_id={account_id}, "
-                f"min_occurrences={min_occurrences}, min_confidence={min_confidence}"
+                f"min_occurrences={min_occurrences}, min_confidence={min_confidence}, "
+                f"max_transactions={max_transactions}"
             )
             
             # Update operation status to in progress
@@ -100,7 +106,7 @@ class RecurringChargeDetectionConsumer(BaseEventConsumer):
             )
             
             # Fetch transactions for analysis
-            transactions = self._fetch_transactions(user_id, account_id)
+            transactions = self._fetch_transactions(user_id, account_id, max_transactions)
             
             if not transactions:
                 logger.info(f"No transactions found for user {user_id}")
@@ -211,17 +217,18 @@ class RecurringChargeDetectionConsumer(BaseEventConsumer):
                 )
             raise
     
-    def _fetch_transactions(self, user_id: str, account_id: Optional[str]) -> List[Transaction]:
+    def _fetch_transactions(self, user_id: str, account_id: Optional[str], max_transactions: int = 10000) -> List[Transaction]:
         """
         Fetch transactions for pattern detection.
         
-        Fetches up to 10,000 most recent transactions for the user, optionally
-        filtered by account. Uses pagination to avoid Lambda timeouts and
+        Fetches up to the specified number of most recent transactions for the user,
+        optionally filtered by account. Uses pagination to avoid Lambda timeouts and
         automatically filters out duplicate transactions.
         
         Args:
             user_id: User ID
             account_id: Optional account ID to filter transactions
+            max_transactions: Maximum number of transactions to fetch (default: 10000)
             
         Returns:
             List of Transaction objects sorted by date (most recent first)
@@ -231,10 +238,9 @@ class RecurringChargeDetectionConsumer(BaseEventConsumer):
             account_ids = [uuid.UUID(account_id)] if account_id else None
             
             # Fetch transactions with proper sorting (most recent first)
-            # We'll paginate to get up to 10,000 transactions
+            # We'll paginate to get up to max_transactions
             all_transactions = []
             last_key = None
-            max_transactions = 10000
             page_size = 1000  # Fetch in chunks to avoid timeouts
             
             while len(all_transactions) < max_transactions:

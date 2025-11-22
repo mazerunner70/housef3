@@ -57,7 +57,8 @@ def detect_recurring_charges_handler(event: Dict[str, Any], user_id: str) -> Dic
     {
         "accountId": "optional-account-id",  # Filter to specific account
         "minOccurrences": 3,                 # Minimum pattern occurrences
-        "minConfidence": 0.6                 # Minimum confidence threshold
+        "minConfidence": 0.6,                # Minimum confidence threshold
+        "maxTransactions": 10000             # Maximum transactions to analyze (default: 10000)
     }
     
     Returns:
@@ -71,12 +72,17 @@ def detect_recurring_charges_handler(event: Dict[str, Any], user_id: str) -> Dic
     account_id = body.get("accountId")
     min_occurrences = body.get("minOccurrences", 3)
     min_confidence = body.get("minConfidence", 0.6)
+    max_transactions = body.get("maxTransactions", 10000)
     
     # Validate parameters
     if min_occurrences < 2:
         raise ValueError("minOccurrences must be at least 2")
     if not (0.0 <= min_confidence <= 1.0):
         raise ValueError("minConfidence must be between 0.0 and 1.0")
+    if max_transactions < 10:
+        raise ValueError("maxTransactions must be at least 10")
+    if max_transactions > 50000:
+        raise ValueError("maxTransactions must not exceed 50000")
     
     # Create operation tracking record
     from services.operation_tracking_service import (
@@ -89,11 +95,13 @@ def detect_recurring_charges_handler(event: Dict[str, Any], user_id: str) -> Dic
     operation_id = f"op_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{user_id[:8]}"
     
     # Start operation tracking
+    # Convert float to Decimal for DynamoDB compatibility
     context = {
         "userId": user_id,
         "accountId": account_id,
         "minOccurrences": min_occurrences,
-        "minConfidence": min_confidence,
+        "minConfidence": Decimal(str(min_confidence)),  # Convert float to Decimal
+        "maxTransactions": max_transactions,
     }
     
     operation_tracking_service.start_operation(
@@ -118,6 +126,7 @@ def detect_recurring_charges_handler(event: Dict[str, Any], user_id: str) -> Dic
             "accountId": account_id,
             "minOccurrences": min_occurrences,
             "minConfidence": min_confidence,
+            "maxTransactions": max_transactions,
         },
     )
     
@@ -309,9 +318,11 @@ def apply_pattern_to_category_handler(
         raise ValueError("categoryId is required")
     
     # Validate category exists and belongs to user
-    from utils.db_utils import get_category_by_id_from_db
-    category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
-    if not category:
+    from utils.db_utils import checked_mandatory_category
+    from utils.db.base import NotFound, NotAuthorized
+    try:
+        checked_mandatory_category(uuid.UUID(category_id), user_id)
+    except (NotFound, NotAuthorized):
         raise ValueError("Category not found or does not belong to user")
     
     # Create update DTO and apply to pattern
