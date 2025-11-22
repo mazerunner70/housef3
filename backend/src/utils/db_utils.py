@@ -34,7 +34,6 @@ from utils.db import (  # noqa: F401
     batch_write_items,
     
     # Account operations
-    get_account,
     list_user_accounts,
     create_account,
     update_account,
@@ -61,7 +60,6 @@ from utils.db import (  # noqa: F401
     checked_optional_transaction,
     
     # File operations
-    get_transaction_file,
     list_account_files,
     list_user_files,
     create_transaction_file,
@@ -73,9 +71,9 @@ from utils.db import (  # noqa: F401
     update_file_field_map,
     checked_mandatory_transaction_file,
     checked_optional_transaction_file,
+    _get_transaction_file,  # Internal use only
     
     # FileMap operations
-    get_file_map,
     get_account_default_file_map,
     create_file_map,
     update_file_map,
@@ -87,7 +85,6 @@ from utils.db import (  # noqa: F401
     
     # Category operations
     create_category_in_db,
-    get_category_by_id_from_db,
     list_categories_by_user_from_db,
     update_category_in_db,
     delete_category_from_db,

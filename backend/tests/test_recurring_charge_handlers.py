@@ -254,7 +254,7 @@ def test_update_pattern_not_found(mock_get):
 
 
 @patch("src.handlers.recurring_charge_operations.update_pattern_in_db")
-@patch("src.handlers.recurring_charge_operations.get_category_by_id_from_db")
+@patch("src.handlers.recurring_charge_operations.checked_mandatory_category")
 @patch("src.handlers.recurring_charge_operations.get_pattern_by_id_from_db")
 def test_apply_pattern_to_category_success(mock_get_pattern, mock_get_category, mock_update):
     """Test successful pattern-category linking"""
@@ -287,14 +287,15 @@ def test_apply_pattern_to_category_success(mock_get_pattern, mock_get_category, 
     assert call_args[0] == pattern
 
 
-@patch("src.handlers.recurring_charge_operations.get_category_by_id_from_db")
+@patch("src.handlers.recurring_charge_operations.checked_mandatory_category")
 @patch("src.handlers.recurring_charge_operations.get_pattern_by_id_from_db")
 def test_apply_pattern_to_category_invalid_category(mock_get_pattern, mock_get_category):
     """Test linking to non-existent category"""
+    from utils.db.base import NotFound
     pattern = _create_test_pattern()
     
     mock_get_pattern.return_value = pattern
-    mock_get_category.return_value = None  # Category not found
+    mock_get_category.side_effect = NotFound("Category not found")  # Category not found
     
     event = {
         **_auth_headers(),

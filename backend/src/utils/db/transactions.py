@@ -30,6 +30,31 @@ logger = logging.getLogger(__name__)
 # Helper Functions
 # ============================================================================
 
+def checked_optional_transaction(transaction_id: Optional[uuid.UUID], user_id: str) -> Optional[Transaction]:
+    """
+    Check if transaction exists and user has access to it, allowing None.
+    
+    Args:
+        transaction_id: ID of the transaction (or None)
+        user_id: ID of the user requesting access
+        
+    Returns:
+        Transaction object if found and authorized, None if transaction_id is None or not found
+        
+    Raises:
+        NotAuthorized: If transaction exists but user doesn't own it
+    """
+    if not transaction_id:
+        return None
+    
+    transaction = _get_transaction(transaction_id)
+    if not transaction:
+        return None
+    
+    check_user_owns_resource(transaction.user_id, user_id)
+    return transaction
+
+
 def checked_mandatory_transaction(transaction_id: uuid.UUID, user_id: str) -> Transaction:
     """
     Check if transaction exists and user has access to it.
@@ -42,44 +67,46 @@ def checked_mandatory_transaction(transaction_id: uuid.UUID, user_id: str) -> Tr
         Transaction object if found and authorized
         
     Raises:
-        NotFound: If transaction doesn't exist or user doesn't have access
-    """
-    try:
-        table = tables.transactions
-        if not table:
-            raise NotFound("Transaction database not available")
-        
-        response = table.get_item(Key={'transactionId': str(transaction_id)})
-        item = response.get('Item')
-        
-        if not item:
-            raise NotFound("Transaction not found")
-        
-        transaction = Transaction.from_dynamodb_item(item)
-        check_user_owns_resource(transaction.user_id, user_id)
-        return transaction
-    except Exception as e:
-        logger.error(f"Error getting transaction {transaction_id}: {str(e)}")
-        raise NotFound("Transaction not found")
-
-
-def checked_optional_transaction(transaction_id: Optional[uuid.UUID], user_id: str) -> Optional[Transaction]:
-    """
-    Check if transaction exists and user has access to it, allowing None.
-    
-    Args:
-        transaction_id: ID of the transaction (or None)
-        user_id: ID of the user requesting access
-        
-    Returns:
-        Transaction object if found and authorized, None if transaction_id is None or not found
+        NotFound: If transaction doesn't exist
+        NotAuthorized: If user doesn't own the transaction
     """
     if not transaction_id:
+        raise NotFound("Transaction ID is required")
+    
+    transaction = checked_optional_transaction(transaction_id, user_id)
+    if not transaction:
+        raise NotFound("Transaction not found")
+    
+    return transaction
+
+
+# ============================================================================
+# Internal Getter (not exported)
+# ============================================================================
+
+def _get_transaction(transaction_id: uuid.UUID) -> Optional[Transaction]:
+    """
+    Retrieve a transaction by ID (no user validation).
+    INTERNAL USE ONLY - external code should use checked_mandatory_transaction.
+    
+    Args:
+        transaction_id: ID of the transaction
+        
+    Returns:
+        Transaction object if found, None otherwise
+    """
+    table = tables.transactions
+    if not table:
+        logger.error("Transaction database not available")
         return None
-    try:
-        return checked_mandatory_transaction(transaction_id, user_id)
-    except NotFound:
+    
+    response = table.get_item(Key={'transactionId': str(transaction_id)})
+    item = response.get('Item')
+    
+    if not item:
         return None
+    
+    return Transaction.from_dynamodb_item(item)
 
 
 # ============================================================================
@@ -210,9 +237,10 @@ def _get_remaining_filters(
 # CRUD Operations
 # ============================================================================
 
-def list_file_transactions(file_id: uuid.UUID) -> List[Transaction]:
+def _list_file_transactions_internal(file_id: uuid.UUID) -> List[Transaction]:
     """
-    List all transactions for a specific file.
+    Internal helper to list all transactions for a file (no auth check).
+    INTERNAL USE ONLY - callers must verify authorization first.
     
     Args:
         file_id: The unique identifier of the file
@@ -225,6 +253,30 @@ def list_file_transactions(file_id: uuid.UUID) -> List[Transaction]:
         KeyConditionExpression=Key('fileId').eq(str(file_id))
     )
     return [Transaction.from_dynamodb_item(item) for item in response.get('Items', [])]
+
+
+def list_file_transactions(file_id: uuid.UUID, user_id: str) -> List[Transaction]:
+    """
+    List all transactions for a specific file.
+    
+    Args:
+        file_id: The unique identifier of the file
+        user_id: The user ID (for authorization)
+        
+    Returns:
+        List of Transaction objects
+        
+    Raises:
+        NotFound: If file doesn't exist
+        NotAuthorized: If user doesn't own the file
+    """
+    # Import here to avoid circular dependency
+    from .files import checked_mandatory_transaction_file
+    
+    # Check that user owns the file before listing its transactions
+    _ = checked_mandatory_transaction_file(file_id, user_id)
+    
+    return _list_file_transactions_internal(file_id)
 
 
 @monitor_performance(operation_type="query", warn_threshold_ms=1000)
@@ -383,14 +435,17 @@ def delete_transactions_for_file(file_id: uuid.UUID) -> int:
     """
     Delete all transactions associated with a file.
     
+    Note: This is an internal helper function. Callers must verify
+    authorization before calling this function.
+    
     Args:
         file_id: The ID of the file whose transactions should be deleted
         
     Returns:
         Number of transactions deleted
     """
-    # Get all transactions for the file
-    transactions = list_file_transactions(file_id)
+    # Get all transactions for the file (using internal helper, auth already checked by caller)
+    transactions = _list_file_transactions_internal(file_id)
     
     if not transactions:
         return 0
@@ -409,7 +464,7 @@ def delete_transactions_for_file(file_id: uuid.UUID) -> int:
 @monitor_performance(operation_type="query", warn_threshold_ms=1000)
 @retry_on_throttle(max_attempts=3)
 @dynamodb_operation("list_account_transactions")
-def list_account_transactions(account_id: str, limit: int = 50, last_evaluated_key: Optional[Dict] = None) -> List[Transaction]:
+def list_account_transactions(account_id: str, user_id: str, limit: int = 50, last_evaluated_key: Optional[Dict] = None) -> List[Transaction]:
     """
     List transactions for a specific account with pagination.
     
@@ -420,12 +475,23 @@ def list_account_transactions(account_id: str, limit: int = 50, last_evaluated_k
     
     Args:
         account_id: The account ID to list transactions for
+        user_id: The user ID (for authorization)
         limit: Maximum number of transactions to return
         last_evaluated_key: Key to start from for pagination
         
     Returns:
         List of Transaction objects sorted by date (ascending)
+        
+    Raises:
+        NotFound: If account doesn't exist
+        NotAuthorized: If user doesn't own the account
     """
+    # Import here to avoid circular dependency
+    from .accounts import checked_mandatory_account
+    
+    # Check that user owns the account before listing its transactions
+    _ = checked_mandatory_account(uuid.UUID(account_id), user_id)
+    
     # Query transactions table using AccountDateIndex
     # This will return transactions sorted by date
     query_params = {

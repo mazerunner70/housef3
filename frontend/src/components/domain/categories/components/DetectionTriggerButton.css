@@ -1,0 +1,38 @@
+.detection-trigger-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+}
+
+.detection-trigger-button__icon {
+    font-size: 1.125em;
+}
+
+.detection-trigger-button__spinner {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: detection-spinner 0.75s linear infinite;
+}
+
+@keyframes detection-spinner {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.detection-trigger-button--loading {
+    cursor: wait;
+}
+
+.detection-trigger-button--loading .detection-trigger-button__spinner {
+    margin-right: 0.25rem;
+}
