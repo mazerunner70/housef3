@@ -58,7 +58,8 @@ def detect_recurring_charges_handler(event: Dict[str, Any], user_id: str) -> Dic
         "accountId": "optional-account-id",  # Filter to specific account
         "minOccurrences": 3,                 # Minimum pattern occurrences
         "minConfidence": 0.6,                # Minimum confidence threshold
-        "maxTransactions": 10000             # Maximum transactions to analyze (default: 10000)
+        "startDateTs": 1704067200000,        # Start date timestamp (ms since epoch, optional)
+        "endDateTs": 1735689599999           # End date timestamp (ms since epoch, optional)
     }
     
     Returns:
@@ -72,17 +73,29 @@ def detect_recurring_charges_handler(event: Dict[str, Any], user_id: str) -> Dic
     account_id = body.get("accountId")
     min_occurrences = body.get("minOccurrences", 3)
     min_confidence = body.get("minConfidence", 0.6)
-    max_transactions = body.get("maxTransactions", 10000)
+    start_date_ts = body.get("startDateTs")
+    end_date_ts = body.get("endDateTs")
     
     # Validate parameters
     if min_occurrences < 2:
         raise ValueError("minOccurrences must be at least 2")
     if not (0.0 <= min_confidence <= 1.0):
         raise ValueError("minConfidence must be between 0.0 and 1.0")
-    if max_transactions < 10:
-        raise ValueError("maxTransactions must be at least 10")
-    if max_transactions > 50000:
-        raise ValueError("maxTransactions must not exceed 50000")
+    
+    # Validate timestamps if provided
+    if start_date_ts is not None:
+        if not isinstance(start_date_ts, (int, float)) or start_date_ts < 0:
+            raise ValueError("startDateTs must be a positive number (milliseconds since epoch)")
+        start_date_ts = int(start_date_ts)
+    
+    if end_date_ts is not None:
+        if not isinstance(end_date_ts, (int, float)) or end_date_ts < 0:
+            raise ValueError("endDateTs must be a positive number (milliseconds since epoch)")
+        end_date_ts = int(end_date_ts)
+    
+    # Validate date range
+    if start_date_ts and end_date_ts and start_date_ts > end_date_ts:
+        raise ValueError("startDateTs must be before endDateTs")
     
     # Create operation tracking record
     from services.operation_tracking_service import (
@@ -101,7 +114,8 @@ def detect_recurring_charges_handler(event: Dict[str, Any], user_id: str) -> Dic
         "accountId": account_id,
         "minOccurrences": min_occurrences,
         "minConfidence": Decimal(str(min_confidence)),  # Convert float to Decimal
-        "maxTransactions": max_transactions,
+        "startDateTs": start_date_ts,
+        "endDateTs": end_date_ts,
     }
     
     operation_tracking_service.start_operation(
@@ -126,7 +140,8 @@ def detect_recurring_charges_handler(event: Dict[str, Any], user_id: str) -> Dic
             "accountId": account_id,
             "minOccurrences": min_occurrences,
             "minConfidence": min_confidence,
-            "maxTransactions": max_transactions,
+            "startDateTs": start_date_ts,
+            "endDateTs": end_date_ts,
         },
     )
     

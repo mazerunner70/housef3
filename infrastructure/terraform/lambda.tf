@@ -1,7 +1,53 @@
+# ==============================================================================
+# ML Dependencies Lambda Layer
+# ==============================================================================
+# Build ML layer when ML dependencies or build script changes
+
+resource "null_resource" "prepare_ml_layer" {
+  triggers = {
+    ml_requirements = sha256(file("../../backend/requirements-ml.txt"))
+    ml_layer_script = sha256(file("../../backend/build_ml_layer.sh"))
+  }
+
+  provisioner "local-exec" {
+    working_dir = "../../backend"
+    command     = "./build_ml_layer.sh"
+  }
+}
+
+# Upload ML layer to S3 (required for layers > 50MB)
+resource "aws_s3_object" "ml_layer" {
+  bucket = aws_s3_bucket.fzip_packages.bucket
+  key    = "lambda-layers/ml-dependencies.zip"
+  source = "../../backend/ml_layer.zip"
+  etag   = fileexists("../../backend/ml_layer.zip") ? filemd5("../../backend/ml_layer.zip") : null
+  
+  depends_on = [null_resource.prepare_ml_layer]
+  
+  lifecycle {
+    ignore_changes = [etag]
+  }
+}
+
+resource "aws_lambda_layer_version" "ml_dependencies" {
+  s3_bucket           = aws_s3_bucket.fzip_packages.bucket
+  s3_key              = aws_s3_object.ml_layer.key
+  layer_name          = "${var.project_name}-${var.environment}-ml-dependencies"
+  compatible_runtimes = ["python3.12"]
+  description         = "ML dependencies: numpy, pandas, scikit-learn, scipy, holidays"
+  
+  source_code_hash = fileexists("../../backend/ml_layer.zip") ? filebase64sha256("../../backend/ml_layer.zip") : "placeholder"
+  depends_on       = [aws_s3_object.ml_layer]
+}
+
+# ==============================================================================
+# Lambda Function Package Build
+# ==============================================================================
 # Run tests and prepare Lambda package
+
 resource "null_resource" "prepare_lambda" {
   triggers = {
-    source_code_hash = "${sha256(file("../../backend/requirements.txt"))}-${sha256(file("../../backend/build_lambda_package.sh"))}-${sha256(join("", [for f in fileset("../../backend/src", "**") : filesha256("../../backend/src/${f}")]))}"
+    source_code_hash = "${sha256(file("../../backend/requirements.txt"))}-${sha256(file("../../backend/requirements-lambda.txt"))}-${sha256(file("../../backend/build_lambda_package.sh"))}-${sha256(join("", [for f in fileset("../../backend/src", "**") : filesha256("../../backend/src/${f}")]))}"
   }
 
   provisioner "local-exec" {
@@ -9,6 +55,10 @@ resource "null_resource" "prepare_lambda" {
     command     = "./build_lambda_package.sh"
   }
 }
+
+# ==============================================================================
+# Lambda Functions
+# ==============================================================================
 
 # Restore Consumer Lambda (S3-triggered)
 resource "aws_lambda_function" "restore_consumer" {
@@ -66,7 +116,7 @@ resource "aws_lambda_permission" "allow_s3_restore_consumer" {
 
 # Calculate source code hash from source files and build script
 locals {
-  source_code_hash = "${sha256(file("../../backend/requirements.txt"))}-${sha256(file("../../backend/build_lambda_package.sh"))}-${sha256(join("", [for f in fileset("../../backend/src", "**") : filesha256("../../backend/src/${f}")]))}"
+  source_code_hash = "${sha256(file("../../backend/requirements.txt"))}-${sha256(file("../../backend/requirements-lambda.txt"))}-${sha256(file("../../backend/build_lambda_package.sh"))}-${sha256(join("", [for f in fileset("../../backend/src", "**") : filesha256("../../backend/src/${f}")]))}"
 
   # Dynamic version management - read from build script output or use provided version
   app_version_raw = var.app_version != null ? var.app_version : (

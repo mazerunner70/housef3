@@ -8,4 +8,7 @@ pydantic>=2.0.0
 typing_extensions>=4.0.0  # Required by pydantic 2.x
 python-jose>=3.3.0 
 
+# Note: ML Dependencies (numpy, pandas, scikit-learn, scipy, holidays)
+# are provided via Lambda Layer (see requirements-ml.txt and build_ml_layer.sh)
+
 urllib3>=2.5.0 # not directly required, pinned by Snyk to avoid a vulnerability

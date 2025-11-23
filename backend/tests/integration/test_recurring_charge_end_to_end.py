@@ -11,9 +11,11 @@ from decimal import Decimal
 import uuid
 import numpy as np
 
-from services.recurring_charge_feature_service import RecurringChargeFeatureService
-from services.recurring_charge_detection_service import RecurringChargeDetectionService
-from services.recurring_charge_prediction_service import RecurringChargePredictionService
+from services.recurring_charges import (
+    RecurringChargeFeatureService,
+    RecurringChargeDetectionService,
+    RecurringChargePredictionService
+)
 from models.transaction import Transaction
 from models.recurring_charge import RecurrenceFrequency, TemporalPatternType
 

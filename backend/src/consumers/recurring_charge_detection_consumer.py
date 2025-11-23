@@ -14,6 +14,7 @@ history and identify recurring patterns, then saves them to DynamoDB.
 import json
 import logging
 import traceback
+import uuid
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
@@ -22,13 +23,13 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 from consumers.base_consumer import BaseEventConsumer, EventProcessingError
 from models.events import BaseEvent
-from services.recurring_charge_detection_service import RecurringChargeDetectionService
-from services.recurring_charge_prediction_service import RecurringChargePredictionService
+from services.recurring_charges import RecurringChargeDetectionService, RecurringChargePredictionService
 from utils.db.transactions import list_user_transactions
 from utils.db.recurring_charges import batch_create_patterns_in_db
+from utils.db.accounts import list_user_accounts
 from models.transaction import Transaction
+from models.account import Account
 from models.recurring_charge import RecurringChargePatternCreate
-import uuid
 
 # Operation tracking
 from services.operation_tracking_service import (
@@ -79,22 +80,26 @@ class RecurringChargeDetectionConsumer(BaseEventConsumer):
             account_id = event.data.get("accountId")
             min_occurrences = event.data.get("minOccurrences", 3)
             min_confidence = event.data.get("minConfidence", 0.6)
-            max_transactions = event.data.get("maxTransactions", 10000)
+            start_date_ts = event.data.get("startDateTs")
+            end_date_ts = event.data.get("endDateTs")
+            
             if min_occurrences < 1:
                 raise EventProcessingError("minOccurrences must be at least 1", permanent=True)
             if not (0.0 <= min_confidence <= 1.0):
                 raise EventProcessingError("minConfidence must be between 0.0 and 1.0", permanent=True)
-            if max_transactions < 10:
-                raise EventProcessingError("maxTransactions must be at least 10", permanent=True)
-            if max_transactions > 50000:
-                raise EventProcessingError("maxTransactions must not exceed 50000", permanent=True)
             if not operation_id:
                 raise EventProcessingError("Operation ID is missing", permanent=True)
+            if start_date_ts and end_date_ts and start_date_ts > end_date_ts:
+                raise EventProcessingError("startDateTs must be before endDateTs", permanent=True)
+            
+            # Format dates for logging
+            start_date_str = datetime.fromtimestamp(start_date_ts / 1000).strftime('%Y-%m-%d') if start_date_ts else 'None'
+            end_date_str = datetime.fromtimestamp(end_date_ts / 1000).strftime('%Y-%m-%d') if end_date_ts else 'None'
             
             logger.info(
                 f"Detection parameters: account_id={account_id}, "
                 f"min_occurrences={min_occurrences}, min_confidence={min_confidence}, "
-                f"max_transactions={max_transactions}"
+                f"start_date={start_date_str}, end_date={end_date_str}"
             )
             
             # Update operation status to in progress
@@ -106,7 +111,7 @@ class RecurringChargeDetectionConsumer(BaseEventConsumer):
             )
             
             # Fetch transactions for analysis
-            transactions = self._fetch_transactions(user_id, account_id, max_transactions)
+            transactions = self._fetch_transactions(user_id, account_id, start_date_ts, end_date_ts)
             
             if not transactions:
                 logger.info(f"No transactions found for user {user_id}")
@@ -129,15 +134,28 @@ class RecurringChargeDetectionConsumer(BaseEventConsumer):
                 operation_id=operation_id,
                 status=OperationStatus.IN_PROGRESS,
                 progress=30,
+                step_description=f"Fetching account information",
+            )
+            
+            # Fetch user accounts for account-aware detection
+            accounts_map = self._fetch_accounts_map(user_id)
+            logger.info(f"Fetched {len(accounts_map)} accounts for account-aware detection")
+            
+            # Update operation status
+            self._update_operation_status(
+                operation_id=operation_id,
+                status=OperationStatus.IN_PROGRESS,
+                progress=40,
                 step_description=f"Analyzing {len(transactions)} transactions",
             )
             
-            # Run pattern detection
+            # Run pattern detection with account information
             patterns = self.detection_service.detect_recurring_patterns(
                 user_id=user_id,
                 transactions=transactions,
                 min_occurrences=min_occurrences,
                 min_confidence=min_confidence,
+                accounts_map=accounts_map,
             )
             
             logger.info(f"Detected {len(patterns)} recurring charge patterns")
@@ -217,18 +235,43 @@ class RecurringChargeDetectionConsumer(BaseEventConsumer):
                 )
             raise
     
-    def _fetch_transactions(self, user_id: str, account_id: Optional[str], max_transactions: int = 10000) -> List[Transaction]:
+    def _fetch_accounts_map(self, user_id: str) -> Dict[uuid.UUID, Account]:
+        """
+        Fetch all accounts for a user and return as a dictionary.
+        
+        Args:
+            user_id: User ID
+            
+        Returns:
+            Dictionary mapping account_id to Account objects
+        """
+        try:
+            accounts = list_user_accounts(user_id)
+            accounts_map = {account.account_id: account for account in accounts}
+            return accounts_map
+        except Exception as e:
+            logger.warning(f"Error fetching accounts for user {user_id}: {e}. Continuing without account data.")
+            return {}
+    
+    def _fetch_transactions(
+        self, 
+        user_id: str, 
+        account_id: Optional[str], 
+        start_date_ts: Optional[int] = None,
+        end_date_ts: Optional[int] = None
+    ) -> List[Transaction]:
         """
         Fetch transactions for pattern detection.
         
-        Fetches up to the specified number of most recent transactions for the user,
+        Fetches transactions within the specified date range for the user,
         optionally filtered by account. Uses pagination to avoid Lambda timeouts and
         automatically filters out duplicate transactions.
         
         Args:
             user_id: User ID
             account_id: Optional account ID to filter transactions
-            max_transactions: Maximum number of transactions to fetch (default: 10000)
+            start_date_ts: Optional start date timestamp in milliseconds
+            end_date_ts: Optional end date timestamp in milliseconds
             
         Returns:
             List of Transaction objects sorted by date (most recent first)
@@ -237,21 +280,24 @@ class RecurringChargeDetectionConsumer(BaseEventConsumer):
             # Prepare account filter if specified
             account_ids = [uuid.UUID(account_id)] if account_id else None
             
-            # Fetch transactions with proper sorting (most recent first)
-            # We'll paginate to get up to max_transactions
+            # Fetch transactions with date range filtering
+            # We'll paginate to get all transactions in the date range
             all_transactions = []
             last_key = None
             page_size = 1000  # Fetch in chunks to avoid timeouts
+            max_pages = 100  # Safety limit to prevent infinite loops
+            page_count = 0
             
-            while len(all_transactions) < max_transactions:
-                remaining = max_transactions - len(all_transactions)
-                limit = min(page_size, remaining)
+            while page_count < max_pages:
+                page_count += 1
                 
                 transactions, last_key, _ = list_user_transactions(
                     user_id=user_id,
-                    limit=limit,
+                    limit=page_size,
                     last_evaluated_key=last_key,
                     account_ids=account_ids,
+                    start_date_ts=start_date_ts,
+                    end_date_ts=end_date_ts,
                     sort_order_date='desc',  # Most recent first!
                     ignore_dup=True,  # Automatically filter duplicates
                 )
@@ -274,7 +320,8 @@ class RecurringChargeDetectionConsumer(BaseEventConsumer):
             logger.info(
                 f"Fetched {len(all_transactions)} transactions, "
                 f"{len(valid_transactions)} valid for analysis "
-                f"(account_id={account_id or 'all accounts'})"
+                f"(account_id={account_id or 'all accounts'}, "
+                f"date_range={'specified' if start_date_ts or end_date_ts else 'all time'})"
             )
             
             return valid_transactions
@@ -374,7 +421,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 "operationId": "op_20250107_123456_abc",
                 "accountId": "optional-account-id",
                 "minOccurrences": 3,
-                "minConfidence": 0.6
+                "minConfidence": 0.6,
+                "startDateTs": 1704067200000,  // Optional: Start date in ms
+                "endDateTs": 1735689599000     // Optional: End date in ms
             }
         }
     }
