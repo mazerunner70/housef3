@@ -40,7 +40,7 @@ const RecurringChargesTab: React.FC<RecurringChargesTabProps> = ({ categoryId })
     const [filterActive, setFilterActive] = useState<boolean | undefined>(undefined);
     const [filterConfidence, setFilterConfidence] = useState<number>(0);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
-    const [maxTransactions, setMaxTransactions] = useState<number>(10000);
+    const [dateRangeMonths, setDateRangeMonths] = useState<number>(12);
 
     // Load patterns on mount
     useEffect(() => {
@@ -57,14 +57,32 @@ const RecurringChargesTab: React.FC<RecurringChargesTabProps> = ({ categoryId })
     }, [filterActive, filterConfidence, categoryId, setFilters]);
 
     const handleTriggerDetection = async () => {
-        const operationId = await triggerDetection({ maxTransactions });
+        // Calculate date range based on selected months
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setMonth(startDate.getMonth() - dateRangeMonths);
+
+        // Set to start of day for startDate and end of day for endDate
+        startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
+
+        const operationId = await triggerDetection({
+            startDateTs: startDate.getTime(),
+            endDateTs: endDate.getTime()
+        });
         if (operationId) {
-            // Show success message
-            alert(`Detection started! Analyzing up to ${maxTransactions.toLocaleString()} transactions. Patterns will be updated shortly.`);
+            // Show success message using Alert component
+            setSuccessMessage(`Detection started! Analyzing transactions from the last ${dateRangeMonths} months.`);
+
+            // Auto-dismiss success message after 5 seconds
+            setTimeout(() => {
+                setSuccessMessage(null);
+            }, 5000);
+
             // Refresh patterns after a delay
             setTimeout(() => {
                 fetchPatterns(true);
-            }, 3000);
+            }, 10000);
         }
     };
 
@@ -135,17 +153,20 @@ const RecurringChargesTab: React.FC<RecurringChargesTabProps> = ({ categoryId })
 
                 <div className="recurring-charges-tab__actions">
                     <div className="recurring-charges-tab__config">
-                        <label htmlFor="max-transactions">Max Transactions:</label>
-                        <input
-                            id="max-transactions"
-                            type="number"
-                            min="10"
-                            max="10000"
-                            step="10"
-                            value={maxTransactions}
-                            onChange={(e) => setMaxTransactions(Number(e.target.value))}
+                        <label htmlFor="date-range-months">Analysis Period:</label>
+                        <select
+                            id="date-range-months"
+                            value={dateRangeMonths}
+                            onChange={(e) => setDateRangeMonths(Number(e.target.value))}
                             className="recurring-charges-tab__config-input"
-                        />
+                        >
+                            <option value="3">Last 3 months</option>
+                            <option value="6">Last 6 months</option>
+                            <option value="12">Last 12 months</option>
+                            <option value="18">Last 18 months</option>
+                            <option value="24">Last 24 months</option>
+                            <option value="36">Last 36 months</option>
+                        </select>
                     </div>
                     <DetectionTriggerButton
                         onTrigger={handleTriggerDetection}

@@ -110,19 +110,20 @@ def get_rule_engine() -> CategoryRuleEngine:
     """Get a CategoryRuleEngine instance."""
     return CategoryRuleEngine()
 
-def handle_category_not_found() -> Dict[str, Any]:
-    """Standard response for category not found."""
-    return create_response(404, {"message": ERROR_CATEGORY_NOT_FOUND})
+def handle_category_not_found( error: Exception) -> Dict[str, Any]:
+    """Standard response for category not found. do not leak security info in http response"""
+    logger.error(f"Category not found or unauthorised", exc_info=True)
+    return create_response(404, "status code 400")
 
 def handle_validation_error(operation: str, error: Exception) -> Dict[str, Any]:
     """Standard response for validation errors."""
     logger.error(f"Validation error {operation}: {str(error)}")
-    return create_response(400, {"message": str(error)})
+    return create_response(400, "status code 400")
 
 def handle_server_error(operation: str, error: Exception) -> Dict[str, Any]:
     """Standard response for server errors."""
     logger.error(f"Error {operation}: {str(error)}")
-    return create_response(500, {"message": f"Error {operation}"})
+    return create_response(500, "status code 400")
 
 
 # --- Specific Operation Handlers (Refactored to use db_utils_categories) ---
@@ -194,8 +195,8 @@ def get_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
             'category': serialize_model(category)
         })
         
-    except (NotFound, NotAuthorized):
-        return handle_category_not_found()
+    except (NotFound, NotAuthorized) as e:
+        return handle_category_not_found(e)
     except ValueError as e:
         return handle_validation_error("retrieving category", e)
     except Exception as e:
@@ -223,7 +224,7 @@ def update_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
         # Update the category
         updated_category = update_category_in_db(uuid.UUID(category_id), user_id, update_payload)
         if not updated_category:
-            return handle_category_not_found()
+            return handle_category_not_found(Exception("Category not found"))
         
         return create_response(200, {
             'message': 'Category updated successfully',
@@ -248,7 +249,7 @@ def delete_category_handler(event: Dict[str, Any], user_id: str) -> Dict[str, An
                 'categoryId': category_id
             })
         else:
-            return handle_category_not_found()
+            return handle_category_not_found(Exception("Category not found"))
         
     except ValueError as e:
         # Special handling for child categories error
@@ -488,11 +489,10 @@ def preview_category_matches_handler(event: Dict[str, Any], user_id: str) -> Dic
     except ValueError as ve:
         logger.warning(f"Missing category ID: {str(ve)}")
         return create_response(400, {"error": str(ve)})
-    except (NotFound, NotAuthorized):
-        return create_response(404, {"error": ERROR_CATEGORY_NOT_FOUND})
+    except (NotFound, NotAuthorized) as e:
+        return handle_category_not_found(e)
     except Exception as e:
-        logger.error(f"Error previewing category matches: {str(e)}", exc_info=True)
-        return create_response(500, {"error": ERROR_INTERNAL_SERVER, "message": str(e)})
+        return handle_server_error("previewing category matches", e)
 
 def generate_category_suggestions_handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """

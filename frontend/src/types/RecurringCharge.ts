@@ -193,11 +193,10 @@ export interface PatternFeedbackCreate {
 // API Request/Response Types
 export interface DetectRecurringChargesRequest {
     accountIds?: string[];
-    startDate?: string; // ISO date
-    endDate?: string; // ISO date
+    startDateTs?: number; // Timestamp in milliseconds since epoch
+    endDateTs?: number; // Timestamp in milliseconds since epoch
     minOccurrences?: number;
     minConfidence?: number;
-    maxTransactions?: number; // Maximum number of transactions to analyze (default: 10000)
 }
 
 export interface DetectRecurringChargesResponse {
