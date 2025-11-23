@@ -212,6 +212,10 @@ scripts/config.json
 lambda.zip
 lambda*.zip
 
+# Ignore layer build artifacts
+backend/layer_build/
+layer_build/
+
 # Ignore test_usecase/config.json
 test_usecase/config.json
 
