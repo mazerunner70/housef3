@@ -295,6 +295,66 @@ class TestRecurringChargePattern:
         assert item["active"] == "false"
         assert isinstance(item["active"], str)
 
+    def test_pattern_to_dynamodb_item_boolean_conversions(self):
+        """Test that all boolean fields (active, autoCategorize, criteriaValidated) are converted to 'true'/'false' strings for DynamoDB GSI compatibility."""
+        # Test with autoCategorize=True, active=True, criteriaValidated=True
+        pattern_true = RecurringChargePattern(
+            userId="user123",
+            merchantPattern="NETFLIX",
+            frequency=RecurrenceFrequency.MONTHLY,
+            temporalPatternType=TemporalPatternType.DAY_OF_MONTH,
+            amountMean=Decimal("14.99"),
+            amountStd=Decimal("0.00"),
+            amountMin=Decimal("14.99"),
+            amountMax=Decimal("14.99"),
+            confidenceScore=Decimal("0.95"),
+            transactionCount=12,
+            firstOccurrence=1672531200000,
+            lastOccurrence=1704067200000,
+            active=True,
+            autoCategorize=True,
+            criteriaValidated=True
+        )
+        
+        item_true = pattern_true.to_dynamodb_item()
+        
+        # CRITICAL: Check that all boolean True values are converted to string 'true'
+        assert item_true["active"] == "true"
+        assert isinstance(item_true["active"], str)
+        assert item_true["autoCategorize"] == "true"
+        assert isinstance(item_true["autoCategorize"], str)
+        assert item_true["criteriaValidated"] == "true"
+        assert isinstance(item_true["criteriaValidated"], str)
+        
+        # Test with autoCategorize=False, active=False, criteriaValidated=False
+        pattern_false = RecurringChargePattern(
+            userId="user123",
+            merchantPattern="SPOTIFY",
+            frequency=RecurrenceFrequency.MONTHLY,
+            temporalPatternType=TemporalPatternType.DAY_OF_MONTH,
+            amountMean=Decimal("9.99"),
+            amountStd=Decimal("0.00"),
+            amountMin=Decimal("9.99"),
+            amountMax=Decimal("9.99"),
+            confidenceScore=Decimal("0.95"),
+            transactionCount=12,
+            firstOccurrence=1672531200000,
+            lastOccurrence=1704067200000,
+            active=False,
+            autoCategorize=False,
+            criteriaValidated=False
+        )
+        
+        item_false = pattern_false.to_dynamodb_item()
+        
+        # CRITICAL: Check that all boolean False values are converted to string 'false'
+        assert item_false["active"] == "false"
+        assert isinstance(item_false["active"], str)
+        assert item_false["autoCategorize"] == "false"
+        assert isinstance(item_false["autoCategorize"], str)
+        assert item_false["criteriaValidated"] == "false"
+        assert isinstance(item_false["criteriaValidated"], str)
+
     def test_pattern_from_dynamodb_item(self):
         """Test creating pattern from DynamoDB item."""
         pattern_id = uuid.uuid4()

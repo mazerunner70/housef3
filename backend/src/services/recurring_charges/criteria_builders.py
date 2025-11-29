@@ -191,7 +191,22 @@ class MerchantCriteriaBuilder:
         exclusions = exclusions or []
         
         def matcher(description: str) -> bool:
-            # Normalize
+            # For regex, handle case sensitivity via flags, not uppercasing
+            if match_type == 'regex':
+                # Check exclusions first (case-sensitive for regex unless specified)
+                excl = exclusions if case_sensitive else [e.upper() for e in exclusions]
+                desc_for_excl = description if case_sensitive else description.upper()
+                if any(ex in desc_for_excl for ex in excl):
+                    return False
+                
+                # Apply regex with appropriate flags
+                try:
+                    flags = 0 if case_sensitive else re.IGNORECASE
+                    return bool(re.search(pattern, description, flags))
+                except re.error:
+                    return False
+            
+            # For non-regex patterns, normalize via uppercasing
             desc = description if case_sensitive else description.upper()
             pat = pattern if case_sensitive else pattern.upper()
             excl = exclusions if case_sensitive else [e.upper() for e in exclusions]
@@ -209,11 +224,6 @@ class MerchantCriteriaBuilder:
                 return desc.startswith(pat)
             elif match_type == 'suffix':
                 return desc.endswith(pat)
-            elif match_type == 'regex':
-                try:
-                    return bool(re.search(pat, desc))
-                except re.error:
-                    return False
             
             return False
         

@@ -166,18 +166,26 @@ class PatternReviewService:
         pattern.criteria_validation_errors = validation_result.warnings
         
         # Update status based on validation
+        # Always move to CONFIRMED after edit (user review), but validation state
+        # determines whether pattern can be activated
+        pattern.status = PatternStatus.CONFIRMED
+        
         if validation_result.is_valid:
-            pattern.status = PatternStatus.CONFIRMED
             if review_action.activate_immediately:
                 pattern.status = PatternStatus.ACTIVE
                 pattern.active = True
                 logger.info(
                     f"Pattern {pattern.pattern_id} edited, validated, and activated"
                 )
+            else:
+                logger.info(
+                    f"Pattern {pattern.pattern_id} edited and validated successfully"
+                )
         else:
             logger.warning(
-                f"Pattern {pattern.pattern_id} edited but validation failed: "
-                f"{validation_result.warnings}"
+                f"Pattern {pattern.pattern_id} edited and confirmed but validation failed: "
+                f"{validation_result.warnings}. Pattern cannot be activated until "
+                f"criteria are corrected."
             )
         
         return pattern, validation_result

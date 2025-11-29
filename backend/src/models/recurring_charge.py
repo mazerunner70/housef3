@@ -220,9 +220,12 @@ class RecurringChargePattern(BaseModel):
         if 'matchedTransactionIds' in data and data['matchedTransactionIds'] is not None:
             data['matchedTransactionIds'] = [str(tid) for tid in data['matchedTransactionIds']]
         
-        # Convert boolean fields to string for DynamoDB GSI compatibility
+        # Convert boolean fields to 'true'/'false' strings for DynamoDB GSI compatibility
+        # DynamoDB GSIs require string types for boolean attributes to enable indexing
         if 'active' in data:
             data['active'] = 'true' if data['active'] else 'false'
+        if 'autoCategorize' in data:
+            data['autoCategorize'] = 'true' if data['autoCategorize'] else 'false'
         if 'criteriaValidated' in data:
             data['criteriaValidated'] = 'true' if data['criteriaValidated'] else 'false'
         
