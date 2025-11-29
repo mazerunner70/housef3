@@ -8,6 +8,17 @@
 # Recurring Charge Patterns Table
 # =========================================
 # Stores detected recurring charge patterns with ML features
+#
+# Phase 1 Fields (Pattern Review):
+# - matchedTransactionIds (List): Transaction IDs from DBSCAN cluster
+# - status (String): Pattern lifecycle status (indexed via UserIdStatusIndex)
+# - criteriaValidated (Boolean): Whether criteria have been validated
+# - criteriaValidationErrors (List): Validation warnings/errors
+# - reviewedBy (String): User ID who reviewed the pattern
+# - reviewedAt (Number): Timestamp when pattern was reviewed
+#
+# Note: Only indexed fields need to be defined in attributes section.
+# DynamoDB is schema-less for non-indexed fields.
 resource "aws_dynamodb_table" "recurring_charge_patterns" {
   name         = "${var.project_name}-${var.environment}-recurring-charge-patterns"
   billing_mode = "PAY_PER_REQUEST"
@@ -34,6 +45,11 @@ resource "aws_dynamodb_table" "recurring_charge_patterns" {
     type = "S" # Using string for boolean to allow GSI
   }
 
+  attribute {
+    name = "status"
+    type = "S" # Pattern lifecycle status (detected, confirmed, active, rejected, paused)
+  }
+
   # GSI to query patterns by category
   global_secondary_index {
     name            = "CategoryIdIndex"
@@ -46,6 +62,15 @@ resource "aws_dynamodb_table" "recurring_charge_patterns" {
     name            = "UserIdActiveIndex"
     hash_key        = "userId"
     range_key       = "active"
+    projection_type = "ALL"
+  }
+
+  # GSI to query patterns by user and status (Phase 1: Pattern Review)
+  # Enables filtering patterns by lifecycle stage (e.g., detected, confirmed, active)
+  global_secondary_index {
+    name            = "UserIdStatusIndex"
+    hash_key        = "userId"
+    range_key       = "status"
     projection_type = "ALL"
   }
 

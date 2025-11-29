@@ -50,6 +50,15 @@ class TemporalPatternType(str, Enum):
     FLEXIBLE = "flexible"                    # No strict temporal pattern
 
 
+class PatternStatus(str, Enum):
+    """Lifecycle status of a recurring charge pattern."""
+    DETECTED = "detected"      # ML detected, awaiting review
+    CONFIRMED = "confirmed"    # User confirmed, criteria validated
+    ACTIVE = "active"          # Actively categorizing transactions
+    REJECTED = "rejected"      # User rejected pattern
+    PAUSED = "paused"          # Temporarily disabled
+
+
 class RecurringChargePattern(BaseModel):
     """
     Represents a detected recurring charge pattern.
@@ -78,24 +87,66 @@ class RecurringChargePattern(BaseModel):
     amount_std: Decimal = Field(alias="amountStd")
     amount_min: Decimal = Field(alias="amountMin")
     amount_max: Decimal = Field(alias="amountMax")
-    amount_tolerance_pct: float = Field(default=10.0, alias="amountTolerancePct", ge=0.0, le=100.0)
+    amount_tolerance_pct: Decimal = Field(default=Decimal("10.0"), alias="amountTolerancePct", ge=0.0, le=100.0)
     
     # Pattern metadata
-    confidence_score: float = Field(alias="confidenceScore", ge=0.0, le=1.0)
+    confidence_score: Decimal = Field(alias="confidenceScore", ge=0.0, le=1.0)
     transaction_count: int = Field(alias="transactionCount", ge=0)
     first_occurrence: int = Field(alias="firstOccurrence")
     last_occurrence: int = Field(alias="lastOccurrence")
     
     # ML features
-    feature_vector: Optional[List[float]] = Field(default=None, alias="featureVector")
+    feature_vector: Optional[List[Decimal]] = Field(default=None, alias="featureVector")
     cluster_id: Optional[int] = Field(default=None, alias="clusterId")
     
     # Associated category
     suggested_category_id: Optional[uuid.UUID] = Field(default=None, alias="suggestedCategoryId")
     auto_categorize: bool = Field(default=False, alias="autoCategorize")
     
+    # Phase 1: Pattern Review - Store matched transaction IDs from DBSCAN cluster
+    matched_transaction_ids: Optional[List[uuid.UUID]] = Field(
+        default=None,
+        alias="matchedTransactionIds",
+        description="Transaction IDs used to create this pattern (from DBSCAN cluster)"
+    )
+    
+    # Phase 1: Pattern lifecycle status
+    status: PatternStatus = Field(
+        default=PatternStatus.DETECTED,
+        description="Current lifecycle status of the pattern"
+    )
+    
+    # Phase 1: Validation metadata
+    criteria_validated: bool = Field(
+        default=False,
+        alias="criteriaValidated",
+        description="Whether criteria have been validated against original matches"
+    )
+    
+    criteria_validation_errors: Optional[List[str]] = Field(
+        default=None,
+        alias="criteriaValidationErrors",
+        description="Any validation warnings or errors"
+    )
+    
+    # Phase 1: User review metadata
+    reviewed_by: Optional[str] = Field(
+        default=None,
+        alias="reviewedBy",
+        description="User ID who reviewed the pattern"
+    )
+    
+    reviewed_at: Optional[int] = Field(
+        default=None,
+        alias="reviewedAt",
+        description="Timestamp when pattern was reviewed"
+    )
+    
     # Status
-    active: bool = Field(default=True)
+    active: bool = Field(
+        default=False,  # Changed: patterns start inactive until activated
+        description="Whether to apply this pattern for auto-categorization"
+    )
     created_at: int = Field(
         default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000),
         alias="createdAt"
@@ -114,10 +165,10 @@ class RecurringChargePattern(BaseModel):
         use_enum_values=False  # Preserve enum objects (not strings) for type safety
     )
 
-    @field_validator('first_occurrence', 'last_occurrence', 'created_at', 'updated_at')
+    @field_validator('first_occurrence', 'last_occurrence', 'created_at', 'updated_at', 'reviewed_at')
     @classmethod
-    def check_positive_timestamp(cls, v: int) -> int:
-        if v < 0:
+    def check_positive_timestamp(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v < 0:
             raise ValueError(TIMESTAMP_ERROR_MESSAGE)
         return v
 
@@ -165,6 +216,17 @@ class RecurringChargePattern(BaseModel):
             if isinstance(value, uuid.UUID):
                 data[key] = str(value)
         
+        # Convert list of UUIDs to list of strings
+        if 'matchedTransactionIds' in data and data['matchedTransactionIds'] is not None:
+            data['matchedTransactionIds'] = [str(tid) for tid in data['matchedTransactionIds']]
+        
+        # Convert boolean fields to string for DynamoDB GSI compatibility
+        if 'active' in data:
+            data['active'] = 'true' if data['active'] else 'false'
+        if 'criteriaValidated' in data:
+            data['criteriaValidated'] = 'true' if data['criteriaValidated'] else 'false'
+        
+        # No float-to-Decimal conversion needed - all numeric fields are already Decimal
         return data
 
     @classmethod
@@ -172,59 +234,152 @@ class RecurringChargePattern(BaseModel):
         """Create from DynamoDB item data."""
         converted_data = data.copy()
         
-        cls._convert_decimal_fields(converted_data)
-        cls._convert_uuid_fields(converted_data)
-        cls._convert_enum_fields(converted_data)
-        
-        return cls.model_validate(converted_data)
-    
-    @staticmethod
-    def _convert_decimal_fields(data: Dict[str, Any]) -> None:
-        """Convert Decimal fields to appropriate types."""
+        # Convert Decimal fields to appropriate types
         int_fields = ['dayOfWeek', 'dayOfMonth', 'toleranceDays', 'transactionCount', 
-                      'firstOccurrence', 'lastOccurrence', 'createdAt', 'updatedAt', 'clusterId']
+                      'firstOccurrence', 'lastOccurrence', 'createdAt', 'updatedAt', 
+                      'reviewedAt', 'clusterId']
         for field in int_fields:
-            if field in data and data[field] is not None and isinstance(data[field], Decimal):
-                data[field] = int(data[field])
+            if field in converted_data and converted_data[field] is not None and isinstance(converted_data[field], Decimal):
+                converted_data[field] = int(converted_data[field])
         
-        float_fields = ['confidenceScore', 'amountTolerancePct']
-        for field in float_fields:
-            if field in data and data[field] is not None and isinstance(data[field], Decimal):
-                data[field] = float(data[field])
-        
-        if 'featureVector' in data and data['featureVector'] is not None:
-            if isinstance(data['featureVector'], list):
-                data['featureVector'] = [
-                    float(x) if isinstance(x, Decimal) else x for x in data['featureVector']
-                ]
-    
-    @staticmethod
-    def _convert_uuid_fields(data: Dict[str, Any]) -> None:
-        """Convert UUID string fields to UUID objects."""
+        # Convert UUID string fields to UUID objects
         uuid_fields = ['patternId', 'suggestedCategoryId']
         for field in uuid_fields:
-            if field in data and isinstance(data[field], str):
+            if field in converted_data and isinstance(converted_data[field], str):
                 try:
-                    data[field] = uuid.UUID(data[field])
+                    converted_data[field] = uuid.UUID(converted_data[field])
                 except ValueError:
                     pass
-    
-    @staticmethod
-    def _convert_enum_fields(data: Dict[str, Any]) -> None:
-        """Convert enum string fields to enum objects."""
-        if 'frequency' in data and isinstance(data['frequency'], str):
-            try:
-                data['frequency'] = RecurrenceFrequency(data['frequency'])
-            except ValueError:
-                logger.warning(f"Invalid RecurrenceFrequency value: {data['frequency']}")
-                data['frequency'] = RecurrenceFrequency.IRREGULAR
         
-        if 'temporalPatternType' in data and isinstance(data['temporalPatternType'], str):
+        # Convert list of UUID strings to list of UUID objects
+        if 'matchedTransactionIds' in converted_data and converted_data['matchedTransactionIds'] is not None:
+            converted_ids = []
+            for tid in converted_data['matchedTransactionIds']:
+                if isinstance(tid, str):
+                    try:
+                        converted_ids.append(uuid.UUID(tid))
+                    except ValueError:
+                        pass
+                elif isinstance(tid, uuid.UUID):
+                    converted_ids.append(tid)
+            converted_data['matchedTransactionIds'] = converted_ids if converted_ids else None
+        
+        # Convert enum string fields to enum objects
+        if 'frequency' in converted_data and isinstance(converted_data['frequency'], str):
             try:
-                data['temporalPatternType'] = TemporalPatternType(data['temporalPatternType'])
+                converted_data['frequency'] = RecurrenceFrequency(converted_data['frequency'])
             except ValueError:
-                logger.warning(f"Invalid TemporalPatternType value: {data['temporalPatternType']}")
-                data['temporalPatternType'] = TemporalPatternType.FLEXIBLE
+                logger.warning(f"Invalid RecurrenceFrequency value: {converted_data['frequency']}")
+                converted_data['frequency'] = RecurrenceFrequency.IRREGULAR
+        
+        if 'temporalPatternType' in converted_data and isinstance(converted_data['temporalPatternType'], str):
+            try:
+                converted_data['temporalPatternType'] = TemporalPatternType(converted_data['temporalPatternType'])
+            except ValueError:
+                logger.warning(f"Invalid TemporalPatternType value: {converted_data['temporalPatternType']}")
+                converted_data['temporalPatternType'] = TemporalPatternType.FLEXIBLE
+        
+        if 'status' in converted_data and isinstance(converted_data['status'], str):
+            try:
+                converted_data['status'] = PatternStatus(converted_data['status'])
+            except ValueError:
+                logger.warning(f"Invalid PatternStatus value: {converted_data['status']}")
+                converted_data['status'] = PatternStatus.DETECTED
+        
+        # Convert boolean string fields to boolean objects
+        if 'active' in converted_data and isinstance(converted_data['active'], str):
+            converted_data['active'] = converted_data['active'].lower() == 'true'
+        if 'autoCategorize' in converted_data and isinstance(converted_data['autoCategorize'], str):
+            converted_data['autoCategorize'] = converted_data['autoCategorize'].lower() == 'true'
+        if 'criteriaValidated' in converted_data and isinstance(converted_data['criteriaValidated'], str):
+            converted_data['criteriaValidated'] = converted_data['criteriaValidated'].lower() == 'true'
+        
+        return cls.model_validate(converted_data)
+
+
+class PatternCriteriaValidation(BaseModel):
+    """Result of validating pattern criteria against original matched transactions."""
+    
+    pattern_id: uuid.UUID = Field(alias="patternId")
+    is_valid: bool = Field(alias="isValid", description="All original transactions match criteria")
+    
+    # Statistics
+    original_count: int = Field(alias="originalCount", description="Number of original matched transactions")
+    criteria_match_count: int = Field(alias="criteriaMatchCount", description="Number of transactions matching criteria")
+    
+    # Matching analysis
+    all_original_match_criteria: bool = Field(
+        alias="allOriginalMatchCriteria",
+        description="All original transactions match the pattern criteria"
+    )
+    
+    no_false_positives: bool = Field(
+        alias="noFalsePositives", 
+        description="Criteria don't match extra transactions beyond original cluster"
+    )
+    
+    perfect_match: bool = Field(
+        alias="perfectMatch",
+        description="Criteria exactly match original cluster, no more, no less"
+    )
+    
+    # Transaction ID analysis
+    missing_from_criteria: List[uuid.UUID] = Field(
+        default_factory=list,
+        alias="missingFromCriteria",
+        description="Original transactions that don't match criteria (false negatives)"
+    )
+    
+    extra_from_criteria: List[uuid.UUID] = Field(
+        default_factory=list,
+        alias="extraFromCriteria",
+        description="Non-original transactions that match criteria (false positives)"
+    )
+    
+    # Recommendations
+    warnings: List[str] = Field(default_factory=list)
+    suggestions: List[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        json_encoders={uuid.UUID: str}
+    )
+
+
+class PatternReviewAction(BaseModel):
+    """User action when reviewing a pattern."""
+    
+    pattern_id: uuid.UUID = Field(alias="patternId")
+    user_id: str = Field(alias="userId")
+    action: str = Field(description="confirm, reject, or edit")
+    
+    # Optional edits to pattern criteria
+    edited_merchant_pattern: Optional[str] = Field(default=None, alias="editedMerchantPattern")
+    edited_amount_tolerance_pct: Optional[Decimal] = Field(default=None, alias="editedAmountTolerancePct")
+    edited_tolerance_days: Optional[int] = Field(default=None, alias="editedToleranceDays")
+    edited_suggested_category_id: Optional[uuid.UUID] = Field(default=None, alias="editedSuggestedCategoryId")
+    
+    # User notes
+    notes: Optional[str] = Field(default=None, description="User's review notes")
+    
+    # Whether to activate immediately after confirmation
+    activate_immediately: bool = Field(default=False, alias="activateImmediately")
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        json_encoders={
+            Decimal: str,
+            uuid.UUID: str
+        }
+    )
+
+    @field_validator('action')
+    @classmethod
+    def validate_action(cls, v: str) -> str:
+        valid_actions = {'confirm', 'reject', 'edit'}
+        if v not in valid_actions:
+            raise ValueError(f"action must be one of {valid_actions}")
+        return v
 
 
 class RecurringChargePatternCreate(BaseModel):
@@ -251,24 +406,36 @@ class RecurringChargePatternCreate(BaseModel):
     amount_std: Decimal = Field(alias="amountStd")
     amount_min: Decimal = Field(alias="amountMin")
     amount_max: Decimal = Field(alias="amountMax")
-    amount_tolerance_pct: float = Field(default=10.0, alias="amountTolerancePct", ge=0.0, le=100.0)
+    amount_tolerance_pct: Decimal = Field(default=Decimal("10.0"), alias="amountTolerancePct", ge=0.0, le=100.0)
     
     # Pattern metadata
-    confidence_score: float = Field(alias="confidenceScore", ge=0.0, le=1.0)
+    confidence_score: Decimal = Field(alias="confidenceScore", ge=0.0, le=1.0)
     transaction_count: int = Field(alias="transactionCount", ge=0)
     first_occurrence: int = Field(alias="firstOccurrence")
     last_occurrence: int = Field(alias="lastOccurrence")
     
     # ML features
-    feature_vector: Optional[List[float]] = Field(default=None, alias="featureVector")
+    feature_vector: Optional[List[Decimal]] = Field(default=None, alias="featureVector")
     cluster_id: Optional[int] = Field(default=None, alias="clusterId")
     
     # Associated category
     suggested_category_id: Optional[uuid.UUID] = Field(default=None, alias="suggestedCategoryId")
     auto_categorize: bool = Field(default=False, alias="autoCategorize")
     
+    # Phase 1: Pattern Review
+    matched_transaction_ids: Optional[List[uuid.UUID]] = Field(
+        default=None,
+        alias="matchedTransactionIds",
+        description="Transaction IDs used to create this pattern (from DBSCAN cluster)"
+    )
+    
+    status: PatternStatus = Field(
+        default=PatternStatus.DETECTED,
+        description="Current lifecycle status of the pattern"
+    )
+    
     # Status
-    active: bool = Field(default=True)
+    active: bool = Field(default=False)
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -322,16 +489,16 @@ class RecurringChargePatternUpdate(BaseModel):
     amount_std: Optional[Decimal] = Field(default=None, alias="amountStd")
     amount_min: Optional[Decimal] = Field(default=None, alias="amountMin")
     amount_max: Optional[Decimal] = Field(default=None, alias="amountMax")
-    amount_tolerance_pct: Optional[float] = Field(default=None, alias="amountTolerancePct", ge=0.0, le=100.0)
+    amount_tolerance_pct: Optional[Decimal] = Field(default=None, alias="amountTolerancePct", ge=0.0, le=100.0)
     
     # Pattern metadata
-    confidence_score: Optional[float] = Field(default=None, alias="confidenceScore", ge=0.0, le=1.0)
+    confidence_score: Optional[Decimal] = Field(default=None, alias="confidenceScore", ge=0.0, le=1.0)
     transaction_count: Optional[int] = Field(default=None, alias="transactionCount", ge=0)
     first_occurrence: Optional[int] = Field(default=None, alias="firstOccurrence")
     last_occurrence: Optional[int] = Field(default=None, alias="lastOccurrence")
     
     # ML features
-    feature_vector: Optional[List[float]] = Field(default=None, alias="featureVector")
+    feature_vector: Optional[List[Decimal]] = Field(default=None, alias="featureVector")
     cluster_id: Optional[int] = Field(default=None, alias="clusterId")
     
     # Associated category
@@ -382,7 +549,7 @@ class RecurringChargePrediction(BaseModel):
     pattern_id: uuid.UUID = Field(alias="patternId")
     next_expected_date: int = Field(alias="nextExpectedDate")  # Timestamp (ms)
     expected_amount: Decimal = Field(alias="expectedAmount")
-    confidence: float = Field(ge=0.0, le=1.0)  # 0.0-1.0
+    confidence: Decimal = Field(ge=0.0, le=1.0)  # 0.0-1.0
     days_until_due: int = Field(alias="daysUntilDue")
     amount_range: Dict[str, Decimal] = Field(alias="amountRange")  # {"min": X, "max": Y}
 
@@ -403,8 +570,8 @@ class RecurringChargePrediction(BaseModel):
 
     @field_validator('confidence')
     @classmethod
-    def validate_confidence(cls, v: float) -> float:
-        if not (0.0 <= v <= 1.0):
+    def validate_confidence(cls, v: Decimal) -> Decimal:
+        if not (Decimal("0.0") <= v <= Decimal("1.0")):
             raise ValueError("confidence must be between 0.0 and 1.0")
         return v
 
@@ -416,6 +583,7 @@ class RecurringChargePrediction(BaseModel):
         if isinstance(data.get('patternId'), uuid.UUID):
             data['patternId'] = str(data['patternId'])
         
+        # No float-to-Decimal conversion needed - confidence is already Decimal
         return data
 
     @classmethod
@@ -430,9 +598,7 @@ class RecurringChargePrediction(BaseModel):
                 if isinstance(converted_data[field], Decimal):
                     converted_data[field] = int(converted_data[field])
         
-        # Convert Decimal to float for confidence
-        if 'confidence' in converted_data and isinstance(converted_data['confidence'], Decimal):
-            converted_data['confidence'] = float(converted_data['confidence'])
+        # Note: confidence remains as Decimal - no conversion needed
         
         # Convert UUID string to UUID object
         if 'patternId' in converted_data and isinstance(converted_data['patternId'], str):
@@ -451,7 +617,7 @@ class RecurringChargePredictionCreate(BaseModel):
     pattern_id: uuid.UUID = Field(alias="patternId")
     next_expected_date: int = Field(alias="nextExpectedDate")  # Timestamp (ms)
     expected_amount: Decimal = Field(alias="expectedAmount")
-    confidence: float = Field(ge=0.0, le=1.0)  # 0.0-1.0
+    confidence: Decimal = Field(ge=0.0, le=1.0)  # 0.0-1.0
     days_until_due: int = Field(alias="daysUntilDue")
     amount_range: Dict[str, Decimal] = Field(alias="amountRange")  # {"min": X, "max": Y}
 
@@ -472,8 +638,8 @@ class RecurringChargePredictionCreate(BaseModel):
 
     @field_validator('confidence')
     @classmethod
-    def validate_confidence(cls, v: float) -> float:
-        if not (0.0 <= v <= 1.0):
+    def validate_confidence(cls, v: Decimal) -> Decimal:
+        if not (Decimal("0.0") <= v <= Decimal("1.0")):
             raise ValueError("confidence must be between 0.0 and 1.0")
         return v
 
@@ -574,4 +740,3 @@ class PatternFeedback(BaseModel):
                     pass
         
         return cls.model_validate(converted_data)
-
