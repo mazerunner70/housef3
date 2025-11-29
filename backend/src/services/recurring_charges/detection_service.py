@@ -327,13 +327,16 @@ class RecurringChargeDetectionService:
             amountStd=amount_std,
             amountMin=amount_min,
             amountMax=amount_max,
-            amountTolerancePct=10.0,
-            confidenceScore=confidence_score,
+            amountTolerancePct=Decimal("10.0"),
+            confidenceScore=Decimal(str(confidence_score)),  # Convert float to Decimal
             transactionCount=len(cluster_transactions),
             firstOccurrence=cluster_transactions[0].date,
             lastOccurrence=cluster_transactions[-1].date,
             clusterId=cluster_id,
-            active=True
+            # Phase 1: Store matched transaction IDs from cluster
+            matchedTransactionIds=[tx.transaction_id for tx in cluster_transactions],
+            # Phase 1: Patterns start as DETECTED and inactive (require review)
+            active=False
         )
         
         return pattern
