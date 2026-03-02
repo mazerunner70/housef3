@@ -552,6 +552,11 @@ locals {
       integration  = "recurring_charge_operations"
       requires_auth = true
     }
+    get_recurring_charge_pattern_transactions = {
+      route_key    = "GET /recurring-charges/patterns/{id}/transactions"
+      integration  = "recurring_charge_operations"
+      requires_auth = true
+    }
     update_recurring_charge_pattern = {
       route_key    = "PATCH /recurring-charges/patterns/{id}"
       integration  = "recurring_charge_operations"
