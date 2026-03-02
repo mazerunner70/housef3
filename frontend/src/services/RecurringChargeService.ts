@@ -21,6 +21,7 @@ import {
     ApplyPatternToCategoryRequest,
     ApplyPatternToCategoryResponse
 } from '@/types/RecurringCharge';
+import type { Transaction } from '@/types/Transaction';
 
 /**
  * Trigger recurring charge detection asynchronously
@@ -69,6 +70,27 @@ export const getPattern = async (patternId: string): Promise<RecurringChargePatt
         `/recurring-charges/patterns/${patternId}`
     );
     return response.pattern;
+};
+
+/**
+ * Get transactions that were matched to this recurring charge pattern
+ */
+export const getPatternTransactions = async (patternId: string): Promise<{
+    transactions: Transaction[];
+    metadata: {
+        totalTransactions: number;
+        patternId: string;
+        merchantPattern: string;
+    };
+}> => {
+    return await ApiClient.getJson<{
+        transactions: Transaction[];
+        metadata: {
+            totalTransactions: number;
+            patternId: string;
+            merchantPattern: string;
+        };
+    }>(`/recurring-charges/patterns/${patternId}/transactions`);
 };
 
 /**
@@ -248,6 +270,7 @@ export const RecurringChargeService = {
     triggerDetection,
     getPatterns,
     getPattern,
+    getPatternTransactions,
     updatePattern,
     deletePattern,
     getPredictions,

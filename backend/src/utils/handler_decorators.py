@@ -24,6 +24,7 @@ from utils.db_utils import (
     checked_mandatory_transaction_file,
     checked_mandatory_file_map,
 )
+from utils.db.recurring_charges import checked_mandatory_pattern
 
 logger = logging.getLogger(__name__)
 
@@ -119,8 +120,8 @@ def require_resource_ownership(resource_param: str, resource_type: str):
     Decorator factory that verifies resource ownership with explicit resource type.
     
     Args:
-        resource_param: The parameter name containing the resource ID (e.g., "account_id", "transaction_id")
-        resource_type: The type of resource to verify ("account", "transaction", "category", "transaction_file", "file_map")
+        resource_param: The parameter name containing the resource ID (e.g., "account_id", "transaction_id", "id")
+        resource_type: The type of resource to verify ("account", "transaction", "category", "transaction_file", "file_map", "pattern")
     
     The decorator will:
     1. Extract the resource ID from path parameters
@@ -153,6 +154,7 @@ def require_resource_ownership(resource_param: str, resource_type: str):
                     "category": checked_mandatory_category,
                     "transaction_file": checked_mandatory_transaction_file,
                     "file_map": checked_mandatory_file_map,
+                    "pattern": checked_mandatory_pattern,
                 }
                 
                 checker = checker_map.get(resource_type)
