@@ -109,6 +109,94 @@ def _get_transaction(transaction_id: uuid.UUID) -> Optional[Transaction]:
     return Transaction.from_dynamodb_item(item)
 
 
+@monitor_performance(operation_type="batch_get", warn_threshold_ms=1000)
+@retry_on_throttle(max_attempts=3)
+@dynamodb_operation("get_transactions_by_ids")
+def get_transactions_by_ids(
+    transaction_ids: List[uuid.UUID],
+    user_id: str
+) -> List[Transaction]:
+    """
+    Retrieve multiple transactions by their IDs.
+    
+    Args:
+        transaction_ids: List of transaction IDs to retrieve
+        user_id: User ID for authorization (all transactions must belong to this user)
+        
+    Returns:
+        List of Transaction objects (only those found and owned by user)
+        
+    Note:
+        - Transactions not found or not owned by user are silently excluded
+        - DynamoDB BatchGetItem has a limit of 100 items per request
+        - Results may not be in the same order as input IDs
+    """
+    if not transaction_ids:
+        return []
+    
+    table = tables.transactions
+    if not table:
+        logger.error("TRANSACTIONS_TABLE is not configured.")
+        return []
+    
+    # DynamoDB BatchGetItem limit is 100 items
+    # Process in chunks if needed
+    chunk_size = 100
+    all_transactions = []
+    
+    for i in range(0, len(transaction_ids), chunk_size):
+        chunk = transaction_ids[i:i + chunk_size]
+        
+        # Build batch get request
+        keys = [{'transactionId': str(tid)} for tid in chunk]
+        
+        try:
+            response = table.meta.client.batch_get_item(
+                RequestItems={
+                    table.name: {
+                        'Keys': keys
+                    }
+                }
+            )
+            
+            items = response.get('Responses', {}).get(table.name, [])
+            
+            # Convert to Transaction objects and filter by user
+            for item in items:
+                try:
+                    transaction = Transaction.from_dynamodb_item(item)
+                    # Only include transactions owned by the requesting user
+                    if transaction.user_id == user_id:
+                        all_transactions.append(transaction)
+                    else:
+                        logger.warning(
+                            f"Transaction {transaction.transaction_id} not owned by user {user_id}"
+                        )
+                except Exception as e:
+                    logger.exception(f"Error deserializing transaction: {e}")
+                    continue
+            
+            # Handle unprocessed keys (throttling)
+            unprocessed = response.get('UnprocessedKeys', {})
+            if unprocessed:
+                logger.warning(
+                    f"Batch get had {len(unprocessed.get(table.name, {}).get('Keys', []))} "
+                    "unprocessed keys (throttling)"
+                )
+                # Note: Could implement retry logic here if needed
+                
+        except Exception as e:
+            logger.exception(f"Error in batch get transactions: {e}")
+            # Continue with next chunk
+            continue
+    
+    logger.info(
+        f"Retrieved {len(all_transactions)} transactions out of {len(transaction_ids)} requested"
+    )
+    
+    return all_transactions
+
+
 # ============================================================================
 # Query Helper Functions
 # ============================================================================

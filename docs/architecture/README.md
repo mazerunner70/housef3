@@ -2,7 +2,19 @@
 
 System-wide architectural designs and technical foundations for Housef3.
 
-## Documents
+## Architecture Decision Records (ADRs)
+
+See [adr/README.md](./adr/README.md) for architectural decisions that affect system functionality.
+
+Current ADRs:
+- [ADR-0001: Decorator-Based Database Architecture](./adr/adr-0001-decorator-based-db-architecture.md) - Decorator pattern for database utilities
+- [ADR-0002: React Router Data API Migration](./adr/adr-0002-react-router-data-api.md) - Migration to React Router Data API
+- [ADR-0003: Four-Layer Component Organization Pattern](./adr/adr-0003-component-organization-pattern.md) - React component organization strategy
+- [ADR-0004: Unsupervised ML for Recurring Charge Detection](./adr/adr-0004-unsupervised-ml-recurring-charge-detection.md) - DBSCAN clustering approach for pattern detection
+
+---
+
+## Design Documents
 
 ### [event-driven-architecture-design.md](./event-driven-architecture-design.md)
 **Purpose:** Design for pub-sub event-driven architecture using AWS EventBridge
@@ -41,6 +53,20 @@ System-wide architectural designs and technical foundations for Housef3.
 - Batch processing patterns
 
 **When to read:** Implementing new data models, optimizing queries, or understanding the data layer
+
+---
+
+### [recurring-charge-ml-design.md](./recurring-charge-ml-design.md)
+**Purpose:** ML architecture for recurring charge detection
+
+**Key Topics:**
+- Feature engineering (67-dimensional vectors)
+- DBSCAN clustering algorithm
+- Pattern analysis and confidence scoring
+- Performance characteristics and scalability
+- Integration with category system
+
+**When to read:** Working on ML features, understanding the detection algorithm, or optimizing performance
 
 ---
 
