@@ -9,7 +9,7 @@ from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 import uuid
 
-from services.recurring_charge_prediction_service import (
+from services.recurring_charges.prediction_service import (
     RecurringChargePredictionService,
     FREQUENCY_DAYS
 )

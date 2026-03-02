@@ -22,8 +22,8 @@ from services.file_service import get_files_for_user, format_file_metadata, get_
 
 # Utility imports
 from utils.db_utils import (
-    get_file_map, 
-    get_transaction_file, 
+    checked_mandatory_file_map,
+    checked_optional_file_map,
     list_user_files, 
     list_account_files, 
     create_transaction_file, 
@@ -31,7 +31,6 @@ from utils.db_utils import (
     update_file_field_map, 
     update_transaction_file, 
     delete_file_metadata, 
-    get_account, 
     list_file_transactions, 
     delete_transactions_for_file, 
     get_file_maps_table,
@@ -551,7 +550,7 @@ def get_file_metadata_handler(event: Dict[str, Any], user_id: str) -> Dict[str, 
     
     # Add field map information if it exists
     if 'fieldMapId' in file_json:
-        field_map = get_file_map(file_json['fieldMapId'])
+        field_map = checked_optional_file_map(uuid.UUID(file_json['fieldMapId']), user_id)
         if field_map:
             file_json['fieldMap'] = {
                 'fieldMapId': field_map.file_map_id,
@@ -693,10 +692,8 @@ def update_file_field_map_handler(event: Dict[str, Any], user_id: str) -> Dict[s
         # Get file metadata from DynamoDB
         file = checked_mandatory_transaction_file(file_id, user_id)
         
-        # Get field map
-        field_map = get_file_map(field_map_id)
-        if not field_map:
-            return create_response(404, {"message": "Field map not found"})
+        # Get field map and verify ownership
+        field_map = checked_mandatory_file_map(field_map_id, user_id)
         
         # Update file properties using DTO pattern
         from models.transaction_file import TransactionFileUpdate

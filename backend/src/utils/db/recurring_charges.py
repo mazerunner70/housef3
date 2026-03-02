@@ -50,12 +50,59 @@ def checked_mandatory_pattern(pattern_id: uuid.UUID, user_id: str) -> RecurringC
         RecurringChargePattern object if found and authorized
         
     Raises:
-        NotFound: If pattern doesn't exist or user doesn't have access
+        NotFound: If pattern doesn't exist
+        NotAuthorized: If user doesn't own the pattern
     """
-    pattern = get_pattern_by_id_from_db(pattern_id, user_id)
+    from .base import NotAuthorized, check_user_owns_resource
+    
+    if not pattern_id:
+        raise NotFound("Pattern ID is required")
+    
+    pattern = _get_pattern(pattern_id)
     if not pattern:
         raise NotFound("Recurring charge pattern not found")
+    
+    check_user_owns_resource(pattern.user_id, user_id)
     return pattern
+
+
+# ============================================================================
+# Internal Getter (not exported)
+# ============================================================================
+
+@monitor_performance(warn_threshold_ms=200)
+@retry_on_throttle(max_attempts=3)
+@dynamodb_operation("_get_pattern")
+def _get_pattern(pattern_id: uuid.UUID) -> Optional[RecurringChargePattern]:
+    """
+    Retrieve a recurring charge pattern by ID (no user validation).
+    INTERNAL USE ONLY - external code should use checked_mandatory_pattern.
+    
+    Args:
+        pattern_id: The pattern ID
+        
+    Returns:
+        RecurringChargePattern object if found, None otherwise
+    """
+    table = tables.recurring_charge_patterns
+    if not table:
+        logger.error("DB: RecurringChargePatterns table not initialized")
+        return None
+    
+    # Note: This requires scanning since we don't have the user_id
+    # For better performance, consider using a GSI on patternId alone
+    logger.debug(f"DB: Getting pattern {str(pattern_id)}")
+    
+    # Scan for the pattern (inefficient but necessary without user_id)
+    response = table.scan(
+        FilterExpression='patternId = :pid',
+        ExpressionAttributeValues={':pid': str(pattern_id)}
+    )
+    
+    items = response.get('Items', [])
+    if items:
+        return RecurringChargePattern.from_dynamodb_item(items[0])
+    return None
 
 
 # ============================================================================
@@ -97,6 +144,9 @@ def get_pattern_by_id_from_db(pattern_id: uuid.UUID, user_id: str) -> Optional[R
     """
     Retrieve a recurring charge pattern by ID and user ID.
     
+    DEPRECATED: Use checked_mandatory_pattern() instead for better error handling.
+    This function is kept for backward compatibility with existing code.
+    
     Args:
         pattern_id: The pattern ID
         user_id: The user ID (for access control)
@@ -123,16 +173,18 @@ def get_pattern_by_id_from_db(pattern_id: uuid.UUID, user_id: str) -> Optional[R
 @dynamodb_operation("list_patterns_by_user_from_db")
 def list_patterns_by_user_from_db(
     user_id: str,
-    active_only: bool = True,
-    min_confidence: Optional[float] = None
+    active: Optional[bool] = None,
+    min_confidence: Optional[float] = None,
+    limit: Optional[int] = None
 ) -> List[RecurringChargePattern]:
     """
     List recurring charge patterns for a user with optional filters.
     
     Args:
         user_id: The user ID
-        active_only: If True, only return active patterns
+        active: If True, only return active patterns; if False, only inactive; if None, return all
         min_confidence: Optional minimum confidence score filter
+        limit: Optional maximum number of patterns to return
         
     Returns:
         List of RecurringChargePattern objects
@@ -142,7 +194,7 @@ def list_patterns_by_user_from_db(
         logger.error("DB: RecurringChargePatterns table not initialized for list_patterns_by_user_from_db")
         return []
     
-    logger.debug(f"DB: Listing patterns for user {user_id}, active_only: {active_only}, min_confidence: {min_confidence}")
+    logger.debug(f"DB: Listing patterns for user {user_id}, active: {active}, min_confidence: {min_confidence}, limit: {limit}")
     
     # Query by userId (partition key)
     response = table.query(
@@ -153,11 +205,15 @@ def list_patterns_by_user_from_db(
     patterns = [RecurringChargePattern.from_dynamodb_item(item) for item in items]
     
     # Apply filters
-    if active_only:
-        patterns = [p for p in patterns if p.active]
+    if active is not None:
+        patterns = [p for p in patterns if p.active == active]
     
     if min_confidence is not None:
         patterns = [p for p in patterns if p.confidence_score >= min_confidence]
+    
+    # Apply limit
+    if limit is not None and limit > 0:
+        patterns = patterns[:limit]
     
     logger.info(f"DB: Found {len(patterns)} patterns for user {user_id}")
     return patterns

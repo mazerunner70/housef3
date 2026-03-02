@@ -6,7 +6,7 @@ from models.transaction import Transaction, TransactionCreate
 from models.transaction_file import TransactionFile
 from models.account import Account, AccountType, Currency
 from services.file_processor_service import create_transactions
-from utils.db_utils import get_account, update_account
+from utils.db_utils import update_account
 
 def test_create_transactions_updates_account_balance(mocker):
     """Test that create_transactions updates the account's balance with the latest transaction's balance."""

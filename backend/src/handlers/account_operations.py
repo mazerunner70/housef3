@@ -16,7 +16,6 @@ from models.account import (
 from utils.serde_utils import to_currency
 from models.transaction_file import FileFormat, TransactionFileCreate
 from utils.db_utils import (
-    get_account,
     list_user_accounts,
     create_account,
     update_account,

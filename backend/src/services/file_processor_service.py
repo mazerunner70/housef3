@@ -27,7 +27,6 @@ from utils.transaction_parser_new import parse_transactions, file_type_selector
 from utils.db_utils import (
     create_transaction_file,
     get_transaction_by_account_and_hash,
-    get_transaction_file,
     list_account_files,
     list_account_transactions,
     update_account,
@@ -36,7 +35,7 @@ from utils.db_utils import (
     create_transaction,
     update_account_derived_values,
     delete_transactions_for_file,
-    get_file_map,
+    checked_optional_file_map,
     list_file_transactions,
     update_transaction_file_object
 )
@@ -46,7 +45,7 @@ from utils.file_processor_utils import (
     calculate_opening_balance_from_duplicates
 )
 from utils.auth import NotAuthorized, NotFound
-from services.auth_checks import (
+from utils.db_utils import (
     checked_mandatory_account,
     checked_mandatory_file_map,
     checked_mandatory_transaction_file,
@@ -132,7 +131,7 @@ def determine_file_map(transaction_file: TransactionFile) -> Optional[FileMap]:
         if transaction_file.account_id:
             account = checked_mandatory_account(transaction_file.account_id, transaction_file.user_id)
             if account.default_file_map_id:
-                file_map = get_file_map(account.default_file_map_id)
+                file_map = checked_optional_file_map(account.default_file_map_id, transaction_file.user_id)
                 if file_map:
                     logger.info(f"Using account default file map for file {transaction_file.file_id}")
                     transaction_file.file_map_id = account.default_file_map_id

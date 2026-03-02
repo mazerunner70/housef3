@@ -19,6 +19,7 @@ from models.recurring_charge import (
     RecurringChargePatternUpdate,
     RecurringChargePrediction,
 )
+from models.transaction import Transaction
 from utils.db.recurring_charges import (
     get_pattern_by_id_from_db,
     list_patterns_by_user_from_db,
@@ -26,6 +27,7 @@ from utils.db.recurring_charges import (
     list_predictions_by_user_from_db,
     checked_mandatory_pattern,
 )
+from utils.db.transactions import get_transactions_by_ids
 from utils.lambda_utils import (
     create_response,
     mandatory_path_parameter,
@@ -57,7 +59,9 @@ def detect_recurring_charges_handler(event: Dict[str, Any], user_id: str) -> Dic
     {
         "accountId": "optional-account-id",  # Filter to specific account
         "minOccurrences": 3,                 # Minimum pattern occurrences
-        "minConfidence": 0.6                 # Minimum confidence threshold
+        "minConfidence": 0.6,                # Minimum confidence threshold
+        "startDateTs": 1704067200000,        # Start date timestamp (ms since epoch, optional)
+        "endDateTs": 1735689599999           # End date timestamp (ms since epoch, optional)
     }
     
     Returns:
@@ -71,12 +75,29 @@ def detect_recurring_charges_handler(event: Dict[str, Any], user_id: str) -> Dic
     account_id = body.get("accountId")
     min_occurrences = body.get("minOccurrences", 3)
     min_confidence = body.get("minConfidence", 0.6)
+    start_date_ts = body.get("startDateTs")
+    end_date_ts = body.get("endDateTs")
     
     # Validate parameters
     if min_occurrences < 2:
         raise ValueError("minOccurrences must be at least 2")
     if not (0.0 <= min_confidence <= 1.0):
         raise ValueError("minConfidence must be between 0.0 and 1.0")
+    
+    # Validate timestamps if provided
+    if start_date_ts is not None:
+        if not isinstance(start_date_ts, (int, float)) or start_date_ts < 0:
+            raise ValueError("startDateTs must be a positive number (milliseconds since epoch)")
+        start_date_ts = int(start_date_ts)
+    
+    if end_date_ts is not None:
+        if not isinstance(end_date_ts, (int, float)) or end_date_ts < 0:
+            raise ValueError("endDateTs must be a positive number (milliseconds since epoch)")
+        end_date_ts = int(end_date_ts)
+    
+    # Validate date range
+    if start_date_ts and end_date_ts and start_date_ts > end_date_ts:
+        raise ValueError("startDateTs must be before endDateTs")
     
     # Create operation tracking record
     from services.operation_tracking_service import (
@@ -89,11 +110,14 @@ def detect_recurring_charges_handler(event: Dict[str, Any], user_id: str) -> Dic
     operation_id = f"op_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{user_id[:8]}"
     
     # Start operation tracking
+    # Convert float to Decimal for DynamoDB compatibility
     context = {
         "userId": user_id,
         "accountId": account_id,
         "minOccurrences": min_occurrences,
-        "minConfidence": min_confidence,
+        "minConfidence": Decimal(str(min_confidence)),  # Convert float to Decimal
+        "startDateTs": start_date_ts,
+        "endDateTs": end_date_ts,
     }
     
     operation_tracking_service.start_operation(
@@ -118,6 +142,8 @@ def detect_recurring_charges_handler(event: Dict[str, Any], user_id: str) -> Dic
             "accountId": account_id,
             "minOccurrences": min_occurrences,
             "minConfidence": min_confidence,
+            "startDateTs": start_date_ts,
+            "endDateTs": end_date_ts,
         },
     )
     
@@ -196,6 +222,62 @@ def get_pattern_handler(event: Dict[str, Any], user_id: str, pattern: RecurringC
     }
     """
     return {"pattern": pattern.model_dump(by_alias=True, mode="json")}
+
+
+@api_handler(require_ownership=("id", "pattern"))
+def get_pattern_transactions_handler(
+    event: Dict[str, Any], 
+    user_id: str, 
+    pattern: RecurringChargePattern
+) -> Dict[str, Any]:
+    """
+    Get transactions that were matched to this recurring charge pattern.
+    
+    GET /api/recurring-charges/patterns/{id}/transactions
+    
+    Returns:
+    {
+        "transactions": [...],
+        "metadata": {
+            "totalTransactions": 12,
+            "patternId": "uuid",
+            "merchantPattern": "NETFLIX"
+        }
+    }
+    """
+    # Get matched transaction IDs from pattern
+    if not pattern.matched_transaction_ids:
+        return {
+            "transactions": [],
+            "metadata": {
+                "totalTransactions": 0,
+                "patternId": str(pattern.pattern_id),
+                "merchantPattern": pattern.merchant_pattern,
+            }
+        }
+    
+    # Fetch transactions by IDs
+    transactions = get_transactions_by_ids(
+        transaction_ids=pattern.matched_transaction_ids,
+        user_id=user_id
+    )
+    
+    # Sort by date descending (most recent first)
+    transactions.sort(key=lambda tx: tx.date or 0, reverse=True)
+    
+    # Serialize transactions
+    transaction_dicts = [
+        tx.model_dump(by_alias=True, mode="json") for tx in transactions
+    ]
+    
+    return {
+        "transactions": transaction_dicts,
+        "metadata": {
+            "totalTransactions": len(transactions),
+            "patternId": str(pattern.pattern_id),
+            "merchantPattern": pattern.merchant_pattern,
+        }
+    }
 
 
 @api_handler(require_ownership=("id", "pattern"))
@@ -309,9 +391,11 @@ def apply_pattern_to_category_handler(
         raise ValueError("categoryId is required")
     
     # Validate category exists and belongs to user
-    from utils.db_utils import get_category_by_id_from_db
-    category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
-    if not category:
+    from utils.db_utils import checked_mandatory_category
+    from utils.db.base import NotFound, NotAuthorized
+    try:
+        checked_mandatory_category(uuid.UUID(category_id), user_id)
+    except (NotFound, NotAuthorized):
         raise ValueError("Category not found or does not belong to user")
     
     # Create update DTO and apply to pattern
@@ -347,13 +431,15 @@ def handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
         raise ValueError("Route not specified")
     
     # Route to appropriate handler
+    # Note: More specific routes must come first to avoid incorrect matches
     route_map = {
         "POST /recurring-charges/detect": detect_recurring_charges_handler,
-        "GET /recurring-charges/patterns": get_patterns_handler,
-        "GET /recurring-charges/patterns/{id}": get_pattern_handler,
-        "PATCH /recurring-charges/patterns/{id}": update_pattern_handler,
         "GET /recurring-charges/predictions": get_predictions_handler,
+        "GET /recurring-charges/patterns/{id}/transactions": get_pattern_transactions_handler,
         "POST /recurring-charges/patterns/{id}/apply-category": apply_pattern_to_category_handler,
+        "PATCH /recurring-charges/patterns/{id}": update_pattern_handler,
+        "GET /recurring-charges/patterns/{id}": get_pattern_handler,
+        "GET /recurring-charges/patterns": get_patterns_handler
     }
     
     handler_func = route_map.get(route)

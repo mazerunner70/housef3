@@ -25,6 +25,33 @@ logger = logging.getLogger(__name__)
 # Helper Functions
 # ============================================================================
 
+def checked_optional_category(category_id: Optional[uuid.UUID], user_id: str) -> Optional[Category]:
+    """
+    Check if category exists and user has access to it, allowing None.
+    
+    Args:
+        category_id: ID of the category (or None)
+        user_id: ID of the user requesting access
+        
+    Returns:
+        Category object if found and authorized, None if category_id is None or not found
+        
+    Raises:
+        NotAuthorized: If category exists but user doesn't own it
+    """
+    from .base import check_user_owns_resource
+    
+    if not category_id:
+        return None
+    
+    category = _get_category_by_id(category_id)
+    if not category:
+        return None
+    
+    check_user_owns_resource(category.userId, user_id)
+    return category
+
+
 def checked_mandatory_category(category_id: uuid.UUID, user_id: str) -> Category:
     """
     Check if category exists and user has access to it.
@@ -37,31 +64,45 @@ def checked_mandatory_category(category_id: uuid.UUID, user_id: str) -> Category
         Category object if found and authorized
         
     Raises:
-        NotFound: If category doesn't exist or user doesn't have access
+        NotFound: If category doesn't exist
+        NotAuthorized: If user doesn't own the category
     """
-    category = get_category_by_id_from_db(category_id, user_id)
+    if not category_id:
+        raise NotFound("Category ID is required")
+    
+    category = checked_optional_category(category_id, user_id)
     if not category:
         raise NotFound("Category not found")
+    
     return category
 
 
-def checked_optional_category(category_id: Optional[uuid.UUID], user_id: str) -> Optional[Category]:
+# ============================================================================
+# Internal Getter (not exported)
+# ============================================================================
+
+def _get_category_by_id(category_id: uuid.UUID) -> Optional[Category]:
     """
-    Check if category exists and user has access to it, allowing None.
+    Retrieve a category by ID (no user validation).
+    INTERNAL USE ONLY - external code should use checked_mandatory_category.
     
     Args:
-        category_id: ID of the category (or None)
-        user_id: ID of the user requesting access
+        category_id: The category ID
         
     Returns:
-        Category object if found and authorized, None if category_id is None or not found
+        Category object if found, None otherwise
     """
-    if not category_id:
+    table = tables.categories
+    if not table:
+        logger.error("DB: Categories table not initialized")
         return None
-    try:
-        return checked_mandatory_category(category_id, user_id)
-    except NotFound:
-        return None
+    
+    response = table.get_item(Key={'categoryId': str(category_id)})
+    item = response.get('Item')
+    
+    if item:
+        return Category.from_dynamodb_item(item)
+    return None
 
 
 # ============================================================================
@@ -89,37 +130,6 @@ def create_category_in_db(category: Category) -> Category:
     table.put_item(Item=category.to_dynamodb_item())
     logger.info(f"DB: Category {str(category.categoryId)} created successfully for user {category.userId}.")
     return category
-
-
-@monitor_performance(warn_threshold_ms=200)
-@retry_on_throttle(max_attempts=3)
-@dynamodb_operation("get_category_by_id_from_db")
-def get_category_by_id_from_db(category_id: uuid.UUID, user_id: str) -> Optional[Category]:
-    """
-    Retrieve a category by ID and user ID.
-    
-    Args:
-        category_id: The category ID
-        user_id: The user ID (for access control)
-        
-    Returns:
-        Category object if found and owned by user, None otherwise
-    """
-    table = tables.categories
-    if not table:
-        logger.error("DB: Categories table not initialized for get_category_by_id_from_db")
-        return None
-    
-    logger.debug(f"DB: Getting category {str(category_id)} for user {user_id}")
-    response = table.get_item(Key={'categoryId': str(category_id)})
-    item = response.get('Item')
-    
-    if item and item.get('userId') == user_id:
-        return Category.from_dynamodb_item(item)
-    elif item:
-        logger.warning(f"User {user_id} attempted to access category {str(category_id)} owned by {item.get('userId')}")
-        return None
-    return None
 
 
 @monitor_performance(operation_type="query", warn_threshold_ms=500)
@@ -196,12 +206,13 @@ def update_category_in_db(
         
     Returns:
         Updated Category object if successful, None if category not found
+        
+    Raises:
+        NotFound: If category doesn't exist
+        NotAuthorized: If user doesn't own the category
     """
     # Retrieve the existing category
-    category = get_category_by_id_from_db(category_id, user_id)
-    if not category:
-        logger.warning(f"DB: Category {str(category_id)} not found or user {user_id} has no access.")
-        return None
+    category = checked_mandatory_category(category_id, user_id)
 
     if not update_data:
         logger.info(f"DB: No update data provided for category {str(category_id)}. Returning existing.")
@@ -256,20 +267,20 @@ def delete_category_from_db(category_id: uuid.UUID, user_id: str) -> bool:
         user_id: The user ID (for access control)
         
     Returns:
-        True if deleted, False if not found or access denied
+        True if deleted successfully
         
     Raises:
+        NotFound: If category doesn't exist
+        NotAuthorized: If user doesn't own the category
         ValueError: If category has child categories
     """
     table = tables.categories
     if not table:
         logger.error("DB: Categories table not initialized for delete_category_from_db")
-        return False
+        raise ConnectionError("Database table not initialized")
     
     logger.debug(f"DB: Deleting category {str(category_id)} for user {user_id}")
-    category_to_delete = get_category_by_id_from_db(category_id, user_id)
-    if not category_to_delete:
-        return False
+    checked_mandatory_category(category_id, user_id)
     
     child_categories = list_categories_by_user_from_db(user_id, parent_category_id=category_id)
     if child_categories:

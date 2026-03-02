@@ -101,7 +101,7 @@ class RecurringChargePredictionService:
             patternId=pattern.pattern_id,
             nextExpectedDate=int(next_date.timestamp() * 1000),
             expectedAmount=expected_amount,
-            confidence=confidence,
+            confidence=Decimal(str(confidence)),  # Convert float to Decimal
             daysUntilDue=days_until,
             amountRange=amount_range
         )

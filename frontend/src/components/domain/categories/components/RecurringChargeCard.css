@@ -1,0 +1,235 @@
+.recurring-charge-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    padding: 1.25rem;
+    transition: all 0.2s ease;
+}
+
+.recurring-charge-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.recurring-charge-card--inactive {
+    opacity: 0.6;
+    background-color: #f9fafb;
+}
+
+.recurring-charge-card--deleting {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.recurring-charge-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+    gap: 1rem;
+}
+
+.recurring-charge-card__title-section {
+    flex: 1;
+    min-width: 0;
+}
+
+.recurring-charge-card__merchant {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #111827;
+    margin-bottom: 0.375rem;
+    font-family: 'Courier New', monospace;
+    word-break: break-word;
+}
+
+.recurring-charge-card__meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: #6b7280;
+}
+
+.recurring-charge-card__separator {
+    color: #d1d5db;
+}
+
+.recurring-charge-card__badges {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.recurring-charge-card__inactive-badge {
+    padding: 0.25rem 0.625rem;
+    background-color: #f3f4f6;
+    color: #6b7280;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 0.375rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.recurring-charge-card__body {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.recurring-charge-card__amount-section {
+    padding: 0.75rem;
+    background-color: #f9fafb;
+    border-radius: 0.375rem;
+}
+
+.recurring-charge-card__amount-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.375rem;
+}
+
+.recurring-charge-card__amount-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #111827;
+    margin-bottom: 0.25rem;
+}
+
+.recurring-charge-card__amount-range {
+    font-size: 0.75rem;
+    color: #9ca3af;
+}
+
+.recurring-charge-card__category-section {
+    padding: 0.75rem;
+    background-color: #eff6ff;
+    border-left: 3px solid #3b82f6;
+    border-radius: 0.375rem;
+}
+
+.recurring-charge-card__category-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #1e40af;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.375rem;
+}
+
+.recurring-charge-card__category-name {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #1e3a8a;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.recurring-charge-card__auto-badge {
+    padding: 0.125rem 0.5rem;
+    background-color: #3b82f6;
+    color: white;
+    font-size: 0.625rem;
+    font-weight: 600;
+    border-radius: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.recurring-charge-card__details {
+    padding: 0.75rem;
+    background-color: #f9fafb;
+    border-radius: 0.375rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.recurring-charge-card__detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    font-size: 0.875rem;
+}
+
+.recurring-charge-card__detail-label {
+    font-weight: 500;
+    color: #6b7280;
+    flex-shrink: 0;
+}
+
+.recurring-charge-card__detail-value {
+    color: #111827;
+    text-align: right;
+}
+
+.recurring-charge-card__actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    padding-top: 1rem;
+    margin-top: 1rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.recurring-charge-card__expand-btn {
+    background: none;
+    border: none;
+    color: #3b82f6;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.2s ease;
+}
+
+.recurring-charge-card__expand-btn:hover {
+    color: #2563eb;
+    text-decoration: underline;
+}
+
+.recurring-charge-card__action-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .recurring-charge-card__header {
+        flex-direction: column;
+    }
+
+    .recurring-charge-card__badges {
+        align-self: flex-start;
+    }
+
+    .recurring-charge-card__actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .recurring-charge-card__action-buttons {
+        width: 100%;
+    }
+
+    .recurring-charge-card__action-buttons button {
+        flex: 1;
+    }
+
+    .recurring-charge-card__detail-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .recurring-charge-card__detail-value {
+        text-align: left;
+    }
+}

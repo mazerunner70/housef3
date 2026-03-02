@@ -12,7 +12,7 @@ from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 import uuid
 
-from services.recurring_charge_detection_service import (
+from services.recurring_charges.detection_service import (
     RecurringChargeDetectionService,
     MIN_CLUSTER_SIZE,
     MIN_CONFIDENCE
@@ -460,29 +460,13 @@ class TestRecurringChargeDetectionService:
         assert pattern is not None
         assert pattern['day_of_week'] == 0  # Monday
     
-    def test_is_first_working_day(self, detection_service):
-        """Test first working day detection."""
-        # March 1, 2024 is a Friday (first working day)
-        dt = datetime(2024, 3, 1, tzinfo=timezone.utc)
-        assert detection_service._is_first_working_day(dt) is True
-        
-        # March 4, 2024 is a Monday but not first working day
-        dt = datetime(2024, 3, 4, tzinfo=timezone.utc)
-        assert detection_service._is_first_working_day(dt) is False
-    
-    def test_is_last_working_day(self, detection_service):
-        """Test last working day detection."""
-        # March 29, 2024 is a Friday (last working day)
-        dt = datetime(2024, 3, 29, tzinfo=timezone.utc)
-        assert detection_service._is_last_working_day(dt) is True
-        
-        # March 28, 2024 is a Thursday but not last working day
-        dt = datetime(2024, 3, 28, tzinfo=timezone.utc)
-        assert detection_service._is_last_working_day(dt) is False
+    # NOTE: First/last working day detection tests have been moved to
+    # test_recurring_charge_feature_service.py as they are now part of
+    # TemporalFeatureExtractor, not the detection service
     
     def test_perform_clustering(self, detection_service):
         """Test DBSCAN clustering."""
-        # Create synthetic feature matrix
+        # Create synthetic feature matrix with clear clusters
         # Two clusters: one around [0, 0], one around [10, 10]
         cluster1 = np.random.randn(10, 67) * 0.1
         cluster2 = np.random.randn(10, 67) * 0.1 + 10
@@ -490,7 +474,8 @@ class TestRecurringChargeDetectionService:
         
         feature_matrix = np.vstack([cluster1, cluster2, noise])
         
-        labels = detection_service._perform_clustering(feature_matrix, eps=0.5, n_samples=22)
+        # Use larger eps to account for 67-dimensional space
+        labels = detection_service._perform_clustering(feature_matrix, eps=2.0, n_samples=22)
         
         # Should find at least 2 clusters
         unique_labels = set(labels)

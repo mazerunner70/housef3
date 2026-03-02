@@ -29,6 +29,31 @@ logger = logging.getLogger(__name__)
 # TransactionFile Helper Functions
 # ============================================================================
 
+def checked_optional_transaction_file(file_id: Optional[uuid.UUID], user_id: str) -> Optional[TransactionFile]:
+    """
+    Check if file exists and user has access to it, allowing None.
+    
+    Args:
+        file_id: ID of the file (or None)
+        user_id: ID of the user requesting access
+        
+    Returns:
+        TransactionFile object if found and authorized, None if file_id is None or not found
+        
+    Raises:
+        NotAuthorized: If file exists but user doesn't own it
+    """
+    if not file_id:
+        return None
+    
+    file = _get_transaction_file(file_id)
+    if not file:
+        return None
+    
+    check_user_owns_resource(file.user_id, user_id)
+    return file
+
+
 def checked_mandatory_transaction_file(file_id: uuid.UUID, user_id: str) -> TransactionFile:
     """
     Check if file exists and user has access to it.
@@ -44,40 +69,24 @@ def checked_mandatory_transaction_file(file_id: uuid.UUID, user_id: str) -> Tran
         NotFound: If file doesn't exist
         NotAuthorized: If user doesn't own the file
     """
-    file = get_transaction_file(file_id)
+    if not file_id:
+        raise NotFound("File ID is required")
+    
+    file = checked_optional_transaction_file(file_id, user_id)
     if not file:
         raise NotFound("File not found")
-    check_user_owns_resource(file.user_id, user_id)
-    return file
-
-
-def checked_optional_transaction_file(file_id: Optional[uuid.UUID], user_id: str) -> Optional[TransactionFile]:
-    """
-    Check if file exists and user has access to it, allowing None.
     
-    Args:
-        file_id: ID of the file (or None)
-        user_id: ID of the user requesting access
-        
-    Returns:
-        TransactionFile object if found and authorized, None if file_id is None or not found
-    """
-    if not file_id:
-        return None
-    file = get_transaction_file(file_id)
-    if not file:
-        return None
-    check_user_owns_resource(file.user_id, user_id)
     return file
 
 
 # ============================================================================
-# TransactionFile CRUD Operations
+# Internal Getters (not exported)
 # ============================================================================
 
-def get_transaction_file(file_id: uuid.UUID) -> Optional[TransactionFile]:
+def _get_transaction_file(file_id: uuid.UUID) -> Optional[TransactionFile]:
     """
-    Retrieve a transaction file by ID.
+    Retrieve a transaction file by ID (no user validation).
+    INTERNAL USE ONLY - external code should use checked_mandatory_transaction_file.
     
     Args:
         file_id: The unique identifier of the file
@@ -95,19 +104,35 @@ def get_transaction_file(file_id: uuid.UUID) -> Optional[TransactionFile]:
     return None
 
 
+# ============================================================================
+# TransactionFile CRUD Operations
+# ============================================================================
+
+
 @monitor_performance(operation_type="query", warn_threshold_ms=500)
 @retry_on_throttle(max_attempts=3)
 @dynamodb_operation("list_account_files")
-def list_account_files(account_id: uuid.UUID) -> List[TransactionFile]:
+def list_account_files(account_id: uuid.UUID, user_id: str) -> List[TransactionFile]:
     """
     List all files for a specific account.
     
     Args:
         account_id: The account's unique identifier
+        user_id: The user ID (for authorization)
         
     Returns:
         List of TransactionFile objects
+        
+    Raises:
+        NotFound: If account doesn't exist
+        NotAuthorized: If user doesn't own the account
     """
+    # Import here to avoid circular dependency
+    from .accounts import checked_mandatory_account
+    
+    # Check that user owns the account before listing its files
+    _ = checked_mandatory_account(account_id, user_id)
+    
     # Query using GSI for accountId
     response = tables.files.query(
         IndexName='AccountIdIndex',
@@ -236,16 +261,24 @@ def delete_transaction_file(file_id: uuid.UUID, user_id: str) -> bool:
 @monitor_performance(warn_threshold_ms=300)
 @retry_on_throttle(max_attempts=3)
 @dynamodb_operation("delete_file_metadata")
-def delete_file_metadata(file_id: uuid.UUID) -> bool:
+def delete_file_metadata(file_id: uuid.UUID, user_id: str) -> bool:
     """
     Delete a file metadata record from the files table.
     
     Args:
         file_id: The ID of the file to delete
+        user_id: The user ID (for authorization)
         
     Returns:
-        True if successful, False otherwise
+        True if successful
+        
+    Raises:
+        NotFound: If file doesn't exist
+        NotAuthorized: If user doesn't own the file
     """
+    # Check ownership before deleting
+    _ = checked_mandatory_transaction_file(file_id, user_id)
+    
     tables.files.delete_item(Key={'fileId': str(file_id)})
     logger.info(f"Deleted file metadata for {str(file_id)}")
     return True
@@ -254,14 +287,22 @@ def delete_file_metadata(file_id: uuid.UUID) -> bool:
 @monitor_performance(warn_threshold_ms=300)
 @retry_on_throttle(max_attempts=3)
 @dynamodb_operation("update_file_account_id")
-def update_file_account_id(file_id: str, account_id: str) -> None:
+def update_file_account_id(file_id: str, account_id: str, user_id: str) -> None:
     """
     Update the accountId of a file in the files table.
     
     Args:
         file_id: The unique identifier of the file
         account_id: The account ID to associate with the file
+        user_id: The user ID (for authorization)
+        
+    Raises:
+        NotFound: If file doesn't exist
+        NotAuthorized: If user doesn't own the file
     """
+    # Check ownership before updating
+    _ = checked_mandatory_transaction_file(uuid.UUID(file_id), user_id)
+    
     table = tables.files
     update_expression = "SET accountId = :accountId, updatedAt = :updatedAt"
     expression_attribute_values = {
@@ -278,14 +319,22 @@ def update_file_account_id(file_id: str, account_id: str) -> None:
 @monitor_performance(warn_threshold_ms=300)
 @retry_on_throttle(max_attempts=3)
 @dynamodb_operation("update_file_field_map")
-def update_file_field_map(file_id: str, field_map_id: str) -> None:
+def update_file_field_map(file_id: str, field_map_id: str, user_id: str) -> None:
     """
     Update the fieldMapId of a file in the files table.
     
     Args:
         file_id: The unique identifier of the file
         field_map_id: The field map ID to associate with the file
+        user_id: The user ID (for authorization)
+        
+    Raises:
+        NotFound: If file doesn't exist
+        NotAuthorized: If user doesn't own the file
     """
+    # Check ownership before updating
+    _ = checked_mandatory_transaction_file(uuid.UUID(file_id), user_id)
+    
     table = tables.files
     update_expression = "SET fieldMapId = :fieldMapId, updatedAt = :updatedAt"
     expression_attribute_values = {
@@ -302,6 +351,31 @@ def update_file_field_map(file_id: str, field_map_id: str) -> None:
 # ============================================================================
 # FileMap Helper Functions
 # ============================================================================
+
+def checked_optional_file_map(file_map_id: Optional[uuid.UUID], user_id: str) -> Optional[FileMap]:
+    """
+    Check if file map exists and user has access to it, allowing None.
+    
+    Args:
+        file_map_id: ID of the file map (or None)
+        user_id: ID of the user requesting access
+        
+    Returns:
+        FileMap object if found and authorized, None if file_map_id is None or not found
+        
+    Raises:
+        NotAuthorized: If file map exists but user doesn't own it
+    """
+    if not file_map_id:
+        return None
+    
+    file_map = _get_file_map(file_map_id)
+    if not file_map:
+        return None
+    
+    check_user_owns_resource(file_map.user_id, user_id)
+    return file_map
+
 
 def checked_mandatory_file_map(file_map_id: Optional[uuid.UUID], user_id: str) -> FileMap:
     """
@@ -320,30 +394,11 @@ def checked_mandatory_file_map(file_map_id: Optional[uuid.UUID], user_id: str) -
     """
     if not file_map_id:
         raise NotFound("FileMap ID is required")
-    file_map = get_file_map(file_map_id)
+    
+    file_map = checked_optional_file_map(file_map_id, user_id)
     if not file_map:
         raise NotFound("File map not found")
-    check_user_owns_resource(file_map.user_id, user_id)
-    return file_map
-
-
-def checked_optional_file_map(file_map_id: Optional[uuid.UUID], user_id: str) -> Optional[FileMap]:
-    """
-    Check if file map exists and user has access to it, allowing None.
     
-    Args:
-        file_map_id: ID of the file map (or None)
-        user_id: ID of the user requesting access
-        
-    Returns:
-        FileMap object if found and authorized, None if file_map_id is None or not found
-    """
-    if not file_map_id:
-        return None
-    file_map = get_file_map(file_map_id)
-    if not file_map:
-        return None
-    check_user_owns_resource(file_map.user_id, user_id)
     return file_map
 
 
@@ -353,10 +408,11 @@ def checked_optional_file_map(file_map_id: Optional[uuid.UUID], user_id: str) ->
 
 @monitor_performance(warn_threshold_ms=200)
 @retry_on_throttle(max_attempts=3)
-@dynamodb_operation("get_file_map")
-def get_file_map(file_map_id: Optional[uuid.UUID] = None) -> Optional[FileMap]:
+@dynamodb_operation("_get_file_map")
+def _get_file_map(file_map_id: Optional[uuid.UUID] = None) -> Optional[FileMap]:
     """
-    Retrieve a file map by ID.
+    Retrieve a file map by ID (no user validation).
+    INTERNAL USE ONLY - external code should use checked_mandatory_file_map.
     
     Args:
         file_map_id: The unique identifier of the file map
@@ -380,32 +436,34 @@ def get_file_map(file_map_id: Optional[uuid.UUID] = None) -> Optional[FileMap]:
 
 @monitor_performance(warn_threshold_ms=300)
 @dynamodb_operation("get_account_default_file_map")
-def get_account_default_file_map(account_id: uuid.UUID) -> Optional[FileMap]:
+def get_account_default_file_map(account_id: uuid.UUID, user_id: str) -> Optional[FileMap]:
     """
     Get the default file map for an account.
     
     Args:
         account_id: ID of the account
+        user_id: ID of the user (for authorization)
         
     Returns:
         FileMap instance if found, None otherwise
+        
+    Raises:
+        NotFound: If account doesn't exist
+        NotAuthorized: If user doesn't own the account
     """
     # Import here to avoid circular dependency
-    from .accounts import get_account
+    from .accounts import checked_mandatory_account
     
-    # Get the account record
-    account = get_account(account_id) 
-    if not account:
-        logger.warning(f"Account {str(account_id)} not found when trying to get default file map.")
-        return None
+    # Get the account record with authorization check
+    account = checked_mandatory_account(account_id, user_id)
         
     # Check for default field map
     default_file_map_id = account.default_file_map_id 
     if not default_file_map_id:
         return None
         
-    # Get the field map
-    return get_file_map(default_file_map_id)
+    # Get the field map (no need to check ownership since it's referenced by the account)
+    return _get_file_map(default_file_map_id)
 
 
 @monitor_performance(warn_threshold_ms=300)
@@ -439,16 +497,24 @@ def update_file_map(file_map: FileMap) -> None:
 @monitor_performance(warn_threshold_ms=300)
 @retry_on_throttle(max_attempts=3)
 @dynamodb_operation("delete_file_map")
-def delete_file_map(file_map_id: uuid.UUID) -> bool:
+def delete_file_map(file_map_id: uuid.UUID, user_id: str) -> bool:
     """
     Delete a file map by ID.
     
     Args:
         file_map_id: ID of the file map to delete
+        user_id: ID of the user (for authorization)
         
     Returns:
-        True if successful, False otherwise
+        True if successful
+        
+    Raises:
+        NotFound: If file map doesn't exist
+        NotAuthorized: If user doesn't own the file map
     """
+    # Check ownership before deleting
+    _ = checked_mandatory_file_map(file_map_id, user_id)
+    
     tables.file_maps.delete_item(
         Key={'fileMapId': str(file_map_id)}
     )
@@ -478,16 +544,27 @@ def list_file_maps_by_user(user_id: str) -> List[FileMap]:
 @monitor_performance(operation_type="query", warn_threshold_ms=500)
 @retry_on_throttle(max_attempts=3)
 @dynamodb_operation("list_account_file_maps")
-def list_account_file_maps(account_id: str) -> List[FileMap]:
+def list_account_file_maps(account_id: str, user_id: str) -> List[FileMap]:
     """
     List all file maps for a specific account.
     
     Args:
         account_id: The account's unique identifier
+        user_id: The user ID (for authorization)
         
     Returns:
         List of FileMap objects
+        
+    Raises:
+        NotFound: If account doesn't exist
+        NotAuthorized: If user doesn't own the account
     """
+    # Import here to avoid circular dependency
+    from .accounts import checked_mandatory_account
+    
+    # Check that user owns the account before listing its file maps
+    _ = checked_mandatory_account(uuid.UUID(account_id), user_id)
+    
     # Query using GSI for accountId
     response = tables.file_maps.query(
         IndexName='AccountIdIndex',

@@ -19,10 +19,8 @@ from models.transaction import Transaction
 from utils.file_analyzer import analyze_file_format
 from utils.db_utils import (
     create_transaction_file,
-    get_account,
     get_account_default_file_map,
-    get_file_map,
-    get_transaction_file,
+    checked_mandatory_transaction_file,
     create_transaction,
     delete_transactions_for_file,
 
@@ -206,14 +204,7 @@ def handler(event, context):
                 # Analytics processing is now handled by analytics_consumer via events
 
             # Re-fetch the transaction file to get its latest state for the response
-            updated_transaction_file = get_transaction_file(transaction_file.file_id)
-            if not updated_transaction_file:
-                logger.error(f"Failed to re-fetch transaction file {transaction_file.file_id} after processing.")
-                # Handle error, perhaps return the file_processor_response message or a generic error
-                return {
-                    'statusCode': 500,
-                    'body': json.dumps({'message': f"Error: File processing status unclear for {transaction_file.file_id}"})
-                }
+            updated_transaction_file = checked_mandatory_transaction_file(transaction_file.file_id, user_id)
             
             logger.info(f"Re-fetched TransactionFile: ID {updated_transaction_file.file_id}, Status {updated_transaction_file.processing_status}")
 
