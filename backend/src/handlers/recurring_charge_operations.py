@@ -19,6 +19,7 @@ from models.recurring_charge import (
     RecurringChargePatternUpdate,
     RecurringChargePrediction,
 )
+from models.transaction import Transaction
 from utils.db.recurring_charges import (
     get_pattern_by_id_from_db,
     list_patterns_by_user_from_db,
@@ -26,6 +27,7 @@ from utils.db.recurring_charges import (
     list_predictions_by_user_from_db,
     checked_mandatory_pattern,
 )
+from utils.db.transactions import get_transactions_by_ids
 from utils.lambda_utils import (
     create_response,
     mandatory_path_parameter,
@@ -223,6 +225,62 @@ def get_pattern_handler(event: Dict[str, Any], user_id: str, pattern: RecurringC
 
 
 @api_handler(require_ownership=("id", "pattern"))
+def get_pattern_transactions_handler(
+    event: Dict[str, Any], 
+    user_id: str, 
+    pattern: RecurringChargePattern
+) -> Dict[str, Any]:
+    """
+    Get transactions that were matched to this recurring charge pattern.
+    
+    GET /api/recurring-charges/patterns/{id}/transactions
+    
+    Returns:
+    {
+        "transactions": [...],
+        "metadata": {
+            "totalTransactions": 12,
+            "patternId": "uuid",
+            "merchantPattern": "NETFLIX"
+        }
+    }
+    """
+    # Get matched transaction IDs from pattern
+    if not pattern.matched_transaction_ids:
+        return {
+            "transactions": [],
+            "metadata": {
+                "totalTransactions": 0,
+                "patternId": str(pattern.pattern_id),
+                "merchantPattern": pattern.merchant_pattern,
+            }
+        }
+    
+    # Fetch transactions by IDs
+    transactions = get_transactions_by_ids(
+        transaction_ids=pattern.matched_transaction_ids,
+        user_id=user_id
+    )
+    
+    # Sort by date descending (most recent first)
+    transactions.sort(key=lambda tx: tx.date or 0, reverse=True)
+    
+    # Serialize transactions
+    transaction_dicts = [
+        tx.model_dump(by_alias=True, mode="json") for tx in transactions
+    ]
+    
+    return {
+        "transactions": transaction_dicts,
+        "metadata": {
+            "totalTransactions": len(transactions),
+            "patternId": str(pattern.pattern_id),
+            "merchantPattern": pattern.merchant_pattern,
+        }
+    }
+
+
+@api_handler(require_ownership=("id", "pattern"))
 def update_pattern_handler(event: Dict[str, Any], user_id: str, pattern: RecurringChargePattern) -> Dict[str, Any]:
     """
     Update a recurring charge pattern.
@@ -373,13 +431,15 @@ def handler(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
         raise ValueError("Route not specified")
     
     # Route to appropriate handler
+    # Note: More specific routes must come first to avoid incorrect matches
     route_map = {
         "POST /recurring-charges/detect": detect_recurring_charges_handler,
-        "GET /recurring-charges/patterns": get_patterns_handler,
-        "GET /recurring-charges/patterns/{id}": get_pattern_handler,
-        "PATCH /recurring-charges/patterns/{id}": update_pattern_handler,
         "GET /recurring-charges/predictions": get_predictions_handler,
+        "GET /recurring-charges/patterns/{id}/transactions": get_pattern_transactions_handler,
         "POST /recurring-charges/patterns/{id}/apply-category": apply_pattern_to_category_handler,
+        "PATCH /recurring-charges/patterns/{id}": update_pattern_handler,
+        "GET /recurring-charges/patterns/{id}": get_pattern_handler,
+        "GET /recurring-charges/patterns": get_patterns_handler
     }
     
     handler_func = route_map.get(route)
