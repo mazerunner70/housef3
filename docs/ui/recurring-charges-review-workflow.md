@@ -830,54 +830,18 @@ Purpose: Query patterns by user and status
 Example: Get all DETECTED patterns for user review
 ```
 
-## Implementation Phases
+## Implementation Status
 
-### Phase 1: Foundation (Week 1-2)
-- [ ] Update `RecurringChargePattern` model with new fields
-- [ ] Add `PatternStatus` enum
-- [ ] Add `PatternCriteriaValidation` model
-- [ ] Add `PatternReviewAction` model
-- [ ] Update Terraform for DynamoDB schema changes
-- [ ] Add UserIdStatusIndex GSI
-- [ ] Write comprehensive unit tests
+**Note:** Detailed implementation plan and tracking moved to `docs/impl-log/recurring-charge-detection.md`.
 
-### Phase 2: Services (Week 3-4)
-- [ ] Enhance `RecurringChargeDetectionService` to store matched transaction IDs
-- [ ] Implement `PatternValidationService`
-- [ ] Implement `PatternReviewService`
-- [ ] Implement `PatternMatchingService`
-- [ ] Write integration tests for services
-- [ ] Performance testing with large transaction sets
-
-### Phase 3: API (Week 5)
-- [ ] Implement pattern review endpoints
-- [ ] Implement validation endpoints
-- [ ] Implement pattern activation/pause endpoints
-- [ ] Implement matching transaction retrieval
-- [ ] API documentation
-- [ ] API integration tests
-
-### Phase 4: Auto-Categorization (Week 6)
-- [ ] Implement auto-categorization logic
-- [ ] Implement batch categorization
-- [ ] Add pattern matching to transaction ingestion pipeline
-- [ ] Add pattern effectiveness tracking
-- [ ] Performance optimization
-
-### Phase 5: Frontend (Week 7-8)
-- [ ] Pattern review UI
-- [ ] Validation result display
-- [ ] Active patterns dashboard
-- [ ] Pattern editing interface
-- [ ] Transaction matching visualization
-- [ ] User testing and refinement
-
-### Phase 6: Analytics & Refinement (Week 9)
-- [ ] Pattern effectiveness metrics
-- [ ] Auto-categorization accuracy tracking
-- [ ] User review analytics
-- [ ] Pattern suggestion improvements
-- [ ] Documentation and training materials
+### Current Status
+- ✅ Pattern detection with matched transaction IDs
+- ✅ Basic pattern CRUD operations
+- ✅ Pattern linking to categories
+- 🔄 Transaction viewing (in progress)
+- ⏳ Pattern validation service (planned)
+- ⏳ Pattern review workflow (planned)
+- ⏳ Auto-categorization (planned)
 
 ## Success Metrics
 

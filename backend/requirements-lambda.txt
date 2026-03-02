@@ -12,3 +12,4 @@ python-jose>=3.3.0
 # are provided via Lambda Layer (see requirements-ml.txt and build_ml_layer.sh)
 
 urllib3>=2.5.0 # not directly required, pinned by Snyk to avoid a vulnerability
+pyasn1>=0.6.2 # not directly required, pinned by Snyk to avoid a vulnerability
