@@ -1,0 +1,10 @@
+# ML Dependencies for Lambda Layer
+# These are packaged separately as a Lambda Layer due to size constraints
+# Layer is shared across multiple Lambda functions
+
+numpy>=1.24.0
+pandas>=2.0.0
+scikit-learn>=1.3.0
+scipy>=1.11.0
+holidays>=0.35
+

@@ -18,6 +18,9 @@ resource "aws_lambda_function" "recurring_charge_operations" {
   memory_size      = 512  # More memory for ML operations
   source_code_hash = base64encode(local.source_code_hash)
   depends_on       = [null_resource.prepare_lambda]
+  
+  # Attach ML dependencies layer
+  layers = [aws_lambda_layer_version.ml_dependencies.arn]
 
   environment {
     variables = {
@@ -67,6 +70,9 @@ resource "aws_lambda_function" "recurring_charge_detection_consumer" {
   memory_size      = 1024  # More memory for ML operations
   source_code_hash = base64encode(local.source_code_hash)
   depends_on       = [null_resource.prepare_lambda]
+  
+  # Attach ML dependencies layer
+  layers = [aws_lambda_layer_version.ml_dependencies.arn]
 
   environment {
     variables = {
@@ -115,10 +121,7 @@ resource "aws_cloudwatch_event_rule" "recurring_charge_detection_events" {
 
   event_pattern = jsonencode({
     source      = ["recurring_charge.service"]
-    detail-type = ["Application Event"]
-    detail = {
-      eventType = ["recurring_charge.detection.requested"]
-    }
+    detail-type = ["recurring_charge.detection.requested"]
   })
 
   tags = {

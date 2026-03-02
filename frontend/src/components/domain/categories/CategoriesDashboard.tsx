@@ -7,6 +7,7 @@ import { CategoryService } from '@/services/CategoryService';
 import CategoryHierarchyTree from './CategoryHierarchyTree';
 import RuleBuilder from './RuleBuilder';
 import ConfirmationModal from '@/components/ui/ConfirmationModal';
+import RecurringChargesTab from './components/RecurringChargesTab';
 import './CategoriesDashboard.css';
 
 interface CategoriesDashboardProps {
@@ -39,6 +40,7 @@ const CategoriesDashboard: React.FC<CategoriesDashboardProps> = ({
     clearError
   } = useCategories();
 
+  const [activeTab, setActiveTab] = useState<'categories' | 'recurring'>('categories');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestionStrategy, setSuggestionStrategy] = useState<CategorySuggestionStrategy>(CategorySuggestionStrategy.ALL_MATCHES);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -189,69 +191,96 @@ const CategoriesDashboard: React.FC<CategoriesDashboardProps> = ({
         </div>
 
         <div className="category-management-controls">
-          <div className="control-group">
-            <label htmlFor="suggestion-strategy">Suggestion Strategy:</label>
-            <select
-              id="suggestion-strategy"
-              value={suggestionStrategy}
-              onChange={(e) => setSuggestionStrategy(e.target.value as CategorySuggestionStrategy)}
-              className="suggestion-strategy-selector"
-            >
-              <option value="all_matches">All Matches</option>
-              <option value="top_n_matches">Top N Matches</option>
-              <option value="confidence_threshold">Confidence Threshold</option>
-              <option value="priority_filtered">Priority Filtered</option>
-            </select>
-          </div>
+          {activeTab === 'categories' && (
+            <>
+              <div className="control-group">
+                <label htmlFor="suggestion-strategy">Suggestion Strategy:</label>
+                <select
+                  id="suggestion-strategy"
+                  value={suggestionStrategy}
+                  onChange={(e) => setSuggestionStrategy(e.target.value as CategorySuggestionStrategy)}
+                  className="suggestion-strategy-selector"
+                >
+                  <option value="all_matches">All Matches</option>
+                  <option value="top_n_matches">Top N Matches</option>
+                  <option value="confidence_threshold">Confidence Threshold</option>
+                  <option value="priority_filtered">Priority Filtered</option>
+                </select>
+              </div>
 
-          <button
-            className={`suggestion-toggle ${showSuggestions ? 'active' : ''}`}
-            onClick={() => setShowSuggestions(!showSuggestions)}
-          >
-            {showSuggestions ? '👁️ Hide' : '👁️‍🗨️ Show'} Suggestions
-          </button>
+              <button
+                className={`suggestion-toggle ${showSuggestions ? 'active' : ''}`}
+                onClick={() => setShowSuggestions(!showSuggestions)}
+              >
+                {showSuggestions ? '👁️ Hide' : '👁️‍🗨️ Show'} Suggestions
+              </button>
 
-          <button
-            className="reset-categories-btn"
-            onClick={() => setShowResetModal(true)}
-            disabled={isResetting}
-            title="Reset all category assignments and re-apply rules"
-          >
-            {isResetting ? '🔄 Resetting...' : '🔄 Reset All Categories'}
-          </button>
-        </div>
-      </div>
-
-      <div className="category-main-content">
-        <div className="category-list-section">
-          <CategoryHierarchyTree
-            hierarchy={hierarchy}
-            selectedCategory={selectedCategory}
-            onSelectCategory={handleSelectCategory}
-            showSuggestions={showSuggestions}
-            onCreateCategory={handleCreateCategory}
-            onMoveCategory={handleMoveCategory}
-            isLoading={isLoading}
-          />
-        </div>
-
-        <div className="category-details-section">
-          {selectedCategory ? (
-            <CategoryEditor
-              category={selectedCategory}
-              hierarchy={hierarchy}
-              suggestionStrategy={suggestionStrategy}
-              isTestingRule={isTestingRule}
-              testResults={testResults}
-              testError={testError}
-              onUpdateCategory={updateCategory}
-              onDeleteCategory={deleteCategory}
-            />
-          ) : (
-            <EmptyStateMessage />
+              <button
+                className="reset-categories-btn"
+                onClick={() => setShowResetModal(true)}
+                disabled={isResetting}
+                title="Reset all category assignments and re-apply rules"
+              >
+                {isResetting ? '🔄 Resetting...' : '🔄 Reset All Categories'}
+              </button>
+            </>
           )}
         </div>
       </div>
+
+      {/* Tab Navigation */}
+      <div className="category-tabs">
+        <button
+          className={`category-tab ${activeTab === 'categories' ? 'active' : ''}`}
+          onClick={() => setActiveTab('categories')}
+        >
+          📂 Categories & Rules
+        </button>
+        <button
+          className={`category-tab ${activeTab === 'recurring' ? 'active' : ''}`}
+          onClick={() => setActiveTab('recurring')}
+        >
+          🔄 Recurring Charges
+        </button>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'categories' ? (
+        <div className="category-main-content">
+          <div className="category-list-section">
+            <CategoryHierarchyTree
+              hierarchy={hierarchy}
+              selectedCategory={selectedCategory}
+              onSelectCategory={handleSelectCategory}
+              showSuggestions={showSuggestions}
+              onCreateCategory={handleCreateCategory}
+              onMoveCategory={handleMoveCategory}
+              isLoading={isLoading}
+            />
+          </div>
+
+          <div className="category-details-section">
+            {selectedCategory ? (
+              <CategoryEditor
+                category={selectedCategory}
+                hierarchy={hierarchy}
+                suggestionStrategy={suggestionStrategy}
+                isTestingRule={isTestingRule}
+                testResults={testResults}
+                testError={testError}
+                onUpdateCategory={updateCategory}
+                onDeleteCategory={deleteCategory}
+              />
+            ) : (
+              <EmptyStateMessage />
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="category-tab-content">
+          <RecurringChargesTab />
+        </div>
+      )}
 
       {/* Create Category Modal */}
       {showCreateModal && (

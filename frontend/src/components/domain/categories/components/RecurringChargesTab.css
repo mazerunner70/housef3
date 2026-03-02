@@ -1,0 +1,205 @@
+.recurring-charges-tab {
+    padding: 1.5rem;
+}
+
+.recurring-charges-tab__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+    gap: 1.5rem;
+}
+
+.recurring-charges-tab__title-section h2 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #111827;
+}
+
+.recurring-charges-tab__description {
+    margin: 0;
+    font-size: 0.938rem;
+    color: #6b7280;
+    line-height: 1.5;
+}
+
+.recurring-charges-tab__actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: flex-end;
+}
+
+.recurring-charges-tab__config {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.recurring-charges-tab__config label {
+    font-weight: 500;
+    color: #374151;
+    white-space: nowrap;
+}
+
+.recurring-charges-tab__config-input {
+    width: 100px;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    color: #111827;
+    background-color: #ffffff;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.recurring-charges-tab__config-input:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.recurring-charges-tab__config-input:hover:not(:focus) {
+    border-color: #9ca3af;
+}
+
+.recurring-charges-tab__stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.recurring-charges-tab__stat {
+    padding: 1rem;
+    background-color: #f9fafb;
+    border-radius: 0.5rem;
+    border: 1px solid #e5e7eb;
+    text-align: center;
+}
+
+.recurring-charges-tab__stat-value {
+    display: block;
+    font-size: 2rem;
+    font-weight: 700;
+    color: #111827;
+    margin-bottom: 0.25rem;
+}
+
+.recurring-charges-tab__stat-label {
+    display: block;
+    font-size: 0.875rem;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+.recurring-charges-tab__filters {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background-color: #f9fafb;
+    border-radius: 0.5rem;
+    border: 1px solid #e5e7eb;
+}
+
+.recurring-charges-tab__filter {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.recurring-charges-tab__filter label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #374151;
+    white-space: nowrap;
+}
+
+.recurring-charges-tab__filter select {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    color: #111827;
+    background-color: white;
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+}
+
+.recurring-charges-tab__filter select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.recurring-charges-tab__patterns {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    gap: 1rem;
+}
+
+.recurring-charges-tab__empty {
+    text-align: center;
+    padding: 4rem 2rem;
+    background-color: #f9fafb;
+    border-radius: 0.5rem;
+    border: 2px dashed #d1d5db;
+}
+
+.recurring-charges-tab__empty-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+}
+
+.recurring-charges-tab__empty h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #111827;
+}
+
+.recurring-charges-tab__empty p {
+    margin: 0;
+    font-size: 0.938rem;
+    color: #6b7280;
+    max-width: 500px;
+    margin-left: auto;
+    margin-right: auto;
+    line-height: 1.6;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1024px) {
+    .recurring-charges-tab__patterns {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .recurring-charges-tab {
+        padding: 1rem;
+    }
+
+    .recurring-charges-tab__header {
+        flex-direction: column;
+    }
+
+    .recurring-charges-tab__stats {
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    }
+
+    .recurring-charges-tab__filters {
+        flex-direction: column;
+    }
+
+    .recurring-charges-tab__filter {
+        width: 100%;
+    }
+
+    .recurring-charges-tab__filter select {
+        flex: 1;
+    }
+}

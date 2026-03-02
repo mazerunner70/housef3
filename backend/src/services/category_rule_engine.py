@@ -632,13 +632,15 @@ class CategoryRuleEngine:
         """Apply rules from a specific category to existing transactions"""
         
         try:
-            from utils.db_utils import get_category_by_id_from_db, update_transaction
+            from utils.db_utils import checked_mandatory_category, update_transaction
+            from utils.db.base import NotFound, NotAuthorized
             from models.transaction import Transaction
             import uuid
             
             # Get the specific category
-            category = get_category_by_id_from_db(uuid.UUID(category_id), user_id)
-            if not category:
+            try:
+                category = checked_mandatory_category(uuid.UUID(category_id), user_id)
+            except (NotFound, NotAuthorized):
                 logger.error(f"Category {category_id} not found for user {user_id}")
                 return {'processed': 0, 'categorized': 0, 'errors': 1}
             

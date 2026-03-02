@@ -28,6 +28,31 @@ logger = logging.getLogger(__name__)
 # Helper Functions
 # ============================================================================
 
+def checked_optional_account(account_id: Optional[uuid.UUID], user_id: str) -> Optional[Account]:
+    """
+    Check if account exists and user has access to it, allowing None.
+    
+    Args:
+        account_id: ID of the account (or None)
+        user_id: ID of the user requesting access
+        
+    Returns:
+        Account object if found and authorized, None if account_id is None or not found
+        
+    Raises:
+        NotAuthorized: If account exists but user doesn't own it
+    """
+    if not account_id:
+        return None
+    
+    account = _get_account(account_id)
+    if not account:
+        return None
+    
+    check_user_owns_resource(account.user_id, user_id)
+    return account
+
+
 def checked_mandatory_account(account_id: Optional[uuid.UUID], user_id: str) -> Account:
     """
     Check if account exists and user has access to it.
@@ -45,44 +70,26 @@ def checked_mandatory_account(account_id: Optional[uuid.UUID], user_id: str) -> 
     """
     if not account_id:
         raise NotFound("Account ID is required")
-    account = get_account(account_id)
+    
+    account = checked_optional_account(account_id, user_id)
     if not account:
         raise NotFound("Account not found")
-    check_user_owns_resource(account.user_id, user_id)
-    return account
-
-
-def checked_optional_account(account_id: Optional[uuid.UUID], user_id: str) -> Optional[Account]:
-    """
-    Check if account exists and user has access to it, allowing None.
     
-    Args:
-        account_id: ID of the account (or None)
-        user_id: ID of the user requesting access
-        
-    Returns:
-        Account object if found and authorized, None if account_id is None or not found
-    """
-    if not account_id:
-        return None
-    account = get_account(account_id)
-    if not account:
-        return None
-    check_user_owns_resource(account.user_id, user_id)
     return account
 
 
 # ============================================================================
-# CRUD Operations
+# Internal Getter (not exported)
 # ============================================================================
 
 @cache_result(ttl_seconds=60, maxsize=100)
 @monitor_performance(warn_threshold_ms=200)
 @retry_on_throttle(max_attempts=3)
-@dynamodb_operation("get_account")
-def get_account(account_id: uuid.UUID) -> Optional[Account]:
+@dynamodb_operation("_get_account")
+def _get_account(account_id: uuid.UUID) -> Optional[Account]:
     """
-    Retrieve an account by ID.
+    Retrieve an account by ID (no user validation).
+    INTERNAL USE ONLY - external code should use checked_mandatory_account.
     
     Args:
         account_id: The unique identifier of the account
@@ -95,6 +102,11 @@ def get_account(account_id: uuid.UUID) -> Optional[Account]:
     if 'Item' in response:
         return Account.from_dynamodb_item(response['Item'])
     return None
+
+
+# ============================================================================
+# CRUD Operations
+# ============================================================================
 
 
 @monitor_performance(operation_type="query", warn_threshold_ms=500)
@@ -195,7 +207,7 @@ def delete_account(account_id: uuid.UUID, user_id: str) -> bool:
     _ = checked_mandatory_account(account_id, user_id)
     
     # Get all files associated with this account
-    associated_files = list_account_files(account_id)
+    associated_files = list_account_files(account_id, user_id)
     logger.info(f"Found {len(associated_files)} files associated with account {str(account_id)}")
     
     # Delete each associated file and its transactions

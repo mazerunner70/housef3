@@ -47,6 +47,18 @@ resource "aws_lambda_function" "analytics_consumer" {
   }
 }
 
+# CloudWatch log group for Analytics Consumer
+resource "aws_cloudwatch_log_group" "analytics_consumer" {
+  name              = "/aws/lambda/${aws_lambda_function.analytics_consumer.function_name}"
+  retention_in_days = 14
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
 # Connect EventBridge analytics rule to Lambda
 resource "aws_cloudwatch_event_target" "analytics_consumer_target" {
   rule           = aws_cloudwatch_event_rule.analytics_events.name
@@ -110,6 +122,18 @@ resource "aws_lambda_function" "file_processor_consumer" {
   }
 }
 
+# CloudWatch log group for File Processor Consumer
+resource "aws_cloudwatch_log_group" "file_processor_consumer" {
+  name              = "/aws/lambda/${aws_lambda_function.file_processor_consumer.function_name}"
+  retention_in_days = 14
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
 # Connect EventBridge file processor rule to Lambda
 resource "aws_cloudwatch_event_target" "file_processor_consumer_target" {
   rule           = aws_cloudwatch_event_rule.file_processor_events.name
@@ -169,6 +193,18 @@ resource "aws_lambda_function" "categorization_consumer" {
     Environment = var.environment
     Project     = "housef3"
     Component   = "categorization-consumer"
+  }
+}
+
+# CloudWatch log group for Categorization Consumer
+resource "aws_cloudwatch_log_group" "categorization_consumer" {
+  name              = "/aws/lambda/${aws_lambda_function.categorization_consumer.function_name}"
+  retention_in_days = 14
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
   }
 }
 
@@ -237,6 +273,18 @@ resource "aws_lambda_function" "generic_vote_aggregator_consumer" {
   }
 }
 
+# CloudWatch log group for Generic Vote Aggregator Consumer
+resource "aws_cloudwatch_log_group" "generic_vote_aggregator_consumer" {
+  name              = "/aws/lambda/${aws_lambda_function.generic_vote_aggregator_consumer.function_name}"
+  retention_in_days = 14
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
 # Connect EventBridge vote aggregator rule to Lambda
 resource "aws_cloudwatch_event_target" "generic_vote_aggregator_consumer_target" {
   rule           = aws_cloudwatch_event_rule.vote_aggregator_events.name
@@ -301,6 +349,18 @@ resource "aws_lambda_function" "file_deletion_executor_consumer" {
   }
 }
 
+# CloudWatch log group for File Deletion Executor Consumer
+resource "aws_cloudwatch_log_group" "file_deletion_executor_consumer" {
+  name              = "/aws/lambda/${aws_lambda_function.file_deletion_executor_consumer.function_name}"
+  retention_in_days = 14
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
 # Connect EventBridge file deletion executor rule to Lambda
 resource "aws_cloudwatch_event_target" "file_deletion_executor_consumer_target" {
   rule           = aws_cloudwatch_event_rule.file_deletion_executor_events.name
@@ -354,6 +414,18 @@ resource "aws_lambda_function" "workflow_tracking_consumer" {
     Environment = var.environment
     Project     = "housef3"
     Component   = "workflow-tracking-consumer"
+  }
+}
+
+# CloudWatch log group for Workflow Tracking Consumer
+resource "aws_cloudwatch_log_group" "workflow_tracking_consumer" {
+  name              = "/aws/lambda/${aws_lambda_function.workflow_tracking_consumer.function_name}"
+  retention_in_days = 14
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
   }
 }
 
@@ -415,6 +487,18 @@ resource "aws_lambda_function" "audit_consumer" {
     Project     = var.project_name
     ManagedBy   = "terraform"
     Purpose     = "event-consumer"
+  }
+}
+
+# CloudWatch log group for Audit Consumer
+resource "aws_cloudwatch_log_group" "audit_consumer" {
+  name              = "/aws/lambda/${aws_lambda_function.audit_consumer.function_name}"
+  retention_in_days = 14
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
   }
 }
 
