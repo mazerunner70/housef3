@@ -16,6 +16,7 @@ import {
 } from '@/types/RecurringCharge';
 import { Button, ConfirmationModal } from '@/components/ui';
 import PatternConfidenceBadge from './PatternConfidenceBadge';
+import PatternTransactionsModal from './PatternTransactionsModal';
 import './RecurringChargeCard.css';
 
 export interface RecurringChargeCardProps {
@@ -42,6 +43,7 @@ const RecurringChargeCard: React.FC<RecurringChargeCardProps> = ({
     const [isExpanded, setIsExpanded] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+    const [showTransactionsModal, setShowTransactionsModal] = useState(false);
 
     const handleToggleActive = async () => {
         if (onToggleActive) {
@@ -182,6 +184,15 @@ const RecurringChargeCard: React.FC<RecurringChargeCardProps> = ({
                     </button>
 
                     <div className="recurring-charge-card__action-buttons">
+                        <Button
+                            variant="secondary"
+                            size="compact"
+                            onClick={() => setShowTransactionsModal(true)}
+                            disabled={isDeleting}
+                        >
+                            View Transactions ({pattern.transactionCount})
+                        </Button>
+
                         {pattern.suggestedCategoryId ? (
                             <Button
                                 variant="secondary"
@@ -235,6 +246,13 @@ const RecurringChargeCard: React.FC<RecurringChargeCardProps> = ({
                 onConfirm={handleDeleteConfirm}
                 onCancel={handleDeleteCancel}
                 isLoading={isDeleting}
+            />
+
+            <PatternTransactionsModal
+                isOpen={showTransactionsModal}
+                patternId={pattern.patternId}
+                merchantPattern={pattern.merchantPattern}
+                onClose={() => setShowTransactionsModal(false)}
             />
         </div>
     );

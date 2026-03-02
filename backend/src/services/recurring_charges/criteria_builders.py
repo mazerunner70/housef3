@@ -151,7 +151,7 @@ class MerchantCriteriaBuilder:
                 parts = remaining.replace('.', ' ').replace('-', ' ').split()
                 variations.update(parts)
         
-        return sorted(list(variations))
+        return sorted(variations)
     
     @staticmethod
     def _calculate_confidence(strings: List[str], pattern: str) -> float:
@@ -462,7 +462,7 @@ class TemporalCriteriaBuilder:
         day_of_month_counts = {}
         for day in days_of_month:
             day_of_month_counts[day] = day_of_month_counts.get(day, 0) + 1
-        day_of_month_mode = max(day_of_month_counts, key=day_of_month_counts.get) if day_of_month_counts else None
+        day_of_month_mode = max(day_of_month_counts, key=lambda k: day_of_month_counts[k]) if day_of_month_counts else None
         day_of_month_variance = np.std(days_of_month) if len(days_of_month) > 1 else 0
         
         # Analyze day of week distribution
@@ -470,7 +470,7 @@ class TemporalCriteriaBuilder:
         day_of_week_counts = {}
         for day in days_of_week:
             day_of_week_counts[day] = day_of_week_counts.get(day, 0) + 1
-        day_of_week_mode = max(day_of_week_counts, key=day_of_week_counts.get) if day_of_week_counts else None
+        day_of_week_mode = max(day_of_week_counts, key=lambda k: day_of_week_counts[k]) if day_of_week_counts else None
         day_of_week_consistency = day_of_week_counts.get(day_of_week_mode, 0) / len(days_of_week) if day_of_week_mode is not None else 0
         
         # Analyze intervals between transactions
@@ -487,14 +487,11 @@ class TemporalCriteriaBuilder:
         
         # Determine temporal pattern type
         pattern_type = TemporalPatternType.FLEXIBLE
-        suggested_day = None
         
         if day_of_month_variance < 3:  # Consistent day of month
             pattern_type = TemporalPatternType.DAY_OF_MONTH
-            suggested_day = day_of_month_mode
         elif day_of_week_consistency > 0.8:  # Consistent day of week
             pattern_type = TemporalPatternType.DAY_OF_WEEK
-            suggested_day = day_of_week_mode
         
         # Suggest tolerance
         if pattern_type == TemporalPatternType.DAY_OF_MONTH:
